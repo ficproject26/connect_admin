@@ -45,5 +45,47 @@ const UserSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
+const castIdToObjectId = (val) => {
+    if (typeof val === 'string' && mongoose.Types.ObjectId.isValid(val)) {
+        try {
+            return new mongoose.Types.ObjectId(val);
+        } catch (e) {
+            return val;
+        }
+    }
+    if (Array.isArray(val)) {
+        return val.map(castIdToObjectId);
+    }
+    if (val && typeof val === 'object' && !(val instanceof mongoose.Types.ObjectId)) {
+        const newObj = {};
+        for (const key of Object.keys(val)) {
+            newObj[key] = castIdToObjectId(val[key]);
+        }
+        return newObj;
+    }
+    return val;
+};
+
+UserSchema.pre(/^find/, function() {
+    const query = this.getQuery();
+    if (query._id) {
+        query._id = castIdToObjectId(query._id);
+    }
+});
+
+UserSchema.pre(/^update/, function() {
+    const query = this.getQuery();
+    if (query._id) {
+        query._id = castIdToObjectId(query._id);
+    }
+});
+
+UserSchema.pre(/^delete/, function() {
+    const query = this.getQuery();
+    if (query._id) {
+        query._id = castIdToObjectId(query._id);
+    }
+});
+
 module.exports = mongoose.model('User', UserSchema);
 

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Pincode = require('../models/Pincode');
@@ -25,10 +26,13 @@ const Query = require('../models/Query');
 const SupportTicket = require('../models/SupportTicket');
 const Announcement = require('../models/Announcement');
 
-// Middleware to check if user is admin (Super Admin, Branch Admin, or Staff)
 const adminAuth = async (req, res, next) => {
     try {
-        const user = await User.findById(req.user.id);
+        let userId = req.user.id;
+        if (mongoose.Types.ObjectId.isValid(userId)) {
+            userId = new mongoose.Types.ObjectId(userId);
+        }
+        const user = await User.findById(userId);
         if (!user || user.role !== 'admin') {
             return res.status(403).json({ msg: 'Access denied. Admins only.' });
         }
