@@ -15,6 +15,15 @@ const CommissionConfig = require('../models/CommissionConfig');
 const MembershipPlan = require('../models/MembershipPlan');
 const Banner = require('../models/Banner');
 const Advertisement = require('../models/Advertisement');
+const Transaction = require('../models/Transaction');
+const JobApplied = require('../models/JobApplied');
+const CardHolder = require('../models/CardHolder');
+const DeliveryPartner = require('../models/DeliveryPartner');
+const SupportTeam = require('../models/SupportTeam');
+const Category = require('../models/Category');
+const Query = require('../models/Query');
+const SupportTicket = require('../models/SupportTicket');
+const Announcement = require('../models/Announcement');
 
 // Middleware to check if user is admin (Super Admin, Branch Admin, or Staff)
 const adminAuth = async (req, res, next) => {
@@ -1230,6 +1239,421 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
         }
 
         res.json(user);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all orders
+router.get('/orders', [auth, adminAuth], async (req, res) => {
+    try {
+        const orders = await Order.find()
+            .populate('vendorId', 'businessName email phone')
+            .populate('customerId', 'name email phone')
+            .sort({ createdAt: -1 });
+        res.json(orders);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all bookings
+router.get('/bookings', [auth, adminAuth], async (req, res) => {
+    try {
+        const bookings = await Booking.find()
+            .populate('vendorId', 'businessName email phone')
+            .populate('customerId', 'name email phone')
+            .sort({ createdAt: -1 });
+        res.json(bookings);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all jobs applied
+router.get('/jobs', [auth, adminAuth], async (req, res) => {
+    try {
+        const jobs = await JobApplied.find().sort({ createdAt: -1 });
+        res.json(jobs);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST new job applied (apply)
+router.post('/jobs', [auth, adminAuth], async (req, res) => {
+    try {
+        const newJob = new JobApplied(req.body);
+        const job = await newJob.save();
+        res.json(job);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// PUT update job applied status
+router.put('/jobs/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const job = await JobApplied.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(job);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE job applied
+router.delete('/jobs/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await JobApplied.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Job application deleted' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all membership card holders
+router.get('/card-holders', [auth, adminAuth], async (req, res) => {
+    try {
+        const holders = await CardHolder.find().sort({ createdAt: -1 });
+        res.json(holders);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST new card holder
+router.post('/card-holders', [auth, adminAuth], async (req, res) => {
+    try {
+        const newHolder = new CardHolder(req.body);
+        const holder = await newHolder.save();
+        res.json(holder);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// PUT update card holder status
+router.put('/card-holders/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const holder = await CardHolder.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(holder);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE card holder
+router.delete('/card-holders/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await CardHolder.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Card holder deleted' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all payments (transactions)
+router.get('/payments', [auth, adminAuth], async (req, res) => {
+    try {
+        const payments = await Transaction.find()
+            .populate('userId', 'name email role')
+            .sort({ createdAt: -1 });
+        res.json(payments);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST a new payment / transaction
+router.post('/payments', [auth, adminAuth], async (req, res) => {
+    try {
+        const newTx = new Transaction(req.body);
+        const tx = await newTx.save();
+        res.json(tx);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all delivery partners
+router.get('/delivery-partners', [auth, adminAuth], async (req, res) => {
+    try {
+        const partners = await DeliveryPartner.find().sort({ createdAt: -1 });
+        res.json(partners);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST new delivery partner
+router.post('/delivery-partners', [auth, adminAuth], async (req, res) => {
+    try {
+        const newPartner = new DeliveryPartner(req.body);
+        const partner = await newPartner.save();
+        res.json(partner);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// PUT update delivery partner status
+router.put('/delivery-partners/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const partner = await DeliveryPartner.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(partner);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE delivery partner
+router.delete('/delivery-partners/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await DeliveryPartner.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Delivery partner deleted' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all customer support team
+router.get('/support-team', [auth, adminAuth], async (req, res) => {
+    try {
+        const team = await SupportTeam.find().sort({ createdAt: -1 });
+        res.json(team);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST new support team member
+router.post('/support-team', [auth, adminAuth], async (req, res) => {
+    try {
+        const newMember = new SupportTeam(req.body);
+        const member = await newMember.save();
+        res.json(member);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// PUT update support team member details
+router.put('/support-team/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const member = await SupportTeam.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(member);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE support team member
+router.delete('/support-team/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await SupportTeam.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Support team member deleted' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all categories
+router.get('/categories', [auth, adminAuth], async (req, res) => {
+    try {
+        const categories = await Category.find().sort({ name: 1 });
+        res.json(categories);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST new category
+router.post('/categories', [auth, adminAuth], async (req, res) => {
+    try {
+        const newCat = new Category(req.body);
+        const cat = await newCat.save();
+        res.json(cat);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// PUT update category
+router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const cat = await Category.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(cat);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE category
+router.delete('/categories/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await Category.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Category deleted' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all queries
+router.get('/queries', [auth, adminAuth], async (req, res) => {
+    try {
+        const queries = await Query.find().sort({ createdAt: -1 });
+        res.json(queries);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST new query
+router.post('/queries', [auth, adminAuth], async (req, res) => {
+    try {
+        const newQuery = new Query(req.body);
+        const query = await newQuery.save();
+        res.json(query);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// PUT update query status
+router.put('/queries/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const query = await Query.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(query);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE query
+router.delete('/queries/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await Query.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Query deleted' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all support tickets
+router.get('/tickets', [auth, adminAuth], async (req, res) => {
+    try {
+        const tickets = await SupportTicket.find().sort({ createdAt: -1 });
+        res.json(tickets);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST new support ticket
+router.post('/tickets', [auth, adminAuth], async (req, res) => {
+    try {
+        const count = await SupportTicket.countDocuments();
+        const ticketId = 'TKT-' + (1000 + count + 1);
+        const newTicket = new SupportTicket({ ...req.body, ticketId });
+        const ticket = await newTicket.save();
+        res.json(ticket);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// PUT update support ticket
+router.put('/tickets/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const ticket = await SupportTicket.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(ticket);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE support ticket
+router.delete('/tickets/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await SupportTicket.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Ticket deleted' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// GET all announcements
+router.get('/announcements', [auth, adminAuth], async (req, res) => {
+    try {
+        const announcements = await Announcement.find().sort({ createdAt: -1 });
+        res.json(announcements);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST new announcement
+router.post('/announcements', [auth, adminAuth], async (req, res) => {
+    try {
+        const newAnn = new Announcement(req.body);
+        const ann = await newAnn.save();
+        res.json(ann);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// PUT update announcement
+router.put('/announcements/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const ann = await Announcement.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(ann);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE announcement
+router.delete('/announcements/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await Announcement.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Announcement deleted' });
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');

@@ -4,7 +4,8 @@ import {
   MapPin, Settings, DollarSign, Award, Image, BarChart3, 
   Layers, LogOut, Menu, Sun, Moon, Plus, Edit2, Trash2, 
   Search, Filter, ChevronRight, Download, CreditCard, Clock,
-  ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, UploadCloud, Bell, User
+  ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, UploadCloud, Bell, User,
+  Briefcase, Truck, Headphones, Folder, HelpCircle, MessageSquare, Megaphone, ShoppingBag, Calendar, Contact
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -126,6 +127,19 @@ function App() {
   const [reports, setReports] = useState([]);
   const [tieups, setTieUps] = useState([]);
   const [tasks, setTasks] = useState([]);
+  
+  // New States
+  const [orders, setOrders] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [cardHolders, setCardHolders] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [deliveryPartners, setDeliveryPartners] = useState([]);
+  const [supportTeam, setSupportTeam] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [queries, setQueries] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
   
   // Pincode Master Lookup States
   const [lookupPincode, setLookupPincode] = useState('');
@@ -251,6 +265,40 @@ function App() {
 
       const tasksRes = await fetch(`${API_BASE}/admin/tasks`, { headers });
       if (tasksRes.ok) setTasks(await tasksRes.json());
+
+      // 14. New endpoints
+      const ordersRes = await fetch(`${API_BASE}/admin/orders`, { headers });
+      if (ordersRes.ok) setOrders(await ordersRes.json());
+
+      const bookingsRes = await fetch(`${API_BASE}/admin/bookings`, { headers });
+      if (bookingsRes.ok) setBookings(await bookingsRes.json());
+
+      const jobsRes = await fetch(`${API_BASE}/admin/jobs`, { headers });
+      if (jobsRes.ok) setJobs(await jobsRes.json());
+
+      const holdersRes = await fetch(`${API_BASE}/admin/card-holders`, { headers });
+      if (holdersRes.ok) setCardHolders(await holdersRes.json());
+
+      const paymentsRes = await fetch(`${API_BASE}/admin/payments`, { headers });
+      if (paymentsRes.ok) setPayments(await paymentsRes.json());
+
+      const partnersRes = await fetch(`${API_BASE}/admin/delivery-partners`, { headers });
+      if (partnersRes.ok) setDeliveryPartners(await partnersRes.json());
+
+      const teamRes = await fetch(`${API_BASE}/admin/support-team`, { headers });
+      if (teamRes.ok) setSupportTeam(await teamRes.json());
+
+      const categoriesRes = await fetch(`${API_BASE}/admin/categories`, { headers });
+      if (categoriesRes.ok) setCategories(await categoriesRes.json());
+
+      const queriesRes = await fetch(`${API_BASE}/admin/queries`, { headers });
+      if (queriesRes.ok) setQueries(await queriesRes.json());
+
+      const ticketsRes = await fetch(`${API_BASE}/admin/tickets`, { headers });
+      if (ticketsRes.ok) setTickets(await ticketsRes.json());
+
+      const announcementsRes = await fetch(`${API_BASE}/admin/announcements`, { headers });
+      if (announcementsRes.ok) setAnnouncements(await announcementsRes.json());
 
     } catch (err) {
       console.error("API Server not reachable:", err);
@@ -546,6 +594,83 @@ function App() {
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'reports' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <BarChart3 className="w-4 h-4" /> Business Reports
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('orders')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'orders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <ShoppingBag className="w-4 h-4" /> Total Orders
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('bookings')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'bookings' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Calendar className="w-4 h-4" /> Bookings
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('jobs')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'jobs' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Briefcase className="w-4 h-4" /> Job Applied
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('card-holders')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'card-holders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Contact className="w-4 h-4" /> Membership Card Holders
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('payments')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payments' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <CreditCard className="w-4 h-4" /> Payments
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('delivery-partners')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'delivery-partners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Truck className="w-4 h-4" /> Delivery Partners
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('support-team')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'support-team' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Headphones className="w-4 h-4" /> Customer Support Team
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('categories')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'categories' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Folder className="w-4 h-4" /> Category Management
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('queries')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'queries' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <HelpCircle className="w-4 h-4" /> Queries
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('tickets')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tickets' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <MessageSquare className="w-4 h-4" /> Support
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('announcements')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'announcements' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Megaphone className="w-4 h-4" /> Announcements
               </button>
 
               <button 
@@ -2139,6 +2264,691 @@ function App() {
             </div>
           )}
 
+          {/* 15. TOTAL ORDERS */}
+          {activeTab === 'orders' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Total Orders Management</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Orders</span>
+                  <span className="text-3xl font-extrabold text-slate-800 dark:text-white mt-2 block">{orders.length}</span>
+                </div>
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Volume</span>
+                  <span className="text-3xl font-extrabold text-emerald-500 mt-2 block">₹{orders.reduce((sum, o) => sum + (o.amount || 0), 0).toLocaleString()}</span>
+                </div>
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Commission</span>
+                  <span className="text-3xl font-extrabold text-primary-500 mt-2 block">₹{orders.reduce((sum, o) => sum + (o.commission || 0), 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Order Number</th>
+                        <th className="px-6 py-4">Vendor</th>
+                        <th className="px-6 py-4">Customer</th>
+                        <th className="px-6 py-4">Amount</th>
+                        <th className="px-6 py-4">Commission</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {orders.map((order) => (
+                        <tr key={order._id}>
+                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{order.order_number || order.id || 'N/A'}</td>
+                          <td className="px-6 py-4">
+                            <span className="block font-semibold">{order.vendorId?.businessName || 'Unknown Vendor'}</span>
+                            <span className="text-xs text-slate-400">{order.vendorId?.email}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="block font-semibold">{order.customerId?.name || 'Unknown Customer'}</span>
+                            <span className="text-xs text-slate-400">{order.customerId?.phone}</span>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-emerald-500">₹{order.amount}</td>
+                          <td className="px-6 py-4 font-bold text-primary-500">₹{order.commission}</td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize bg-emerald-500/10 text-emerald-500">
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(order.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 16. BOOKINGS */}
+          {activeTab === 'bookings' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Bookings Management</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Bookings</span>
+                  <span className="text-3xl font-extrabold text-slate-800 dark:text-white mt-2 block">{bookings.length}</span>
+                </div>
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Volume</span>
+                  <span className="text-3xl font-extrabold text-emerald-500 mt-2 block">₹{bookings.reduce((sum, b) => sum + (b.amount || 0), 0).toLocaleString()}</span>
+                </div>
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Commission</span>
+                  <span className="text-3xl font-extrabold text-primary-500 mt-2 block">₹{bookings.reduce((sum, b) => sum + (b.commission || 0), 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Vendor</th>
+                        <th className="px-6 py-4">Customer</th>
+                        <th className="px-6 py-4">Amount</th>
+                        <th className="px-6 py-4">Commission</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {bookings.map((booking) => (
+                        <tr key={booking._id}>
+                          <td className="px-6 py-4">
+                            <span className="block font-semibold">{booking.vendorId?.businessName || 'Unknown Vendor'}</span>
+                            <span className="text-xs text-slate-400">{booking.vendorId?.email}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="block font-semibold">{booking.customerId?.name || 'Unknown Customer'}</span>
+                            <span className="text-xs text-slate-400">{booking.customerId?.phone}</span>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-emerald-500">₹{booking.amount}</td>
+                          <td className="px-6 py-4 font-bold text-primary-500">₹{booking.commission}</td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize bg-emerald-500/10 text-emerald-500">
+                              {booking.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(booking.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 17. JOB APPLIED */}
+          {activeTab === 'jobs' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Job Applications</h3>
+                <button 
+                  onClick={() => setShowModal('job')}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Add Candidate Application
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Candidate</th>
+                        <th className="px-6 py-4">Position</th>
+                        <th className="px-6 py-4">Experience</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4">Applied Date</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {jobs.map((job) => (
+                        <tr key={job._id}>
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-200">{job.candidateName}</span>
+                            <span className="text-xs text-slate-400">{job.email} | {job.phone}</span>
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-primary-500">{job.position}</td>
+                          <td className="px-6 py-4 text-xs">{job.experience || 'N/A'}</td>
+                          <td className="px-6 py-4">
+                            <select 
+                              value={job.status} 
+                              onChange={(e) => executeAction(`/admin/jobs/${job._id}`, 'PUT', { status: e.target.value })}
+                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                            >
+                              <option value="applied">Applied</option>
+                              <option value="interviewing">Interviewing</option>
+                              <option value="selected">Selected</option>
+                              <option value="rejected">Rejected</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(job.createdAt).toLocaleDateString()}</td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => executeAction(`/admin/jobs/${job._id}`, 'DELETE')}
+                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 18. MEMBERSHIP CARD HOLDER */}
+          {activeTab === 'card-holders' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Membership Card Holders</h3>
+                <button 
+                  onClick={() => setShowModal('card-holder')}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Add Card Holder
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Name</th>
+                        <th className="px-6 py-4">Card Info</th>
+                        <th className="px-6 py-4">Expiry</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {cardHolders.map((holder) => (
+                        <tr key={holder._id}>
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-200">{holder.name}</span>
+                            <span className="text-xs text-slate-400">{holder.email} | {holder.phone}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${holder.cardType === 'Platinum' ? 'bg-purple-500/10 text-purple-500' : holder.cardType === 'Gold' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-400/10 text-slate-400'}`}>
+                              {holder.cardType}
+                            </span>
+                            <span className="block font-mono text-[10px] text-slate-400 mt-1">{holder.cardNumber}</span>
+                          </td>
+                          <td className="px-6 py-4 text-xs">{new Date(holder.expiryDate).toLocaleDateString()}</td>
+                          <td className="px-6 py-4">
+                            <select 
+                              value={holder.status} 
+                              onChange={(e) => executeAction(`/admin/card-holders/${holder._id}`, 'PUT', { status: e.target.value })}
+                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                            >
+                              <option value="active">Active</option>
+                              <option value="expired">Expired</option>
+                              <option value="suspended">Suspended</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => executeAction(`/admin/card-holders/${holder._id}`, 'DELETE')}
+                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 19. PAYMENTS */}
+          {activeTab === 'payments' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Payments & Transactions</h3>
+                <button 
+                  onClick={() => setShowModal('payment')}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Record Payment
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">User</th>
+                        <th className="px-6 py-4">Transaction Details</th>
+                        <th className="px-6 py-4">Amount</th>
+                        <th className="px-6 py-4">Type</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {payments.map((p) => (
+                        <tr key={p._id}>
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-200">{p.userId?.name || 'Super Admin'}</span>
+                            <span className="text-[10px] text-slate-400 uppercase">{p.userId?.role || 'admin'}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="block font-semibold">{p.title}</span>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-white">₹{p.amount}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${p.type === 'credit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                              {p.type}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${p.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 20. DELIVERY PARTNER */}
+          {activeTab === 'delivery-partners' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Delivery Partners</h3>
+                <button 
+                  onClick={() => setShowModal('delivery-partner')}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Onboard Delivery Partner
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Partner Name</th>
+                        <th className="px-6 py-4">Vehicle Details</th>
+                        <th className="px-6 py-4">City</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {deliveryPartners.map((dp) => (
+                        <tr key={dp._id}>
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-200">{dp.name}</span>
+                            <span className="text-xs text-slate-400">{dp.email} | {dp.phone}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="block font-semibold">{dp.vehicleType}</span>
+                            <span className="text-xs text-slate-400">{dp.vehicleNumber || 'N/A'}</span>
+                          </td>
+                          <td className="px-6 py-4">{dp.city}</td>
+                          <td className="px-6 py-4">
+                            <select 
+                              value={dp.status} 
+                              onChange={(e) => executeAction(`/admin/delivery-partners/${dp._id}`, 'PUT', { status: e.target.value })}
+                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                            >
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                              <option value="suspended">Suspended</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => executeAction(`/admin/delivery-partners/${dp._id}`, 'DELETE')}
+                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 21. CUSTOMER SUPPORT TEAM */}
+          {activeTab === 'support-team' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Customer Support Team</h3>
+                <button 
+                  onClick={() => setShowModal('support-team')}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Add Support Agent
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Agent Name</th>
+                        <th className="px-6 py-4">Role</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {supportTeam.map((st) => (
+                        <tr key={st._id}>
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-200">{st.name}</span>
+                            <span className="text-xs text-slate-400">{st.email} | {st.phone}</span>
+                          </td>
+                          <td className="px-6 py-4 capitalize font-semibold text-primary-500">{st.role}</td>
+                          <td className="px-6 py-4">
+                            <select 
+                              value={st.status} 
+                              onChange={(e) => executeAction(`/admin/support-team/${st._id}`, 'PUT', { status: e.target.value })}
+                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                            >
+                              <option value="active">Active</option>
+                              <option value="inactive">Inactive</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => executeAction(`/admin/support-team/${st._id}`, 'DELETE')}
+                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 22. CATEGORY MANAGEMENT */}
+          {activeTab === 'categories' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Category Management</h3>
+                <button 
+                  onClick={() => setShowModal('category')}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Add Category
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Category Name</th>
+                        <th className="px-6 py-4">Description</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {categories.map((c) => (
+                        <tr key={c._id}>
+                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{c.name}</td>
+                          <td className="px-6 py-4 text-xs">{c.description || 'No description'}</td>
+                          <td className="px-6 py-4">
+                            <button 
+                              onClick={() => executeAction(`/admin/categories/${c._id}`, 'PUT', { isActive: !c.isActive })}
+                              className={`px-2 py-0.5 rounded-full text-xs font-bold capitalize ${c.isActive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}
+                            >
+                              {c.isActive ? 'Active' : 'Inactive'}
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => executeAction(`/admin/categories/${c._id}`, 'DELETE')}
+                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 23. QUERIES */}
+          {activeTab === 'queries' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Customer Inquiries & Queries</h3>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">From</th>
+                        <th className="px-6 py-4">Query Details</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {queries.map((q) => (
+                        <tr key={q._id}>
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-200">{q.name}</span>
+                            <span className="text-xs text-slate-400">{q.email} | {q.phone || 'N/A'}</span>
+                          </td>
+                          <td className="px-6 py-4 space-y-1">
+                            <span className="block font-bold text-primary-500">{q.subject}</span>
+                            <p className="text-xs text-slate-600 dark:text-slate-400 italic max-w-md whitespace-pre-line">"{q.message}"</p>
+                            <span className="block text-[10px] text-slate-400">{new Date(q.createdAt).toLocaleString()}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <select 
+                              value={q.status} 
+                              onChange={(e) => executeAction(`/admin/queries/${q._id}`, 'PUT', { status: e.target.value })}
+                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                            >
+                              <option value="unread">Unread</option>
+                              <option value="read">Read</option>
+                              <option value="resolved">Resolved</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => executeAction(`/admin/queries/${q._id}`, 'DELETE')}
+                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 24. SUPPORT */}
+          {activeTab === 'tickets' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Customer Support Tickets</h3>
+                <button 
+                  onClick={() => setShowModal('ticket')}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Create Support Ticket
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Ticket ID</th>
+                        <th className="px-6 py-4">Customer</th>
+                        <th className="px-6 py-4">Issue</th>
+                        <th className="px-6 py-4">Priority</th>
+                        <th className="px-6 py-4">Assigned To</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {tickets.map((t) => (
+                        <tr key={t._id}>
+                          <td className="px-6 py-4 font-mono font-bold text-slate-850 dark:text-slate-100">{t.ticketId}</td>
+                          <td className="px-6 py-4">
+                            <span className="block font-semibold">{t.customerName}</span>
+                            <span className="text-xs text-slate-400">{t.phone || 'No phone'}</span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <p className="text-xs max-w-xs">{t.issue}</p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${t.priority === 'high' ? 'bg-rose-500/10 text-rose-500' : t.priority === 'medium' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-500/10 text-slate-500'}`}>
+                              {t.priority}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <select 
+                              value={t.assignedTo || ''} 
+                              onChange={(e) => executeAction(`/admin/tickets/${t._id}`, 'PUT', { assignedTo: e.target.value })}
+                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                            >
+                              <option value="">Unassigned</option>
+                              {supportTeam.map((agent) => (
+                                <option key={agent._id} value={agent.name}>{agent.name}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="px-6 py-4">
+                            <select 
+                              value={t.status} 
+                              onChange={(e) => executeAction(`/admin/tickets/${t._id}`, 'PUT', { status: e.target.value })}
+                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1 font-semibold"
+                            >
+                              <option value="open">Open</option>
+                              <option value="in-progress">In Progress</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="closed">Closed</option>
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <button 
+                              onClick={() => executeAction(`/admin/tickets/${t._id}`, 'DELETE')}
+                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 25. ANNOUNCEMENT */}
+          {activeTab === 'announcements' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">System Announcements</h3>
+                <button 
+                  onClick={() => setShowModal('announcement')}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Create Announcement
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {announcements.map((ann) => (
+                  <div key={ann._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col justify-between space-y-4">
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-start">
+                        <span className="font-extrabold text-slate-850 dark:text-slate-100 text-base">{ann.title}</span>
+                        <button 
+                          onClick={() => executeAction(`/admin/announcements/${ann._id}`, 'DELETE')}
+                          className="text-slate-400 hover:text-rose-500 p-1 rounded-lg"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap">{ann.content}</p>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-4 border-t border-slate-100 dark:border-slate-800">
+                      <span className="text-[10px] uppercase font-bold bg-primary-600/10 text-primary-550 px-2 py-0.5 rounded-full">
+                        Audience: {ann.targetAudience}
+                      </span>
+                      <button 
+                        onClick={() => executeAction(`/admin/announcements/${ann._id}`, 'PUT', { isActive: !ann.isActive })}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ann.isActive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}
+                      >
+                        {ann.isActive ? 'Active' : 'Inactive'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* SYSTEM SETTINGS VIEW */}
+
         </main>
       </div>
 
@@ -2842,6 +3652,396 @@ function App() {
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
                   Register Agent
                 </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 26. CREATE JOB MODAL */}
+      {showModal === 'job' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">New Job Application</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const candidateName = e.target.candidateName.value;
+                const email = e.target.email.value;
+                const phone = e.target.phone.value;
+                const position = e.target.position.value;
+                const experience = e.target.experience.value;
+                await executeAction('/admin/jobs', 'POST', { candidateName, email, phone, position, experience });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Candidate Name</label>
+                <input name="candidateName" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
+                  <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
+                  <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Position</label>
+                <input name="position" required placeholder="e.g. Sales Associate" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Experience</label>
+                <input name="experience" placeholder="e.g. 2 Years" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Application</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 27. CREATE CARD HOLDER MODAL */}
+      {showModal === 'card-holder' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">New Card Holder</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const email = e.target.email.value;
+                const phone = e.target.phone.value;
+                const cardType = e.target.cardType.value;
+                const cardNumber = e.target.cardNumber.value;
+                const expiryDate = e.target.expiryDate.value;
+                await executeAction('/admin/card-holders', 'POST', { name, email, phone, cardType, cardNumber, expiryDate });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
+                <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
+                  <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
+                  <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Card Type</label>
+                  <select name="cardType" defaultValue="Gold" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="Silver">Silver</option>
+                    <option value="Gold">Gold</option>
+                    <option value="Platinum">Platinum</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Card Number</label>
+                  <input name="cardNumber" required placeholder="e.g. CARD-998877" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Expiry Date</label>
+                <input name="expiryDate" required type="date" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Holder</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 28. RECORD PAYMENT MODAL */}
+      {showModal === 'payment' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Record New Transaction</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const title = e.target.title.value;
+                const amount = Number(e.target.amount.value);
+                const type = e.target.type.value;
+                const status = e.target.status.value;
+                await executeAction('/admin/payments', 'POST', { title, amount, type, status });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Transaction Title</label>
+                <input name="title" placeholder="e.g. Agent commission payout" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Amount (₹)</label>
+                  <input name="amount" required type="number" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Type</label>
+                  <select name="type" defaultValue="credit" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="credit">Credit (Inflow)</option>
+                    <option value="debit">Debit (Outflow)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Status</label>
+                <select name="status" defaultValue="completed" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="completed">Completed</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Record Transaction</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 29. ONBOARD DELIVERY PARTNER */}
+      {showModal === 'delivery-partner' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Onboard Delivery Partner</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const email = e.target.email.value;
+                const phone = e.target.phone.value;
+                const vehicleType = e.target.vehicleType.value;
+                const vehicleNumber = e.target.vehicleNumber.value;
+                const city = e.target.city.value;
+                await executeAction('/admin/delivery-partners', 'POST', { name, email, phone, vehicleType, vehicleNumber, city });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Partner Name</label>
+                <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
+                  <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
+                  <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vehicle Type</label>
+                  <input name="vehicleType" required placeholder="e.g. Motorcycle / Van" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vehicle Number</label>
+                  <input name="vehicleNumber" required placeholder="e.g. DL-3C-AB-1234" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">City</label>
+                <input name="city" required placeholder="e.g. Delhi" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Onboard Partner</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 30. ADD SUPPORT AGENT */}
+      {showModal === 'support-team' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Add Customer Support Agent</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const email = e.target.email.value;
+                const phone = e.target.phone.value;
+                const role = e.target.role.value;
+                await executeAction('/admin/support-team', 'POST', { name, email, phone, role });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent Name</label>
+                <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
+                  <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
+                  <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Support Role</label>
+                <select name="role" defaultValue="agent" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="agent">Support Executive</option>
+                  <option value="manager">Support Manager</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Agent</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 31. ADD CATEGORY */}
+      {showModal === 'category' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Add New Category</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const description = e.target.description.value;
+                await executeAction('/admin/categories', 'POST', { name, description });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Category Name</label>
+                <input name="name" placeholder="e.g. Healthcare / Electronics" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
+                <textarea name="description" placeholder="Description of the category..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]" />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Category</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 32. CREATE SUPPORT TICKET */}
+      {showModal === 'ticket' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Create Support Ticket</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const customerName = e.target.customerName.value;
+                const phone = e.target.phone.value;
+                const issue = e.target.issue.value;
+                const priority = e.target.priority.value;
+                await executeAction('/admin/tickets', 'POST', { customerName, phone, issue, priority });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Customer Name</label>
+                <input name="customerName" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
+                <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Issue / Description</label>
+                <textarea name="issue" required placeholder="Customer issue details..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Priority</label>
+                <select name="priority" defaultValue="medium" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Create Ticket</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 33. CREATE ANNOUNCEMENT */}
+      {showModal === 'announcement' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">New Announcement</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const title = e.target.title.value;
+                const content = e.target.content.value;
+                const targetAudience = e.target.targetAudience.value;
+                await executeAction('/admin/announcements', 'POST', { title, content, targetAudience });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Title</label>
+                <input name="title" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Content</label>
+                <textarea name="content" required placeholder="Announcement content..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[100px]" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Target Audience</label>
+                <select name="targetAudience" defaultValue="all" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="all">All Users</option>
+                  <option value="vendors">Vendors</option>
+                  <option value="agents">Agents</option>
+                  <option value="customers">Customers</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Publish Announcement</button>
               </div>
             </form>
           </div>

@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
-    _id: { type: mongoose.Schema.Types.Mixed },
+    _id: { type: mongoose.Schema.Types.Mixed, default: () => new mongoose.Types.ObjectId() },
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     phone: { type: String, unique: true, sparse: true },
