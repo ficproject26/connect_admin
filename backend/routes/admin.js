@@ -1483,7 +1483,7 @@ router.delete('/support-team/:id', [auth, adminAuth], async (req, res) => {
 });
 
 // GET all categories
-router.get('/categories', [auth, adminAuth], async (req, res) => {
+router.get('/categories', async (req, res) => {
     try {
         const categories = await Category.find().sort({ name: 1 });
         res.json(categories);

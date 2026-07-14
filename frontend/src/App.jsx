@@ -1228,42 +1228,47 @@ function App() {
                   {agents
                     .filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()))
                     .map((agent) => (
-                      <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                        <div className="flex gap-4">
-                          <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover" />
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-slate-850 dark:text-slate-100">{agent.name}</span>
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                {agent.status}
-                              </span>
-                            </div>
-                            <div className="text-xs text-slate-400 mt-1 space-x-2">
-                              <span>{agent.phone}</span>
-                              <span>•</span>
-                              <span>{agent.email}</span>
-                              <span>•</span>
-                              <span className="text-amber-500 dark:text-amber-400 font-bold font-mono">PW: password123</span>
+                      <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                        <div 
+                          onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
+                          className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-1 cursor-pointer"
+                        >
+                          <div className="flex gap-4">
+                            <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors">{agent.name}</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                  {agent.status}
+                                </span>
+                              </div>
+                              <div className="text-xs text-slate-400 mt-1 space-x-2">
+                                <span>{agent.phone}</span>
+                                <span>•</span>
+                                <span>{agent.email}</span>
+                                <span>•</span>
+                                <span className="text-amber-500 dark:text-amber-400 font-bold font-mono">PW: password123</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
-                          <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                            <span className="block text-slate-400">Pincode</span>
-                            <span className="font-bold">{agent.assignedPincode?.code || 'None'}</span>
-                          </div>
-                          <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                            <span className="block text-slate-400">Wallet</span>
-                            <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
-                          </div>
-                          <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                            <span className="block text-slate-400">Vendors</span>
-                            <span className="font-bold">{agent.vendorsAdded || 0}</span>
-                          </div>
-                          <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                            <span className="block text-slate-400">Commission</span>
-                            <span className="font-bold">₹{agent.commissionEarned || 0}</span>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
+                            <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                              <span className="block text-slate-400">Pincode</span>
+                              <span className="font-bold">{agent.assignedPincode?.code || 'None'}</span>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                              <span className="block text-slate-400">Wallet</span>
+                              <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                              <span className="block text-slate-400">Vendors</span>
+                              <span className="font-bold">{agent.vendorsAdded || 0}</span>
+                            </div>
+                            <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                              <span className="block text-slate-400">Commission</span>
+                              <span className="font-bold">₹{agent.commissionEarned || 0}</span>
+                            </div>
                           </div>
                         </div>
 
@@ -1515,40 +1520,45 @@ function App() {
                 {vendors
                   .filter(v => filterCategory === 'All' || v.category === filterCategory || (v.vendorType && v.vendorType.toLowerCase().includes(filterCategory.toLowerCase())) || (v.subcategory && v.subcategory.toLowerCase().includes(filterCategory.toLowerCase())))
                   .map((vendor) => (
-                    <div key={vendor._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-extrabold text-slate-850 dark:text-slate-100">{vendor.businessName}</span>
-                            <span className="bg-primary-500/10 text-primary-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.category}</span>
-                            {vendor.subcategory && (
-                              <span className="bg-purple-500/10 text-purple-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.subcategory}</span>
-                            )}
-                            {vendor.baseVendorType && (
-                              <span className="bg-blue-500/10 text-blue-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.baseVendorType}</span>
-                            )}
+                    <div key={vendor._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4 hover:shadow-md transition-shadow">
+                      <div 
+                        onClick={() => { setModalData(vendor); setShowModal('vendor-details'); }}
+                        className="cursor-pointer space-y-4"
+                      >
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-extrabold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors">{vendor.businessName}</span>
+                              <span className="bg-primary-500/10 text-primary-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.category}</span>
+                              {vendor.subcategory && (
+                                <span className="bg-purple-500/10 text-purple-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.subcategory}</span>
+                              )}
+                              {vendor.baseVendorType && (
+                                <span className="bg-blue-500/10 text-blue-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.baseVendorType}</span>
+                              )}
+                            </div>
+                            <span className="block text-xs text-slate-400 mt-1">{vendor.contactName} • {vendor.phone}</span>
                           </div>
-                          <span className="block text-xs text-slate-400 mt-1">{vendor.contactName} • {vendor.phone}</span>
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${vendor.status?.toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : vendor.status?.toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                            {vendor.status}
+                          </span>
                         </div>
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${vendor.status?.toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : vendor.status?.toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                          {vendor.status}
-                        </span>
-                      </div>
 
-                      <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl text-xs space-y-2 border border-slate-200/50 dark:border-slate-850">
-                        {vendor.vendorType && (
+                        <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl text-xs space-y-2 border border-slate-200/50 dark:border-slate-850">
+                          {vendor.vendorType && (
+                            <div className="flex justify-between">
+                              <span className="text-slate-400">Vendor Type:</span>
+                              <span className="font-semibold text-slate-700 dark:text-slate-300">{vendor.vendorType}</span>
+                            </div>
+                          )}
                           <div className="flex justify-between">
-                            <span className="text-slate-400">Vendor Type:</span>
-                            <span className="font-semibold text-slate-700 dark:text-slate-300">{vendor.vendorType}</span>
+                            <span className="text-slate-400">Referred Agent:</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">{vendor.agentId?.name || 'Direct / Platform Add'}</span>
                           </div>
-                        )}
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Referred Agent:</span>
-                          <span className="font-semibold text-slate-700 dark:text-slate-300">{vendor.agentId?.name || 'Direct / Platform Add'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-slate-400">Membership Tier:</span>
-                          <span className="font-bold text-amber-500 uppercase">{vendor.membership?.status === 'active' ? 'Active Pro' : 'None'}</span>
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Membership Tier:</span>
+                            <span className="font-bold text-amber-500 uppercase">{vendor.membership?.status === 'active' ? 'Active Pro' : 'None'}</span>
+                          </div>
                         </div>
                       </div>
 
@@ -2862,13 +2872,25 @@ function App() {
                               {c.isActive ? 'Active' : 'Inactive'}
                             </button>
                           </td>
-                          <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => executeAction(`/admin/categories/${c._id}`, 'DELETE')}
-                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
-                            >
-                              Delete
-                            </button>
+                          <td className="px-6 py-4 text-right flex gap-3 justify-end items-center">
+                            {c.subcategory ? (
+                              <>
+                                <button 
+                                  onClick={() => { setModalData(c); setShowModal('edit-category'); }}
+                                  className="text-primary-600 hover:text-primary-500 text-xs font-semibold"
+                                >
+                                  Edit
+                                </button>
+                                <button 
+                                  onClick={() => executeAction(`/admin/categories/${c._id}`, 'DELETE')}
+                                  className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                                >
+                                  Delete
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-[10px] uppercase font-bold text-slate-400">Predefined First Category</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -4070,7 +4092,13 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Main Name)</label>
-                <input name="name" placeholder="e.g. Restaurants" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <select name="name" required className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950">
+                  <option value="Hospitals">Hospitals</option>
+                  <option value="Hotels">Hotels</option>
+                  <option value="Restaurants">Restaurants</option>
+                  <option value="Stores">Stores</option>
+                  <option value="Services">Services</option>
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -4204,6 +4232,316 @@ function App() {
               className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10 cursor-default"
               onClick={(e) => e.stopPropagation()} 
             />
+          </div>
+        </div>
+      )}
+
+      {/* 35. VENDOR DETAILS MODAL */}
+      {showModal === 'vendor-details' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-3xl rounded-3xl p-6 space-y-6 my-8">
+            <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{modalData.businessName}</h3>
+                <span className="text-xs text-slate-400">Created: {new Date(modalData.createdAt).toLocaleDateString()}</span>
+              </div>
+              <button 
+                onClick={() => setShowModal(null)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+              <div className="space-y-4">
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Business Details</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-semibold">{modalData.category}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Subcategory:</span><span className="font-semibold">{modalData.subcategory || 'N/A'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Base Type:</span><span className="font-semibold">{modalData.baseVendorType || 'N/A'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Status:</span><span className="font-semibold capitalize">{modalData.status}</span></div>
+                </div>
+
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Contact Information</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Contact Person:</span><span className="font-semibold">{modalData.contactName}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-semibold">{modalData.phone}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-semibold truncate max-w-[200px]">{modalData.email}</span></div>
+                </div>
+
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Performance & Platform</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Total Orders:</span><span className="font-semibold">{modalData.totalOrders || 0}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Total Revenue:</span><span className="font-bold text-emerald-500">₹{modalData.totalRevenue || 0}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Total Bookings:</span><span className="font-semibold">{modalData.totalBookings || 0}</span></div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">KYC Documents & Verification</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-3">
+                  <div className="flex justify-between"><span className="text-slate-400">KYC Status:</span><span className="font-bold capitalize">{modalData.kycStatus}</span></div>
+                  
+                  {modalData.kycDocs && (
+                    <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                      {modalData.kycDocs.aadhaarNumber && (
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-400">Aadhaar:</span>
+                          <span className="font-semibold">{modalData.kycDocs.aadhaarNumber}</span>
+                        </div>
+                      )}
+                      {modalData.kycDocs.aadhaarImage && (
+                        <button 
+                          onClick={() => setKycPreviewImage(modalData.kycDocs.aadhaarImage)}
+                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
+                        >
+                          View Aadhaar Document
+                        </button>
+                      )}
+                      
+                      {modalData.kycDocs.panNumber && (
+                        <div className="flex justify-between items-center text-xs pt-2">
+                          <span className="text-slate-400">PAN:</span>
+                          <span className="font-semibold">{modalData.kycDocs.panNumber}</span>
+                        </div>
+                      )}
+                      {modalData.kycDocs.panImage && (
+                        <button 
+                          onClick={() => setKycPreviewImage(modalData.kycDocs.panImage)}
+                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
+                        >
+                          View PAN Document
+                        </button>
+                      )}
+                      
+                      {modalData.kycDocs.selfie && (
+                        <button 
+                          onClick={() => setKycPreviewImage(modalData.kycDocs.selfie)}
+                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
+                        >
+                          View Selfie Profile
+                        </button>
+                      )}
+                      
+                      {modalData.kycDocs.businessProofImage && (
+                        <button 
+                          onClick={() => setKycPreviewImage(modalData.kycDocs.businessProofImage)}
+                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
+                        >
+                          View Business Proof Document
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Membership & Referral</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Membership Tier:</span><span className="font-bold text-amber-500 uppercase">{modalData.membership?.status === 'active' ? 'PRO MEMBER' : 'FREE TIER'}</span></div>
+                  {modalData.membership?.expiryDate && (
+                    <div className="flex justify-between"><span className="text-slate-400">Expires:</span><span>{new Date(modalData.membership.expiryDate).toLocaleDateString()}</span></div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Onboarding Agent:</span>
+                    <span>{modalData.agentId?.name || 'Direct Sign-Up'}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+              <button 
+                onClick={() => setShowModal(null)} 
+                className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all"
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 36. AGENT DETAILS MODAL */}
+      {showModal === 'agent-details' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-3xl rounded-3xl p-6 space-y-6 my-8">
+            <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <img 
+                  src={modalData.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
+                  alt="" 
+                  className="w-12 h-12 rounded-xl object-cover" 
+                />
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{modalData.name}</h3>
+                  <span className="text-xs text-slate-400">Registered: {new Date(modalData.createdAt).toLocaleDateString()}</span>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowModal(null)} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+              <div className="space-y-4">
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Agent Details</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Role:</span><span className="font-semibold capitalize">{modalData.role}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Level:</span><span className="font-semibold capitalize">{modalData.level || 'pincode'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Assigned Area:</span><span className="font-semibold">{modalData.assignedArea || 'N/A'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Assigned Pincode:</span><span className="font-bold text-primary-500">{modalData.assignedPincode?.code || 'None'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Status:</span><span className="font-semibold capitalize">{modalData.status}</span></div>
+                </div>
+
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Contact Information</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-semibold">{modalData.phone}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-semibold truncate max-w-[200px]">{modalData.email}</span></div>
+                </div>
+
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Performance & Financials</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Wallet Balance:</span><span className="font-bold text-emerald-500">₹{modalData.balance || 0}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Commission Earned:</span><span className="font-bold text-primary-500">₹{modalData.commissionEarned || 0}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Vendors Onboarded:</span><span className="font-bold">{modalData.vendorsAdded || 0}</span></div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">KYC Documents</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-3">
+                  {modalData.kyc ? (
+                    <div className="space-y-3">
+                      {modalData.kyc.aadhaarNumber && (
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-400">Aadhaar:</span>
+                          <span className="font-semibold">{modalData.kyc.aadhaarNumber}</span>
+                        </div>
+                      )}
+                      {modalData.kyc.aadhaarImage && (
+                        <button 
+                          onClick={() => setKycPreviewImage(modalData.kyc.aadhaarImage)}
+                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
+                        >
+                          View Aadhaar Document
+                        </button>
+                      )}
+                      
+                      {modalData.kyc.panNumber && (
+                        <div className="flex justify-between items-center text-xs pt-2">
+                          <span className="text-slate-400">PAN:</span>
+                          <span className="font-semibold">{modalData.kyc.panNumber}</span>
+                        </div>
+                      )}
+                      {modalData.kyc.panImage && (
+                        <button 
+                          onClick={() => setKycPreviewImage(modalData.kyc.panImage)}
+                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
+                        >
+                          View PAN Document
+                        </button>
+                      )}
+                      
+                      {modalData.kyc.selfie && (
+                        <button 
+                          onClick={() => setKycPreviewImage(modalData.kyc.selfie)}
+                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
+                        >
+                          View Selfie Profile
+                        </button>
+                      )}
+                      
+                      {modalData.kyc.businessProofImage && (
+                        <button 
+                          onClick={() => setKycPreviewImage(modalData.kyc.businessProofImage)}
+                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
+                        >
+                          View Business Proof Document
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-slate-400 text-center py-4">No KYC documents uploaded</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+              <button 
+                onClick={() => setShowModal(null)} 
+                className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all"
+              >
+                Close Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 37. EDIT CATEGORY MODAL */}
+      {showModal === 'edit-category' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Edit Category Hierarchy</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const subcategory = e.target.subcategory.value;
+                const subSubcategory = e.target.subSubcategory.value;
+                const description = e.target.description.value;
+                await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { subcategory, subSubcategory, description });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Non-Editable)</label>
+                <input 
+                  disabled 
+                  value={modalData.name} 
+                  type="text" 
+                  className="w-full bg-slate-100 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-500 cursor-not-allowed" 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub)</label>
+                  <input 
+                    name="subcategory" 
+                    defaultValue={modalData.subcategory || ''} 
+                    type="text" 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Sub-sub)</label>
+                  <input 
+                    name="subSubcategory" 
+                    defaultValue={modalData.subSubcategory || ''} 
+                    type="text" 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
+                <textarea 
+                  name="description" 
+                  defaultValue={modalData.description || ''} 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]" 
+                />
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Save Changes</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
