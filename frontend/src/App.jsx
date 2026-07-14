@@ -4,7 +4,7 @@ import {
   MapPin, Settings, DollarSign, Award, Image, BarChart3, 
   Layers, LogOut, Menu, Sun, Moon, Plus, Edit2, Trash2, 
   Search, Filter, ChevronRight, Download, CreditCard, Clock,
-  ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, UploadCloud, Bell, User,
+  ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, EyeOff, UploadCloud, Bell, User,
   Briefcase, Truck, Headphones, Folder, HelpCircle, MessageSquare, Megaphone, ShoppingBag, Calendar, Contact
 } from 'lucide-react';
 import { 
@@ -13,6 +13,148 @@ import {
 } from 'recharts';
 
 const API_BASE = 'http://localhost:5001/api';
+
+const TAXONOMY = {
+  "Services": {
+    "Healthcare": ["Hospitals", "Clinics", "Diagnostic Centers", "Pharmacies", "Dental Care", "Eye Care", "Ambulance Services", "Home Nursing", "Health Checkups", "Telemedicine", "Physiotherapy", "Medical Equipment"],
+    "Education": ["Schools", "Colleges", "Universities", "Online Courses", "Training Institutes", "Skill Development", "Computer Training", "AI & IT Training", "Language Classes", "Competitive Exam Coaching", "Certification Programs"],
+    "Employment": ["Job Portal", "Recruitment Services", "Resume Building", "Interview Preparation", "Career Guidance", "Placement Services", "Internship Programs", "Freelancing Opportunities", "Overseas Jobs"],
+    "Financial": ["Banking Services", "Personal Loans", "Home Loans", "Business Loans", "Credit Cards", "Investment Plans", "Mutual Funds", "Financial Consulting", "Tax Planning", "Retirement Planning"],
+    "Insurance": ["Health Insurance", "Life Insurance", "Vehicle Insurance", "Travel Insurance", "Property Insurance", "Business Insurance", "Accident Insurance"],
+    "Home Services": ["Electrician", "Plumber", "Carpenter", "Painter", "Interior Design", "Home Cleaning", "Pest Control", "AC Repair", "Appliance Repair", "CCTV Installation", "Smart Home Solutions"],
+    "Legal": ["Legal Consultation", "Property Registration", "Agreement Drafting", "Notary Services", "Court Assistance", "Company Registration", "Trademark Registration", "Legal Documentation"],
+    "Digital": ["Website Development", "Mobile App Development", "UI/UX Design", "Digital Marketing", "SEO Services", "Social Media Marketing", "Graphic Design", "Video Editing", "Cloud Solutions", "Software Development"],
+    "Business": ["Company Formation", "GST Registration", "Payroll Management", "HR Solutions", "Recruitment Services", "Business Consulting", "Branding Services", "Franchise Consulting", "Startup Advisory"],
+    "Automobile": ["Car Service", "Bike Service", "Car Wash", "Roadside Assistance", "Vehicle Inspection", "Vehicle Insurance", "Driving School", "Vehicle Rental"],
+    "Telecom": ["Mobile Recharge", "DTH Recharge", "Broadband Services", "Fiber Internet", "SIM Activation", "Business Connectivity"],
+    "Utilities": ["Electricity Bill Payment", "Water Bill Payment", "Gas Booking", "Property Tax", "Internet Bill Payment", "Government Services"],
+    "Family": ["Child Care", "Day Care", "Elder Care", "Home Care", "Family Counseling", "Parenting Support"],
+    "Fitness": ["Gym Membership", "Yoga Classes", "Personal Training", "Nutrition Consultation", "Wellness Centers", "Spa Services", "Mental Wellness"],
+    "Events": ["Wedding Planning", "Birthday Events", "Corporate Events", "Photography", "Videography", "Catering Services", "Decoration Services"],
+    "Hospitality": ["Hotels", "Resorts", "Homestays", "Service Apartments", "Luxury Villas", "Corporate Stay"],
+    "Travel": ["Flight Booking", "Train Booking", "Bus Booking", "Tour Packages", "Visa Assistance", "Passport Assistance", "Travel Insurance", "Car Rentals", "Holiday Packages"],
+    "Real Estate": ["Property Buying", "Property Selling", "Property Rental", "Property Management", "Interior Solutions", "Home Loans"],
+    "Security": ["Security Guards", "CCTV Monitoring", "Cyber Security", "Home Security", "Office Security"]
+  },
+  "Products": {
+    "Electronics": ["Smartphones", "Tablets", "Laptops", "Desktop Computers", "Smart Watches", "Headphones", "Earbuds", "Speakers", "Cameras", "Printers", "Computer Accessories"],
+    "IT & Office": ["Monitors", "Keyboards", "Mouse", "Webcams", "Routers", "Networking Devices", "Storage Devices", "Office Printers", "Projectors", "UPS & Power Backup"],
+    "Home Appliances": ["Refrigerators", "Washing Machines", "Air Conditioners", "Televisions", "Microwave Ovens", "Water Purifiers", "Vacuum Cleaners", "Air Coolers", "Fans", "Geysers"],
+    "Furniture": ["Sofas", "Dining Tables", "Beds", "Mattresses", "Wardrobes", "Office Chairs", "Office Tables", "Study Tables", "TV Units", "Shoe Racks"],
+    "Fashion": [
+      "Men - Shirts", "Men - T-Shirts", "Men - Jeans", "Men - Footwear", "Men - Watches", "Men - Accessories",
+      "Women - Sarees", "Women - Kurtis", "Women - Dresses", "Women - Footwear", "Women - Handbags", "Women - Jewelry",
+      "Kids - Clothing", "Kids - School Accessories", "Kids - Footwear", "Kids - Toys"
+    ],
+    "Beauty": ["Skincare", "Haircare", "Cosmetics", "Perfumes", "Grooming Products", "Wellness Products"],
+    "Baby Care": ["Baby Food", "Diapers", "Baby Clothing", "Baby Toys", "Baby Care Products", "Baby Accessories"],
+    "Sports & Fitness": ["Gym Equipment", "Yoga Accessories", "Sports Wear", "Sports Equipment", "Fitness Trackers", "Cycling Accessories"],
+    "Books": ["Academic Books", "Story Books", "Notebooks", "Office Stationery", "Art Supplies", "Educational Materials"],
+    "Gaming": ["Gaming Consoles", "Gaming Accessories", "VR Devices", "Gaming Chairs", "Gaming PCs"],
+    "Automobile": ["Car Accessories", "Bike Accessories", "Tyres", "Vehicle Care Products", "Safety Equipment", "GPS Devices"],
+    "Home & Kitchen": ["Kitchen Appliances", "Cookware", "Storage Containers", "Dining Sets", "Home Decor", "Lighting Products"],
+    "Pet Care": ["Pet Food", "Pet Toys", "Pet Accessories", "Pet Grooming Products", "Pet Healthcare"],
+    "Gardening": ["Plants", "Gardening Tools", "Outdoor Furniture", "Seeds", "Fertilizers"],
+    "Healthcare": ["Medical Equipment", "Health Monitoring Devices", "Wellness Products", "Orthopedic Products", "Personal Health Devices"],
+    "Business Products": ["Safety Equipment", "Tools & Machinery", "Office Supplies", "Packaging Materials", "Business Equipment"]
+  },
+  "Daily Needs": {
+    "Grocery": ["Staples", "Rice", "Wheat", "Flour", "Rava", "Pulses", "Dal", "Sugar", "Salt", "Cooking Oil", "Spices", "Packaged Foods", "Biscuits", "Snacks", "Noodles", "Breakfast Cereals", "Ready-to-Eat Foods", "Dry Fruits"],
+    "Fruits & Vegetables": ["Fresh Fruits", "Apple", "Banana", "Orange", "Mango", "Grapes", "Pomegranate", "Fresh Vegetables", "Onion", "Tomato", "Potato", "Carrot", "Cabbage", "Green Vegetables"],
+    "Dairy": ["Milk", "Curd", "Butter", "Ghee", "Cheese", "Paneer", "Yogurt", "Ice Cream", "Flavored Milk"],
+    "Water & Beverages": ["Drinking Water", "Water Cans", "Mineral Water", "RO Water Delivery", "Beverages", "Tea", "Coffee", "Juices", "Soft Drinks", "Energy Drinks", "Health Drinks"],
+    "Household Essentials": ["Cleaning Products", "Floor Cleaner", "Toilet Cleaner", "Glass Cleaner", "Disinfectants", "Kitchen Essentials", "Dishwash Liquid", "Scrub Pads", "Aluminum Foil", "Storage Containers", "Utility Items", "Buckets", "Mops", "Dustbins", "Cloth Drying Stands"],
+    "Personal Care": ["Bath & Body", "Soap", "Body Wash", "Shampoo", "Conditioner", "Face Wash", "Grooming", "Razor", "Trimmer", "Hair Oil", "Deodorants", "Perfumes", "Oral Care", "Toothpaste", "Toothbrush", "Mouthwash"],
+    "Baby Care": ["Baby Diapers", "Baby Wipes", "Baby Powder", "Baby Soap", "Baby Shampoo", "Baby Food", "Feeding Bottles"],
+    "Pharmacy": ["Medicines", "OTC Medicines", "Pain Relief Products", "Cold & Cough Remedies", "Healthcare Products", "Thermometer", "BP Monitor", "Glucose Monitor", "First Aid Kit", "Sanitizers", "Face Masks"],
+    "Pet Care": ["Dog Food", "Cat Food", "Pet Shampoo", "Pet Toys", "Pet Accessories", "Pet Medicines"],
+    "Bakery": ["Bread", "Cakes", "Buns", "Cookies", "Fresh Bakery Items"],
+    "Organic Products": ["Organic Vegetables", "Organic Fruits", "Organic Rice", "Organic Spices", "Natural Health Products"],
+    "Utility Products": ["Batteries", "Power Banks", "Chargers", "LED Bulbs", "Extension Boards", "Inverters"]
+  },
+  "Food": {
+    "Restaurants": ["Fine Dining", "Family Restaurants", "Casual Dining", "Luxury Restaurants", "Rooftop Restaurants", "Buffet Restaurants", "Theme Restaurants"],
+    "Fast Food": ["Burgers", "Pizza", "Sandwiches", "French Fries", "Wraps", "Hot Dogs", "Fried Chicken"],
+    "Cafes": ["Coffee Shops", "Tea Cafes", "Dessert Cafes", "Co-working Cafes", "Juice Cafes", "Premium Lounges"],
+    "South Indian": ["Idli", "Dosa", "Uttapam", "Pongal", "Vada", "Meals", "Biryani"],
+    "North Indian": ["Roti", "Naan", "Paneer Dishes", "Dal Varieties", "Tandoori Items", "Thali Meals"],
+    "Biryani": ["Chicken Biryani", "Mutton Biryani", "Veg Biryani", "Dum Biryani", "Fried Rice", "Pulav"],
+    "Healthy Food": ["Salads", "Diet Meals", "Protein Meals", "Organic Foods", "Keto Foods", "Vegan Foods"],
+    "Bakery": ["Cakes", "Pastries", "Cookies", "Donuts", "Brownies", "Chocolates", "Ice Cream"],
+    "Beverages": ["Tea", "Coffee", "Fresh Juice", "Smoothies", "Milkshakes", "Soft Drinks", "Energy Drinks"],
+    "International Cuisine": ["Chinese", "Italian", "Mexican", "Thai", "Japanese", "Korean", "Continental"],
+    "Non-Veg Specials": ["Chicken", "Mutton", "Fish", "Seafood", "Grill Items", "BBQ"],
+    "Vegetarian Specials": ["Pure Veg Restaurants", "Jain Food", "Organic Food", "Traditional Meals"],
+    "Home Food": ["Homemade Meals", "Tiffin Services", "Daily Lunch Plans", "Healthy Home Food"],
+    "Catering": ["Wedding Catering", "Birthday Catering", "Corporate Catering", "Event Catering", "Bulk Orders"],
+    "Subscription Meals": ["Daily Breakfast", "Daily Lunch", "Daily Dinner", "Monthly Meal Plans", "Office Meal Plans"],
+    "Premium Dining": ["5-Star Hotels", "Luxury Dining", "Chef Specials", "Exclusive Member Restaurants"]
+  },
+  "Stay": {
+    "Hotels": ["Budget Hotels", "Business Hotels", "Premium Hotels", "Luxury Hotels", "5-Star Hotels", "Airport Hotels", "Boutique Hotels"],
+    "Resorts": ["Beach Resorts", "Hill Station Resorts", "Family Resorts", "Luxury Resorts", "Wellness Resorts", "Eco Resorts", "Adventure Resorts"],
+    "Homestays": ["Family Homestays", "Village Homestays", "Luxury Homestays", "Farm Stays", "Heritage Homestays"],
+    "Service Apartments": ["Daily Rental", "Weekly Rental", "Monthly Rental", "Corporate Apartments", "Family Apartments"],
+    "Vacation Rentals": ["Villas", "Holiday Homes", "Farm Houses", "Private Houses", "Weekend Getaways"],
+    "Student Accommodation": ["Boys Hostel", "Girls Hostel", "PG Accommodation", "Student Apartments", "College Hostels"],
+    "Corporate Stay": ["Business Hotels", "Corporate Guest Houses", "Executive Suites", "Long-Term Business Stay"],
+    "Camping & Adventure": ["Tent Camping", "Glamping", "Forest Stay", "Mountain Camps", "Adventure Camps"],
+    "Heritage Stay": ["Palace Hotels", "Heritage Resorts", "Traditional Houses", "Cultural Stays"],
+    "Couple Stay": ["Honeymoon Resorts", "Romantic Hotels", "Luxury Villas", "Private Pool Villas"],
+    "Family Stay": ["Family Hotels", "Family Resorts", "Kid-Friendly Resorts", "Holiday Packages"],
+    "Wellness Retreats": ["Yoga Retreats", "Meditation Centers", "Ayurveda Resorts", "Wellness Retreats", "Spa Resorts"],
+    "Medical Stay": ["Hospital Guest Houses", "Medical Tourism Stay", "Patient Accommodation", "Caregiver Accommodation"],
+    "Religious Stay": ["Temple Guest Houses", "Pilgrimage Hotels", "Spiritual Retreats", "Religious Accommodation"],
+    "Rental Accommodation": ["Flats", "Apartments", "Independent Houses", "Shared Accommodation", "Rental Villas"],
+    "International Stay": ["International Hotels", "Global Resorts", "Holiday Packages", "Travel Accommodation"]
+  },
+  "Travel": {
+    "Flight Booking": ["Domestic Flights", "International Flights", "One-Way Flights", "Round Trip Flights", "Multi-City Flights", "Business Class", "First Class", "Charter Flights"],
+    "Train Booking": ["Express Trains", "Superfast Trains", "Premium Trains", "Tatkal Booking", "Tourist Trains", "Luxury Trains"],
+    "Bus Booking": ["Government Buses", "Private Buses", "Sleeper Buses", "AC Buses", "Luxury Coaches", "Volvo Services"],
+    "Cab Services": ["Local Taxi", "Airport Transfer", "Outstation Cabs", "Luxury Cars", "Chauffeur Services", "Self-Drive Cars"],
+    "Car Rental": ["Self Drive Cars", "Monthly Rental", "Luxury Car Rental", "Corporate Rental", "Tourist Vehicles"],
+    "Bike Rental": ["Scooters", "Motorcycles", "Premium Bikes", "Adventure Bikes"],
+    "Tour Packages": ["Domestic Tours", "International Tours", "Weekend Trips", "Family Packages", "Group Tours", "Couple Packages"],
+    "Honeymoon Packages": ["Beach Destinations", "Hill Stations", "International Honeymoon", "Luxury Honeymoon Resorts"],
+    "Family Travel": ["Family Holiday Packages", "Theme Parks", "Resorts", "Family Adventures"],
+    "Corporate Travel": ["Business Flights", "Hotel Booking", "Corporate Cab Services", "Employee Travel Management"],
+    "Adventure Travel": ["Trekking", "Camping", "Wildlife Safari", "Mountain Climbing", "Water Sports", "Adventure Tours"],
+    "Religious Travel": ["Temple Tours", "Pilgrimage Packages", "Spiritual Retreats", "Holy City Tours"],
+    "Holiday Packages": ["Beach Holidays", "Hill Station Holidays", "Island Vacations", "Cruise Vacations"],
+    "Cruise Travel": ["Domestic Cruises", "International Cruises", "Luxury Cruises", "Family Cruises"],
+    "Visa Services": ["Tourist Visa", "Business Visa", "Student Visa", "Work Visa", "Visa Consultation"],
+    "Passport Services": ["New Passport", "Renewal", "Tatkal Passport", "Passport Assistance"],
+    "International Travel": ["International Flights", "International Hotels", "Global Packages", "Travel Assistance"],
+    "Travel Essentials": ["Travel Insurance", "Forex Services", "SIM Cards", "Travel Accessories", "Airport Lounge Access"],
+    "Emergency Travel": ["Medical Emergency Travel", "Emergency Ticket Booking", "Travel Support", "Insurance Claims"]
+  },
+  "Jobs": {
+    "Banking": ["Relationship Manager", "Sales Officer", "Branch Operations", "Customer Service Executive", "Credit Analyst", "Loan Officer", "CASA Executive", "Branch Manager", "Wealth Manager", "Commercial Banking"],
+    "IT": ["Software Developer", "Full Stack Developer", "Frontend Developer", "Backend Developer", "Mobile App Developer", "UI/UX Designer", "DevOps Engineer", "Cloud Engineer", "Data Analyst", "AI Engineer", "Cyber Security Analyst"],
+    "Non-IT": ["Admin Executive", "Office Assistant", "Data Entry Operator", "Operations Executive", "Coordinator", "Receptionist", "Back Office Executive"],
+    "BPO": ["Voice Process", "Non-Voice Process", "Customer Support", "Technical Support", "Chat Support", "International Process", "Domestic Process"],
+    "Sales & Marketing": ["Sales Executive", "Business Development Executive", "Marketing Executive", "Digital Marketing Executive", "Territory Sales Manager", "Area Sales Manager", "Brand Executive"],
+    "Manufacturing": ["Production Operator", "Machine Operator", "Quality Inspector", "Production Supervisor", "Plant Manager", "Maintenance Technician"],
+    "Automobile": ["Service Advisor", "Technician", "Sales Consultant", "Workshop Manager", "Spare Parts Executive"],
+    "Healthcare": ["Doctors", "Nurses", "Pharmacists", "Lab Technicians", "Medical Representatives", "Hospital Administrators"],
+    "Education": ["Teachers", "Professors", "Trainers", "Academic Counselors", "School Administrators", "Placement Officers"],
+    "Hospitality": ["Hotel Manager", "Front Office Executive", "Housekeeping Staff", "Chef", "Waiter", "Restaurant Manager"],
+    "Travel & Tourism": ["Travel Consultant", "Tour Coordinator", "Ticketing Executive", "Visa Consultant", "Travel Operations Executive"],
+    "Real Estate": ["Property Consultant", "Sales Executive", "Site Engineer", "CRM Executive", "Real Estate Manager"],
+    "Legal": ["Advocate", "Legal Associate", "Legal Advisor", "Documentation Executive"],
+    "Finance": ["Accountant", "Finance Executive", "Tax Consultant", "Auditor", "Chartered Accountant"],
+    "Logistics": ["Warehouse Executive", "Logistics Coordinator", "Supply Chain Analyst", "Delivery Executive"],
+    "Construction": ["Civil Engineer", "Site Supervisor", "Project Manager", "Architect", "Quantity Surveyor"],
+    "Creative": ["Graphic Designer", "Video Editor", "Animator", "Content Writer", "Social Media Manager"],
+    "Retail": ["Store Manager", "Cashier", "Retail Sales Executive", "Inventory Executive"],
+    "HR & Recruitment": ["HR Executive", "Recruiter", "Talent Acquisition Specialist", "HR Manager"],
+    "Government": ["State Government Jobs", "Central Government Jobs", "Railway Jobs", "Defense Jobs", "PSU Jobs"],
+    "International": ["Gulf Jobs", "Europe Jobs", "Singapore Jobs", "Malaysia Jobs", "Canada Jobs", "Australia Jobs"],
+    "Internships": ["IT Internship", "HR Internship", "Marketing Internship", "Banking Internship", "Finance Internship"],
+    "Freelance & Remote": ["Remote Developer", "Remote Designer", "Virtual Assistant", "Freelance Writer", "Online Tutor"]
+  }
+};
 
 // --- Safe LocalStorage Initialization Helper ---
 const getSafeLocalStorageItem = (key, fallbackValue) => {
@@ -96,6 +238,44 @@ function App() {
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const [onboardType, setOnboardType] = useState('delivery-partner');
+  const [showAgentPassword, setShowAgentPassword] = useState(false);
+  const [showAgentConfirmPassword, setShowAgentConfirmPassword] = useState(false);
+  const [agentViewMode, setAgentViewMode] = useState('list');
+  const [pincodeStateFilter, setPincodeStateFilter] = useState('');
+  const [pincodeDistrictFilter, setPincodeDistrictFilter] = useState('');
+  const [pincodeStatusFilter, setPincodeStatusFilter] = useState('all');
+
+  // Category management cascading/adding states
+  const [addFirstCategory, setAddFirstCategory] = useState("Services");
+  const [addSecondCategory, setAddSecondCategory] = useState("");
+  const [addThirdCategory, setAddThirdCategory] = useState("");
+  const [isAddingSecondCategory, setIsAddingSecondCategory] = useState(false);
+  const [isAddingThirdCategory, setIsAddingThirdCategory] = useState(false);
+
+  useEffect(() => {
+    if (TAXONOMY[addFirstCategory]) {
+      const secondKeys = Object.keys(TAXONOMY[addFirstCategory]);
+      if (secondKeys.length > 0) {
+        setAddSecondCategory(secondKeys[0]);
+        const thirdVals = TAXONOMY[addFirstCategory][secondKeys[0]] || [];
+        setAddThirdCategory(thirdVals[0] || "");
+      } else {
+        setAddSecondCategory("");
+        setAddThirdCategory("");
+      }
+    }
+  }, [addFirstCategory]);
+
+  useEffect(() => {
+    if (TAXONOMY[addFirstCategory] && TAXONOMY[addFirstCategory][addSecondCategory]) {
+      const thirdVals = TAXONOMY[addFirstCategory][addSecondCategory] || [];
+      setAddThirdCategory(thirdVals[0] || "");
+    } else {
+      setAddThirdCategory("");
+    }
+  }, [addSecondCategory, addFirstCategory]);
 
   // Dark Mode State
   const [darkMode, setDarkMode] = useState(() => {
@@ -643,6 +823,20 @@ function App() {
               </button>
 
               <button 
+                onClick={() => setActiveTab('technicians')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'technicians' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Contact className="w-4 h-4" /> Technicians
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('executives')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'executives' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <UserCheck className="w-4 h-4" /> Executives
+              </button>
+
+              <button 
                 onClick={() => setActiveTab('support-team')} 
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'support-team' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
@@ -1164,12 +1358,20 @@ function App() {
                         </span>
                       )}
                     </div>
-                    <button 
-                      onClick={() => executeAction(`/admin/admins/${adm._id}`, 'DELETE')}
-                      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => { setModalData(adm); setShowModal('admin'); }}
+                        className="p-2 text-slate-400 hover:text-primary-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => executeAction(`/admin/admins/${adm._id}`, 'DELETE')}
+                        className="p-2 text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1205,8 +1407,8 @@ function App() {
 
               {/* Agent Grid / Directory */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex gap-4 justify-between items-center">
-                  <div className="flex gap-2 bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl flex-1 border border-slate-200/60 dark:border-slate-850 max-w-md">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                  <div className="flex gap-2 bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl flex-1 border border-slate-200/60 dark:border-slate-850 w-full sm:max-w-md">
                     <Search className="w-5 h-5 text-slate-400" />
                     <input 
                       type="text" 
@@ -1216,102 +1418,204 @@ function App() {
                       className="bg-transparent focus:outline-none text-sm w-full"
                     />
                   </div>
-                  <button 
-                    onClick={() => { setModalData(null); setShowModal('create-agent'); }}
-                    className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" /> Add Agent
-                  </button>
+                  <div className="flex gap-3 items-center w-full sm:w-auto justify-between sm:justify-end">
+                    <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <button 
+                        type="button"
+                        onClick={() => setAgentViewMode('list')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${agentViewMode === 'list' ? 'bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-300'}`}
+                      >
+                        List
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setAgentViewMode('grid')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${agentViewMode === 'grid' ? 'bg-white dark:bg-slate-900 text-slate-855 dark:text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-300'}`}
+                      >
+                        Grid
+                      </button>
+                    </div>
+                    <button 
+                      onClick={() => { setModalData(null); setShowModal('create-agent'); }}
+                      className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 text-xs"
+                    >
+                      <Plus className="w-4 h-4" /> Add Agent
+                    </button>
+                  </div>
                 </div>
 
-                <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {agents
-                    .filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map((agent) => (
-                      <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                        <div 
-                          onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
-                          className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-1 cursor-pointer"
-                        >
-                          <div className="flex gap-4">
-                            <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover" />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors">{agent.name}</span>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                  {agent.status}
-                                </span>
+                {agentViewMode === 'list' ? (
+                  <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {agents
+                      .filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .map((agent) => (
+                        <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                          <div 
+                            onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
+                            className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-1 cursor-pointer"
+                          >
+                            <div className="flex gap-4">
+                              <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors">{agent.name}</span>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                    {agent.status}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-slate-400 mt-1 space-x-2">
+                                  <span>{agent.phone}</span>
+                                  <span>•</span>
+                                  <span>{agent.email}</span>
+                                </div>
                               </div>
-                              <div className="text-xs text-slate-400 mt-1 space-x-2">
-                                <span>{agent.phone}</span>
-                                <span>•</span>
-                                <span>{agent.email}</span>
-                                <span>•</span>
-                                <span className="text-amber-500 dark:text-amber-400 font-bold font-mono">PW: password123</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
+                              <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                                <span className="block text-slate-400">Pincode</span>
+                                <span className="font-bold">{agent.assignedPincode?.code || 'None'}</span>
+                              </div>
+                              <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                                <span className="block text-slate-400">Wallet</span>
+                                <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
+                              </div>
+                              <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                                <span className="block text-slate-400">Vendors</span>
+                                <span className="font-bold">{agent.vendorsAdded || 0}</span>
+                              </div>
+                              <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                                <span className="block text-slate-400">Commission</span>
+                                <span className="font-bold">₹{agent.commissionEarned || 0}</span>
                               </div>
                             </div>
                           </div>
 
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
-                            <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                              <span className="block text-slate-400">Pincode</span>
-                              <span className="font-bold">{agent.assignedPincode?.code || 'None'}</span>
-                            </div>
-                            <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                              <span className="block text-slate-400">Wallet</span>
-                              <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
-                            </div>
-                            <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                              <span className="block text-slate-400">Vendors</span>
-                              <span className="font-bold">{agent.vendorsAdded || 0}</span>
-                            </div>
-                            <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                              <span className="block text-slate-400">Commission</span>
-                              <span className="font-bold">₹{agent.commissionEarned || 0}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2 justify-end">
-                          <button 
-                            onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
-                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                          >
-                            Assign Task
-                          </button>
-                          <button 
-                            onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
-                            className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                          >
-                            Edit
-                          </button>
-                          {agent.status === 'approved' ? (
+                          <div className="flex gap-2 justify-end">
                             <button 
-                              onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
-                              className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                              onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
+                              className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                             >
-                              Suspend
+                              Assign Task
                             </button>
-                          ) : (
-                            <>
+                            <button 
+                              onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
+                              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                            >
+                              Edit
+                            </button>
+                            {agent.status === 'approved' ? (
                               <button 
-                                onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
-                                className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
+                                className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                               >
-                                Reject
+                                Suspend
                               </button>
-                              <button 
-                                onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
-                                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                              >
-                                Approve
-                              </button>
-                            </>
-                          )}
+                            ) : (
+                              <>
+                                <button 
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                                  className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                >
+                                  Reject
+                                </button>
+                                <button 
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                >
+                                  Approve
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6 bg-slate-50/50 dark:bg-slate-950/10">
+                    {agents
+                      .filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .map((agent) => (
+                        <div key={agent._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                          <div 
+                            onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
+                            className="cursor-pointer space-y-4"
+                          >
+                            <div className="flex gap-3.5 items-center">
+                              <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors truncate">{agent.name}</span>
+                                  <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                    {agent.status}
+                                  </span>
+                                </div>
+                                <span className="block text-xs text-slate-400 mt-1 truncate">{agent.email}</span>
+                                <span className="block text-xs text-slate-400 truncate">{agent.phone}</span>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2.5 text-center text-xs">
+                              <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
+                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Pincode</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-300">{agent.assignedPincode?.code || 'None'}</span>
+                              </div>
+                              <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
+                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Wallet</span>
+                                <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
+                              </div>
+                              <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
+                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Vendors</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-300">{agent.vendorsAdded || 0}</span>
+                              </div>
+                              <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
+                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Comm.</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-300">₹{agent.commissionEarned || 0}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 justify-end pt-3 border-t border-slate-100 dark:border-slate-800/80">
+                            <button 
+                              onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
+                              className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                            >
+                              Assign Task
+                            </button>
+                            <button 
+                              onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
+                              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                            >
+                              Edit
+                            </button>
+                            {agent.status === 'approved' ? (
+                              <button 
+                                onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
+                                className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                              >
+                                Suspend
+                              </button>
+                            ) : (
+                              <>
+                                <button 
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                                  className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                >
+                                  Reject
+                                </button>
+                                <button 
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                >
+                                  Approve
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
 
             </div>
@@ -1434,67 +1738,122 @@ function App() {
                       </button>
                     </div>
                   )}
-
                 </div>
               </div>
 
-              {/* Existing Pincodes List */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl w-80">
-                    <Search className="w-5 h-5 text-slate-400" />
-                    <input 
-                      type="text" 
-                      placeholder="Search pincode, city, state..." 
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="bg-transparent focus:outline-none text-sm w-full"
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => { setModalData(null); setShowModal('pincode'); }}
-                      className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
-                    >
-                      Assign Pincode
-                    </button>
-                    <button 
-                      onClick={() => { setModalData(null); setShowModal('create-pincode'); }}
-                      className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
-                    >
-                      Create Pincode
-                    </button>
-                  </div>
-                </div>
+                   {/* Existing Pincodes List */}
+              {(() => {
+                const uniqueStates = [...new Set(pincodes.map(p => p.state).filter(Boolean))].sort();
+                const uniqueDistricts = [...new Set(pincodes.map(p => p.district).filter(Boolean))].sort();
+                
+                const filteredPincodes = pincodes.filter(p => {
+                  const matchesSearch = !searchTerm || 
+                                        p.code.includes(searchTerm) || 
+                                        p.district.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                        p.state.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        (p.activeAgentId?.name && p.activeAgentId.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                                        
+                  const matchesState = !pincodeStateFilter || p.state === pincodeStateFilter;
+                  const matchesDistrict = !pincodeDistrictFilter || p.district === pincodeDistrictFilter;
+                  const matchesStatus = pincodeStatusFilter === 'all' || 
+                                        (pincodeStatusFilter === 'assigned' && p.activeAgentId) || 
+                                        (pincodeStatusFilter === 'unassigned' && !p.activeAgentId);
+                                        
+                  return matchesSearch && matchesState && matchesDistrict && matchesStatus;
+                });
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {pincodes
-                    .filter(p => p.code.includes(searchTerm) || p.district.toLowerCase().includes(searchTerm.toLowerCase()))
-                    .map((pin) => (
-                      <div key={pin._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200/50 dark:border-slate-850 flex items-center justify-between">
-                        <div>
-                          <span className="block text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{pin.code}</span>
-                          <span className="text-xs text-slate-400">{pin.name}, {pin.district}, {pin.state}</span>
-                          <span className="block text-xs font-semibold mt-2">
-                            Assigned Agent: {pin.activeAgentId ? (
-                              <span className="text-primary-500 font-bold">{pin.activeAgentId.name}</span>
-                            ) : (
-                              <span className="text-slate-400 italic">Available</span>
-                            )}
-                          </span>
+                return (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                    <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                      <div className="flex flex-1 flex-wrap gap-3 w-full">
+                        <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[200px]">
+                          <Search className="w-5 h-5 text-slate-400" />
+                          <input 
+                            type="text" 
+                            placeholder="Search pincode, district, state, agent..." 
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="bg-transparent focus:outline-none text-sm w-full"
+                          />
                         </div>
-                        {pin.activeAgentId && (
-                          <button 
-                            onClick={() => executeAction('/admin/pincodes/remove', 'POST', { pincodeId: pin._id })}
-                            className="text-xs font-bold text-rose-500 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-all"
-                          >
-                            Deassign
-                          </button>
-                        )}
+                        
+                        <select
+                          value={pincodeStateFilter}
+                          onChange={(e) => setPincodeStateFilter(e.target.value)}
+                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                        >
+                          <option value="">All States</option>
+                          {uniqueStates.map(state => (
+                            <option key={state} value={state}>{state}</option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={pincodeDistrictFilter}
+                          onChange={(e) => setPincodeDistrictFilter(e.target.value)}
+                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                        >
+                          <option value="">All Districts</option>
+                          {uniqueDistricts.map(district => (
+                            <option key={district} value={district}>{district}</option>
+                          ))}
+                        </select>
+
+                        <select
+                          value={pincodeStatusFilter}
+                          onChange={(e) => setPincodeStatusFilter(e.target.value)}
+                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                        >
+                          <option value="all">All Assignments</option>
+                          <option value="assigned">Assigned</option>
+                          <option value="unassigned">Unassigned</option>
+                        </select>
                       </div>
-                  ))}
-                </div>
-              </div>
+
+                      <div className="flex gap-2 shrink-0 w-full xl:w-auto justify-end">
+                        <button 
+                          onClick={() => { setModalData(null); setShowModal('pincode'); }}
+                          className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 text-xs"
+                        >
+                          Assign Pincode
+                        </button>
+                        <button 
+                          onClick={() => { setModalData(null); setShowModal('create-pincode'); }}
+                          className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 text-xs"
+                        >
+                          Create Pincode
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {filteredPincodes.map((pin) => (
+                        <div key={pin._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200/50 dark:border-slate-850 flex items-center justify-between">
+                          <div>
+                            <span className="block text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{pin.code}</span>
+                            <span className="text-xs text-slate-400">{pin.name}, {pin.district}, {pin.state}</span>
+                            <span className="block text-xs font-semibold mt-2">
+                              Assigned Agent: {pin.activeAgentId ? (
+                                <span className="text-primary-500 font-bold">{pin.activeAgentId.name}</span>
+                              ) : (
+                                <span className="text-slate-400 italic">Available</span>
+                              )}
+                            </span>
+                          </div>
+                          {pin.activeAgentId && (
+                            <button 
+                              onClick={() => executeAction('/admin/pincodes/remove', 'POST', { pincodeId: pin._id })}
+                              className="text-xs font-bold text-rose-500 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-all"
+                            >
+                              Deassign
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -2713,7 +3072,7 @@ function App() {
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Delivery Partners</h3>
                 <button 
-                  onClick={() => setShowModal('delivery-partner')}
+                  onClick={() => { setOnboardType('delivery-partner'); setShowModal('delivery-partner'); }}
                   className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                 >
                   Onboard Delivery Partner
@@ -2733,38 +3092,176 @@ function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {deliveryPartners.map((dp) => (
-                        <tr key={dp._id}>
-                          <td className="px-6 py-4">
-                            <span className="block font-bold text-slate-800 dark:text-slate-200">{dp.name}</span>
-                            <span className="text-xs text-slate-400">{dp.email} | {dp.phone}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="block font-semibold">{dp.vehicleType}</span>
-                            <span className="text-xs text-slate-400">{dp.vehicleNumber || 'N/A'}</span>
-                          </td>
-                          <td className="px-6 py-4">{dp.city}</td>
-                          <td className="px-6 py-4">
-                            <select 
-                              value={dp.status} 
-                              onChange={(e) => executeAction(`/admin/delivery-partners/${dp._id}`, 'PUT', { status: e.target.value })}
-                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
-                            >
-                              <option value="active">Active</option>
-                              <option value="inactive">Inactive</option>
-                              <option value="suspended">Suspended</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => executeAction(`/admin/delivery-partners/${dp._id}`, 'DELETE')}
-                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
-                            >
-                              Delete
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {deliveryPartners
+                        .filter(dp => dp.vehicleType?.toLowerCase() !== 'technician' && dp.vehicleType?.toLowerCase() !== 'executive')
+                        .map((dp) => (
+                          <tr key={dp._id}>
+                            <td className="px-6 py-4">
+                              <span className="block font-bold text-slate-800 dark:text-slate-200">{dp.name}</span>
+                              <span className="text-xs text-slate-400">{dp.email} | {dp.phone}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="block font-semibold">{dp.vehicleType}</span>
+                              <span className="text-xs text-slate-400">{dp.vehicleNumber || 'N/A'}</span>
+                            </td>
+                            <td className="px-6 py-4">{dp.city}</td>
+                            <td className="px-6 py-4">
+                              <select 
+                                value={dp.status} 
+                                onChange={(e) => executeAction(`/admin/delivery-partners/${dp._id}`, 'PUT', { status: e.target.value })}
+                                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                              >
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="suspended">Suspended</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => executeAction(`/admin/delivery-partners/${dp._id}`, 'DELETE')}
+                                className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TECHNICIANS TAB */}
+          {activeTab === 'technicians' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Service Technicians</h3>
+                <button 
+                  onClick={() => { setOnboardType('technician'); setShowModal('delivery-partner'); }}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Onboard Technician
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Technician Name</th>
+                        <th className="px-6 py-4">Specialty / Role</th>
+                        <th className="px-6 py-4">City</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {deliveryPartners
+                        .filter(dp => dp.vehicleType?.toLowerCase() === 'technician')
+                        .map((dp) => (
+                          <tr key={dp._id}>
+                            <td className="px-6 py-4">
+                              <span className="block font-bold text-slate-800 dark:text-slate-200">{dp.name}</span>
+                              <span className="text-xs text-slate-400">{dp.email} | {dp.phone}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="bg-purple-500/10 text-purple-500 text-[10px] font-bold px-2 py-0.5 rounded-full capitalize">
+                                Service Specialist
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">{dp.city}</td>
+                            <td className="px-6 py-4">
+                              <select 
+                                value={dp.status} 
+                                onChange={(e) => executeAction(`/admin/delivery-partners/${dp._id}`, 'PUT', { status: e.target.value })}
+                                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                              >
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="suspended">Suspended</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => executeAction(`/admin/delivery-partners/${dp._id}`, 'DELETE')}
+                                className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EXECUTIVES TAB */}
+          {activeTab === 'executives' && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Executives</h3>
+                <button 
+                  onClick={() => { setOnboardType('executive'); setShowModal('delivery-partner'); }}
+                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                >
+                  Onboard Executive
+                </button>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Executive Name</th>
+                        <th className="px-6 py-4">Role</th>
+                        <th className="px-6 py-4">City</th>
+                        <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {deliveryPartners
+                        .filter(dp => dp.vehicleType?.toLowerCase() === 'executive')
+                        .map((dp) => (
+                          <tr key={dp._id}>
+                            <td className="px-6 py-4">
+                              <span className="block font-bold text-slate-800 dark:text-slate-200">{dp.name}</span>
+                              <span className="text-xs text-slate-400">{dp.email} | {dp.phone}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="bg-blue-500/10 text-blue-500 text-[10px] font-bold px-2 py-0.5 rounded-full capitalize">
+                                Operations Executive
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">{dp.city}</td>
+                            <td className="px-6 py-4">
+                              <select 
+                                value={dp.status} 
+                                onChange={(e) => executeAction(`/admin/delivery-partners/${dp._id}`, 'PUT', { status: e.target.value })}
+                                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                              >
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="suspended">Suspended</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => executeAction(`/admin/delivery-partners/${dp._id}`, 'DELETE')}
+                                className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 </div>
@@ -3248,7 +3745,9 @@ function App() {
       {showModal === 'admin' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Register Admin</h3>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
+              {modalData ? 'Edit Admin User' : 'Register Admin'}
+            </h3>
             <form 
               onSubmit={async (e) => {
                 e.preventDefault();
@@ -3258,33 +3757,43 @@ function App() {
                 const adminRole = e.target.adminRole.value;
                 const branchId = e.target.branchId.value || null;
                 
-                await executeAction('/admin/admins', 'POST', { name, email, password, adminRole, branchId });
+                const payload = { name, email, adminRole, branchId };
+                if (password) payload.password = password;
+
+                if (modalData) {
+                  await executeAction(`/admin/admins/${modalData._id}`, 'PUT', payload);
+                } else {
+                  await executeAction('/admin/admins', 'POST', payload);
+                }
                 setShowModal(null);
               }}
               className="space-y-4"
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
-                <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input name="name" required defaultValue={modalData?.name || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email</label>
-                <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input name="email" required defaultValue={modalData?.email || ''} type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Password</label>
-                <input name="password" required type="password" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
+                  Password {modalData && '(Leave blank to keep current)'}
+                </label>
+                <input name="password" required={!modalData} type="password" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Role</label>
-                <select name="adminRole" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                <select name="adminRole" defaultValue={modalData?.adminRole || 'branch-admin'} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
                   <option value="branch-admin">District Admin</option>
                   <option value="staff">Staff</option>
+                  <option value="super-admin">Super Admin</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">District Assignment</label>
-                <select name="branchId" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                <select name="branchId" defaultValue={modalData?.branchId?._id || modalData?.branchId || ''} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
                   <option value="">None (Global)</option>
                   {branches.map(b => (
                     <option key={b._id} value={b._id}>{b.name}</option>
@@ -3296,7 +3805,7 @@ function App() {
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
-                  Create Admin
+                  {modalData ? 'Save Changes' : 'Register Admin'}
                 </button>
               </div>
             </form>
@@ -3727,7 +4236,7 @@ function App() {
 
       {showModal === 'create-agent' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Register New Agent</h3>
             <form 
               onSubmit={async (e) => {
@@ -3736,12 +4245,27 @@ function App() {
                 const email = e.target.email.value;
                 const phone = e.target.phone.value;
                 const password = e.target.password.value;
+                const confirmPassword = e.target.confirmPassword.value;
                 const level = e.target.level.value;
                 const assignedArea = e.target.assignedArea.value;
                 const pincode = e.target.pincode.value;
                 const status = e.target.status.value;
                 
-                await executeAction('/admin/create-agent', 'POST', { name, email, phone, password, level, assignedArea, pincode, status });
+                if (password !== confirmPassword) {
+                  alert("Passwords do not match!");
+                  return;
+                }
+
+                const bankDetails = {
+                  upiId: e.target.upiId.value,
+                  bankName: e.target.bankName.value,
+                  accountNumber: e.target.accountNumber.value,
+                  ifscCode: e.target.ifscCode.value,
+                };
+                
+                await executeAction('/admin/create-agent', 'POST', { 
+                  name, email, phone, password, level, assignedArea, pincode, status, bankDetails 
+                });
                 setShowModal(null);
               }}
               className="space-y-4"
@@ -3760,10 +4284,48 @@ function App() {
                   <input name="phone" required type="text" placeholder="9876543210" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Password</label>
-                <input name="password" required type="password" placeholder="••••••••" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Password</label>
+                  <div className="relative">
+                    <input 
+                      name="password" 
+                      required 
+                      type={showAgentPassword ? "text" : "password"} 
+                      placeholder="••••••••" 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3.5 pr-10 py-2 text-sm" 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAgentPassword(!showAgentPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showAgentPassword ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Confirm Password</label>
+                  <div className="relative">
+                    <input 
+                      name="confirmPassword" 
+                      required 
+                      type={showAgentConfirmPassword ? "text" : "password"} 
+                      placeholder="••••••••" 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3.5 pr-10 py-2 text-sm" 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAgentConfirmPassword(!showAgentConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      {showAgentConfirmPassword ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent Level</label>
@@ -3790,6 +4352,30 @@ function App() {
                     <option value="approved">Approved & Active</option>
                     <option value="pending">Pending KYC Review</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-4">
+                <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment / Payout Details</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">UPI ID</label>
+                    <input name="upiId" type="text" placeholder="e.g. name@upi" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Bank Name</label>
+                    <input name="bankName" type="text" placeholder="e.g. HDFC Bank" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Account Number</label>
+                    <input name="accountNumber" type="text" placeholder="Account Number" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">IFSC Code</label>
+                    <input name="ifscCode" type="text" placeholder="IFSC Code" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  </div>
                 </div>
               </div>
               
@@ -3972,15 +4558,17 @@ function App() {
       {showModal === 'delivery-partner' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Onboard Delivery Partner</h3>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
+              {onboardType === 'technician' ? 'Onboard Technician' : onboardType === 'executive' ? 'Onboard Executive' : 'Onboard Delivery Partner'}
+            </h3>
             <form 
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
                 const email = e.target.email.value;
                 const phone = e.target.phone.value;
-                const vehicleType = e.target.vehicleType.value;
-                const vehicleNumber = e.target.vehicleNumber.value;
+                const vehicleType = onboardType !== 'delivery-partner' ? onboardType : e.target.vehicleType.value;
+                const vehicleNumber = onboardType !== 'delivery-partner' ? 'N/A' : e.target.vehicleNumber.value;
                 const city = e.target.city.value;
                 await executeAction('/admin/delivery-partners', 'POST', { name, email, phone, vehicleType, vehicleNumber, city });
                 setShowModal(null);
@@ -3988,7 +4576,7 @@ function App() {
               className="space-y-4"
             >
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Partner Name</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
                 <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -4001,16 +4589,18 @@ function App() {
                   <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vehicle Type</label>
-                  <input name="vehicleType" required placeholder="e.g. Motorcycle / Van" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              {onboardType === 'delivery-partner' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vehicle Type</label>
+                    <input name="vehicleType" required placeholder="e.g. Motorcycle / Van" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vehicle Number</label>
+                    <input name="vehicleNumber" required placeholder="e.g. DL-3C-AB-1234" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vehicle Number</label>
-                  <input name="vehicleNumber" required placeholder="e.g. DL-3C-AB-1234" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
-                </div>
-              </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">City</label>
                 <input name="city" required placeholder="e.g. Delhi" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
@@ -4018,7 +4608,9 @@ function App() {
 
               <div className="flex gap-2 justify-end pt-4">
                 <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
-                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Onboard Partner</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  {onboardType === 'technician' ? 'Onboard Technician' : onboardType === 'executive' ? 'Onboard Executive' : 'Onboard Partner'}
+                </button>
               </div>
             </form>
           </div>
@@ -4092,22 +4684,93 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Main Name)</label>
-                <select name="name" required className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950">
-                  <option value="Hospitals">Hospitals</option>
-                  <option value="Hotels">Hotels</option>
-                  <option value="Restaurants">Restaurants</option>
-                  <option value="Stores">Stores</option>
+                <select 
+                  name="name" 
+                  value={addFirstCategory}
+                  onChange={(e) => {
+                    setAddFirstCategory(e.target.value);
+                    setIsAddingSecondCategory(false);
+                    setIsAddingThirdCategory(false);
+                  }}
+                  required 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950"
+                >
                   <option value="Services">Services</option>
+                  <option value="Products">Products</option>
+                  <option value="Daily Needs">Daily Needs</option>
+                  <option value="Food">Food</option>
+                  <option value="Stay">Stay</option>
+                  <option value="Travel">Travel</option>
+                  <option value="Jobs">Jobs</option>
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub)</label>
-                  <input name="subcategory" placeholder="e.g. Fast Food" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase">Second Category (Sub)</label>
+                    <button 
+                      type="button" 
+                      onClick={() => setIsAddingSecondCategory(!isAddingSecondCategory)}
+                      className="text-[10px] text-primary-500 hover:text-primary-600 font-bold uppercase transition-all"
+                    >
+                      {isAddingSecondCategory ? "Select Existing" : "Add Category"}
+                    </button>
+                  </div>
+                  {isAddingSecondCategory ? (
+                    <input 
+                      name="subcategory" 
+                      placeholder="Enter new category" 
+                      required 
+                      type="text" 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                    />
+                  ) : (
+                    <select 
+                      name="subcategory"
+                      value={addSecondCategory}
+                      onChange={(e) => {
+                        setAddSecondCategory(e.target.value);
+                        setIsAddingThirdCategory(false);
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950"
+                    >
+                      {Object.keys(TAXONOMY[addFirstCategory] || {}).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Sub-sub)</label>
-                  <input name="subSubcategory" placeholder="e.g. Pizza / Burgers" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <div className="flex justify-between items-center mb-2">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase">Third Category (Sub-sub)</label>
+                    <button 
+                      type="button" 
+                      onClick={() => setIsAddingThirdCategory(!isAddingThirdCategory)}
+                      className="text-[10px] text-primary-500 hover:text-primary-600 font-bold uppercase transition-all"
+                    >
+                      {isAddingThirdCategory ? "Select Existing" : "Add Category"}
+                    </button>
+                  </div>
+                  {isAddingThirdCategory || isAddingSecondCategory ? (
+                    <input 
+                      name="subSubcategory" 
+                      placeholder="Enter sub-subcategory" 
+                      type="text" 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                    />
+                  ) : (
+                    <select 
+                      name="subSubcategory"
+                      value={addThirdCategory}
+                      onChange={(e) => setAddThirdCategory(e.target.value)}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950"
+                    >
+                      {(TAXONOMY[addFirstCategory]?.[addSecondCategory] || []).map(subsub => (
+                        <option key={subsub} value={subsub}>{subsub}</option>
+                      ))}
+                      <option value="">None (Empty)</option>
+                    </select>
+                  )}
                 </div>
               </div>
               <div>
@@ -4402,6 +5065,18 @@ function App() {
                   <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-semibold">{modalData.phone}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-semibold truncate max-w-[200px]">{modalData.email}</span></div>
                 </div>
+
+                {modalData.bankDetails && (
+                  <>
+                    <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Payment & Payout Details</h4>
+                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                      {modalData.bankDetails.upiId && <div className="flex justify-between text-xs"><span className="text-slate-400">UPI ID:</span><span className="font-semibold">{modalData.bankDetails.upiId}</span></div>}
+                      {modalData.bankDetails.bankName && <div className="flex justify-between text-xs"><span className="text-slate-400">Bank Name:</span><span className="font-semibold">{modalData.bankDetails.bankName}</span></div>}
+                      {modalData.bankDetails.accountNumber && <div className="flex justify-between text-xs"><span className="text-slate-400">Account Number:</span><span className="font-semibold">{modalData.bankDetails.accountNumber}</span></div>}
+                      {modalData.bankDetails.ifscCode && <div className="flex justify-between text-xs"><span className="text-slate-400">IFSC Code:</span><span className="font-semibold">{modalData.bankDetails.ifscCode}</span></div>}
+                    </div>
+                  </>
+                )}
 
                 <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Performance & Financials</h4>
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">

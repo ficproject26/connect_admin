@@ -1200,7 +1200,7 @@ router.post('/save-pincode', [auth, adminAuth], async (req, res) => {
 
 // Create Agent Directly
 router.post('/create-agent', [auth, adminAuth], async (req, res) => {
-    const { name, email, phone, password, level, assignedArea, pincode, status } = req.body;
+    const { name, email, phone, password, level, assignedArea, pincode, status, bankDetails } = req.body;
     try {
         const bcrypt = require('bcryptjs');
         let user = await User.findOne({ email });
@@ -1231,7 +1231,8 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
             assignedArea,
             assignedPincode,
             status: status || 'approved',
-            isActive: status === 'approved'
+            isActive: status === 'approved',
+            bankDetails
         });
 
         const salt = await bcrypt.genSalt(10);
