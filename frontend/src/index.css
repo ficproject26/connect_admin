@@ -1,0 +1,80 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Outfit', 'Inter', sans-serif;
+  --color-primary-50: #fefdf0;
+  --color-primary-100: #fefbd6;
+  --color-primary-200: #fef5ad;
+  --color-primary-300: #fded77;
+  --color-primary-400: #fcdc3b;
+  --color-primary-500: #eab308;
+  --color-primary-600: #ca8a04;
+  --color-primary-700: #a16207;
+  --color-primary-800: #854d0e;
+  --color-primary-900: #713f12;
+  --color-primary-950: #422006;
+}
+
+body {
+  @apply bg-slate-100 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100;
+  font-family: var(--font-sans);
+}
+
+/* Glassmorphism custom styling */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dark .glass {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full dark:bg-slate-800;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400 dark:bg-slate-700;
+}
+
+/* Premium active navigation styling (Subtle low-opacity yellow background with bright yellow text) */
+aside .bg-primary-600 {
+  background-color: rgba(234, 179, 8, 0.2) !important; /* 80% reduced intensity (20% opacity) */
+  color: #facc15 !important; /* Premium bright yellow text */
+}
+
+aside .bg-primary-600 svg {
+  color: #facc15 !important; /* Ensure active icon is also bright yellow */
+}
+
+/* Sidebar navigation icon branding color (Yellow) */
+aside nav button svg {
+  color: #facc15 !important; /* Company logo yellow color */
+}
+
+/* Sidebar navigation text color (White for inactive) */
+aside nav button {
+  color: rgba(255, 255, 255, 0.9) !important; /* Soft premium white */
+}
+
+/* Ensure active tab keeps yellow text */
+aside .bg-primary-600 {
+  color: #facc15 !important; 
+}

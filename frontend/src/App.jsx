@@ -1,0 +1,2861 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  Users, UserCheck, ShieldAlert, FileText, CheckCircle, XCircle, 
+  MapPin, Settings, DollarSign, Award, Image, BarChart3, 
+  Layers, LogOut, Menu, Sun, Moon, Plus, Edit2, Trash2, 
+  Search, Filter, ChevronRight, Download, CreditCard, Clock,
+  ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, UploadCloud, Bell, User
+} from 'lucide-react';
+import { 
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  BarChart, Bar, Legend, PieChart, Pie, Cell
+} from 'recharts';
+
+const API_BASE = 'http://localhost:5001/api';
+
+// --- Safe LocalStorage Initialization Helper ---
+const getSafeLocalStorageItem = (key, fallbackValue) => {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item || item === 'undefined') return fallbackValue;
+    return item;
+  } catch (e) {
+    return fallbackValue;
+  }
+};
+
+const getSafeParsedLocalStorageItem = (key, fallbackValue) => {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item || item === 'undefined') return fallbackValue;
+    return JSON.parse(item);
+  } catch (e) {
+    return fallbackValue;
+  }
+};
+
+// --- Error Boundary to prevent blank screens ---
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 max-w-2xl mx-auto my-16 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 text-rose-800 dark:text-rose-200 rounded-3xl shadow-xl">
+          <div className="flex items-center gap-3 mb-4">
+            <AlertTriangle className="w-8 h-8 text-rose-500" />
+            <h1 className="text-2xl font-extrabold tracking-tight">Portal Rendering Error</h1>
+          </div>
+          <p className="text-sm text-rose-600 dark:text-rose-400 mb-4 font-medium">
+            An unexpected error occurred during rendering. Please review the details below:
+          </p>
+          <pre className="text-xs overflow-auto bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 p-5 rounded-2xl border dark:border-slate-800 max-h-96 font-mono">
+            {this.state.error?.stack || this.state.error?.toString()}
+          </pre>
+          <div className="mt-6 flex gap-3">
+            <button 
+              onClick={() => {
+                localStorage.clear();
+                window.location.reload();
+              }}
+              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md text-sm"
+            >
+              Clear Session & Reload
+            </button>
+            <button 
+              onClick={() => window.location.reload()}
+              className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold px-5 py-2.5 rounded-xl transition-all text-sm"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function App() {
+  // Authentication & Session with safe initializers
+  const [token, setToken] = useState(() => getSafeLocalStorageItem('token', ''));
+  const [user, setUser] = useState(() => getSafeParsedLocalStorageItem('user', null));
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Dark Mode State
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem('theme') === 'dark' || 
+             (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } catch (e) {
+      return false;
+    }
+  });
+
+  // Navigation
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Data States
+  const [stats, setStats] = useState(null);
+  const [branches, setBranches] = useState([]);
+  const [admins, setAdmins] = useState([]);
+  const [agents, setAgents] = useState([]);
+  const [pincodes, setPincodes] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
+  const [commissions, setCommissions] = useState([]);
+  const [membershipPlans, setMembershipPlans] = useState([]);
+  const [banners, setBanners] = useState([]);
+  const [ads, setAds] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [tieups, setTieUps] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  
+  // Pincode Master Lookup States
+  const [lookupPincode, setLookupPincode] = useState('');
+  const [lookupResults, setLookupResults] = useState([]);
+  const [selectedOffice, setSelectedOffice] = useState(null);
+  const [showOfficeDropdown, setShowOfficeDropdown] = useState(false);
+  const [lookupLoading, setLookupLoading] = useState(false);
+
+  const handlePincodeLookup = async (pin) => {
+    setLookupPincode(pin);
+    if (pin.length !== 6 || isNaN(pin)) {
+      setLookupResults([]);
+      setSelectedOffice(null);
+      return;
+    }
+    setLookupLoading(true);
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+      const data = await res.json();
+      if (data && data[0] && data[0].Status === 'Success') {
+        setLookupResults(data[0].PostOffice || []);
+        setShowOfficeDropdown(true);
+      } else {
+        setLookupResults([]);
+      }
+    } catch (err) {
+      console.error(err);
+      setLookupResults([]);
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  // Search & Filter
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('All');
+  const [filterBranch, setFilterBranch] = useState('All');
+  const [reportType, setReportType] = useState('revenue');
+
+  // Modals / CRUD Actions
+  const [showModal, setShowModal] = useState(null); // 'branch', 'admin', 'plan', 'banner', 'ad', 'kyc', 'pincode'
+  const [modalData, setModalData] = useState(null);
+
+  // Apply Dark Mode Class
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      try { localStorage.setItem('theme', 'dark'); } catch(e){}
+    } else {
+      document.documentElement.classList.remove('dark');
+      try { localStorage.setItem('theme', 'light'); } catch(e){}
+    }
+  }, [darkMode]);
+
+  // Fetch Dashboard Stats & Associated Data
+  const fetchData = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+      
+      // 1. Dashboard KPIs
+      const statsRes = await fetch(`${API_BASE}/admin/dashboard-stats`, { headers });
+      if (statsRes.status === 401 || statsRes.status === 403) {
+        handleLogout();
+        return;
+      }
+      if (statsRes.ok) {
+        const statsData = await statsRes.json();
+        setStats(statsData);
+      }
+
+      // 2. Branches
+      const branchesRes = await fetch(`${API_BASE}/admin/branches`, { headers });
+      if (branchesRes.ok) setBranches(await branchesRes.json());
+
+      // 3. Admins
+      const adminsRes = await fetch(`${API_BASE}/admin/admins`, { headers });
+      if (adminsRes.ok) setAdmins(await adminsRes.json());
+
+      // 4. Agents
+      const agentsRes = await fetch(`${API_BASE}/admin/agents`, { headers });
+      if (agentsRes.ok) setAgents(await agentsRes.json());
+
+      // 5. Pincodes
+      const pincodesRes = await fetch(`${API_BASE}/pincodes`, { headers });
+      if (pincodesRes.ok) setPincodes(await pincodesRes.json());
+
+      // 6. Vendors
+      const vendorsRes = await fetch(`${API_BASE}/admin/vendors`, { headers });
+      if (vendorsRes.ok) setVendors(await vendorsRes.json());
+
+      // 7. Customers
+      const customersRes = await fetch(`${API_BASE}/admin/customers`, { headers });
+      if (customersRes.ok) setCustomers(await customersRes.json());
+
+      // 8. Withdrawals
+      const withdrawalsRes = await fetch(`${API_BASE}/admin/wallet/withdrawals`, { headers });
+      if (withdrawalsRes.ok) setWithdrawals(await withdrawalsRes.json());
+
+      // 9. Commissions
+      const commsRes = await fetch(`${API_BASE}/admin/commissions`, { headers });
+      if (commsRes.ok) setCommissions(await commsRes.json());
+
+      // 10. Memberships
+      const membersRes = await fetch(`${API_BASE}/admin/memberships/plans`, { headers });
+      if (membersRes.ok) setMembershipPlans(await membersRes.json());
+
+      // 11. Banners & Ads
+      const bannersRes = await fetch(`${API_BASE}/admin/banners`, { headers });
+      if (bannersRes.ok) setBanners(await bannersRes.json());
+
+      const adsRes = await fetch(`${API_BASE}/admin/ads`, { headers });
+      if (adsRes.ok) setAds(await adsRes.json());
+
+      // 12. Reports
+      const reportsRes = await fetch(`${API_BASE}/admin/reports?type=${reportType}`, { headers });
+      if (reportsRes.ok) setReports(await reportsRes.json());
+
+      // 13. Tie-ups & Tasks
+      const tieupsRes = await fetch(`${API_BASE}/admin/tie-ups`, { headers });
+      if (tieupsRes.ok) setTieUps(await tieupsRes.json());
+
+      const tasksRes = await fetch(`${API_BASE}/admin/tasks`, { headers });
+      if (tasksRes.ok) setTasks(await tasksRes.json());
+
+    } catch (err) {
+      console.error("API Server not reachable:", err);
+      // Silent catch or simple console error to keep UX clean, let's log it
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [token, reportType]);
+
+  // Auth Handling
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setAuthError('');
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.msg || 'Authentication failed');
+      }
+      if (data.user.role !== 'admin') {
+        throw new Error('Access denied. Admin portal only.');
+      }
+      try {
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+      } catch (e) {}
+      setToken(data.token);
+      setUser(data.user);
+      setActiveTab('dashboard');
+    } catch (err) {
+      console.error("API Login failed:", err.message);
+      setAuthError(err.message || 'Invalid Credentials or Connection Refused');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    try {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    } catch (e) {}
+    setToken('');
+    setUser(null);
+  };
+
+  // API Action Mutators
+  const executeAction = async (endpoint, method = 'POST', body = null) => {
+    try {
+      const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : null
+      });
+      const data = await res.json();
+      fetchData();
+      return { success: true, data };
+    } catch (err) {
+      console.error("API action failed:", err);
+      alert("API Action failed: Server unreachable or request rejected.");
+      return { success: false };
+    }
+  };
+
+  // Mock Exports
+  const handleExport = (format) => {
+    alert(`Generating and downloading ${reportType}_report.${format} ...`);
+  };
+
+  if (!user) {
+    // LOGIN SCREEN (Rich styling with Harmony palette, modern cards, and shadow styling)
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-6 relative overflow-hidden">
+        {/* Decorative background elements */}
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600 rounded-full filter blur-[150px] opacity-20 pointer-events-none"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-600 rounded-full filter blur-[150px] opacity-20 pointer-events-none"></div>
+        
+        <div className="w-full max-w-md bg-slate-800/40 border border-slate-700/60 p-8 rounded-3xl backdrop-blur-xl shadow-2xl relative z-10">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-4 overflow-hidden">
+              <img src="/logo.jpg" alt="Forge India Connect Logo" className="w-full h-full object-cover" />
+            </div>
+            <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-yellow-400 to-amber-500 bg-clip-text text-transparent">Forge India Connect</h1>
+            <p className="text-slate-400 mt-2">Super Admin & District Admin Portal</p>
+          </div>
+
+          {authError && (
+            <div className="bg-rose-500/10 border border-rose-500/30 text-rose-400 p-3 rounded-xl mb-6 text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Email Address</label>
+              <input 
+                type="email" 
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="e.g. admin@example.com"
+                required
+                className="w-full bg-slate-900/60 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-primary-500 transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Password</label>
+              <input 
+                type="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full bg-slate-900/60 border border-slate-700/50 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-primary-500 transition-colors"
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-primary-600 to-purple-600 hover:from-primary-500 hover:to-purple-500 text-white font-semibold py-3.5 rounded-xl transition-all duration-200 shadow-lg hover:shadow-primary-500/20 active:scale-95 disabled:opacity-50"
+            >
+              {loading ? 'Authenticating...' : 'Sign In to Portal'}
+            </button>
+          </form>
+
+          {/* Quick Login Assist Info */}
+          <div className="mt-8 pt-6 border-t border-slate-700/40 text-center">
+            <p className="text-xs text-slate-400 mb-2 font-medium">Demo Credentials</p>
+            <div className="grid grid-cols-3 gap-1.5 text-[9px]">
+              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-700/20">
+                <span className="block text-primary-400 font-bold font-semibold">Super Admin</span>
+                <span className="block break-all">admin@example.com</span>
+                <span className="block text-slate-400 font-mono">admin123</span>
+              </div>
+              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-700/20">
+                <span className="block text-purple-400 font-bold font-semibold">District Admin</span>
+                <span className="block break-all">north@example.com</span>
+                <span className="block text-slate-400 font-mono">admin123</span>
+              </div>
+              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-700/20">
+                <span className="block text-emerald-400 font-bold font-semibold">Agent App</span>
+                <span className="block break-all">amit@example.com</span>
+                <span className="block text-slate-400 font-mono">password123</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Super Admin vs Branch Admin menu filters
+  const isSuperAdmin = user.adminRole === 'super-admin';
+
+  return (
+    <div className="min-h-screen flex bg-slate-100 dark:bg-slate-950 transition-colors duration-200">
+      
+      {/* SIDEBAR */}
+      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-white border-r border-slate-800 transition-transform duration-300 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-0 lg:-translate-x-full'} lg:sticky lg:top-0 lg:h-screen lg:translate-x-0`}>
+        <div className="h-full flex flex-col justify-between py-6 px-4 overflow-hidden">
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex items-center gap-3 px-2 mb-8 shrink-0">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg overflow-hidden shrink-0">
+                <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
+              </div>
+              <div>
+                <span className="block text-sm font-bold tracking-wide">Forge India</span>
+                <span className="text-[10px] text-slate-400 capitalize">{(user?.adminRole || '').replace('-', ' ')}</span>
+              </div>
+            </div>
+
+            <nav className="space-y-1 overflow-y-auto flex-1 pr-1">
+              <button 
+                onClick={() => setActiveTab('dashboard')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'dashboard' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Layers className="w-4 h-4" /> Dashboard
+              </button>
+
+              {isSuperAdmin && (
+                <>
+                  <button 
+                    onClick={() => setActiveTab('branches')} 
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'branches' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <MapPin className="w-4 h-4" /> District Management
+                  </button>
+                  
+                  <button 
+                    onClick={() => setActiveTab('admins')} 
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'admins' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <UserCheck className="w-4 h-4" /> Admin Management
+                  </button>
+                </>
+              )}
+
+              <button 
+                onClick={() => setActiveTab('agents')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'agents' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Users className="w-4 h-4" /> Agent Directory
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('pincodes')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'pincodes' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <MapPin className="w-4 h-4" /> Pincode Management
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('vendors')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'vendors' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Layers className="w-4 h-4" /> Vendor Directory
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('customers')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'customers' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Users className="w-4 h-4" /> Customers
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('kyc')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'kyc' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <FileText className="w-4 h-4" /> KYC Verification
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('tieups')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tieups' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Layers className="w-4 h-4" /> Business Tie-ups
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('tasks')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tasks' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <CheckCircle className="w-4 h-4" /> Agent Tasks
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('wallet')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'wallet' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <DollarSign className="w-4 h-4" /> Wallet & Withdrawals
+              </button>
+
+              {isSuperAdmin && (
+                <>
+                  <button 
+                    onClick={() => setActiveTab('commissions')} 
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'commissions' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <CreditCard className="w-4 h-4" /> Commissions Config
+                  </button>
+
+                  <button 
+                    onClick={() => setActiveTab('memberships')} 
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'memberships' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <Award className="w-4 h-4" /> Membership Plans
+                  </button>
+
+                  <button 
+                    onClick={() => setActiveTab('banners')} 
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'banners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <Image className="w-4 h-4" /> Banner Management
+                  </button>
+                </>
+              )}
+
+              <button 
+                onClick={() => setActiveTab('reports')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'reports' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <BarChart3 className="w-4 h-4" /> Business Reports
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('settings')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'settings' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Settings className="w-4 h-4" /> System Settings
+              </button>
+            </nav>
+          </div>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        
+        {/* HEADER BAR */}
+        <header className="h-20 glass sticky top-0 z-20 px-8 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-slate-500 dark:text-slate-400 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+              <Menu className="w-6 h-6" />
+            </button>
+            <div>
+              <h2 className="text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight">
+                {activeTab === 'branches' ? 'districts' : activeTab.replace('-', ' ')}
+              </h2>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
+                {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Dark Mode toggle button */}
+            <button 
+              onClick={() => setDarkMode(!darkMode)}
+              className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer"
+              title="Toggle theme"
+            >
+              {darkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-500" />}
+            </button>
+
+            {/* Notifications */}
+            <button 
+              onClick={() => alert("You have no new notifications.")}
+              className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer relative"
+              title="Notifications"
+            >
+              <Bell className="w-4 h-4" />
+              <span className="absolute top-1 right-1 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+              </span>
+            </button>
+
+            {/* User Profile Widget */}
+            <div className="flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-800">
+              <button 
+                onClick={() => setActiveTab('settings')}
+                className="w-9 h-9 rounded-full bg-primary-500 hover:bg-primary-600 flex items-center justify-center font-bold text-white text-sm shadow-sm transition-colors cursor-pointer"
+                title="View Profile"
+              >
+                {(user?.name || '').charAt(0)}
+              </button>
+              <div className="hidden md:block text-left">
+                <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">{user?.name || 'Super Admin'}</span>
+                <span className="block text-[10px] text-slate-400 font-medium capitalize">{(user?.adminRole || 'Admin User').replace('-', ' ')}</span>
+              </div>
+              <button 
+                onClick={handleLogout}
+                className="ml-1 p-2 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-all active:scale-95 cursor-pointer"
+                title="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* PAGE VIEWS */}
+        <main className="p-6 max-w-7xl w-full mx-auto space-y-6">
+          
+          {/* loading indicator */}
+          {loading && (
+            <div className="bg-primary-500/10 text-primary-600 dark:text-primary-400 p-3 rounded-xl text-center text-xs font-semibold animate-pulse">
+              Syncing panel data...
+            </div>
+          )}
+
+          {/* 1. DASHBOARD VIEW */}
+          {activeTab === 'dashboard' && (
+            stats ? (
+              <div className="max-w-7xl mx-auto space-y-6">
+              
+              {/* KPI Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {[
+                  { 
+                    title: 'Total Revenue', 
+                    value: `₹${stats.kpis.totalRevenue.toLocaleString()}`, 
+                    change: '+12.4% vs last mo', 
+                    icon: DollarSign, 
+                    cardBg: 'bg-emerald-50 dark:bg-emerald-950/20', 
+                    borderColor: 'border-emerald-100 dark:border-emerald-900/30',
+                    titleColor: 'text-emerald-700 dark:text-emerald-400', 
+                    valueColor: 'text-emerald-900 dark:text-emerald-300', 
+                    changeColor: 'text-emerald-600/80 dark:text-emerald-500',
+                    iconColor: 'text-emerald-600'
+                  },
+                  { 
+                    title: 'Total Orders', 
+                    value: stats.kpis.totalOrders, 
+                    change: '+8.2% vs last mo', 
+                    icon: FileText, 
+                    cardBg: 'bg-blue-50 dark:bg-blue-950/20', 
+                    borderColor: 'border-blue-100 dark:border-blue-900/30',
+                    titleColor: 'text-blue-700 dark:text-blue-400', 
+                    valueColor: 'text-blue-900 dark:text-blue-300', 
+                    changeColor: 'text-blue-600/80 dark:text-blue-500',
+                    iconColor: 'text-blue-600'
+                  },
+                  { 
+                    title: 'Total Agents', 
+                    value: stats.kpis.totalAgents, 
+                    change: `${stats.kpis.pendingAgentApprovals} pending approval`, 
+                    icon: Users, 
+                    cardBg: 'bg-purple-50 dark:bg-purple-950/20', 
+                    borderColor: 'border-purple-100 dark:border-purple-900/30',
+                    titleColor: 'text-purple-700 dark:text-purple-400', 
+                    valueColor: 'text-purple-900 dark:text-purple-300', 
+                    changeColor: 'text-purple-600/80 dark:text-purple-500',
+                    iconColor: 'text-purple-600'
+                  },
+                  { 
+                    title: 'Total Vendors', 
+                    value: stats.kpis.totalVendors, 
+                    change: `${stats.kpis.pendingVendorApprovals} pending approval`, 
+                    icon: Award, 
+                    cardBg: 'bg-amber-50 dark:bg-amber-950/20', 
+                    borderColor: 'border-amber-100 dark:border-amber-900/30',
+                    titleColor: 'text-amber-700 dark:text-amber-400', 
+                    valueColor: 'text-amber-900 dark:text-amber-300', 
+                    changeColor: 'text-amber-600/80 dark:text-amber-500',
+                    iconColor: 'text-amber-600'
+                  }
+                ].map((kpi, idx) => (
+                  <div key={idx} className={`${kpi.cardBg} p-6 rounded-3xl shadow-sm border ${kpi.borderColor} flex items-center justify-between hover:scale-[1.02] transition-all hover:shadow-md`}>
+                    <div>
+                      <span className={`block text-xs font-extrabold uppercase tracking-wider ${kpi.titleColor}`}>{kpi.title}</span>
+                      <span className={`block text-3xl font-black mt-2.5 ${kpi.valueColor}`}>{kpi.value}</span>
+                      <span className={`block text-xs font-semibold mt-2 ${kpi.changeColor}`}>{kpi.change}</span>
+                    </div>
+                    <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 shrink-0">
+                      <kpi.icon className={`w-5 h-5 ${kpi.iconColor}`} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Extra KPIs */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {[
+                  { 
+                    label: 'Agent Pending KYC', 
+                    val: stats.kpis.pendingAgentKYC ?? 0, 
+                    bg: 'bg-rose-50/50 dark:bg-rose-950/10',
+                    border: 'border-rose-100 dark:border-rose-900/30',
+                    text: 'text-rose-600 dark:text-rose-400' 
+                  },
+                  { 
+                    label: 'Vendor Pending KYC', 
+                    val: stats.kpis.pendingVendorKYC ?? 0, 
+                    bg: 'bg-orange-50/50 dark:bg-orange-950/10',
+                    border: 'border-orange-100 dark:border-orange-900/30',
+                    text: 'text-orange-600 dark:text-orange-400' 
+                  },
+                  { 
+                    label: 'State Agent', 
+                    val: stats.kpis.stateAgents ?? 0, 
+                    bg: 'bg-blue-50/50 dark:bg-blue-950/10',
+                    border: 'border-blue-100 dark:border-blue-900/30',
+                    text: 'text-blue-600 dark:text-blue-400' 
+                  },
+                  { 
+                    label: 'District Agent', 
+                    val: stats.kpis.districtAgents ?? 0, 
+                    bg: 'bg-indigo-50/50 dark:bg-indigo-950/10',
+                    border: 'border-indigo-100 dark:border-indigo-900/30',
+                    text: 'text-indigo-600 dark:text-indigo-400' 
+                  },
+                  { 
+                    label: 'Sub District Agent', 
+                    val: stats.kpis.subDistrictAgents ?? 0, 
+                    bg: 'bg-violet-50/50 dark:bg-violet-950/10',
+                    border: 'border-violet-100 dark:border-violet-900/30',
+                    text: 'text-violet-600 dark:text-violet-400' 
+                  },
+                  { 
+                    label: 'Pincode Agent', 
+                    val: stats.kpis.pincodeAgents ?? 0, 
+                    bg: 'bg-purple-50/50 dark:bg-purple-950/10',
+                    border: 'border-purple-100 dark:border-purple-900/30',
+                    text: 'text-purple-600 dark:text-purple-400' 
+                  }
+                ].map((sub, sIdx) => (
+                  <div 
+                    key={sIdx} 
+                    className={`${sub.bg} border ${sub.border} p-4 rounded-2xl shadow-sm text-center flex flex-col justify-center items-center hover:scale-[1.03] transition-all duration-300 hover:shadow-md`}
+                  >
+                    <span className="block text-2xl font-black text-slate-800 dark:text-white">{sub.val}</span>
+                    <span className={`block text-[11px] font-extrabold mt-1.5 uppercase tracking-wider leading-tight ${sub.text}`}>
+                      {sub.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Charts Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Revenue Trend Area Chart */}
+                <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Revenue Overview</h3>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={stats.charts.revenueOverview}>
+                        <defs>
+                          <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
+                        <YAxis stroke="#94a3b8" fontSize={11} />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Category Wise Revenue Pie Chart */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Category Wise Revenue</h3>
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={stats.charts.categoryWiseRevenue}
+                          cx="50%"
+                          cy="55%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={5}
+                          dataKey="value"
+                          nameKey="category"
+                        >
+                          {stats.charts.categoryWiseRevenue.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={11} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Branch Wise Revenue (Super Admin exclusive comparison) */}
+              {isSuperAdmin && (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">District Wise Performance</h3>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={stats.charts.branchWiseRevenue}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
+                        <YAxis stroke="#94a3b8" fontSize={11} />
+                        <Tooltip />
+                        <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Notifications / Approvals */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Pending Approvals */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pending Action Items</h3>
+                    <span className="bg-rose-500/10 text-rose-500 text-xs px-2 py-0.5 rounded-full font-bold">Alert</span>
+                  </div>
+                  <div className="space-y-3">
+                    {agents.filter(a => a.status === 'pending').map((pAgent, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
+                        <div>
+                          <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pAgent.name}</span>
+                          <span className="text-xs text-slate-400">Agent KYC Pending • {pAgent.assignedDistrict}</span>
+                        </div>
+                        <button 
+                          onClick={() => { setActiveTab('kyc') }}
+                          className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                        >
+                          Verify KYC
+                        </button>
+                      </div>
+                    ))}
+                    {vendors.filter(v => v.status?.toLowerCase() === 'pending').map((pVendor, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
+                        <div>
+                          <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pVendor.businessName}</span>
+                          <span className="text-xs text-slate-400">New Vendor Tie-Up • {pVendor.category}</span>
+                        </div>
+                        <button 
+                          onClick={() => { setActiveTab('vendors') }}
+                          className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                        >
+                          Approve
+                        </button>
+                      </div>
+                    ))}
+                    {agents.filter(a => a.status === 'pending').length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
+                      <div className="text-center py-6 text-slate-400 text-sm">
+                        <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                        No pending approvals!
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Latest Activity Log */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Latest Platform Activity</h3>
+                  <div className="space-y-4">
+                    {stats.recent.latestVendors.slice(0, 3).map((v, idx) => (
+                      <div key={idx} className="flex gap-3 items-start text-sm">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+                          <Award className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-850 dark:text-slate-200">
+                            Vendor tie-up <span className="text-primary-500">{v.businessName}</span> submitted.
+                          </p>
+                          <span className="text-[10px] text-slate-400">Category: {v.category}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {stats.recent.latestAgents.slice(0, 2).map((a, idx) => (
+                      <div key={idx} className="flex gap-3 items-start text-sm">
+                        <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-850 dark:text-slate-200">
+                            New agent onboarding: <span className="text-purple-500">{a.name}</span> ({a.email})
+                          </p>
+                          <span className="text-[10px] text-slate-400">Level: {a.level}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
+                <p>Loading dashboard data or server is unavailable...</p>
+              </div>
+            )
+          )}
+
+          {/* 2. BRANCH MANAGEMENT */}
+          {activeTab === 'branches' && isSuperAdmin && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <div className="flex gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl w-80">
+                  <Search className="w-5 h-5 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Search districts..." 
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="bg-transparent focus:outline-none text-sm w-full"
+                  />
+                </div>
+                <button 
+                  onClick={() => { setModalData(null); setShowModal('branch'); }}
+                  className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-md active:scale-95"
+                >
+                  <Plus className="w-4 h-4" /> Add District
+                </button>
+              </div>
+
+              {/* Branch list table */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                      <th className="px-6 py-4">District Details</th>
+                      <th className="px-6 py-4">Code</th>
+                      <th className="px-6 py-4">Location</th>
+                      <th className="px-6 py-4">Contact</th>
+                      <th className="px-6 py-4">Status</th>
+                      <th className="px-6 py-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {branches
+                      .filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .map((b) => (
+                        <tr key={b._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-slate-850 dark:text-slate-100">{b.name}</span>
+                            <span className="text-xs text-slate-400">{b.address}</span>
+                            {b.agentId && (
+                              <span className="inline-flex mt-1.5 text-[10px] bg-primary-500/10 text-primary-500 font-bold px-2 py-0.5 rounded-md">
+                                Agent: {b.agentId.name || b.agentId}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 font-mono font-semibold text-slate-600 dark:text-slate-400">{b.code}</td>
+                          <td className="px-6 py-4">{b.city}, {b.state}</td>
+                          <td className="px-6 py-4">{b.contactNumber}</td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex px-2 py-1 rounded-full text-xs font-bold ${b.isActive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-400'}`}>
+                              {b.isActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right space-x-2">
+                            <button 
+                              onClick={() => { setModalData(b); setShowModal('branch'); }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-primary-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => executeAction(`/admin/branches/${b._id}`, 'DELETE')}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 3. ADMIN USER MANAGEMENT */}
+          {activeTab === 'admins' && isSuperAdmin && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Administrators & Permissions</h3>
+                <button 
+                  onClick={() => { setModalData(null); setShowModal('admin'); }}
+                  className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-md"
+                >
+                  <Plus className="w-4 h-4" /> Add Admin User
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {admins.map((adm) => (
+                  <div key={adm._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-850 dark:text-slate-100">{adm.name}</span>
+                        <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full ${adm.adminRole === 'super-admin' ? 'bg-amber-500/10 text-amber-500' : 'bg-purple-500/10 text-purple-500'}`}>
+                          {adm.adminRole}
+                        </span>
+                      </div>
+                      <span className="block text-xs text-slate-400 mt-1">{adm.email}</span>
+                      {adm.branchId && (
+                        <span className="inline-block bg-slate-100 dark:bg-slate-800 text-xs px-2.5 py-1 rounded-md font-semibold mt-3">
+                          Assigned District: {adm.branchId.name || adm.branchId}
+                        </span>
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => executeAction(`/admin/admins/${adm._id}`, 'DELETE')}
+                      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 4. AGENTS DIRECTORY */}
+          {activeTab === 'agents' && (
+            <div className="space-y-6">
+              
+              {/* Agent Performance Analytics Dashboard */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Agent Network Performance</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl text-center">
+                    <span className="block text-2xl font-black text-primary-500">{agents.length}</span>
+                    <span className="text-xs text-slate-400 mt-1">Total Network Agents</span>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl text-center">
+                    <span className="block text-2xl font-black text-emerald-500">
+                      ₹{agents.reduce((sum, a) => sum + (a.commissionEarned || 0), 0).toLocaleString()}
+                    </span>
+                    <span className="text-xs text-slate-400 mt-1">Total Commissions Disbursed</span>
+                  </div>
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl text-center">
+                    <span className="block text-2xl font-black text-purple-500">
+                      {agents.reduce((sum, a) => sum + (a.vendorsAdded || 0), 0)}
+                    </span>
+                    <span className="text-xs text-slate-400 mt-1">Vendors Onboarded By Agents</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Agent Grid / Directory */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex gap-4 justify-between items-center">
+                  <div className="flex gap-2 bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl flex-1 border border-slate-200/60 dark:border-slate-850 max-w-md">
+                    <Search className="w-5 h-5 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Search by name, email, pincode..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="bg-transparent focus:outline-none text-sm w-full"
+                    />
+                  </div>
+                  <button 
+                    onClick={() => { setModalData(null); setShowModal('create-agent'); }}
+                    className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Add Agent
+                  </button>
+                </div>
+
+                <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {agents
+                    .filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .map((agent) => (
+                      <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex gap-4">
+                          <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-850 dark:text-slate-100">{agent.name}</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                {agent.status}
+                              </span>
+                            </div>
+                            <div className="text-xs text-slate-400 mt-1 space-x-2">
+                              <span>{agent.phone}</span>
+                              <span>•</span>
+                              <span>{agent.email}</span>
+                              <span>•</span>
+                              <span className="text-amber-500 dark:text-amber-400 font-bold font-mono">PW: password123</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
+                          <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                            <span className="block text-slate-400">Pincode</span>
+                            <span className="font-bold">{agent.assignedPincode?.code || 'None'}</span>
+                          </div>
+                          <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                            <span className="block text-slate-400">Wallet</span>
+                            <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
+                          </div>
+                          <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                            <span className="block text-slate-400">Vendors</span>
+                            <span className="font-bold">{agent.vendorsAdded || 0}</span>
+                          </div>
+                          <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                            <span className="block text-slate-400">Commission</span>
+                            <span className="font-bold">₹{agent.commissionEarned || 0}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 justify-end">
+                          <button 
+                            onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
+                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                          >
+                            Assign Task
+                          </button>
+                          <button 
+                            onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
+                            className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                          >
+                            Edit
+                          </button>
+                          {agent.status === 'approved' ? (
+                            <button 
+                              onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
+                              className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                            >
+                              Suspend
+                            </button>
+                          ) : (
+                            <>
+                              <button 
+                                onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                                className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                              >
+                                Reject
+                              </button>
+                              <button 
+                                onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                              >
+                                Approve
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* 5. PINCODE MANAGEMENT */}
+          {activeTab === 'pincodes' && (
+            <div className="space-y-6">
+              
+              {/* PINCODE MASTER LOOKUP CARD */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-6 max-w-xl mx-auto">
+                <h3 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">Pincode Master</h3>
+                
+                <div className="space-y-4">
+                  <div className="relative">
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Enter 6-Digit Pincode</label>
+                    <input 
+                      type="text" 
+                      maxLength={6}
+                      value={lookupPincode}
+                      onChange={(e) => handlePincodeLookup(e.target.value)}
+                      placeholder="e.g. 635301" 
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:border-primary-500 transition-colors font-mono tracking-widest text-lg"
+                    />
+                    {lookupLoading && (
+                      <span className="absolute right-4 bottom-3 text-xs text-slate-400 animate-pulse">Searching...</span>
+                    )}
+                  </div>
+
+                  {/* Post Office Selection Dropdown */}
+                  {lookupResults.length > 0 && (
+                    <div className="relative">
+                      <button 
+                        type="button"
+                        onClick={() => setShowOfficeDropdown(!showOfficeDropdown)}
+                        className="w-full bg-white dark:bg-slate-900 border border-primary-500 text-primary-600 font-semibold py-2.5 px-4 rounded-xl text-sm transition-all hover:bg-primary-50/50 flex justify-between items-center"
+                      >
+                        <span>{selectedOffice ? `Selected: ${selectedOffice.Name}` : `Select Post Office (${lookupResults.length} found)`}</span>
+                        <ChevronRight className={`w-4 h-4 transform transition-transform ${showOfficeDropdown ? 'rotate-90' : ''}`} />
+                      </button>
+                      
+                      {showOfficeDropdown && (
+                        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y dark:divide-slate-800">
+                          {lookupResults.map((office, idx) => (
+                            <button
+                              type="button"
+                              key={idx}
+                              onClick={() => {
+                                setSelectedOffice(office);
+                                setShowOfficeDropdown(false);
+                              }}
+                              className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-850 text-sm text-slate-700 dark:text-slate-350 transition-colors"
+                            >
+                              {office.Name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Location Details Box */}
+                  {selectedOffice && (
+                    <div className="space-y-4 animate-fadeIn">
+                      <div className="text-center">
+                        {pincodes.find(p => p.code === lookupPincode && p.activeAgentId) ? (
+                          <span className="inline-flex px-4 py-1.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-500 border border-amber-500/20">
+                            ⚠️ Already Assigned to Agent: {pincodes.find(p => p.code === lookupPincode).activeAgentId.name}
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-4 py-1.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                            ✓ Pincode Available
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-slate-950/40 border dark:border-slate-850 rounded-2xl p-5 space-y-3">
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Location Details</h4>
+                        <div className="grid grid-cols-2 gap-y-2 text-xs">
+                          <span className="text-slate-400">Post Office:</span>
+                          <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.Name}</span>
+                          
+                          <span className="text-slate-400">District:</span>
+                          <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.District}</span>
+                          
+                          <span className="text-slate-400">State:</span>
+                          <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.State}</span>
+                          
+                          <span className="text-slate-400">Division:</span>
+                          <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.Division || 'N/A'}</span>
+                          
+                          <span className="text-slate-400">Region:</span>
+                          <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.Region || 'N/A'}</span>
+                          
+                          <span className="text-slate-400">Delivery Status:</span>
+                          <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.DeliveryStatus}</span>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const saveRes = await executeAction('/admin/save-pincode', 'POST', {
+                            pincode: lookupPincode,
+                            postOffice: selectedOffice.Name,
+                            district: selectedOffice.District,
+                            state: selectedOffice.State
+                          });
+                          if (saveRes.success) {
+                            setModalData({ pincodeId: saveRes.data._id });
+                            setShowModal('pincode');
+                            setLookupPincode('');
+                            setLookupResults([]);
+                            setSelectedOffice(null);
+                          }
+                        }}
+                        className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-5 h-5" /> Add Agent for this Pincode
+                      </button>
+                    </div>
+                  )}
+
+                </div>
+              </div>
+
+              {/* Existing Pincodes List */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl w-80">
+                    <Search className="w-5 h-5 text-slate-400" />
+                    <input 
+                      type="text" 
+                      placeholder="Search pincode, city, state..." 
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="bg-transparent focus:outline-none text-sm w-full"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => { setModalData(null); setShowModal('pincode'); }}
+                      className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
+                    >
+                      Assign Pincode
+                    </button>
+                    <button 
+                      onClick={() => { setModalData(null); setShowModal('create-pincode'); }}
+                      className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
+                    >
+                      Create Pincode
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pincodes
+                    .filter(p => p.code.includes(searchTerm) || p.district.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .map((pin) => (
+                      <div key={pin._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200/50 dark:border-slate-850 flex items-center justify-between">
+                        <div>
+                          <span className="block text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{pin.code}</span>
+                          <span className="text-xs text-slate-400">{pin.name}, {pin.district}, {pin.state}</span>
+                          <span className="block text-xs font-semibold mt-2">
+                            Assigned Agent: {pin.activeAgentId ? (
+                              <span className="text-primary-500 font-bold">{pin.activeAgentId.name}</span>
+                            ) : (
+                              <span className="text-slate-400 italic">Available</span>
+                            )}
+                          </span>
+                        </div>
+                        {pin.activeAgentId && (
+                          <button 
+                            onClick={() => executeAction('/admin/pincodes/remove', 'POST', { pincodeId: pin._id })}
+                            className="text-xs font-bold text-rose-500 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-all"
+                          >
+                            Deassign
+                          </button>
+                        )}
+                      </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 6. VENDOR MANAGEMENT & TIE-UPS */}
+          {activeTab === 'vendors' && (
+            <div className="space-y-6">
+              
+              {/* Category Filter */}
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {['All', 'Hospitals', 'Hotels', 'Restaurants', 'Stores', 'Services'].map((cat) => (
+                  <button 
+                    key={cat}
+                    onClick={() => setFilterCategory(cat)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${filterCategory === cat ? 'bg-primary-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Vendors List */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {vendors
+                  .filter(v => filterCategory === 'All' || v.category === filterCategory || (v.vendorType && v.vendorType.toLowerCase().includes(filterCategory.toLowerCase())))
+                  .map((vendor) => (
+                    <div key={vendor._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-slate-850 dark:text-slate-100">{vendor.businessName}</span>
+                            <span className="bg-primary-500/10 text-primary-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.category}</span>
+                            {vendor.subcategory && (
+                              <span className="bg-purple-500/10 text-purple-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.subcategory}</span>
+                            )}
+                            {vendor.baseVendorType && (
+                              <span className="bg-blue-500/10 text-blue-500 text-[10px] font-bold px-2 py-0.5 rounded-full">{vendor.baseVendorType}</span>
+                            )}
+                          </div>
+                          <span className="block text-xs text-slate-400 mt-1">{vendor.contactName} • {vendor.phone}</span>
+                        </div>
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${vendor.status?.toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : vendor.status?.toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                          {vendor.status}
+                        </span>
+                      </div>
+
+                      <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl text-xs space-y-2 border border-slate-200/50 dark:border-slate-850">
+                        {vendor.vendorType && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-400">Vendor Type:</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">{vendor.vendorType}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Referred Agent:</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">{vendor.agentId?.name || 'Direct / Platform Add'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Membership Tier:</span>
+                          <span className="font-bold text-amber-500 uppercase">{vendor.membership?.status === 'active' ? 'Active Pro' : 'None'}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 justify-end">
+                        {vendor.status?.toLowerCase() !== 'rejected' && (
+                          <button 
+                            onClick={() => executeAction(`/admin/vendors/${vendor._id}/reject`, 'PUT', {})}
+                            className="bg-slate-100 hover:bg-rose-500/10 dark:bg-slate-800 hover:text-rose-500 text-slate-600 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-all"
+                          >
+                            Reject
+                          </button>
+                        )}
+                        {vendor.status?.toLowerCase() !== 'approved' && (
+                          <button 
+                            onClick={() => executeAction(`/admin/vendors/${vendor._id}/approve`, 'PUT', {})}
+                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-all"
+                          >
+                            Approve Vendor
+                          </button>
+                        )}
+
+                      </div>
+                    </div>
+                ))}
+              </div>
+
+            </div>
+          )}
+
+          {/* 7. CUSTOMERS VIEW */}
+          {activeTab === 'customers' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                      <th className="px-6 py-4">Customer Name</th>
+                      <th className="px-6 py-4">Contact Info</th>
+                      <th className="px-6 py-4">District</th>
+                      <th className="px-6 py-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                    {customers.map((c) => (
+                      <tr key={c._id}>
+                        <td className="px-6 py-4 font-semibold text-slate-850 dark:text-slate-200">{c.name}</td>
+                        <td className="px-6 py-4 text-xs">
+                          <span className="block">{c.email}</span>
+                          <span className="block text-slate-400 mt-0.5">{c.phone}</span>
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400">{c.branchId?.name || 'Direct'}</td>
+                        <td className="px-6 py-4">
+                          <span className="bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full text-xs font-bold">Active</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 8. KYC VERIFICATION SCREEN */}
+          {activeTab === 'kyc' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">KYC Verification Inbox</h3>
+                  <div className="flex gap-2">
+                    {['pending', 'approved', 'rejected'].map(st => {
+                      const isSelected = (filterCategory === st) || (st === 'pending' && !['approved', 'rejected'].includes(filterCategory));
+                      return (
+                        <button
+                          key={st}
+                          onClick={() => setFilterCategory(st)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors ${isSelected ? 'bg-primary-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
+                        >
+                          {st}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                  {agents
+                    .filter(a => {
+                      const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                      return a.status === currentFilter;
+                    })
+                    .map((agent) => (
+                    <div key={agent._id} className="py-5 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{agent.name}</span>
+                          <span className="block text-xs text-slate-400">{agent.email} • {agent.phone}</span>
+                        </div>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                          agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 
+                          agent.status === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 
+                          'bg-amber-500/10 text-amber-500'
+                        }`}>
+                          KYC {agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}
+                        </span>
+                      </div>
+
+                      {/* Documents viewer */}
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center">
+                          <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
+                          <img src={agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
+                          <span className="block text-[10px] font-mono mt-2">{agent.kyc?.aadhaarNumber || '1234 5678 9012'}</span>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center">
+                          <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
+                          <img src={agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
+                          <span className="block text-[10px] font-mono mt-2">{agent.kyc?.panNumber || 'ABCDE1234F'}</span>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center">
+                          <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Video/Photo</span>
+                          <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center">
+                          <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
+                          <img src={agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
+                        </div>
+                      </div>
+
+                      {agent.status === 'pending' && (
+                        <div className="flex gap-3 justify-end">
+                          <button 
+                            onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                            className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                          >
+                            Reject / Request Reupload
+                          </button>
+                          <button 
+                            onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                          >
+                            Verify & Approve KYC
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {agents.filter(a => a.status === (['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending')).length === 0 && (
+                    <div className="text-center py-12 text-slate-400 text-sm">
+                      <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      No agents found for this status.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* BUSINESS TIE-UPS SCREEN */}
+          {activeTab === 'tieups' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Business Tie-Up Requests</h3>
+                  <div className="flex gap-2">
+                    {['All', 'pending', 'approved', 'rejected'].map(st => (
+                      <button
+                        key={st}
+                        onClick={() => setFilterCategory(st)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors ${filterCategory === st ? 'bg-primary-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {tieups
+                    .filter(t => filterCategory === 'All' || filterCategory === 'pending' || filterCategory === 'approved' || filterCategory === 'rejected' ? (filterCategory === 'All' || t.status === filterCategory) : true)
+                    .map((tieup) => (
+                      <div key={tieup._id} className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-850 space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="block font-bold text-slate-800 dark:text-slate-200 text-base">{tieup.businessName}</span>
+                            <span className="text-xs text-slate-400">Category: {tieup.category} • Subcategory: {tieup.serviceType}</span>
+                          </div>
+                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-bold capitalize ${tieup.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : tieup.status === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                            {tieup.status}
+                          </span>
+                        </div>
+
+                        <div className="text-xs space-y-1.5 text-slate-600 dark:text-slate-400">
+                          <p><strong>Location:</strong> {tieup.location} (Pincode: {tieup.pincode})</p>
+                          {tieup.businessLicense && <p><strong>License:</strong> {tieup.businessLicense}</p>}
+                          <p><strong>Submitted By:</strong> {tieup.agentId?.name || 'Unknown Agent'} ({tieup.agentId?.phone || ''})</p>
+                          {tieup.submittedAt && <p><strong>Date:</strong> {new Date(tieup.submittedAt).toLocaleDateString()}</p>}
+                        </div>
+
+                        {tieup.proofImage && (
+                          <div>
+                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1.5">Proof Image</span>
+                            <img src={tieup.proofImage} alt="Proof" className="w-full h-32 object-cover rounded-xl border dark:border-slate-800 cursor-pointer hover:opacity-95" onClick={() => window.open(tieup.proofImage, '_blank')} />
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 justify-end pt-2">
+                          <button
+                            onClick={() => { setModalData(tieup); setShowModal('edit-tieup'); }}
+                            className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3.5 py-2 rounded-xl transition-all"
+                          >
+                            Edit Request
+                          </button>
+                          {tieup.status === 'pending' && (
+                            <>
+                              <button
+                                onClick={() => executeAction(`/admin/tie-up/${tieup._id}`, 'PUT', { status: 'rejected' })}
+                                className="bg-rose-50/50 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-3 py-2 rounded-xl transition-all"
+                              >
+                                Reject
+                              </button>
+                              <button
+                                onClick={() => executeAction(`/admin/tie-up/${tieup._id}`, 'PUT', { status: 'approved' })}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-all"
+                              >
+                                Approve
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  {tieups.length === 0 && (
+                    <div className="col-span-2 text-center py-12 text-slate-400 text-sm">
+                      <Layers className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                      No business tie-up requests found.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* AGENT TASKS SCREEN */}
+          {activeTab === 'tasks' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Task Assignments</h3>
+                  <button
+                    onClick={() => { setModalData(null); setShowModal('assign-task'); }}
+                    className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> Assign New Task
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Task Details</th>
+                        <th className="px-6 py-4">Assigned Agent</th>
+                        <th className="px-6 py-4">Due Date</th>
+                        <th className="px-6 py-4">Assigned By</th>
+                        <th className="px-6 py-4">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {tasks.map((task) => (
+                        <tr key={task._id} className="hover:bg-slate-50/30 dark:hover:bg-slate-900/10">
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-slate-800 dark:text-slate-100">{task.title}</span>
+                            <span className="text-xs text-slate-400">{task.description}</span>
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">
+                            {task.assignedTo?.name || 'Unknown Agent'}
+                            <span className="block text-[10px] text-slate-400 font-normal">{task.assignedTo?.email}</span>
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-slate-500">
+                            {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'No Due Date'}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-400">
+                            {task.adminId?.name || 'Admin'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${task.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' : task.status === 'in-progress' ? 'bg-blue-500/10 text-blue-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                              {task.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {tasks.length === 0 && (
+                        <tr>
+                          <td colSpan="5" className="text-center py-12 text-slate-400 text-sm">
+                            <CheckCircle className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                            No tasks have been assigned yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 9. WALLET & WITHDRAWALS */}
+          {activeTab === 'wallet' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Withdrawal Request Queues</h3>
+                
+                <div className="space-y-4">
+                  {withdrawals.map((req) => (
+                    <div key={req._id} className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                      <div>
+                        <span className="block font-extrabold text-slate-850 dark:text-slate-100">{req.agentId?.name}</span>
+                        <span className="block text-xs text-slate-400 mt-1">Wallet Balance: ₹{req.agentId?.balance} • Req Date: {new Date(req.createdAt).toLocaleDateString()}</span>
+                        <span className="inline-block mt-3 bg-primary-500/10 text-primary-500 text-xs font-bold px-2 py-0.5 rounded-full">Bank Withdrawal Requested</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-6">
+                        <span className="text-2xl font-black text-rose-500">₹{req.amount}</span>
+                        {req.status === 'pending' ? (
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => executeAction(`/admin/wallet/withdrawals/${req._id}`, 'PUT', { status: 'rejected' })}
+                              className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-bold px-3 py-2 rounded-xl transition-all"
+                            >
+                              Reject
+                            </button>
+                            <button 
+                              onClick={() => executeAction(`/admin/wallet/withdrawals/${req._id}`, 'PUT', { status: 'approved' })}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all"
+                            >
+                              Approve Pay-out
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 capitalize">{req.status}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {withdrawals.length === 0 && (
+                    <div className="text-center py-12 text-slate-400 text-sm">
+                      <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                      No pending withdrawal requests.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 10. COMMISSIONS CONFIG */}
+          {activeTab === 'commissions' && isSuperAdmin && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Global & District Commission Rates</h3>
+                
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const value = e.target.value.value;
+                    const type = e.target.type.value;
+                    const scope = e.target.scope.value;
+                    executeAction('/admin/commissions', 'POST', { scope, type, value: Number(value) });
+                  }}
+                  className="grid grid-cols-1 sm:grid-cols-4 gap-4 items-end bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border"
+                >
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Scope</label>
+                    <select name="scope" className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-xl px-3 py-2.5 text-sm">
+                      <option value="global">Global Commission</option>
+                      <option value="branch">District Commission</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Type</label>
+                    <select name="type" className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-xl px-3 py-2.5 text-sm">
+                      <option value="percentage">Percentage (%)</option>
+                      <option value="fixed">Fixed Amount (₹)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Rate / Value</label>
+                    <input name="value" type="number" required placeholder="e.g. 5" className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-850 rounded-xl px-3 py-2.5 text-sm" />
+                  </div>
+                  <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white font-semibold py-2.5 rounded-xl transition-all">
+                    Update Configuration
+                  </button>
+                </form>
+
+                <div className="space-y-3">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Commissions Setup</h4>
+                  {commissions.map((comm, idx) => (
+                    <div key={idx} className="flex justify-between bg-slate-50 dark:bg-slate-950 p-4 rounded-xl text-sm border">
+                      <span className="capitalize font-bold text-slate-700 dark:text-slate-300">{comm.scope} Rate</span>
+                      <span className="font-black text-primary-500">{comm.value} {comm.type === 'percentage' ? '%' : '₹'}</span>
+                    </div>
+                  ))}
+                  {commissions.length === 0 && (
+                    <div className="flex justify-between bg-slate-50 dark:bg-slate-950 p-4 rounded-xl text-sm border">
+                      <span className="capitalize font-bold text-slate-700 dark:text-slate-300">Global Rate (Default)</span>
+                      <span className="font-black text-primary-500">5 %</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 11. MEMBERSHIPS */}
+          {activeTab === 'memberships' && isSuperAdmin && (
+            <div className="space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Vendor Membership Plans</h3>
+                <button 
+                  onClick={() => { setModalData(null); setShowModal('plan'); }}
+                  className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md"
+                >
+                  <Plus className="w-4 h-4" /> Create Plan
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {membershipPlans.map((plan) => (
+                  <div key={plan._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col justify-between">
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-start">
+                        <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{plan.name}</span>
+                        <button 
+                          onClick={() => executeAction(`/admin/memberships/plans/${plan._id}`, 'DELETE')}
+                          className="text-slate-400 hover:text-rose-500 p-1 rounded-lg"
+                        >
+                          <Trash2 className="w-4.5 h-4.5" />
+                        </button>
+                      </div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-3xl font-black text-primary-500">₹{plan.price}</span>
+                        <span className="text-xs text-slate-400">/ {plan.duration} days</span>
+                      </div>
+                      <ul className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
+                        {plan.features.map((f, idx) => (
+                          <li key={idx} className="flex items-center gap-2">
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                            <span>{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 12. BANNER & ADS */}
+          {activeTab === 'banners' && isSuperAdmin && (
+            <div className="space-y-6">
+              
+              {/* Banners CRUD */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Promotional Banners</h3>
+                  <button 
+                    onClick={() => setShowModal('banner')}
+                    className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                  >
+                    Add Banner
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {banners.map((b) => (
+                    <div key={b._id} className="border border-slate-200 dark:border-slate-850 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-950 flex">
+                      <img src={b.imageUrl} alt="" className="w-32 h-24 object-cover shrink-0" />
+                      <div className="p-3.5 flex flex-col justify-between flex-1 min-w-0">
+                        <div>
+                          <span className="block font-bold text-sm truncate">{b.title}</span>
+                          <span className="block text-[10px] text-slate-400 mt-1">Expiry: {new Date(b.endDate).toLocaleDateString()}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-emerald-500 text-[10px] font-bold">Active</span>
+                          <button 
+                            onClick={() => executeAction(`/admin/banners/${b._id}`, 'DELETE')}
+                            className="text-rose-500 text-[10px] font-bold"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Advertisement Tracking */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Paid Advertisements Campaigns</h3>
+                  <button 
+                    onClick={() => setShowModal('ad')}
+                    className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
+                  >
+                    Launch Ad Campaign
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {ads.map((ad) => (
+                    <div key={ad._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200/50 dark:border-slate-850 space-y-3">
+                      <div className="flex justify-between">
+                        <span className="font-bold text-sm">{ad.title}</span>
+                        <span className="text-emerald-500 text-xs font-bold">Earnings: ₹{ad.revenue}</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                        <div className="bg-white dark:bg-slate-900 p-2 rounded-lg">
+                          <span className="block text-slate-400 text-[10px]">Impressions</span>
+                          <span className="font-bold">{ad.impressions}</span>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-2 rounded-lg">
+                          <span className="block text-slate-400 text-[10px]">Clicks</span>
+                          <span className="font-bold">{ad.clicks}</span>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-2 rounded-lg">
+                          <span className="block text-slate-400 text-[10px]">CTR</span>
+                          <span className="font-bold text-primary-500">{ad.ctr}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          )}
+
+          {/* 13. BUSINESS REPORTS & EXPORTS */}
+          {activeTab === 'reports' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setReportType('revenue')}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${reportType === 'revenue' ? 'bg-primary-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                    >
+                      District Revenue Reports
+                    </button>
+                    <button 
+                      onClick={() => setReportType('vendors')}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${reportType === 'vendors' ? 'bg-primary-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                    >
+                      Vendor Performance Reports
+                    </button>
+                    <button 
+                      onClick={() => setReportType('agents')}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${reportType === 'agents' ? 'bg-primary-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                    >
+                      Agent Performance Reports
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2 text-xs">
+                    <button onClick={() => handleExport('pdf')} className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2 rounded-xl font-semibold transition-all">
+                      <Download className="w-3.5 h-3.5" /> PDF
+                    </button>
+                    <button onClick={() => handleExport('xlsx')} className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2 rounded-xl font-semibold transition-all">
+                      <Download className="w-3.5 h-3.5" /> Excel
+                    </button>
+                    <button onClick={() => handleExport('csv')} className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 px-3.5 py-2 rounded-xl font-semibold transition-all">
+                      <Download className="w-3.5 h-3.5" /> CSV
+                    </button>
+                  </div>
+                </div>
+
+                {/* Report Table Display */}
+                <div className="overflow-x-auto">
+                  {reportType === 'revenue' ? (
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">District Details</th>
+                          <th className="px-6 py-4">District Code</th>
+                          <th className="px-6 py-4">Total Orders</th>
+                          <th className="px-6 py-4">Revenue</th>
+                          <th className="px-6 py-4">Earned Commission</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {reports.map((row, idx) => (
+                          <tr key={idx}>
+                            <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{row.branchName}</td>
+                            <td className="px-6 py-4 font-mono">{row.branchCode}</td>
+                            <td className="px-6 py-4 font-semibold">{row.totalOrders}</td>
+                            <td className="px-6 py-4 font-bold text-emerald-500">₹{row.revenue?.toLocaleString()}</td>
+                            <td className="px-6 py-4 font-bold text-primary-500">₹{row.commission?.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : reportType === 'vendors' ? (
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Vendor Business</th>
+                          <th className="px-6 py-4">Category</th>
+                          <th className="px-6 py-4">Total Orders</th>
+                          <th className="px-6 py-4">Revenue Generated</th>
+                          <th className="px-6 py-4">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {reports.map((row, idx) => (
+                          <tr key={idx}>
+                            <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{row.businessName}</td>
+                            <td className="px-6 py-4 font-semibold text-primary-500">{row.category}</td>
+                            <td className="px-6 py-4">{row.orders}</td>
+                            <td className="px-6 py-4 font-bold text-emerald-500">₹{row.revenue?.toLocaleString()}</td>
+                            <td className="px-6 py-4 capitalize">{row.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Agent Name</th>
+                          <th className="px-6 py-4">Level & Pincode</th>
+                          <th className="px-6 py-4">Vendors Added</th>
+                          <th className="px-6 py-4">Commission Earned</th>
+                          <th className="px-6 py-4">Wallet Balance</th>
+                          <th className="px-6 py-4">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {reports.map((row, idx) => (
+                          <tr key={idx}>
+                            <td className="px-6 py-4">
+                              <span className="block font-bold text-slate-800 dark:text-slate-200">{row.agentName}</span>
+                              <span className="text-[10px] text-slate-400">{row.email}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="block capitalize font-semibold text-primary-500">{row.level}</span>
+                              <span className="text-[10px] text-slate-400">Pincode: {row.pincode}</span>
+                            </td>
+                            <td className="px-6 py-4 font-semibold">{row.vendorsAdded}</td>
+                            <td className="px-6 py-4 font-bold text-emerald-500">₹{row.commissionEarned?.toLocaleString()}</td>
+                            <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">₹{row.balance?.toLocaleString()}</td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${row.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                {row.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* 14. SYSTEM SETTINGS */}
+          {activeTab === 'settings' && (
+            <div className="space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  {/* General Config */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">General Platform Settings</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Platform Name</label>
+                        <input type="text" defaultValue="MAM Connect App" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl px-4 py-2.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Support Helpline</label>
+                        <input type="text" defaultValue="+91 99887 76655" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl px-4 py-2.5 text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Payment Gateway mock */}
+                  <div className="space-y-4">
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Razorpay Configurations</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Key ID</label>
+                        <input type="text" defaultValue="rzp_test_placeholder" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl px-4 py-2.5 text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Key Secret</label>
+                        <input type="password" placeholder="••••••••••••••••" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl px-4 py-2.5 text-sm" />
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                  <button onClick={() => alert('Settings Saved Successfully!')} className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-all">
+                    Save Changes
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
+        </main>
+      </div>
+
+      {/* MODALS */}
+      {showModal === 'branch' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
+              {modalData ? 'Modify District details' : 'Create New District'}
+            </h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const code = e.target.code.value;
+                const state = e.target.state.value;
+                const district = e.target.district.value;
+                const city = e.target.city.value;
+                const address = e.target.address.value;
+                const contactNumber = e.target.contactNumber.value;
+                const agentId = e.target.agentId.value || null;
+                
+                if (modalData) {
+                  await executeAction(`/admin/branches/${modalData._id}`, 'PUT', { name, code, state, district, city, address, contactNumber, agentId });
+                } else {
+                  await executeAction('/admin/branches', 'POST', { name, code, state, district, city, address, contactNumber, agentId });
+                }
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">District Name</label>
+                  <input 
+                    name="name" 
+                    defaultValue={modalData?.name || ''} 
+                    onChange={(e) => {
+                      if (modalData) return;
+                      const val = e.target.value;
+                      const form = e.target.form;
+                      if (!form) return;
+                      
+                      let codeVal = '';
+                      if (val.length >= 3) {
+                        codeVal = val.substring(0, 3).toUpperCase() + '01';
+                      } else if (val.length > 0) {
+                        codeVal = val.toUpperCase() + '01';
+                      }
+                      
+                      const districtMap = {
+                        'mumbai': { state: 'Maharashtra', city: 'Mumbai', code: 'MUM01' },
+                        'delhi': { state: 'Delhi', city: 'Delhi', code: 'DEL01' },
+                        'bangalore': { state: 'Karnataka', city: 'Bengaluru', code: 'BLR01' },
+                        'bengaluru': { state: 'Karnataka', city: 'Bengaluru', code: 'BLR01' },
+                        'chennai': { state: 'Tamil Nadu', city: 'Chennai', code: 'CHN01' },
+                        'kolkata': { state: 'West Bengal', city: 'Kolkata', code: 'KOL01' },
+                        'hyderabad': { state: 'Telangana', city: 'Hyderabad', code: 'HYD01' },
+                        'pune': { state: 'Maharashtra', city: 'Pune', code: 'PUN01' },
+                        'ahmedabad': { state: 'Gujarat', city: 'Ahmedabad', code: 'AMD01' },
+                        'jaipur': { state: 'Rajasthan', city: 'Jaipur', code: 'JAI01' },
+                        'lucknow': { state: 'Uttar Pradesh', city: 'Lucknow', code: 'LKO01' },
+                        'patna': { state: 'Bihar', city: 'Patna', code: 'PAT01' },
+                        'coimbatore': { state: 'Tamil Nadu', city: 'Coimbatore', code: 'CBE01' },
+                        'madurai': { state: 'Tamil Nadu', city: 'Madurai', code: 'MDU01' },
+                        'surat': { state: 'Gujarat', city: 'Surat', code: 'SUR01' },
+                        'kanpur': { state: 'Uttar Pradesh', city: 'Kanpur', code: 'KAN01' },
+                        'nagpur': { state: 'Maharashtra', city: 'Nagpur', code: 'NAG01' },
+                        'indore': { state: 'Madhya Pradesh', city: 'Indore', code: 'IND01' },
+                        'bhopal': { state: 'Madhya Pradesh', city: 'Bhopal', code: 'BHO01' },
+                        'visakhapatnam': { state: 'Andhra Pradesh', city: 'Visakhapatnam', code: 'VTZ01' },
+                        'vadodara': { state: 'Gujarat', city: 'Vadodara', code: 'BDQ01' },
+                        'kochi': { state: 'Kerala', city: 'Kochi', code: 'COK01' },
+                        'thiruvananthapuram': { state: 'Kerala', city: 'Thiruvananthapuram', code: 'TRV01' }
+                      };
+                      
+                      const key = val.trim().toLowerCase();
+                      const matched = districtMap[key];
+                      
+                      if (matched) {
+                        form.code.value = matched.code;
+                        form.state.value = matched.state;
+                        form.district.value = val;
+                        form.city.value = matched.city;
+                        form.address.value = `${matched.city}, ${matched.state}`;
+                        form.contactNumber.value = '9876543210';
+                      } else {
+                        form.code.value = codeVal;
+                        form.district.value = val;
+                        form.city.value = val;
+                        form.state.value = '';
+                        form.address.value = val ? `${val} Central Office` : '';
+                        form.contactNumber.value = val ? '9876543210' : '';
+                      }
+                    }}
+                    required 
+                    type="text" 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">District Code</label>
+                  <input name="code" defaultValue={modalData?.code || ''} required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">State</label>
+                  <input name="state" defaultValue={modalData?.state || ''} required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">District</label>
+                  <input name="district" defaultValue={modalData?.district || ''} required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">City</label>
+                  <input name="city" defaultValue={modalData?.city || ''} required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Address</label>
+                <input name="address" defaultValue={modalData?.address || ''} required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Contact Number</label>
+                <input name="contactNumber" defaultValue={modalData?.contactNumber || ''} required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">District Controlling Agent</label>
+                <select name="agentId" defaultValue={modalData?.agentId?._id || modalData?.agentId || ''} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="">-- Select Controlling Agent --</option>
+                  {agents.map(a => (
+                    <option key={a._id} value={a._id}>{a.name} ({a.email})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-200 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Save District
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'admin' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Register Admin</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const email = e.target.email.value;
+                const password = e.target.password.value;
+                const adminRole = e.target.adminRole.value;
+                const branchId = e.target.branchId.value || null;
+                
+                await executeAction('/admin/admins', 'POST', { name, email, password, adminRole, branchId });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
+                <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email</label>
+                <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Password</label>
+                <input name="password" required type="password" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Role</label>
+                <select name="adminRole" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="branch-admin">District Admin</option>
+                  <option value="staff">Staff</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">District Assignment</label>
+                <select name="branchId" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="">None (Global)</option>
+                  {branches.map(b => (
+                    <option key={b._id} value={b._id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Create Admin
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'pincode' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Assign Pincode to Agent</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const pincodeId = e.target.pincodeId.value;
+                const agentId = e.target.agentId.value;
+                await executeAction('/admin/pincodes/assign', 'POST', { pincodeId, agentId });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Pincode</label>
+                <select name="pincodeId" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  {pincodes.map(p => (
+                    <option key={p._id} value={p._id}>{p.code} ({p.name})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent</label>
+                <select name="agentId" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  {agents.map(a => (
+                    <option key={a._id} value={a._id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Assign
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'plan' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Create Membership Plan</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const price = Number(e.target.price.value);
+                const duration = Number(e.target.duration.value);
+                const features = e.target.features.value.split(',').map(f => f.trim());
+                
+                await executeAction('/admin/memberships/plans', 'POST', { name, price, duration, features });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Plan Name</label>
+                <input name="name" required type="text" placeholder="e.g. Gold Tier" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Price (INR)</label>
+                  <input name="price" required type="number" placeholder="2499" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Duration (Days)</label>
+                  <input name="duration" required type="number" placeholder="90" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Features (comma separated)</label>
+                <input name="features" required type="text" placeholder="Priority listing, SMS alerts, Weekly analytics" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Save Plan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'banner' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Add Promotional Banner</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const title = e.target.title.value;
+                const imageUrl = e.target.imageUrl.value;
+                const redirectLink = e.target.redirectLink.value;
+                const startDate = new Date();
+                const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+                
+                await executeAction('/admin/banners', 'POST', { title, imageUrl, redirectLink, startDate, endDate });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Title</label>
+                <input name="title" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Image URL</label>
+                <input name="imageUrl" defaultValue="https://images.unsplash.com/photo-1542838132-92c53300491e?w=600" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Redirect Link</label>
+                <input name="redirectLink" required type="text" placeholder="/promotions" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Publish Banner
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'ad' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Launch Advertisement</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const title = e.target.title.value;
+                const imageUrl = e.target.imageUrl.value;
+                const redirectLink = e.target.redirectLink.value;
+                
+                await executeAction('/admin/ads', 'POST', { title, imageUrl, redirectLink });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Ad Title</label>
+                <input name="title" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Image URL</label>
+                <input name="imageUrl" defaultValue="https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=600" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Redirect URL</label>
+                <input name="redirectLink" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Launch Ad
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'create-pincode' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Create New Pincode</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const pincode = e.target.pincode.value;
+                const postOffice = e.target.postOffice.value;
+                const district = e.target.district.value;
+                const state = e.target.state.value;
+                
+                await executeAction('/admin/save-pincode', 'POST', { pincode, postOffice, district, state });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Pincode / Zip Code</label>
+                <input name="pincode" required type="text" placeholder="e.g. 600001" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Post Office Name</label>
+                <input name="postOffice" required type="text" placeholder="e.g. Chennai GPO" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">District</label>
+                <input name="district" required type="text" placeholder="e.g. Chennai" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">State</label>
+                <input name="state" required type="text" placeholder="e.g. Tamil Nadu" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Save Pincode
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'assign-task' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Assign Task to Agent</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const assignedTo = e.target.assignedTo.value;
+                const title = e.target.title.value;
+                const description = e.target.description.value;
+                const dueDate = e.target.dueDate.value;
+                
+                await executeAction('/admin/assign-task', 'POST', { assignedTo, title, description, dueDate });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Select Agent</label>
+                <select name="assignedTo" defaultValue={modalData?.agentId || ''} required className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="" disabled>-- Select an Agent --</option>
+                  {agents.filter(a => a.status === 'approved').map(a => (
+                    <option key={a._id} value={a._id}>{a.name} ({a.email})</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Task Title</label>
+                <input name="title" required type="text" placeholder="e.g. Verify documents for Hospital tie-up" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
+                <textarea name="description" placeholder="Provide detailed instructions..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm h-24" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Due Date</label>
+                <input name="dueDate" required type="date" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Assign Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'edit-agent' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Edit Agent Details</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const email = e.target.email.value;
+                const phone = e.target.phone.value;
+                const level = e.target.level.value;
+                const assignedArea = e.target.assignedArea.value;
+                const isActive = e.target.isActive.checked;
+                
+                await executeAction(`/admin/update-agent/${modalData._id}`, 'PUT', { name, email, phone, level, assignedArea });
+                await executeAction(`/admin/activate-agent/${modalData._id}`, 'PUT', { isActive });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
+                <input name="name" required defaultValue={modalData.name || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email</label>
+                <input name="email" required defaultValue={modalData.email || ''} type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone</label>
+                <input name="phone" required defaultValue={modalData.phone || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent Level</label>
+                  <select name="level" defaultValue={modalData.level || 'pincode'} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="state">State</option>
+                    <option value="district">District</option>
+                    <option value="division">Division</option>
+                    <option value="pincode">Pincode</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Assigned Area</label>
+                  <input name="assignedArea" defaultValue={modalData.assignedArea || ''} type="text" placeholder="State/Dist name" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3 py-2">
+                <input name="isActive" id="isActive" defaultChecked={modalData.isActive || false} type="checkbox" className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-slate-300" />
+                <label htmlFor="isActive" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Is Profile Active</label>
+              </div>
+              
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'edit-tieup' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Edit Business Tie-Up Request</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const businessName = e.target.businessName.value;
+                const category = e.target.category.value;
+                const serviceType = e.target.serviceType.value;
+                const location = e.target.location.value;
+                const pincode = e.target.pincode.value;
+                const businessLicense = e.target.businessLicense.value;
+                const status = e.target.status.value;
+                
+                await executeAction(`/admin/tie-up/${modalData._id}`, 'PUT', { businessName, category, serviceType, location, pincode, businessLicense, status });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Business Name</label>
+                <input name="businessName" required defaultValue={modalData.businessName || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Category</label>
+                  <select name="category" defaultValue={modalData.category || 'Product'} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="Services">Services</option>
+                    <option value="Product">Product</option>
+                    <option value="Daily Need">Daily Need</option>
+                    <option value="Food">Food</option>
+                    <option value="Stay">Stay</option>
+                    <option value="Travel">Travel</option>
+                    <option value="Job">Job</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Subcategory (Service Type)</label>
+                  <input name="serviceType" required defaultValue={modalData.serviceType || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Location</label>
+                <input name="location" required defaultValue={modalData.location || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Pincode</label>
+                  <input name="pincode" required defaultValue={modalData.pincode || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">License / Registration</label>
+                  <input name="businessLicense" defaultValue={modalData.businessLicense || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Status</label>
+                <select name="status" defaultValue={modalData.status || 'pending'} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+              
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showModal === 'create-agent' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Register New Agent</h3>
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const name = e.target.name.value;
+                const email = e.target.email.value;
+                const phone = e.target.phone.value;
+                const password = e.target.password.value;
+                const level = e.target.level.value;
+                const assignedArea = e.target.assignedArea.value;
+                const pincode = e.target.pincode.value;
+                const status = e.target.status.value;
+                
+                await executeAction('/admin/create-agent', 'POST', { name, email, phone, password, level, assignedArea, pincode, status });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent Name</label>
+                <input name="name" required type="text" placeholder="e.g. John Doe" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
+                  <input name="email" required type="email" placeholder="john@example.com" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
+                  <input name="phone" required type="text" placeholder="9876543210" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Password</label>
+                <input name="password" required type="password" placeholder="••••••••" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent Level</label>
+                  <select name="level" defaultValue="pincode" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="state">State</option>
+                    <option value="district">District</option>
+                    <option value="division">Division</option>
+                    <option value="pincode">Pincode</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Assigned Area</label>
+                  <input name="assignedArea" type="text" placeholder="e.g. Tamil Nadu / Chennai" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Assigned Pincode</label>
+                  <input name="pincode" type="text" placeholder="e.g. 600001" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Initial KYC Status</label>
+                  <select name="status" defaultValue="approved" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="approved">Approved & Active</option>
+                    <option value="pending">Pending KYC Review</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 justify-end pt-4">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                  Cancel
+                </button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
+                  Register Agent
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
+
+export default function AppWrapper() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
