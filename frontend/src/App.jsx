@@ -141,6 +141,10 @@ function App() {
   const [tickets, setTickets] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   
+  // Refined UX States
+  const [selectedPlanTab, setSelectedPlanTab] = useState(0);
+  const [kycPreviewImage, setKycPreviewImage] = useState(null);
+  
   // Pincode Master Lookup States
   const [lookupPincode, setLookupPincode] = useState('');
   const [lookupResults, setLookupResults] = useState([]);
@@ -1495,7 +1499,7 @@ function App() {
               
               {/* Category Filter */}
               <div className="flex gap-2 overflow-x-auto pb-2">
-                {['All', 'Hospitals', 'Hotels', 'Restaurants', 'Stores', 'Services'].map((cat) => (
+                {['All', ...new Set(categories.map(c => c.name))].map((cat) => (
                   <button 
                     key={cat}
                     onClick={() => setFilterCategory(cat)}
@@ -1509,7 +1513,7 @@ function App() {
               {/* Vendors List */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {vendors
-                  .filter(v => filterCategory === 'All' || v.category === filterCategory || (v.vendorType && v.vendorType.toLowerCase().includes(filterCategory.toLowerCase())))
+                  .filter(v => filterCategory === 'All' || v.category === filterCategory || (v.vendorType && v.vendorType.toLowerCase().includes(filterCategory.toLowerCase())) || (v.subcategory && v.subcategory.toLowerCase().includes(filterCategory.toLowerCase())))
                   .map((vendor) => (
                     <div key={vendor._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
                       <div className="flex justify-between items-start">
@@ -1653,21 +1657,33 @@ function App() {
 
                       {/* Documents viewer */}
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center">
+                        <div 
+                          onClick={() => setKycPreviewImage(agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500')}
+                          className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                        >
                           <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
                           <img src={agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
-                          <span className="block text-[10px] font-mono mt-2">{agent.kyc?.aadhaarNumber || '1234 5678 9012'}</span>
+                          <span className="block text-[10px] font-mono mt-2">{agent.kyc?.aadhaarNumber || '987654321098'}</span>
                         </div>
-                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center">
+                        <div 
+                          onClick={() => setKycPreviewImage(agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500')}
+                          className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                        >
                           <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
                           <img src={agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
                           <span className="block text-[10px] font-mono mt-2">{agent.kyc?.panNumber || 'ABCDE1234F'}</span>
                         </div>
-                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center">
+                        <div 
+                          onClick={() => setKycPreviewImage(agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500')}
+                          className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                        >
                           <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Video/Photo</span>
                           <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
                         </div>
-                        <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center">
+                        <div 
+                          onClick={() => setKycPreviewImage(agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500')}
+                          className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                        >
                           <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
                           <img src={agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
                         </div>
@@ -1971,35 +1987,135 @@ function App() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {membershipPlans.map((plan) => (
-                  <div key={plan._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm relative overflow-hidden flex flex-col justify-between">
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-start">
-                        <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{plan.name}</span>
-                        <button 
-                          onClick={() => executeAction(`/admin/memberships/plans/${plan._id}`, 'DELETE')}
-                          className="text-slate-400 hover:text-rose-500 p-1 rounded-lg"
+              {membershipPlans.length > 0 ? (() => {
+                const activePlan = membershipPlans[selectedPlanTab] || membershipPlans[0];
+                const isGold = activePlan.name.toLowerCase().includes('gold');
+                const isPlatinum = activePlan.name.toLowerCase().includes('platinum') || activePlan.name.toLowerCase().includes('enterprise');
+                const isSilver = !isGold && !isPlatinum;
+
+                // Card gradient definitions
+                let cardGradient = 'from-slate-300 via-slate-100 to-slate-400 text-slate-800';
+                let tierText = 'SILVER TIER';
+                if (isGold) {
+                  cardGradient = 'from-amber-300 via-yellow-100 to-amber-500 text-amber-950 shadow-amber-500/10';
+                  tierText = 'GOLD TIER';
+                } else if (isPlatinum) {
+                  cardGradient = 'from-slate-850 via-slate-900 to-slate-950 text-slate-100 border border-slate-700/60 shadow-slate-950/40';
+                  tierText = 'PLATINUM TIER';
+                }
+
+                return (
+                  <div className="space-y-6">
+                    {/* Plan Tabs */}
+                    <div className="flex gap-2 overflow-x-auto pb-2 border-b border-slate-200/60 dark:border-slate-850">
+                      {membershipPlans.map((plan, idx) => (
+                        <button
+                          key={plan._id}
+                          onClick={() => setSelectedPlanTab(idx)}
+                          className={`px-5 py-2.5 rounded-xl text-xs font-bold shrink-0 transition-all ${selectedPlanTab === idx ? 'bg-primary-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
                         >
-                          <Trash2 className="w-4.5 h-4.5" />
+                          {plan.name}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Two Side Layout */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center pt-2">
+                      {/* Left Side: Membership Benefits Card */}
+                      <div className="bg-slate-900 border border-slate-800 p-8 rounded-3xl space-y-6 shadow-xl relative min-h-[380px] flex flex-col justify-between text-white">
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-start">
+                            <span className="text-xs uppercase font-extrabold tracking-widest text-primary-400">{tierText}</span>
+                            <button 
+                              onClick={() => executeAction(`/admin/memberships/plans/${activePlan._id}`, 'DELETE')}
+                              className="text-slate-500 hover:text-rose-500 p-1.5 rounded-lg transition-colors"
+                              title="Delete Plan"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          </div>
+                          
+                          <h4 className="text-2xl font-black">{activePlan.name}</h4>
+                          
+                          <div className="flex items-baseline gap-1.5 pt-2 border-b border-slate-800 pb-4">
+                            <span className="text-4xl font-black">₹{activePlan.price}</span>
+                            <span className="text-sm text-slate-400">/ {activePlan.duration} days</span>
+                          </div>
+
+                          <div className="space-y-3 pt-2">
+                            <span className="block text-xs uppercase font-extrabold tracking-wider text-slate-400">Membership Benefits</span>
+                            <ul className="space-y-2.5 text-xs text-slate-350">
+                              {activePlan.features.map((f, idx) => (
+                                <li key={idx} className="flex items-center gap-2.5">
+                                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                                  <span>{f}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+
+                        <div className="pt-6 border-t border-slate-800/80">
+                          <button
+                            onClick={() => { setModalData(activePlan); setShowModal('plan'); }}
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-3 rounded-xl transition-all border border-slate-750"
+                          >
+                            Edit Plan Details
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Right Side: Virtual Premium Card */}
+                      <div className="flex flex-col items-center justify-center space-y-6">
+                        <div className={`w-full max-w-[420px] aspect-[1.58/1] rounded-3xl bg-gradient-to-br ${cardGradient} p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden transition-transform duration-300 hover:scale-[1.02]`}>
+                          {/* Glossy Overlay */}
+                          <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 pointer-events-none"></div>
+                          
+                          {/* Top Card Info */}
+                          <div className="flex justify-between items-start relative z-10">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black tracking-widest uppercase opacity-60">MEMBERSHIP</span>
+                              <span className="text-lg font-black tracking-tighter">CONNECT</span>
+                            </div>
+                            <div className="flex flex-col items-end">
+                              <div className="w-10 h-7 bg-white/10 rounded-md border border-white/10 flex items-center justify-center text-[8px] font-mono tracking-widest opacity-80">CHIP</div>
+                              <span className="text-[9px] font-extrabold tracking-widest mt-1 opacity-70">{tierText}</span>
+                            </div>
+                          </div>
+
+                          {/* Center Card Info */}
+                          <div className="flex items-center gap-4 relative z-10 my-4">
+                            <div className="w-8 h-8 rounded-full bg-white/15 backdrop-blur-md flex items-center justify-center">
+                              <Award className="w-4.5 h-4.5 opacity-90" />
+                            </div>
+                            <span className="font-mono text-base tracking-widest opacity-95">••••  ••••  ••••  {activePlan.price}</span>
+                          </div>
+
+                          {/* Bottom Card Info */}
+                          <div className="flex justify-between items-end relative z-10">
+                            <div className="flex flex-col">
+                              <span className="text-[8px] uppercase tracking-wider opacity-50">Card Holder</span>
+                              <span className="text-xs font-bold tracking-wide uppercase">FORGE INDIA CONNECT</span>
+                            </div>
+                            <span className="text-[9px] font-bold opacity-60">VAL : {activePlan.duration} DAYS</span>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => { setModalData(activePlan); setShowModal('plan'); }}
+                          className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-md transition-all"
+                        >
+                          Edit Card Design
                         </button>
                       </div>
-                      <div className="flex items-baseline gap-1">
-                        <span className="text-3xl font-black text-primary-500">₹{plan.price}</span>
-                        <span className="text-xs text-slate-400">/ {plan.duration} days</span>
-                      </div>
-                      <ul className="space-y-2 text-xs text-slate-500 dark:text-slate-400">
-                        {plan.features.map((f, idx) => (
-                          <li key={idx} className="flex items-center gap-2">
-                            <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                            <span>{f}</span>
-                          </li>
-                        ))}
-                      </ul>
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })() : (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-8 rounded-2xl text-center text-slate-400">
+                  No membership plans found. Click Create Plan to add one.
+                </div>
+              )}
             </div>
           )}
 
@@ -2723,7 +2839,9 @@ function App() {
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">Category Name</th>
+                        <th className="px-6 py-4">First Category</th>
+                        <th className="px-6 py-4">Second Category (Sub)</th>
+                        <th className="px-6 py-4">Third Category (Sub-sub)</th>
                         <th className="px-6 py-4">Description</th>
                         <th className="px-6 py-4">Status</th>
                         <th className="px-6 py-4 text-right">Actions</th>
@@ -2733,6 +2851,8 @@ function App() {
                       {categories.map((c) => (
                         <tr key={c._id}>
                           <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{c.name}</td>
+                          <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-semibold">{c.subcategory || '—'}</td>
+                          <td className="px-6 py-4 text-primary-500 font-semibold">{c.subSubcategory || '—'}</td>
                           <td className="px-6 py-4 text-xs">{c.description || 'No description'}</td>
                           <td className="px-6 py-4">
                             <button 
@@ -3208,7 +3328,9 @@ function App() {
       {showModal === 'plan' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Create Membership Plan</h3>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
+              {modalData ? 'Edit Membership Plan' : 'Create Membership Plan'}
+            </h3>
             <form 
               onSubmit={async (e) => {
                 e.preventDefault();
@@ -3217,35 +3339,39 @@ function App() {
                 const duration = Number(e.target.duration.value);
                 const features = e.target.features.value.split(',').map(f => f.trim());
                 
-                await executeAction('/admin/memberships/plans', 'POST', { name, price, duration, features });
+                if (modalData) {
+                  await executeAction(`/admin/memberships/plans/${modalData._id}`, 'PUT', { name, price, duration, features });
+                } else {
+                  await executeAction('/admin/memberships/plans', 'POST', { name, price, duration, features });
+                }
                 setShowModal(null);
               }}
               className="space-y-4"
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Plan Name</label>
-                <input name="name" required type="text" placeholder="e.g. Gold Tier" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input name="name" required type="text" defaultValue={modalData ? modalData.name : ''} placeholder="e.g. Gold Tier" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Price (INR)</label>
-                  <input name="price" required type="number" placeholder="2499" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input name="price" required type="number" defaultValue={modalData ? modalData.price : ''} placeholder="2499" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Duration (Days)</label>
-                  <input name="duration" required type="number" placeholder="90" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input name="duration" required type="number" defaultValue={modalData ? modalData.duration : ''} placeholder="90" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Features (comma separated)</label>
-                <input name="features" required type="text" placeholder="Priority listing, SMS alerts, Weekly analytics" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input name="features" required type="text" defaultValue={modalData ? modalData.features.join(', ') : ''} placeholder="Priority listing, SMS alerts, Weekly analytics" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div className="flex gap-2 justify-end pt-4">
                 <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
-                  Save Plan
+                  {modalData ? 'Save Changes' : 'Create Plan'}
                 </button>
               </div>
             </form>
@@ -3929,20 +4055,32 @@ function App() {
       {showModal === 'category' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Add New Category</h3>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Add New Category Hierarchy</h3>
             <form 
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
+                const subcategory = e.target.subcategory.value;
+                const subSubcategory = e.target.subSubcategory.value;
                 const description = e.target.description.value;
-                await executeAction('/admin/categories', 'POST', { name, description });
+                await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description });
                 setShowModal(null);
               }}
               className="space-y-4"
             >
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Category Name</label>
-                <input name="name" placeholder="e.g. Healthcare / Electronics" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Main Name)</label>
+                <input name="name" placeholder="e.g. Restaurants" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub)</label>
+                  <input name="subcategory" placeholder="e.g. Fast Food" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Sub-sub)</label>
+                  <input name="subSubcategory" placeholder="e.g. Pizza / Burgers" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
@@ -4044,6 +4182,28 @@ function App() {
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Publish Announcement</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* 34. KYC DOCUMENT PREVIEW MODAL */}
+      {kycPreviewImage && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 cursor-pointer"
+          onClick={() => setKycPreviewImage(null)}
+        >
+          <div className="relative max-w-4xl max-h-[85vh] w-full flex flex-col items-center justify-center">
+            <button 
+              onClick={() => setKycPreviewImage(null)} 
+              className="absolute top-[-40px] right-0 bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors cursor-pointer text-sm font-bold border border-white/10"
+            >
+              ✕ Close Preview
+            </button>
+            <img 
+              src={kycPreviewImage} 
+              alt="KYC Document Preview" 
+              className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10 cursor-default"
+              onClick={(e) => e.stopPropagation()} 
+            />
           </div>
         </div>
       )}

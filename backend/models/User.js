@@ -46,12 +46,18 @@ const UserSchema = new mongoose.Schema({
 });
 
 const castIdToObjectId = (val) => {
+    if (val && typeof val === 'object' && (val.$in || val.$eq || val.$nin)) {
+        return val;
+    }
     if (typeof val === 'string' && mongoose.Types.ObjectId.isValid(val)) {
         try {
-            return new mongoose.Types.ObjectId(val);
+            return { $in: [val, new mongoose.Types.ObjectId(val)] };
         } catch (e) {
             return val;
         }
+    }
+    if (val instanceof mongoose.Types.ObjectId) {
+        return { $in: [val.toString(), val] };
     }
     if (Array.isArray(val)) {
         return val.map(castIdToObjectId);

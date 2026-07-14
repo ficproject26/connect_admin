@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 
 const CategorySchema = new mongoose.Schema({
-    name: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+    subcategory: { type: String, default: '' },
+    subSubcategory: { type: String, default: '' },
     description: { type: String },
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now }
