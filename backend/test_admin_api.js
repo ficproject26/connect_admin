@@ -20,7 +20,8 @@ const run = async () => {
 
         console.log("Got token.");
 
-        const res = await axios.get('http://localhost:5000/api/admin/dashboard-stats', {
+        const PORT = process.env.PORT || 5001;
+        const res = await axios.get(`http://localhost:${PORT}/api/admin/dashboard-stats`, {
             headers: { 'x-auth-token': token }
         });
 

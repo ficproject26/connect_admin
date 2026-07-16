@@ -2,14 +2,15 @@ const axios = require('axios');
 
 async function run() {
     try {
-        const loginRes = await axios.post('http://localhost:5000/api/auth/login', {
+        const PORT = process.env.PORT || 5001;
+        const loginRes = await axios.post(`http://localhost:${PORT}/api/auth/login`, {
             email: 'admin@example.com',
             password: 'admin123'
         });
         const token = loginRes.data.token;
         console.log('Login successful, token:', token);
         
-        const vendorsRes = await axios.get('http://localhost:5000/api/admin/vendors', {
+        const vendorsRes = await axios.get(`http://localhost:${PORT}/api/admin/vendors`, {
             headers: { 'x-auth-token': token }
         });
         console.log('Vendors returned:', vendorsRes.data);

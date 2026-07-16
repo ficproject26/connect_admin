@@ -3801,7 +3801,7 @@ function App() {
                 </select>
               </div>
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -3844,7 +3844,7 @@ function App() {
                 </select>
               </div>
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -3898,7 +3898,7 @@ function App() {
                 <input name="features" required type="text" defaultValue={modalData ? modalData.features.join(', ') : ''} placeholder="Priority listing, SMS alerts, Weekly analytics" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -3918,12 +3918,17 @@ function App() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 const title = e.target.title.value;
-                const imageUrl = e.target.imageUrl.value;
+                const mediaType = e.target.mediaType.value;
+                const imageUrl = e.target.imageUrl?.value || '';
+                const videoUrl = e.target.videoUrl?.value || '';
+                const targetAudience = e.target.targetAudience.value;
                 const redirectLink = e.target.redirectLink.value;
                 const startDate = new Date();
                 const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
                 
-                await executeAction('/admin/banners', 'POST', { title, imageUrl, redirectLink, startDate, endDate });
+                await executeAction('/admin/banners', 'POST', { 
+                  title, mediaType, imageUrl, videoUrl, targetAudience, redirectLink, startDate, endDate 
+                });
                 setShowModal(null);
               }}
               className="space-y-4"
@@ -3932,16 +3937,38 @@ function App() {
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Title</label>
                 <input name="title" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Media Type</label>
+                  <select name="mediaType" defaultValue="image" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">For Whom (Audience)</label>
+                  <select name="targetAudience" defaultValue="all" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="all">All</option>
+                    <option value="vendor">Vendor</option>
+                    <option value="agent">Agent</option>
+                    <option value="customer">Customer</option>
+                  </select>
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Image URL</label>
-                <input name="imageUrl" defaultValue="https://images.unsplash.com/photo-1542838132-92c53300491e?w=600" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input name="imageUrl" defaultValue="https://images.unsplash.com/photo-1542838132-92c53300491e?w=600" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Video URL (Optional)</label>
+                <input name="videoUrl" placeholder="e.g. https://example.com/promo.mp4" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Redirect Link</label>
                 <input name="redirectLink" required type="text" placeholder="/promotions" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -3961,10 +3988,15 @@ function App() {
               onSubmit={async (e) => {
                 e.preventDefault();
                 const title = e.target.title.value;
-                const imageUrl = e.target.imageUrl.value;
+                const mediaType = e.target.mediaType.value;
+                const imageUrl = e.target.imageUrl?.value || '';
+                const videoUrl = e.target.videoUrl?.value || '';
+                const targetAudience = e.target.targetAudience.value;
                 const redirectLink = e.target.redirectLink.value;
                 
-                await executeAction('/admin/ads', 'POST', { title, imageUrl, redirectLink });
+                await executeAction('/admin/ads', 'POST', { 
+                  title, mediaType, imageUrl, videoUrl, targetAudience, redirectLink 
+                });
                 setShowModal(null);
               }}
               className="space-y-4"
@@ -3973,16 +4005,38 @@ function App() {
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Ad Title</label>
                 <input name="title" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Media Type</label>
+                  <select name="mediaType" defaultValue="image" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="image">Image</option>
+                    <option value="video">Video</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">For Whom (Audience)</label>
+                  <select name="targetAudience" defaultValue="all" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="all">All</option>
+                    <option value="vendor">Vendor</option>
+                    <option value="agent">Agent</option>
+                    <option value="customer">Customer</option>
+                  </select>
+                </div>
+              </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Image URL</label>
-                <input name="imageUrl" defaultValue="https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=600" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input name="imageUrl" defaultValue="https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=600" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Video URL (Optional)</label>
+                <input name="videoUrl" placeholder="e.g. https://example.com/promo.mp4" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Redirect URL</label>
                 <input name="redirectLink" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -4028,7 +4082,7 @@ function App() {
                 <input name="state" required type="text" placeholder="e.g. Tamil Nadu" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -4079,7 +4133,7 @@ function App() {
                 <input name="dueDate" required type="date" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -4144,7 +4198,7 @@ function App() {
               </div>
               
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -4222,7 +4276,7 @@ function App() {
               </div>
               
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -4380,7 +4434,7 @@ function App() {
               </div>
               
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
                 </button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
@@ -4434,7 +4488,7 @@ function App() {
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Application</button>
               </div>
             </form>
@@ -4495,7 +4549,7 @@ function App() {
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Holder</button>
               </div>
             </form>
@@ -4546,7 +4600,7 @@ function App() {
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Record Transaction</button>
               </div>
             </form>
@@ -4607,7 +4661,7 @@ function App() {
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">
                   {onboardType === 'technician' ? 'Onboard Technician' : onboardType === 'executive' ? 'Onboard Executive' : 'Onboard Partner'}
                 </button>
@@ -4657,7 +4711,7 @@ function App() {
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Agent</button>
               </div>
             </form>
@@ -4779,7 +4833,7 @@ function App() {
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Category</button>
               </div>
             </form>
@@ -4826,7 +4880,7 @@ function App() {
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Create Ticket</button>
               </div>
             </form>
@@ -4869,7 +4923,7 @@ function App() {
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Publish Announcement</button>
               </div>
             </form>
@@ -4931,6 +4985,9 @@ function App() {
                   <div className="flex justify-between"><span className="text-slate-400">Contact Person:</span><span className="font-semibold">{modalData.contactName}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-semibold">{modalData.phone}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-semibold truncate max-w-[200px]">{modalData.email}</span></div>
+                  {modalData.address && (
+                    <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-semibold text-right max-w-[200px] break-words">{modalData.address}</span></div>
+                  )}
                 </div>
 
                 <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Performance & Platform</h4>
@@ -4998,6 +5055,18 @@ function App() {
                     </div>
                   )}
                 </div>
+
+                {modalData.bankDetails && (
+                  <>
+                    <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Payment & Bank Details</h4>
+                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                      {modalData.bankDetails.upiId && <div className="flex justify-between text-xs"><span className="text-slate-400">UPI ID:</span><span className="font-semibold">{modalData.bankDetails.upiId}</span></div>}
+                      {modalData.bankDetails.bankName && <div className="flex justify-between text-xs"><span className="text-slate-400">Bank Name:</span><span className="font-semibold">{modalData.bankDetails.bankName}</span></div>}
+                      {modalData.bankDetails.accountNumber && <div className="flex justify-between text-xs"><span className="text-slate-400">Account Number:</span><span className="font-semibold">{modalData.bankDetails.accountNumber}</span></div>}
+                      {modalData.bankDetails.ifscCode && <div className="flex justify-between text-xs"><span className="text-slate-400">IFSC Code:</span><span className="font-semibold">{modalData.bankDetails.ifscCode}</span></div>}
+                    </div>
+                  </>
+                )}
 
                 <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Membership & Referral</h4>
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">

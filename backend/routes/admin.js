@@ -587,6 +587,18 @@ router.get('/vendors', [auth, adminAuth], async (req, res) => {
             agentId: v.referredBy || null,
             membership: { status: v.isPaid ? 'active' : 'none' },
             createdAt: v.createdAt,
+            kycStatus: v.status || 'Pending',
+            kycDocs: {
+                aadhaarNumber: v.kyc?.aadhaarNumber || '',
+                aadhaarImage: v.kyc?.aadhaarImage || '',
+                panNumber: v.kyc?.panNumber || '',
+                panImage: v.kyc?.panImage || '',
+                selfie: v.kyc?.selfie || '',
+                businessProofImage: v.kyc?.businessProofImage || ''
+            },
+            address: v.address || '',
+            bankDetails: v.bankDetails || null,
+            paymentOptions: v.paymentOptions || null,
             isUserCollection: true
         }));
 
@@ -604,6 +616,9 @@ router.get('/vendors', [auth, adminAuth], async (req, res) => {
             agentId: v.agentId,
             membership: v.membership,
             createdAt: v.createdAt,
+            kycStatus: v.kycStatus || 'pending',
+            kycDocs: v.kycDocs || null,
+            address: v.address || '',
             isUserCollection: false
         }));
 
@@ -1497,12 +1512,19 @@ router.get('/categories', async (req, res) => {
 // POST new category
 router.post('/categories', [auth, adminAuth], async (req, res) => {
     try {
+        // Drop unique index on name if it exists to allow hierarchical category records
+        try {
+            await Category.collection.dropIndex('name_1');
+        } catch (idxErr) {
+            // Index might not exist, ignore
+        }
+        
         const newCat = new Category(req.body);
         const cat = await newCat.save();
         res.json(cat);
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
+        console.error("Error creating category:", err);
+        res.status(500).json({ error: err.message || 'Server error' });
     }
 });
 

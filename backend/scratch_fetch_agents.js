@@ -2,21 +2,22 @@ const axios = require('axios');
 
 async function run() {
     try {
-        const loginRes = await axios.post('http://localhost:5000/api/auth/login', {
+        const PORT = process.env.PORT || 5001;
+        const loginRes = await axios.post(`http://localhost:${PORT}/api/auth/login`, {
             email: 'admin@example.com',
             password: 'admin123'
         });
         const token = loginRes.data.token;
         console.log('Login successful, token resolved');
         
-        const agentsRes = await axios.get('http://localhost:5000/api/admin/agents', {
+        const agentsRes = await axios.get(`http://localhost:${PORT}/api/admin/agents`, {
             headers: { 'x-auth-token': token }
         });
         console.log('Agents API returned:', agentsRes.data.map(a => ({ name: a.name, status: a.status })));
 
         // Check if tie-ups endpoint exists and what it returns
         try {
-            const tieupsRes = await axios.get('http://localhost:5000/api/admin/tie-ups', {
+            const tieupsRes = await axios.get(`http://localhost:${PORT}/api/admin/tie-ups`, {
                 headers: { 'x-auth-token': token }
             });
             console.log('Tie-ups API returned:', tieupsRes.data);

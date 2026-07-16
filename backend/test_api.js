@@ -7,7 +7,8 @@ dotenv.config();
 const run = async () => {
     try {
         console.log("Logging in as agent...");
-        const res = await axios.post('http://localhost:5000/api/auth/login', {
+        const PORT = process.env.PORT || 5001;
+        const res = await axios.post(`http://localhost:${PORT}/api/auth/login`, {
             email: 'kathir@gmail.com',
             password: 'password' // Assuming default password
         });
@@ -15,7 +16,7 @@ const run = async () => {
         const token = res.data.token;
         console.log("Got token:", token.substring(0, 20) + "...");
 
-        const taskRes = await axios.get('http://localhost:5000/api/agent/tasks', {
+        const taskRes = await axios.get(`http://localhost:${PORT}/api/agent/tasks`, {
             headers: { 'x-auth-token': token }
         });
 
