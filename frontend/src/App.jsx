@@ -15,6 +15,7 @@ import {
 const getBackendUrl = () => {
   if (typeof window === 'undefined') return 'http://localhost:5001/api';
   const hostname = window.location.hostname;
+  // Local development: point to local backend server
   if (
     !hostname || 
     hostname === 'localhost' || 
@@ -25,7 +26,8 @@ const getBackendUrl = () => {
   ) {
     return `http://${hostname || 'localhost'}:5001/api`;
   }
-  return import.meta.env.VITE_API_BASE || '/api';
+  // Production: use env variable or deployed Render backend
+  return import.meta.env.VITE_API_BASE || 'https://connect-admin-backend.onrender.com/api';
 };
 
 const API_BASE = getBackendUrl();
