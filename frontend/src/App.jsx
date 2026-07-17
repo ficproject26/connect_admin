@@ -537,7 +537,7 @@ function App() {
       }
       
       if (!res.ok) {
-        throw new Error(data.msg || 'Authentication failed');
+        throw new Error(data.msg || data.error || 'Authentication failed');
       }
       if (data.user.role !== 'admin') {
         throw new Error('Access denied. Admin portal only.');
