@@ -12,7 +12,23 @@ import {
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5001/api';
+const getBackendUrl = () => {
+  if (typeof window === 'undefined') return 'http://localhost:5001/api';
+  const hostname = window.location.hostname;
+  if (
+    !hostname || 
+    hostname === 'localhost' || 
+    hostname === '127.0.0.1' || 
+    hostname.startsWith('192.168.') || 
+    hostname.startsWith('10.') || 
+    hostname.startsWith('172.')
+  ) {
+    return `http://${hostname || 'localhost'}:5001/api`;
+  }
+  return import.meta.env.VITE_API_BASE || '/api';
+};
+
+const API_BASE = getBackendUrl();
 
 const TAXONOMY = {
   "Services": {
