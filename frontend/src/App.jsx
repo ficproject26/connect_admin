@@ -518,12 +518,22 @@ function App() {
     setLoading(true);
     setAuthError('');
     try {
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      const loginUrl = `${API_BASE}/auth/login`;
+      const res = await fetch(loginUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      const data = await res.json();
+      
+      const contentType = res.headers.get('content-type');
+      let data = {};
+      if (contentType && contentType.includes('application/json')) {
+        data = await res.json();
+      } else {
+        const textResponse = await res.text();
+        throw new Error(`Server returned non-JSON response (URL: ${loginUrl}). Response: ${textResponse.substring(0, 100)}...`);
+      }
+      
       if (!res.ok) {
         throw new Error(data.msg || 'Authentication failed');
       }
@@ -534,6 +544,8 @@ function App() {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
       } catch (e) {}
+
+
       setToken(data.token);
       setUser(data.user);
       setActiveTab('dashboard');
