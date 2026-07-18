@@ -27,7 +27,7 @@ const getBackendUrl = () => {
     return `http://${hostname || 'localhost'}:5001/api`;
   }
   // Production: use env variable or deployed Render backend
-  return import.meta.env.VITE_API_BASE || 'https://connect-admin-backend.onrender.com/api';
+  return import.meta.env.VITE_API_BASE || 'https://connect-admin-96pc.onrender.com/api';
 };
 
 const API_BASE = getBackendUrl();
