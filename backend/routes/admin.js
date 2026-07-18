@@ -801,6 +801,38 @@ router.put('/vendors/:id/status', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// DELETE a vendor by ID
+router.delete('/vendors/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        let vendor = await User.findById(req.params.id);
+        if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
+            await User.findByIdAndDelete(req.params.id);
+            return res.json({ msg: 'Vendor deleted' });
+        }
+        let legacy = await Vendor.findById(req.params.id);
+        if (legacy) {
+            await Vendor.findByIdAndDelete(req.params.id);
+            return res.json({ msg: 'Vendor deleted' });
+        }
+        res.status(404).json({ msg: 'Vendor not found' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE all vendors
+router.delete('/vendors', [auth, adminAuth], async (req, res) => {
+    try {
+        await User.deleteMany({ role: { $in: ['Vendor', 'vendor'] } });
+        await Vendor.deleteMany({});
+        res.json({ msg: 'All vendors deleted' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
 // ==========================================
 // 7. CUSTOMER MANAGEMENT
 // ==========================================
