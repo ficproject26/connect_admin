@@ -1891,33 +1891,17 @@ function App() {
           {activeTab === 'vendors' && (
             <div className="space-y-6">
               
-              {/* Category Filter & Actions */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div className="flex gap-2 overflow-x-auto pb-2 w-full sm:w-auto">
-                  {['All', ...new Set(categories.map(c => c.name))].map((cat) => (
-                    <button 
-                      key={cat}
-                      onClick={() => setFilterCategory(cat)}
-                      className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${filterCategory === cat ? 'bg-primary-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-                
-                {vendors.length > 0 && (
+              {/* Category Filter */}
+              <div className="flex gap-2 overflow-x-auto pb-2">
+                {['All', ...new Set(categories.map(c => c.name))].map((cat) => (
                   <button 
-                    onClick={() => {
-                      if (window.confirm("Are you sure you want to delete ALL vendors from the system? This action cannot be undone.")) {
-                        executeAction('/admin/vendors', 'DELETE');
-                      }
-                    }}
-                    className="bg-rose-600 hover:bg-rose-550 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-rose-600/10 cursor-pointer hover:shadow-lg hover:shadow-rose-600/20 active:scale-95"
+                    key={cat}
+                    onClick={() => setFilterCategory(cat)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${filterCategory === cat ? 'bg-primary-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
                   >
-                    <Trash2 size={14} />
-                    Delete All Vendors
+                    {cat}
                   </button>
-                )}
+                ))}
               </div>
 
               {/* Vendors List */}
