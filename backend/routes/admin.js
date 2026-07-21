@@ -1297,14 +1297,78 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// Helper to resolve Vendor and Customer information for dynamic / hybrid schemas
+const resolveVendorAndCustomer = async (items) => {
+    const resolvedItems = [];
+    for (const item of items) {
+        const doc = item.toObject ? item.toObject() : item;
+        
+        // 1. Resolve Vendor
+        let vendor = doc.vendorId;
+        if (vendor && typeof vendor === 'string') {
+            const dbVendor = await Vendor.findOne({ id: vendor });
+            if (dbVendor) {
+                vendor = dbVendor.toObject();
+            } else {
+                try {
+                    const dbVendorObj = await Vendor.findById(vendor);
+                    if (dbVendorObj) vendor = dbVendorObj.toObject();
+                } catch (e) {}
+            }
+        } else if (vendor && mongoose.Types.ObjectId.isValid(vendor)) {
+            try {
+                const dbVendorObj = await Vendor.findById(vendor);
+                if (dbVendorObj) vendor = dbVendorObj.toObject();
+            } catch (e) {}
+        }
+
+        // 2. Resolve Customer
+        let customer = doc.customerId;
+        if (!customer) {
+            const custName = doc.memberName || doc.customer_name;
+            if (custName) {
+                const dbCustomer = await Customer.findOne({ name: custName });
+                if (dbCustomer) {
+                    customer = dbCustomer.toObject();
+                } else {
+                    customer = {
+                        name: custName,
+                        phone: doc.customer_phone || 'N/A',
+                        email: doc.customer_email || 'N/A'
+                    };
+                }
+            } else {
+                customer = {
+                    name: 'Unknown Customer',
+                    phone: 'N/A',
+                    email: 'N/A'
+                };
+            }
+        }
+
+        // Adjust amount and commission for dynamic orders
+        const amount = doc.amount !== undefined ? doc.amount : (doc.finalAmount !== undefined ? doc.finalAmount : (doc.totalAmount !== undefined ? doc.totalAmount : 0));
+        const commission = doc.commission !== undefined ? doc.commission : Math.round(amount * 0.05);
+
+        resolvedItems.push({
+            ...doc,
+            vendorId: vendor,
+            customerId: customer,
+            amount,
+            commission
+        });
+    }
+    return resolvedItems;
+};
+
 // GET all orders
 router.get('/orders', [auth, adminAuth], async (req, res) => {
     try {
-        const orders = await Order.find()
-            .populate('vendorId', 'businessName email phone')
-            .populate('customerId', 'name email phone')
+        const rawOrders = await Order.find({ type: { $nin: ['Booking', 'Job', 'Stay', 'Travel', 'Jobs'] } })
             .sort({ createdAt: -1 });
-        res.json(orders);
+
+        const resolvedOrders = await resolveVendorAndCustomer(rawOrders);
+        res.json(resolvedOrders);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -1314,11 +1378,22 @@ router.get('/orders', [auth, adminAuth], async (req, res) => {
 // GET all bookings
 router.get('/bookings', [auth, adminAuth], async (req, res) => {
     try {
-        const bookings = await Booking.find()
+        const dbBookings = await Booking.find()
             .populate('vendorId', 'businessName email phone')
             .populate('customerId', 'name email phone')
             .sort({ createdAt: -1 });
-        res.json(bookings);
+
+        const customBookings = await Order.find({ type: { $in: ['Booking', 'Stay', 'Travel'] } })
+            .sort({ createdAt: -1 });
+
+        const resolvedDbBookings = dbBookings.map(b => b.toObject ? b.toObject() : b);
+        const resolvedCustomBookings = await resolveVendorAndCustomer(customBookings);
+
+        const allBookings = [...resolvedDbBookings, ...resolvedCustomBookings].sort((a, b) => {
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+
+        res.json(allBookings);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -1328,8 +1403,28 @@ router.get('/bookings', [auth, adminAuth], async (req, res) => {
 // GET all jobs applied
 router.get('/jobs', [auth, adminAuth], async (req, res) => {
     try {
-        const jobs = await JobApplied.find().sort({ createdAt: -1 });
-        res.json(jobs);
+        const dbJobs = await JobApplied.find().sort({ createdAt: -1 });
+
+        const customJobs = await Order.find({ type: { $in: ['Job', 'Jobs'] } })
+            .sort({ createdAt: -1 });
+
+        const resolvedDbJobs = dbJobs.map(j => j.toObject ? j.toObject() : j);
+        const resolvedCustomJobs = customJobs.map(order => ({
+            _id: order._id,
+            candidateName: order.memberName || order.customer_name || 'Unknown Candidate',
+            email: order.candidateEmail || 'N/A',
+            phone: order.customer_phone || 'N/A',
+            position: order.product_details || 'Job Application',
+            experience: order.experience || 'Fresher',
+            status: (order.status || 'applied').toLowerCase(),
+            createdAt: order.createdAt
+        }));
+
+        const allJobs = [...resolvedDbJobs, ...resolvedCustomJobs].sort((a, b) => {
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+
+        res.json(allJobs);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -1351,7 +1446,22 @@ router.post('/jobs', [auth, adminAuth], async (req, res) => {
 // PUT update job applied status
 router.put('/jobs/:id', [auth, adminAuth], async (req, res) => {
     try {
-        const job = await JobApplied.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        let job = await JobApplied.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        if (!job) {
+            const orderJob = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
+            if (orderJob) {
+                job = {
+                    _id: orderJob._id,
+                    candidateName: orderJob.memberName || orderJob.customer_name || 'Unknown Candidate',
+                    email: orderJob.candidateEmail || 'N/A',
+                    phone: orderJob.customer_phone || 'N/A',
+                    position: orderJob.product_details || 'Job Application',
+                    experience: orderJob.experience || 'Fresher',
+                    status: (orderJob.status || 'applied').toLowerCase(),
+                    createdAt: orderJob.createdAt
+                };
+            }
+        }
         res.json(job);
     } catch (err) {
         console.error(err);
@@ -1362,7 +1472,10 @@ router.put('/jobs/:id', [auth, adminAuth], async (req, res) => {
 // DELETE job applied
 router.delete('/jobs/:id', [auth, adminAuth], async (req, res) => {
     try {
-        await JobApplied.findByIdAndDelete(req.params.id);
+        const job = await JobApplied.findByIdAndDelete(req.params.id);
+        if (!job) {
+            await Order.findByIdAndDelete(req.params.id);
+        }
         res.json({ msg: 'Job application deleted' });
     } catch (err) {
         console.error(err);

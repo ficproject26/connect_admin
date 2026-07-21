@@ -9,6 +9,6 @@ const JobAppliedSchema = new mongoose.Schema({
     resumeUrl: { type: String, default: 'https://images.unsplash.com/photo-1586281380349-632531db7ed4?w=150' },
     status: { type: String, enum: ['applied', 'interviewing', 'selected', 'rejected'], default: 'applied' },
     createdAt: { type: Date, default: Date.now }
-});
+}, { strict: false });
 
 module.exports = mongoose.model('JobApplied', JobAppliedSchema);
