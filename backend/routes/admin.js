@@ -1325,21 +1325,76 @@ const resolveVendorAndCustomer = async (items) => {
         
         // 1. Resolve Vendor
         let vendor = doc.vendorId;
-        if (vendor && typeof vendor === 'string') {
-            const dbVendor = await Vendor.findOne({ id: vendor });
-            if (dbVendor) {
-                vendor = dbVendor.toObject();
-            } else {
-                try {
-                    const dbVendorObj = await Vendor.findById(vendor);
-                    if (dbVendorObj) vendor = dbVendorObj.toObject();
-                } catch (e) {}
-            }
-        } else if (vendor && mongoose.Types.ObjectId.isValid(vendor)) {
+        if (vendor) {
             try {
-                const dbVendorObj = await Vendor.findById(vendor);
-                if (dbVendorObj) vendor = dbVendorObj.toObject();
-            } catch (e) {}
+                let dbVendorUser = null;
+                if (mongoose.Types.ObjectId.isValid(vendor)) {
+                    dbVendorUser = await User.findOne({
+                        $or: [
+                            { _id: vendor },
+                            { 'businesses._id': vendor }
+                        ]
+                    });
+                } else if (typeof vendor === 'string') {
+                    if (vendor.match(/^[0-9a-fA-F]{24}$/)) {
+                        dbVendorUser = await User.findOne({
+                            $or: [
+                                { _id: new mongoose.Types.ObjectId(vendor) },
+                                { 'businesses._id': new mongoose.Types.ObjectId(vendor) }
+                            ]
+                        });
+                    }
+                    if (!dbVendorUser) {
+                        dbVendorUser = await User.findOne({
+                            $or: [
+                                { email: vendor },
+                                { mobileNumber: vendor },
+                                { businessName: vendor }
+                            ]
+                        });
+                    }
+                }
+
+                if (dbVendorUser) {
+                    const matchedBiz = (dbVendorUser.businesses || []).find(b => b._id.toString() === vendor.toString());
+                    vendor = {
+                        _id: dbVendorUser._id,
+                        businessName: matchedBiz?.businessName || dbVendorUser.businessName || dbVendorUser.name || 'Unknown Vendor',
+                        name: dbVendorUser.name,
+                        email: dbVendorUser.email,
+                        mobileNumber: dbVendorUser.mobileNumber || 'N/A'
+                    };
+                } else {
+                    const dbVendor = await Vendor.findOne({
+                        $or: [
+                            { id: vendor },
+                            { _id: mongoose.Types.ObjectId.isValid(vendor) ? vendor : undefined }
+                        ].filter(Boolean)
+                    });
+                    if (dbVendor) {
+                        vendor = dbVendor.toObject();
+                    } else {
+                        vendor = {
+                            businessName: 'Unknown Vendor',
+                            email: 'N/A',
+                            mobileNumber: 'N/A'
+                        };
+                    }
+                }
+            } catch (e) {
+                console.error("Resolve vendor failed:", e);
+                vendor = {
+                    businessName: 'Unknown Vendor',
+                    email: 'N/A',
+                    mobileNumber: 'N/A'
+                };
+            }
+        } else {
+            vendor = {
+                businessName: 'Unknown Vendor',
+                email: 'N/A',
+                mobileNumber: 'N/A'
+            };
         }
 
         // 2. Resolve Customer
@@ -1347,10 +1402,24 @@ const resolveVendorAndCustomer = async (items) => {
         if (!customer) {
             const custName = doc.memberName || doc.customer_name;
             if (custName) {
-                const dbCustomer = await Customer.findOne({ name: custName });
-                if (dbCustomer) {
-                    customer = dbCustomer.toObject();
-                } else {
+                try {
+                    const dbCustomer = await Customer.findOne({
+                        $or: [
+                            { name: custName },
+                            { name: new RegExp('^' + custName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') },
+                            { name: new RegExp(custName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') }
+                        ]
+                    });
+                    if (dbCustomer) {
+                        customer = dbCustomer.toObject();
+                    } else {
+                        customer = {
+                            name: custName,
+                            phone: doc.customer_phone || 'N/A',
+                            email: doc.customer_email || 'N/A'
+                        };
+                    }
+                } catch (err) {
                     customer = {
                         name: custName,
                         phone: doc.customer_phone || 'N/A',
@@ -1362,6 +1431,36 @@ const resolveVendorAndCustomer = async (items) => {
                     name: 'Unknown Customer',
                     phone: 'N/A',
                     email: 'N/A'
+                };
+            }
+        } else if (typeof customer === 'string') {
+            try {
+                let dbCustomer = null;
+                if (mongoose.Types.ObjectId.isValid(customer)) {
+                    dbCustomer = await Customer.findById(customer);
+                }
+                if (!dbCustomer) {
+                    dbCustomer = await Customer.findOne({
+                        $or: [
+                            { name: customer },
+                            { email: customer }
+                        ]
+                    });
+                }
+                if (dbCustomer) {
+                    customer = dbCustomer.toObject();
+                } else {
+                    customer = {
+                        name: customer,
+                        phone: doc.customer_phone || 'N/A',
+                        email: doc.customer_email || 'N/A'
+                    };
+                }
+            } catch (err) {
+                customer = {
+                    name: customer,
+                    phone: doc.customer_phone || 'N/A',
+                    email: doc.customer_email || 'N/A'
                 };
             }
         }
