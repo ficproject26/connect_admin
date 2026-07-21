@@ -3589,17 +3589,45 @@ function App() {
                       <span className="font-semibold text-indigo-600 dark:text-indigo-400">Category Management</span>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => {
-                      setAddFirstCategory("Services");
-                      setShowModal('category');
-                    }}
-                    className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 dark:shadow-none"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add New Category
-                    <ChevronRight className="w-3.5 h-3.5 rotate-90 opacity-70" />
-                  </button>
+                  <div className="relative">
+                    <button 
+                      onClick={() => setShowAddCategoryDropdown(!showAddCategoryDropdown)}
+                      className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 dark:shadow-none"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add New Category
+                      <ChevronRight className="w-3.5 h-3.5 rotate-90 opacity-70" />
+                    </button>
+                    {showAddCategoryDropdown && (
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-30 py-1 text-xs">
+                        <button
+                          onClick={() => {
+                            setAddFirstCategory(activeMainCatName);
+                            setCategoryModalTier('sub');
+                            setShowModal('category');
+                            setShowAddCategoryDropdown(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"
+                        >
+                          <Folder className="w-3.5 h-3.5 text-blue-500" />
+                          Add Sub Category
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAddFirstCategory(activeMainCatName);
+                            setAddSecondCategory(activeSubCatName);
+                            setCategoryModalTier('child');
+                            setShowModal('category');
+                            setShowAddCategoryDropdown(false);
+                          }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800"
+                        >
+                          <Layers className="w-3.5 h-3.5 text-emerald-500" />
+                          Add Child Category
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* 5 KPI Stat Cards */}
@@ -3774,16 +3802,6 @@ function App() {
                           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                             1. Main Categories ({filteredMainList.length})
                           </h3>
-                          <button 
-                            onClick={() => {
-                              setAddFirstCategory(activeMainCatName);
-                              setShowModal('category');
-                            }}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add
-                          </button>
                         </div>
 
                         <div className="space-y-3">
@@ -3919,6 +3937,7 @@ function App() {
                           <button 
                             onClick={() => {
                               setAddFirstCategory(activeMainCatName);
+                              setCategoryModalTier('sub');
                               setShowModal('category');
                             }}
                             className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
@@ -4058,6 +4077,7 @@ function App() {
                             onClick={() => {
                               setAddFirstCategory(activeMainCatName);
                               setAddSecondCategory(activeSubCatName);
+                              setCategoryModalTier('child');
                               setShowModal('category');
                             }}
                             className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
@@ -5119,14 +5139,10 @@ function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Category</label>
-                  <select name="category" defaultValue={modalData.category || 'Product'} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
-                    <option value="Services">Services</option>
-                    <option value="Product">Product</option>
-                    <option value="Daily Need">Daily Need</option>
-                    <option value="Food">Food</option>
-                    <option value="Stay">Stay</option>
-                    <option value="Travel">Travel</option>
-                    <option value="Job">Job</option>
+                  <select name="category" defaultValue={modalData.category || 'Products'} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950">
+                    {Array.from(new Set([...Object.keys(TAXONOMY), ...(categories || []).map(c => c.name)])).filter(Boolean).map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -5605,13 +5621,15 @@ function App() {
       {showModal === 'category' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
-            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Add New Category Hierarchy</h3>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
+              {categoryModalTier === 'child' ? 'Add New Child Category' : 'Add New Sub Category'}
+            </h3>
             <form 
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
                 const subcategory = e.target.subcategory.value;
-                const subSubcategory = e.target.subSubcategory.value;
+                const subSubcategory = categoryModalTier === 'child' ? (e.target.subSubcategory?.value || '') : '';
                 const description = e.target.description.value;
                 await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description });
                 setShowModal(null);
@@ -5620,95 +5638,51 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Main Name)</label>
-                <select 
+                <input 
                   name="name" 
-                  value={addFirstCategory}
-                  onChange={(e) => {
-                    setAddFirstCategory(e.target.value);
-                    setIsAddingSecondCategory(false);
-                    setIsAddingThirdCategory(false);
-                  }}
-                  required 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950"
-                >
-                  <option value="Services">Services</option>
-                  <option value="Products">Products</option>
-                  <option value="Daily Needs">Daily Needs</option>
-                  <option value="Food">Food</option>
-                  <option value="Stay">Stay</option>
-                  <option value="Travel">Travel</option>
-                  <option value="Jobs">Jobs</option>
-                </select>
+                  value={addFirstCategory} 
+                  readOnly 
+                  disabled 
+                  className="w-full bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed font-semibold" 
+                />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+
+              {categoryModalTier === 'sub' ? (
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-xs font-semibold text-slate-400 uppercase">Second Category (Sub)</label>
-                    <button 
-                      type="button" 
-                      onClick={() => setIsAddingSecondCategory(!isAddingSecondCategory)}
-                      className="text-[10px] text-primary-500 hover:text-primary-600 font-bold uppercase transition-all"
-                    >
-                      {isAddingSecondCategory ? "Select Existing" : "Add Category"}
-                    </button>
-                  </div>
-                  {isAddingSecondCategory ? (
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
+                  <input 
+                    name="subcategory" 
+                    placeholder="Enter sub category name (e.g. Mobiles & Tablets)" 
+                    required 
+                    type="text" 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Name)</label>
                     <input 
                       name="subcategory" 
-                      placeholder="Enter new category" 
+                      value={addSecondCategory} 
+                      readOnly 
+                      disabled 
+                      className="w-full bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed font-semibold" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Child Name)</label>
+                    <input 
+                      name="subSubcategory" 
+                      placeholder="Enter child category (e.g. Apple)" 
                       required 
                       type="text" 
                       className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
                     />
-                  ) : (
-                    <select 
-                      name="subcategory"
-                      value={addSecondCategory}
-                      onChange={(e) => {
-                        setAddSecondCategory(e.target.value);
-                        setIsAddingThirdCategory(false);
-                      }}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950"
-                    >
-                      {Object.keys(TAXONOMY[addFirstCategory] || {}).map(cat => (
-                        <option key={cat} value={cat}>{cat}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <label className="block text-xs font-semibold text-slate-400 uppercase">Third Category (Sub-sub)</label>
-                    <button 
-                      type="button" 
-                      onClick={() => setIsAddingThirdCategory(!isAddingThirdCategory)}
-                      className="text-[10px] text-primary-500 hover:text-primary-600 font-bold uppercase transition-all"
-                    >
-                      {isAddingThirdCategory ? "Select Existing" : "Add Category"}
-                    </button>
                   </div>
-                  {isAddingThirdCategory || isAddingSecondCategory ? (
-                    <input 
-                      name="subSubcategory" 
-                      placeholder="Enter sub-subcategory" 
-                      type="text" 
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
-                    />
-                  ) : (
-                    <select 
-                      name="subSubcategory"
-                      value={addThirdCategory}
-                      onChange={(e) => setAddThirdCategory(e.target.value)}
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm [&>option]:bg-white [&>option]:dark:bg-slate-950"
-                    >
-                      {(TAXONOMY[addFirstCategory]?.[addSecondCategory] || []).map(subsub => (
-                        <option key={subsub} value={subsub}>{subsub}</option>
-                      ))}
-                      <option value="">None (Empty)</option>
-                    </select>
-                  )}
                 </div>
-              </div>
+              )}
+
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
                 <textarea name="description" placeholder="Description of the category..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]" />
@@ -5716,7 +5690,7 @@ function App() {
 
               <div className="flex gap-2 justify-end pt-4">
                 <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
-                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Category</button>
+                <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Category</button>
               </div>
             </form>
           </div>
