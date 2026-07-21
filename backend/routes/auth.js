@@ -246,5 +246,67 @@ router.post('/login-vendor', async (req, res) => {
     }
 });
 
-module.exports = router;
+// @route    POST api/auth/register-customer
+// @desc     Register a new customer from Connect App
+// @access   Public
+router.post('/register-customer', async (req, res) => {
+    const { name, phone, email, password, aadhaarNumber, panNumber } = req.body;
+    try {
+        // Validate required fields
+        if (!name || !phone || !email) {
+            return res.status(400).json({ msg: 'Name, phone, and email are required' });
+        }
 
+        const Customer = require('../models/Customer');
+
+        // Check if customer already exists by phone or email
+        let existing = await Customer.findOne({ $or: [{ phone }, { email }] });
+        if (existing) {
+            return res.status(400).json({ msg: 'Customer already registered with this phone or email' });
+        }
+
+        // Hash password if provided
+        let hashedPassword = '';
+        if (password) {
+            const salt = await bcrypt.genSalt(10);
+            hashedPassword = await bcrypt.hash(password, salt);
+        }
+
+        // Assign to first available branch (or leave null)
+        const Branch = require('../models/Branch');
+        const defaultBranch = await Branch.findOne();
+
+        const customer = new Customer({
+            name,
+            phone,
+            email,
+            password: hashedPassword,
+            aadhaarNumber: aadhaarNumber || '',
+            panNumber: panNumber || '',
+            branchId: defaultBranch ? defaultBranch._id : undefined,
+            status: 'active'
+        });
+
+        await customer.save();
+
+        res.json({
+            success: true,
+            msg: 'Registration successful',
+            customer: {
+                id: customer._id,
+                name: customer.name,
+                email: customer.email,
+                phone: customer.phone,
+                status: customer.status
+            }
+        });
+    } catch (err) {
+        console.error('Customer registration error:', err.message);
+        if (err.code === 11000) {
+            return res.status(400).json({ msg: 'Customer already registered with this phone or email' });
+        }
+        res.status(500).json({ msg: 'Server error during registration' });
+    }
+});
+
+module.exports = router;

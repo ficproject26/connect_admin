@@ -5,7 +5,8 @@ import {
   Layers, LogOut, Menu, Sun, Moon, Plus, Edit2, Trash2, 
   Search, Filter, ChevronRight, Download, CreditCard, Clock,
   ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, EyeOff, UploadCloud, Bell, User,
-  Briefcase, Truck, Headphones, Folder, HelpCircle, MessageSquare, Megaphone, ShoppingBag, Calendar, Contact
+  Briefcase, Truck, Headphones, Folder, HelpCircle, MessageSquare, Megaphone, ShoppingBag, Calendar, Contact,
+  MoreVertical, RotateCcw, LayoutGrid, List, Smartphone, Laptop, Tv, Home, Shirt, Sparkles, Package, Utensils, Tag, Activity, ArrowRight, ChevronLeft
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -271,6 +272,21 @@ function App() {
   const [addThirdCategory, setAddThirdCategory] = useState("");
   const [isAddingSecondCategory, setIsAddingSecondCategory] = useState(false);
   const [isAddingThirdCategory, setIsAddingThirdCategory] = useState(false);
+
+  // Category 3-tier layout & selection states
+  const [selectedMainCat, setSelectedMainCat] = useState("Products");
+  const [selectedSubCat, setSelectedSubCat] = useState("Mobiles & Tablets");
+  const [catSearchTerm, setCatSearchTerm] = useState("");
+  const [catMainFilter, setCatMainFilter] = useState("All");
+  const [catSubFilter, setCatSubFilter] = useState("All");
+  const [catStatusFilter, setCatStatusFilter] = useState("All Status");
+  const [categoryViewMode, setCategoryViewMode] = useState("cards"); // 'cards' or 'table'
+  const [activeCatMenuId, setActiveCatMenuId] = useState(null);
+  const [mainCatPage, setMainCatPage] = useState(1);
+  const [subCatPage, setSubCatPage] = useState(1);
+  const [childCatPage, setChildCatPage] = useState(1);
+  const [categoryModalTier, setCategoryModalTier] = useState('sub'); // 'sub' or 'child'
+  const [showAddCategoryDropdown, setShowAddCategoryDropdown] = useState(false);
 
   useEffect(() => {
     if (TAXONOMY[addFirstCategory]) {
@@ -1996,6 +2012,8 @@ function App() {
                     <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                       <th className="px-6 py-4">Customer Name</th>
                       <th className="px-6 py-4">Contact Info</th>
+                      <th className="px-6 py-4">Aadhaar Number</th>
+                      <th className="px-6 py-4">PAN Number</th>
                       <th className="px-6 py-4">District</th>
                       <th className="px-6 py-4">Status</th>
                     </tr>
@@ -2008,9 +2026,11 @@ function App() {
                           <span className="block">{c.email}</span>
                           <span className="block text-slate-400 mt-0.5">{c.phone}</span>
                         </td>
+                        <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.aadhaarNumber || '—'}</td>
+                        <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.panNumber || '—'}</td>
                         <td className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400">{c.branchId?.name || 'Direct'}</td>
                         <td className="px-6 py-4">
-                          <span className="bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full text-xs font-bold">Active</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${c.status === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>{c.status === 'active' ? 'Active' : 'Blocked'}</span>
                         </td>
                       </tr>
                     ))}
@@ -3369,52 +3389,817 @@ function App() {
           )}
 
           {/* 22. CATEGORY MANAGEMENT */}
-          {activeTab === 'categories' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Category Management</h3>
-                <button 
-                  onClick={() => setShowModal('category')}
-                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
-                >
-                  Add Category
-                </button>
-              </div>
+          {activeTab === 'categories' && (() => {
+            // Helper icon renderer for categories
+            const getCatIcon = (name, type = 'main') => {
+              const iconClass = "w-4 h-4";
+              const n = (name || '').toLowerCase();
+              
+              if (n.includes('product') || n.includes('bag')) return <ShoppingBag className={iconClass} />;
+              if (n.includes('service') || n.includes('briefcase')) return <Briefcase className={iconClass} />;
+              if (n.includes('daily') || n.includes('grocery') || n.includes('need')) return <Package className={iconClass} />;
+              if (n.includes('food') || n.includes('restaurant') || n.includes('cafe')) return <Utensils className={iconClass} />;
+              if (n.includes('offer') || n.includes('deal')) return <Tag className={iconClass} />;
+              if (n.includes('mobile') || n.includes('phone') || n.includes('tablet')) return <Smartphone className={iconClass} />;
+              if (n.includes('laptop') || n.includes('computer') || n.includes('desktop')) return <Laptop className={iconClass} />;
+              if (n.includes('appliance') || n.includes('tv') || n.includes('electronic')) return <Tv className={iconClass} />;
+              if (n.includes('fashion') || n.includes('cloth') || n.includes('wear')) return <Shirt className={iconClass} />;
+              if (n.includes('home') || n.includes('furniture') || n.includes('house')) return <Home className={iconClass} />;
+              if (n.includes('beauty') || n.includes('care') || n.includes('spa')) return <Sparkles className={iconClass} />;
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">First Category</th>
-                        <th className="px-6 py-4">Second Category (Sub)</th>
-                        <th className="px-6 py-4">Third Category (Sub-sub)</th>
-                        <th className="px-6 py-4">Description</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {categories.map((c) => (
-                        <tr key={c._id}>
-                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{c.name}</td>
-                          <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-semibold">{c.subcategory || '—'}</td>
-                          <td className="px-6 py-4 text-primary-500 font-semibold">{c.subSubcategory || '—'}</td>
-                          <td className="px-6 py-4 text-xs">{c.description || 'No description'}</td>
-                          <td className="px-6 py-4">
-                            <button 
-                              onClick={() => executeAction(`/admin/categories/${c._id}`, 'PUT', { isActive: !c.isActive })}
-                              className={`px-2 py-0.5 rounded-full text-xs font-bold capitalize ${c.isActive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}
+              return type === 'main' ? <Folder className={iconClass} /> : <Layers className={iconClass} />;
+            };
+
+            // Build Category Hierarchy by merging TAXONOMY and DB categories
+            const catTree = {};
+
+            // 1. Load from predefined TAXONOMY
+            Object.keys(TAXONOMY).forEach(mainName => {
+              catTree[mainName] = {
+                name: mainName,
+                description: `${mainName} categories and items`,
+                isActive: true,
+                subcategories: {}
+              };
+              const subData = TAXONOMY[mainName];
+              if (Array.isArray(subData)) {
+                subData.forEach(subName => {
+                  catTree[mainName].subcategories[subName] = {
+                    name: subName,
+                    description: `${subName} subcategory`,
+                    isActive: true,
+                    childCategories: []
+                  };
+                });
+              } else if (subData && typeof subData === 'object') {
+                Object.keys(subData).forEach(subName => {
+                  catTree[mainName].subcategories[subName] = {
+                    name: subName,
+                    description: `${subName} subcategory`,
+                    isActive: true,
+                    childCategories: (subData[subName] || []).map(childName => ({
+                      name: childName,
+                      description: `${childName} category`,
+                      isActive: true
+                    }))
+                  };
+                });
+              }
+            });
+
+            // 2. Merge database categories
+            (categories || []).forEach(c => {
+              const mainName = c.name;
+              if (!mainName) return;
+
+              if (!catTree[mainName]) {
+                catTree[mainName] = {
+                  _id: c._id,
+                  name: mainName,
+                  description: c.description || `${mainName} category`,
+                  isActive: c.isActive !== undefined ? c.isActive : true,
+                  subcategories: {}
+                };
+              } else if (!c.subcategory && !c.subSubcategory) {
+                catTree[mainName]._id = c._id;
+                if (c.description) catTree[mainName].description = c.description;
+                if (c.isActive !== undefined) catTree[mainName].isActive = c.isActive;
+              }
+
+              if (c.subcategory) {
+                const subName = c.subcategory;
+                if (!catTree[mainName].subcategories[subName]) {
+                  catTree[mainName].subcategories[subName] = {
+                    _id: c._id,
+                    name: subName,
+                    description: c.description || `${subName} subcategory`,
+                    isActive: c.isActive !== undefined ? c.isActive : true,
+                    childCategories: []
+                  };
+                } else if (!c.subSubcategory) {
+                  catTree[mainName].subcategories[subName]._id = c._id;
+                  if (c.description) catTree[mainName].subcategories[subName].description = c.description;
+                  if (c.isActive !== undefined) catTree[mainName].subcategories[subName].isActive = c.isActive;
+                }
+
+                if (c.subSubcategory) {
+                  const childName = c.subSubcategory;
+                  const childArr = catTree[mainName].subcategories[subName].childCategories;
+                  const existingIdx = childArr.findIndex(ch => ch.name === childName);
+                  if (existingIdx >= 0) {
+                    childArr[existingIdx] = {
+                      _id: c._id,
+                      name: childName,
+                      description: c.description || `${childName} category`,
+                      isActive: c.isActive !== undefined ? c.isActive : true
+                    };
+                  } else {
+                    childArr.push({
+                      _id: c._id,
+                      name: childName,
+                      description: c.description || `${childName} category`,
+                      isActive: c.isActive !== undefined ? c.isActive : true
+                    });
+                  }
+                }
+              }
+            });
+
+            // Compute KPI Counts
+            const allMainCats = Object.values(catTree);
+            let totalSubCatsCount = 0;
+            let totalChildCatsCount = 0;
+            let activeCount = 0;
+            let inactiveCount = 0;
+
+            allMainCats.forEach(m => {
+              if (m.isActive !== false) activeCount++; else inactiveCount++;
+              const subs = Object.values(m.subcategories || {});
+              totalSubCatsCount += subs.length;
+              subs.forEach(s => {
+                if (s.isActive !== false) activeCount++; else inactiveCount++;
+                const children = s.childCategories || [];
+                totalChildCatsCount += children.length;
+                children.forEach(ch => {
+                  if (ch.isActive !== false) activeCount++; else inactiveCount++;
+                });
+              });
+            });
+
+            // Active selections & defaults
+            const activeMainCatName = selectedMainCat && catTree[selectedMainCat] ? selectedMainCat : (allMainCats[0]?.name || "Products");
+            const currentMainObj = catTree[activeMainCatName] || allMainCats[0] || { subcategories: {} };
+            const allSubCatsForMain = Object.values(currentMainObj.subcategories || {});
+            
+            const activeSubCatName = selectedSubCat && currentMainObj.subcategories?.[selectedSubCat] 
+              ? selectedSubCat 
+              : (allSubCatsForMain[0]?.name || "");
+            
+            const currentSubObj = currentMainObj.subcategories?.[activeSubCatName] || allSubCatsForMain[0] || { childCategories: [] };
+            const allChildCatsForSub = currentSubObj.childCategories || [];
+
+            // Filters
+            const filteredMainList = allMainCats.filter(m => {
+              const matchesSearch = !catSearchTerm || 
+                m.name.toLowerCase().includes(catSearchTerm.toLowerCase()) || 
+                (m.description || '').toLowerCase().includes(catSearchTerm.toLowerCase());
+              const matchesMain = catMainFilter === 'All' || m.name === catMainFilter;
+              const matchesStatus = catStatusFilter === 'All Status' || 
+                (catStatusFilter === 'Active' && m.isActive !== false) || 
+                (catStatusFilter === 'Inactive' && m.isActive === false);
+              return matchesSearch && matchesMain && matchesStatus;
+            });
+
+            const filteredSubList = allSubCatsForMain.filter(s => {
+              const matchesSearch = !catSearchTerm || 
+                s.name.toLowerCase().includes(catSearchTerm.toLowerCase()) || 
+                (s.description || '').toLowerCase().includes(catSearchTerm.toLowerCase());
+              const matchesSub = catSubFilter === 'All' || s.name === catSubFilter;
+              const matchesStatus = catStatusFilter === 'All Status' || 
+                (catStatusFilter === 'Active' && s.isActive !== false) || 
+                (catStatusFilter === 'Inactive' && s.isActive === false);
+              return matchesSearch && matchesSub && matchesStatus;
+            });
+
+            const filteredChildList = allChildCatsForSub.filter(ch => {
+              const matchesSearch = !catSearchTerm || 
+                ch.name.toLowerCase().includes(catSearchTerm.toLowerCase()) || 
+                (ch.description || '').toLowerCase().includes(catSearchTerm.toLowerCase());
+              const matchesStatus = catStatusFilter === 'All Status' || 
+                (catStatusFilter === 'Active' && ch.isActive !== false) || 
+                (catStatusFilter === 'Inactive' && ch.isActive === false);
+              return matchesSearch && matchesStatus;
+            });
+
+            // Pagination slice
+            const itemsPerPage = 5;
+            const displayedMainList = filteredMainList.slice((mainCatPage - 1) * itemsPerPage, mainCatPage * itemsPerPage);
+            const displayedSubList = filteredSubList.slice((subCatPage - 1) * itemsPerPage, subCatPage * itemsPerPage);
+            const displayedChildList = filteredChildList.slice((childCatPage - 1) * itemsPerPage, childCatPage * itemsPerPage);
+
+            return (
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Category Management</h2>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      <span>Dashboard</span>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="font-semibold text-indigo-600 dark:text-indigo-400">Category Management</span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setAddFirstCategory("Services");
+                      setShowModal('category');
+                    }}
+                    className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 dark:shadow-none"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add New Category
+                    <ChevronRight className="w-3.5 h-3.5 rotate-90 opacity-70" />
+                  </button>
+                </div>
+
+                {/* 5 KPI Stat Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  {/* Main Categories Card */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/40 shrink-0 flex items-center justify-center">
+                      <LayoutGrid className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Main Categories</p>
+                      <h4 className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{allMainCats.length}</h4>
+                      <p className="text-[10px] text-slate-400">All main categories</p>
+                    </div>
+                  </div>
+
+                  {/* Sub Categories Card */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40 shrink-0 flex items-center justify-center">
+                      <Folder className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Sub Categories</p>
+                      <h4 className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{totalSubCatsCount}</h4>
+                      <p className="text-[10px] text-slate-400">All sub categories</p>
+                    </div>
+                  </div>
+
+                  {/* Child Categories Card */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 shrink-0 flex items-center justify-center">
+                      <Layers className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Child Categories</p>
+                      <h4 className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{totalChildCatsCount}</h4>
+                      <p className="text-[10px] text-slate-400">All child categories</p>
+                    </div>
+                  </div>
+
+                  {/* Active Categories Card */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/40 shrink-0 flex items-center justify-center">
+                      <CheckCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Active Categories</p>
+                      <h4 className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{activeCount}</h4>
+                      <p className="text-[10px] text-slate-400">Currently active</p>
+                    </div>
+                  </div>
+
+                  {/* Inactive Categories Card */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40 shrink-0 flex items-center justify-center">
+                      <XCircle className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Inactive Categories</p>
+                      <h4 className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">{inactiveCount}</h4>
+                      <p className="text-[10px] text-slate-400">Currently inactive</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter & Toolbar */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col xl:flex-row gap-3 items-center justify-between">
+                  <div className="flex flex-1 flex-wrap items-center gap-3 w-full">
+                    {/* Search Input */}
+                    <div className="relative min-w-[220px] flex-1">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input 
+                        type="text" 
+                        value={catSearchTerm}
+                        onChange={(e) => setCatSearchTerm(e.target.value)}
+                        placeholder="Search categories..."
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+
+                    {/* Main Category Dropdown */}
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Main Category</label>
+                      <select 
+                        value={catMainFilter}
+                        onChange={(e) => {
+                          setCatMainFilter(e.target.value);
+                          if (e.target.value !== 'All') setSelectedMainCat(e.target.value);
+                        }}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 [&>option]:bg-white [&>option]:dark:bg-slate-950"
+                      >
+                        <option value="All">All</option>
+                        {allMainCats.map(m => (
+                          <option key={m.name} value={m.name}>{m.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Sub Category Dropdown */}
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Sub Category</label>
+                      <select 
+                        value={catSubFilter}
+                        onChange={(e) => {
+                          setCatSubFilter(e.target.value);
+                          if (e.target.value !== 'All') setSelectedSubCat(e.target.value);
+                        }}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 [&>option]:bg-white [&>option]:dark:bg-slate-950"
+                      >
+                        <option value="All">All</option>
+                        {allSubCatsForMain.map(s => (
+                          <option key={s.name} value={s.name}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Status Dropdown */}
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Status</label>
+                      <select 
+                        value={catStatusFilter}
+                        onChange={(e) => setCatStatusFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 [&>option]:bg-white [&>option]:dark:bg-slate-950"
+                      >
+                        <option value="All Status">All Status</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </div>
+
+                    {/* Reset Button */}
+                    <button 
+                      onClick={() => {
+                        setCatSearchTerm("");
+                        setCatMainFilter("All");
+                        setCatSubFilter("All");
+                        setCatStatusFilter("All Status");
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold transition-all"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reset
+                    </button>
+                  </div>
+
+                  {/* View Mode Toggle */}
+                  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
+                    <button 
+                      onClick={() => setCategoryViewMode('cards')}
+                      className={`p-1.5 rounded-lg transition-all ${categoryViewMode === 'cards' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                      title="3-Column Cascading View"
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                    </button>
+                    <button 
+                      onClick={() => setCategoryViewMode('table')}
+                      className={`p-1.5 rounded-lg transition-all ${categoryViewMode === 'table' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+                      title="Table View"
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 3-Column Cascading UI */}
+                {categoryViewMode === 'cards' ? (
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
+                    {/* Column 1: Main Categories */}
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
+                      <div>
+                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800">
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                            1. Main Categories ({filteredMainList.length})
+                          </h3>
+                          <button 
+                            onClick={() => {
+                              setAddFirstCategory(activeMainCatName);
+                              setShowModal('category');
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          {displayedMainList.map((mainItem) => {
+                            const isSelected = activeMainCatName === mainItem.name;
+                            return (
+                              <div 
+                                key={mainItem.name}
+                                onClick={() => {
+                                  setSelectedMainCat(mainItem.name);
+                                  const firstSub = Object.keys(mainItem.subcategories || {})[0];
+                                  if (firstSub) setSelectedSubCat(firstSub);
+                                }}
+                                className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative group flex items-center justify-between ${
+                                  isSelected 
+                                    ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 ring-2 ring-indigo-500/20 shadow-sm' 
+                                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-900/40 shrink-0">
+                                    {getCatIcon(mainItem.name, 'main')}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{mainItem.name}</h4>
+                                    <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{mainItem.description}</p>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      <span className={`w-1.5 h-1.5 rounded-full ${mainItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                                      <span className={`text-[10px] font-bold ${mainItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                                        {mainItem.isActive !== false ? 'Active' : 'Inactive'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="bg-indigo-100/70 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-900/50">
+                                    {Object.keys(mainItem.subcategories || {}).length}
+                                  </span>
+                                  
+                                  <div className="relative">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(activeCatMenuId === `main-${mainItem.name}` ? null : `main-${mainItem.name}`);
+                                      }}
+                                      className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                    >
+                                      <MoreVertical className="w-4 h-4" />
+                                    </button>
+                                    {activeCatMenuId === `main-${mainItem.name}` && (
+                                      <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveCatMenuId(null);
+                                            setModalData(mainItem);
+                                            setShowModal('edit-category');
+                                          }}
+                                          className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button 
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            setActiveCatMenuId(null);
+                                            if (mainItem._id) {
+                                              await executeAction(`/admin/categories/${mainItem._id}`, 'PUT', { isActive: !mainItem.isActive });
+                                            }
+                                          }}
+                                          className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                        >
+                                          Toggle Status
+                                        </button>
+                                        {mainItem._id && (
+                                          <button 
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              setActiveCatMenuId(null);
+                                              await executeAction(`/admin/categories/${mainItem._id}`, 'DELETE');
+                                            }}
+                                            className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
+                                          >
+                                            Delete
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {isSelected && (
+                                  <div className="hidden lg:block absolute -right-3 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Pagination */}
+                      <div className="flex items-center justify-center gap-2 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+                        <button 
+                          disabled={mainCatPage <= 1}
+                          onClick={() => setMainCatPage(p => Math.max(1, p - 1))}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="w-7 h-7 flex items-center justify-center bg-indigo-600 text-white rounded-lg text-xs font-bold">
+                          {mainCatPage}
+                        </span>
+                        <button 
+                          disabled={mainCatPage >= Math.ceil(filteredMainList.length / itemsPerPage)}
+                          onClick={() => setMainCatPage(p => p + 1)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Column 2: Sub Categories */}
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
+                      <div>
+                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800">
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                            2. Sub Categories ({filteredSubList.length}) <span className="text-slate-400 font-normal">- {activeMainCatName}</span>
+                          </h3>
+                          <button 
+                            onClick={() => {
+                              setAddFirstCategory(activeMainCatName);
+                              setShowModal('category');
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          {displayedSubList.map((subItem) => {
+                            const isSelected = activeSubCatName === subItem.name;
+                            return (
+                              <div 
+                                key={subItem.name}
+                                onClick={() => setSelectedSubCat(subItem.name)}
+                                className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative group flex items-center justify-between ${
+                                  isSelected 
+                                    ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 ring-2 ring-indigo-500/20 shadow-sm' 
+                                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                                }`}
+                              >
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/40 shrink-0">
+                                    {getCatIcon(subItem.name, 'sub')}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{subItem.name}</h4>
+                                    <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{subItem.description}</p>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      <span className={`w-1.5 h-1.5 rounded-full ${subItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                                      <span className={`text-[10px] font-bold ${subItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                                        {subItem.isActive !== false ? 'Active' : 'Inactive'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="bg-indigo-100/70 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-900/50">
+                                    {(subItem.childCategories || []).length}
+                                  </span>
+                                  
+                                  <div className="relative">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(activeCatMenuId === `sub-${subItem.name}` ? null : `sub-${subItem.name}`);
+                                      }}
+                                      className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                    >
+                                      <MoreVertical className="w-4 h-4" />
+                                    </button>
+                                    {activeCatMenuId === `sub-${subItem.name}` && (
+                                      <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
+                                        <button 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveCatMenuId(null);
+                                            setModalData({ ...subItem, name: activeMainCatName, subcategory: subItem.name });
+                                            setShowModal('edit-category');
+                                          }}
+                                          className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button 
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            setActiveCatMenuId(null);
+                                            if (subItem._id) {
+                                              await executeAction(`/admin/categories/${subItem._id}`, 'PUT', { isActive: !subItem.isActive });
+                                            }
+                                          }}
+                                          className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                        >
+                                          Toggle Status
+                                        </button>
+                                        {subItem._id && (
+                                          <button 
+                                            onClick={async (e) => {
+                                              e.stopPropagation();
+                                              setActiveCatMenuId(null);
+                                              await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
+                                            }}
+                                            className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
+                                          >
+                                            Delete
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {isSelected && (
+                                  <div className="hidden lg:block absolute -right-3 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
+                                    <ArrowRight className="w-3.5 h-3.5" />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Pagination */}
+                      <div className="flex items-center justify-center gap-2 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+                        <button 
+                          disabled={subCatPage <= 1}
+                          onClick={() => setSubCatPage(p => Math.max(1, p - 1))}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="w-7 h-7 flex items-center justify-center bg-indigo-600 text-white rounded-lg text-xs font-bold">
+                          {subCatPage}
+                        </span>
+                        <button 
+                          disabled={subCatPage >= Math.ceil(filteredSubList.length / itemsPerPage)}
+                          onClick={() => setSubCatPage(p => p + 1)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Column 3: Child Categories */}
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
+                      <div>
+                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800">
+                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                            3. Child Categories ({filteredChildList.length}) <span className="text-slate-400 font-normal">- {activeSubCatName}</span>
+                          </h3>
+                          <button 
+                            onClick={() => {
+                              setAddFirstCategory(activeMainCatName);
+                              setAddSecondCategory(activeSubCatName);
+                              setShowModal('category');
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          {displayedChildList.map((childItem) => (
+                            <div 
+                              key={childItem.name}
+                              className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-all flex items-center justify-between group"
                             >
-                              {c.isActive ? 'Active' : 'Inactive'}
-                            </button>
-                          </td>
-                          <td className="px-6 py-4 text-right flex gap-3 justify-end items-center">
-                            {c.subcategory ? (
-                              <>
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0 font-bold text-xs uppercase flex items-center justify-center w-10 h-10">
+                                  {childItem.name.substring(0, 2)}
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{childItem.name}</h4>
+                                  <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{childItem.description || `${childItem.name} category`}</p>
+                                  <div className="flex items-center gap-1.5 mt-1">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${childItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                                    <span className={`text-[10px] font-bold ${childItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                                      {childItem.isActive !== false ? 'Active' : 'Inactive'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="relative shrink-0">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveCatMenuId(activeCatMenuId === `child-${childItem.name}` ? null : `child-${childItem.name}`);
+                                  }}
+                                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </button>
+                                {activeCatMenuId === `child-${childItem.name}` && (
+                                  <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
+                                    <button 
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(null);
+                                        setModalData({ ...childItem, name: activeMainCatName, subcategory: activeSubCatName, subSubcategory: childItem.name });
+                                        setShowModal('edit-category');
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button 
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(null);
+                                        if (childItem._id) {
+                                          await executeAction(`/admin/categories/${childItem._id}`, 'PUT', { isActive: !childItem.isActive });
+                                        }
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                    >
+                                      Toggle Status
+                                    </button>
+                                    {childItem._id && (
+                                      <button 
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          setActiveCatMenuId(null);
+                                          await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
+                                      >
+                                        Delete
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Pagination */}
+                      <div className="flex items-center justify-center gap-2 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
+                        <button 
+                          disabled={childCatPage <= 1}
+                          onClick={() => setChildCatPage(p => Math.max(1, p - 1))}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        <span className="w-7 h-7 flex items-center justify-center bg-indigo-600 text-white rounded-lg text-xs font-bold">
+                          {childCatPage}
+                        </span>
+                        <button 
+                          disabled={childCatPage >= Math.ceil(filteredChildList.length / itemsPerPage)}
+                          onClick={() => setChildCatPage(p => p + 1)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Table View Fallback */
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead>
+                          <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                            <th className="px-6 py-4">First Category</th>
+                            <th className="px-6 py-4">Second Category (Sub)</th>
+                            <th className="px-6 py-4">Third Category (Sub-sub)</th>
+                            <th className="px-6 py-4">Description</th>
+                            <th className="px-6 py-4">Status</th>
+                            <th className="px-6 py-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                          {categories.map((c) => (
+                            <tr key={c._id}>
+                              <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{c.name}</td>
+                              <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-semibold">{c.subcategory || '—'}</td>
+                              <td className="px-6 py-4 text-indigo-600 font-semibold">{c.subSubcategory || '—'}</td>
+                              <td className="px-6 py-4 text-xs">{c.description || 'No description'}</td>
+                              <td className="px-6 py-4">
+                                <button 
+                                  onClick={() => executeAction(`/admin/categories/${c._id}`, 'PUT', { isActive: !c.isActive })}
+                                  className={`px-2 py-0.5 rounded-full text-xs font-bold capitalize ${c.isActive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}
+                                >
+                                  {c.isActive ? 'Active' : 'Inactive'}
+                                </button>
+                              </td>
+                              <td className="px-6 py-4 text-right flex gap-3 justify-end items-center">
                                 <button 
                                   onClick={() => { setModalData(c); setShowModal('edit-category'); }}
-                                  className="text-primary-600 hover:text-primary-500 text-xs font-semibold"
+                                  className="text-indigo-600 hover:text-indigo-500 text-xs font-semibold"
                                 >
                                   Edit
                                 </button>
@@ -3424,19 +4209,76 @@ function App() {
                                 >
                                   Delete
                                 </button>
-                              </>
-                            ) : (
-                              <span className="text-[10px] uppercase font-bold text-slate-400">Predefined First Category</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Category Management Guide */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-5">
+                  <div className="flex flex-col lg:flex-row items-start lg:items-center gap-6">
+                    {/* Guide Info */}
+                    <div className="flex items-center gap-4 min-w-0 lg:max-w-[40%]">
+                      <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/40 shrink-0 flex items-center justify-center">
+                        <Layers className="w-7 h-7" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100">Category Management Guide</h4>
+                        <p className="text-[11px] text-slate-400 mt-0.5 leading-relaxed">Organize your marketplace with a 3-level category structure for better navigation and user experience.</p>
+                      </div>
+                    </div>
+
+                    {/* Guide Feature Cards */}
+                    <div className="flex flex-1 flex-wrap lg:flex-nowrap gap-3 w-full lg:w-auto">
+                      <div className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3.5 py-2.5 border border-slate-100 dark:border-slate-700/50 flex-1 min-w-[140px]">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                          <Layers className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Hierarchical Structure</p>
+                          <p className="text-[10px] text-slate-400">Organize in 3 levels</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3.5 py-2.5 border border-slate-100 dark:border-slate-700/50 flex-1 min-w-[140px]">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                          <Settings className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Easy Management</p>
+                          <p className="text-[10px] text-slate-400">Add, edit, delete easily</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3.5 py-2.5 border border-slate-100 dark:border-slate-700/50 flex-1 min-w-[140px]">
+                        <div className="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                          <MapPin className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">Better Navigation</p>
+                          <p className="text-[10px] text-slate-400">Improved user experience</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-3.5 py-2.5 border border-slate-100 dark:border-slate-700/50 flex-1 min-w-[140px]">
+                        <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                          <Search className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-700 dark:text-slate-200">SEO Friendly</p>
+                          <p className="text-[10px] text-slate-400">Better visibility in search</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 23. QUERIES */}
           {activeTab === 'queries' && (
