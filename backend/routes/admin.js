@@ -1654,6 +1654,17 @@ router.get('/categories', async (req, res) => {
     }
 });
 
+// GET all active banners (public)
+router.get('/public/banners', async (req, res) => {
+    try {
+        const banners = await Banner.find({ isActive: true });
+        res.json(banners);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
 // POST new category
 router.post('/categories', [auth, adminAuth], async (req, res) => {
     try {
