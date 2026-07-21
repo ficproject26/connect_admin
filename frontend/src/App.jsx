@@ -419,108 +419,58 @@ function App() {
     try {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
       
-      // 1. Dashboard KPIs
-      const statsRes = await fetch(`${API_BASE}/admin/dashboard-stats`, { headers });
-      if (statsRes.status === 401 || statsRes.status === 403) {
-        handleLogout();
-        return;
-      }
-      if (statsRes.ok) {
-        const statsData = await statsRes.json();
-        setStats(statsData);
-      }
+      const fetchTasks = [
+        // 1. Dashboard KPIs (Check auth status)
+        fetch(`${API_BASE}/admin/dashboard-stats`, { headers }).then(async r => {
+          if (r.status === 401 || r.status === 403) {
+            handleLogout();
+            throw new Error("Unauthorized");
+          }
+          if (r.ok) setStats(await r.json());
+        }),
+        // 2. Branches
+        fetch(`${API_BASE}/admin/branches`, { headers }).then(async r => { if (r.ok) setBranches(await r.json()); }),
+        // 3. Admins
+        fetch(`${API_BASE}/admin/admins`, { headers }).then(async r => { if (r.ok) setAdmins(await r.json()); }),
+        // 4. Agents
+        fetch(`${API_BASE}/admin/agents`, { headers }).then(async r => { if (r.ok) setAgents(await r.json()); }),
+        // 5. Pincodes
+        fetch(`${API_BASE}/pincodes`, { headers }).then(async r => { if (r.ok) setPincodes(await r.json()); }),
+        // 6. Vendors
+        fetch(`${API_BASE}/admin/vendors`, { headers }).then(async r => { if (r.ok) setVendors(await r.json()); }),
+        // 7. Customers
+        fetch(`${API_BASE}/admin/customers`, { headers }).then(async r => { if (r.ok) setCustomers(await r.json()); }),
+        // 8. Withdrawals
+        fetch(`${API_BASE}/admin/wallet/withdrawals`, { headers }).then(async r => { if (r.ok) setWithdrawals(await r.json()); }),
+        // 9. Commissions
+        fetch(`${API_BASE}/admin/commissions`, { headers }).then(async r => { if (r.ok) setCommissions(await r.json()); }),
+        // 10. Memberships
+        fetch(`${API_BASE}/admin/memberships/plans`, { headers }).then(async r => { if (r.ok) setMembershipPlans(await r.json()); }),
+        // 11. Banners & Ads
+        fetch(`${API_BASE}/admin/banners`, { headers }).then(async r => { if (r.ok) setBanners(await r.json()); }),
+        fetch(`${API_BASE}/admin/ads`, { headers }).then(async r => { if (r.ok) setAds(await r.json()); }),
+        // 12. Reports
+        fetch(`${API_BASE}/admin/reports?type=${reportType}`, { headers }).then(async r => { if (r.ok) setReports(await r.json()); }),
+        // 13. Tie-ups & Tasks
+        fetch(`${API_BASE}/admin/tie-ups`, { headers }).then(async r => { if (r.ok) setTieUps(await r.json()); }),
+        fetch(`${API_BASE}/admin/tasks`, { headers }).then(async r => { if (r.ok) setTasks(await r.json()); }),
+        // 14. New endpoints
+        fetch(`${API_BASE}/admin/orders`, { headers }).then(async r => { if (r.ok) setOrders(await r.json()); }),
+        fetch(`${API_BASE}/admin/bookings`, { headers }).then(async r => { if (r.ok) setBookings(await r.json()); }),
+        fetch(`${API_BASE}/admin/jobs`, { headers }).then(async r => { if (r.ok) setJobs(await r.json()); }),
+        fetch(`${API_BASE}/admin/card-holders`, { headers }).then(async r => { if (r.ok) setCardHolders(await r.json()); }),
+        fetch(`${API_BASE}/admin/payments`, { headers }).then(async r => { if (r.ok) setPayments(await r.json()); }),
+        fetch(`${API_BASE}/admin/delivery-partners`, { headers }).then(async r => { if (r.ok) setDeliveryPartners(await r.json()); }),
+        fetch(`${API_BASE}/admin/support-team`, { headers }).then(async r => { if (r.ok) setSupportTeam(await r.json()); }),
+        fetch(`${API_BASE}/admin/categories`, { headers }).then(async r => { if (r.ok) setCategories(await r.json()); }),
+        fetch(`${API_BASE}/admin/queries`, { headers }).then(async r => { if (r.ok) setQueries(await r.json()); }),
+        fetch(`${API_BASE}/admin/tickets`, { headers }).then(async r => { if (r.ok) setTickets(await r.json()); }),
+        fetch(`${API_BASE}/admin/announcements`, { headers }).then(async r => { if (r.ok) setAnnouncements(await r.json()); }),
+      ];
 
-      // 2. Branches
-      const branchesRes = await fetch(`${API_BASE}/admin/branches`, { headers });
-      if (branchesRes.ok) setBranches(await branchesRes.json());
-
-      // 3. Admins
-      const adminsRes = await fetch(`${API_BASE}/admin/admins`, { headers });
-      if (adminsRes.ok) setAdmins(await adminsRes.json());
-
-      // 4. Agents
-      const agentsRes = await fetch(`${API_BASE}/admin/agents`, { headers });
-      if (agentsRes.ok) setAgents(await agentsRes.json());
-
-      // 5. Pincodes
-      const pincodesRes = await fetch(`${API_BASE}/pincodes`, { headers });
-      if (pincodesRes.ok) setPincodes(await pincodesRes.json());
-
-      // 6. Vendors
-      const vendorsRes = await fetch(`${API_BASE}/admin/vendors`, { headers });
-      if (vendorsRes.ok) setVendors(await vendorsRes.json());
-
-      // 7. Customers
-      const customersRes = await fetch(`${API_BASE}/admin/customers`, { headers });
-      if (customersRes.ok) setCustomers(await customersRes.json());
-
-      // 8. Withdrawals
-      const withdrawalsRes = await fetch(`${API_BASE}/admin/wallet/withdrawals`, { headers });
-      if (withdrawalsRes.ok) setWithdrawals(await withdrawalsRes.json());
-
-      // 9. Commissions
-      const commsRes = await fetch(`${API_BASE}/admin/commissions`, { headers });
-      if (commsRes.ok) setCommissions(await commsRes.json());
-
-      // 10. Memberships
-      const membersRes = await fetch(`${API_BASE}/admin/memberships/plans`, { headers });
-      if (membersRes.ok) setMembershipPlans(await membersRes.json());
-
-      // 11. Banners & Ads
-      const bannersRes = await fetch(`${API_BASE}/admin/banners`, { headers });
-      if (bannersRes.ok) setBanners(await bannersRes.json());
-
-      const adsRes = await fetch(`${API_BASE}/admin/ads`, { headers });
-      if (adsRes.ok) setAds(await adsRes.json());
-
-      // 12. Reports
-      const reportsRes = await fetch(`${API_BASE}/admin/reports?type=${reportType}`, { headers });
-      if (reportsRes.ok) setReports(await reportsRes.json());
-
-      // 13. Tie-ups & Tasks
-      const tieupsRes = await fetch(`${API_BASE}/admin/tie-ups`, { headers });
-      if (tieupsRes.ok) setTieUps(await tieupsRes.json());
-
-      const tasksRes = await fetch(`${API_BASE}/admin/tasks`, { headers });
-      if (tasksRes.ok) setTasks(await tasksRes.json());
-
-      // 14. New endpoints
-      const ordersRes = await fetch(`${API_BASE}/admin/orders`, { headers });
-      if (ordersRes.ok) setOrders(await ordersRes.json());
-
-      const bookingsRes = await fetch(`${API_BASE}/admin/bookings`, { headers });
-      if (bookingsRes.ok) setBookings(await bookingsRes.json());
-
-      const jobsRes = await fetch(`${API_BASE}/admin/jobs`, { headers });
-      if (jobsRes.ok) setJobs(await jobsRes.json());
-
-      const holdersRes = await fetch(`${API_BASE}/admin/card-holders`, { headers });
-      if (holdersRes.ok) setCardHolders(await holdersRes.json());
-
-      const paymentsRes = await fetch(`${API_BASE}/admin/payments`, { headers });
-      if (paymentsRes.ok) setPayments(await paymentsRes.json());
-
-      const partnersRes = await fetch(`${API_BASE}/admin/delivery-partners`, { headers });
-      if (partnersRes.ok) setDeliveryPartners(await partnersRes.json());
-
-      const teamRes = await fetch(`${API_BASE}/admin/support-team`, { headers });
-      if (teamRes.ok) setSupportTeam(await teamRes.json());
-
-      const categoriesRes = await fetch(`${API_BASE}/admin/categories`, { headers });
-      if (categoriesRes.ok) setCategories(await categoriesRes.json());
-
-      const queriesRes = await fetch(`${API_BASE}/admin/queries`, { headers });
-      if (queriesRes.ok) setQueries(await queriesRes.json());
-
-      const ticketsRes = await fetch(`${API_BASE}/admin/tickets`, { headers });
-      if (ticketsRes.ok) setTickets(await ticketsRes.json());
-
-      const announcementsRes = await fetch(`${API_BASE}/admin/announcements`, { headers });
-      if (announcementsRes.ok) setAnnouncements(await announcementsRes.json());
-
+      await Promise.allSettled(fetchTasks);
     } catch (err) {
       console.error("API Server not reachable:", err);
-      // Silent catch or simple console error to keep UX clean, let's log it
     } finally {
       setLoading(false);
     }
