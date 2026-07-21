@@ -948,6 +948,14 @@ function App() {
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Syncing Indicator */}
+            {loading && (
+              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold animate-pulse">
+                <RotateCcw className="w-3.5 h-3.5 animate-spin" />
+                <span className="hidden sm:inline">Syncing...</span>
+              </div>
+            )}
+
             {/* Dark Mode toggle button */}
             <button 
               onClick={() => setDarkMode(!darkMode)}
@@ -997,12 +1005,7 @@ function App() {
         {/* PAGE VIEWS */}
         <main className="p-6 max-w-7xl w-full mx-auto space-y-6">
           
-          {/* loading indicator */}
-          {loading && (
-            <div className="bg-primary-500/10 text-primary-600 dark:text-primary-400 p-3 rounded-xl text-center text-xs font-semibold animate-pulse">
-              Syncing panel data...
-            </div>
-          )}
+
 
           {/* 1. DASHBOARD VIEW */}
           {activeTab === 'dashboard' && (
