@@ -969,6 +969,26 @@ router.delete('/memberships/plans/:id', [auth, adminAuth], async (req, res) => {
 // ==========================================
 // 11. BANNERS & ADVERTISEMENTS
 // ==========================================
+router.get('/public-banners', async (req, res) => {
+    try {
+        const banners = await Banner.find({ isActive: true });
+        res.json(banners);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+router.get('/banners/public', async (req, res) => {
+    try {
+        const banners = await Banner.find({ isActive: true });
+        res.json(banners);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
 router.get('/banners', [auth, adminAuth], async (req, res) => {
     try {
         const banners = await Banner.find();
