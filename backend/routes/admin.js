@@ -1582,6 +1582,36 @@ router.delete('/categories/:id', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// DELETE category hierarchy endpoint
+router.delete('/categories-hierarchy', [auth, adminAuth], async (req, res) => {
+    try {
+        const { name, subcategory, subSubcategory } = req.query;
+        const filter = {};
+        if (name) filter.name = name;
+        if (subcategory) filter.subcategory = subcategory;
+        if (subSubcategory) filter.subSubcategory = subSubcategory;
+
+        // 1. Delete matching existing records
+        await Category.deleteMany(filter);
+
+        // 2. Insert deletion marker so predefined TAXONOMY entries also stay deleted
+        const deletionMarker = new Category({
+            name: name || '',
+            subcategory: subcategory || '',
+            subSubcategory: subSubcategory || '',
+            isActive: false,
+            isDeleted: true,
+            description: 'DELETED_HIERARCHY_MARKER'
+        });
+        await deletionMarker.save();
+
+        res.json({ msg: 'Category hierarchy deleted' });
+    } catch (err) {
+        console.error("Error deleting category hierarchy:", err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
 // GET all queries
 router.get('/queries', [auth, adminAuth], async (req, res) => {
     try {

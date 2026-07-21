@@ -6,6 +6,7 @@ const CategorySchema = new mongoose.Schema({
     subSubcategory: { type: String, default: '' },
     description: { type: String },
     isActive: { type: Boolean, default: true },
+    isDeleted: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
 });
 

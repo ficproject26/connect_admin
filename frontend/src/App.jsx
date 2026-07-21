@@ -3447,10 +3447,26 @@ function App() {
               }
             });
 
-            // 2. Merge database categories
+            // 2. Merge database categories & process deletion markers
             (categories || []).forEach(c => {
               const mainName = c.name;
               if (!mainName) return;
+
+              if (c.isDeleted || c.description === 'DELETED_HIERARCHY_MARKER') {
+                if (catTree[mainName]) {
+                  if (c.subcategory && catTree[mainName].subcategories?.[c.subcategory]) {
+                    if (c.subSubcategory) {
+                      catTree[mainName].subcategories[c.subcategory].childCategories = 
+                        (catTree[mainName].subcategories[c.subcategory].childCategories || []).filter(ch => ch.name !== c.subSubcategory);
+                    } else {
+                      delete catTree[mainName].subcategories[c.subcategory];
+                    }
+                  } else if (!c.subcategory) {
+                    delete catTree[mainName];
+                  }
+                }
+                return;
+              }
 
               if (!catTree[mainName]) {
                 catTree[mainName] = {
@@ -3877,18 +3893,21 @@ function App() {
                                         >
                                           Toggle Status
                                         </button>
-                                        {mainItem._id && (
-                                          <button 
-                                            onClick={async (e) => {
-                                              e.stopPropagation();
-                                              setActiveCatMenuId(null);
-                                              await executeAction(`/admin/categories/${mainItem._id}`, 'DELETE');
-                                            }}
-                                            className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
-                                          >
-                                            Delete
-                                          </button>
-                                        )}
+                                        <button 
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            setActiveCatMenuId(null);
+                                            if (confirm(`Are you sure you want to delete main category "${mainItem.name}" and all its subcategories?`)) {
+                                              if (mainItem._id) {
+                                                await executeAction(`/admin/categories/${mainItem._id}`, 'DELETE');
+                                              }
+                                              await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(mainItem.name)}`, 'DELETE');
+                                            }
+                                          }}
+                                          className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
+                                        >
+                                          Delete
+                                        </button>
                                       </div>
                                     )}
                                   </div>
@@ -4016,18 +4035,21 @@ function App() {
                                         >
                                           Toggle Status
                                         </button>
-                                        {subItem._id && (
-                                          <button 
-                                            onClick={async (e) => {
-                                              e.stopPropagation();
-                                              setActiveCatMenuId(null);
-                                              await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
-                                            }}
-                                            className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
-                                          >
-                                            Delete
-                                          </button>
-                                        )}
+                                        <button 
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            setActiveCatMenuId(null);
+                                            if (confirm(`Are you sure you want to delete subcategory "${subItem.name}"?`)) {
+                                              if (subItem._id) {
+                                                await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
+                                              }
+                                              await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
+                                            }
+                                          }}
+                                          className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
+                                        >
+                                          Delete
+                                        </button>
                                       </div>
                                     )}
                                   </div>
@@ -4144,18 +4166,21 @@ function App() {
                                     >
                                       Toggle Status
                                     </button>
-                                    {childItem._id && (
-                                      <button 
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          setActiveCatMenuId(null);
-                                          await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
-                                        }}
-                                        className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
-                                      >
-                                        Delete
-                                      </button>
-                                    )}
+                                    <button 
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(null);
+                                        if (confirm(`Are you sure you want to delete child category "${childItem.name}"?`)) {
+                                          if (childItem._id) {
+                                            await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                          }
+                                          await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                        }
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
+                                    >
+                                      Delete
+                                    </button>
                                   </div>
                                 )}
                               </div>
