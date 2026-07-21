@@ -278,6 +278,9 @@ function App() {
   const [selectedSubCat, setSelectedSubCat] = useState("Mobiles & Tablets");
   const [catSearchTerm, setCatSearchTerm] = useState("");
   const [catMainFilter, setCatMainFilter] = useState("All");
+
+  const [bannerImageUrl, setBannerImageUrl] = useState("https://images.unsplash.com/photo-1542838132-92c53300491e?w=600");
+  const [bannerVideoUrl, setBannerVideoUrl] = useState("");
   const [catSubFilter, setCatSubFilter] = useState("All");
   const [catStatusFilter, setCatStatusFilter] = useState("All Status");
   const [categoryViewMode, setCategoryViewMode] = useState("cards"); // 'cards' or 'table'
@@ -4837,11 +4840,66 @@ function App() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Image URL</label>
-                <input name="imageUrl" defaultValue="https://images.unsplash.com/photo-1542838132-92c53300491e?w=600" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <div className="flex gap-2 items-center">
+                  <input 
+                    name="imageUrl" 
+                    value={bannerImageUrl} 
+                    onChange={(e) => setBannerImageUrl(e.target.value)} 
+                    type="text" 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  />
+                  <label className="bg-[#b8860b] hover:bg-[#966d09] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs transition-all border-none">
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Upload</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            setBannerImageUrl(evt.target.result);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }} 
+                    />
+                  </label>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Video URL (Optional)</label>
-                <input name="videoUrl" placeholder="e.g. https://example.com/promo.mp4" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <div className="flex gap-2 items-center">
+                  <input 
+                    name="videoUrl" 
+                    value={bannerVideoUrl} 
+                    onChange={(e) => setBannerVideoUrl(e.target.value)} 
+                    placeholder="e.g. https://example.com/promo.mp4" 
+                    type="text" 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  />
+                  <label className="bg-[#b8860b] hover:bg-[#966d09] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs transition-all border-none">
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Upload</span>
+                    <input 
+                      type="file" 
+                      accept="video/*" 
+                      className="hidden" 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            setBannerVideoUrl(evt.target.result);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }} 
+                    />
+                  </label>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Redirect Link</label>
