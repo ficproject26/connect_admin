@@ -3620,45 +3620,6 @@ function App() {
                       <span className="font-semibold text-indigo-600 dark:text-indigo-400">Category Management</span>
                     </div>
                   </div>
-                  <div className="relative">
-                    <button 
-                      onClick={() => setShowAddCategoryDropdown(!showAddCategoryDropdown)}
-                      className="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm shadow-indigo-200 dark:shadow-none"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add New Category
-                      <ChevronRight className="w-3.5 h-3.5 rotate-90 opacity-70" />
-                    </button>
-                    {showAddCategoryDropdown && (
-                      <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-30 py-1 text-xs">
-                        <button
-                          onClick={() => {
-                            setAddFirstCategory(activeMainCatName);
-                            setCategoryModalTier('sub');
-                            setShowModal('category');
-                            setShowAddCategoryDropdown(false);
-                          }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2"
-                        >
-                          <Folder className="w-3.5 h-3.5 text-blue-500" />
-                          Add Sub Category
-                        </button>
-                        <button
-                          onClick={() => {
-                            setAddFirstCategory(activeMainCatName);
-                            setAddSecondCategory(activeSubCatName);
-                            setCategoryModalTier('child');
-                            setShowModal('category');
-                            setShowAddCategoryDropdown(false);
-                          }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2 border-t border-slate-100 dark:border-slate-800"
-                        >
-                          <Layers className="w-3.5 h-3.5 text-emerald-500" />
-                          Add Child Category
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
 
                 {/* 5 KPI Stat Cards */}
