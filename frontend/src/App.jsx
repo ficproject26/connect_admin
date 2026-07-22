@@ -547,6 +547,10 @@ function App() {
         body: body ? JSON.stringify(body) : null
       });
       const data = await res.json();
+      if (!res.ok) {
+        alert(data.msg || data.error || "Action failed.");
+        return { success: false, data };
+      }
       fetchData();
       return { success: true, data };
     } catch (err) {

@@ -1113,11 +1113,21 @@ router.get('/reports', [auth, adminAuth], async (req, res) => {
 // ==========================================
 
 // Approve/Reject Agent KYC
+// Approve/Reject Agent KYC
 router.put('/approve-agent/:id', [auth, adminAuth], async (req, res) => {
     const { status } = req.body;
     try {
         let agent = await User.findById(req.params.id);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
+
+        if (status === 'approved' && agent.status !== 'approved') {
+            // Check limitation before approving
+            const pinCodeVal = agent.assignedPincode ? (await Pincode.findById(agent.assignedPincode))?.code : null;
+            const limitCheck = await checkAgentLimitation(agent.level, agent.assignedArea, pinCodeVal, req.params.id);
+            if (!limitCheck.allowed) {
+                return res.status(400).json({ msg: limitCheck.msg });
+            }
+        }
 
         agent.status = status;
         if (status === 'approved') {
@@ -1159,10 +1169,46 @@ router.put('/activate-agent/:id', [auth, adminAuth], async (req, res) => {
 
 // Edit Agent Details
 router.put('/update-agent/:id', [auth, adminAuth], async (req, res) => {
+    const { level, assignedArea, pincode } = req.body;
     try {
-        let agent = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        let agent = await User.findById(req.params.id);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
-        res.json(agent);
+
+        const newLevel = level !== undefined ? level : agent.level;
+        const newArea = assignedArea !== undefined ? assignedArea : agent.assignedArea;
+        const newPincode = pincode !== undefined ? pincode : (agent.assignedPincode ? (await Pincode.findById(agent.assignedPincode))?.code : null);
+
+        if (level !== undefined || assignedArea !== undefined || pincode !== undefined) {
+            const limitCheck = await checkAgentLimitation(newLevel, newArea, newPincode, req.params.id);
+            if (!limitCheck.allowed) {
+                return res.status(400).json({ msg: limitCheck.msg });
+            }
+        }
+
+        // Handle assignedPincode resolution if pincode changes
+        if (pincode !== undefined) {
+            if (pincode) {
+                let pinDoc = await Pincode.findOne({ code: pincode });
+                if (!pinDoc) {
+                    pinDoc = new Pincode({
+                        code: pincode,
+                        name: 'Area ' + pincode,
+                        district: 'District',
+                        state: 'State'
+                    });
+                    await pinDoc.save();
+                }
+                req.body.assignedPincode = pinDoc._id;
+                if (agent.status === 'approved' || req.body.status === 'approved') {
+                    await Pincode.findByIdAndUpdate(pinDoc._id, { activeAgentId: agent._id });
+                }
+            } else {
+                req.body.assignedPincode = null;
+            }
+        }
+
+        const updatedAgent = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(updatedAgent);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -1265,6 +1311,67 @@ router.post('/save-pincode', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// Helper to verify agent limitations (one per area for state, district, division, and pincode agents)
+const checkAgentLimitation = async (level, assignedArea, pincode, excludeUserId = null) => {
+    // If the level is state, district, or division:
+    if (['state', 'district', 'division'].includes(level)) {
+        if (!assignedArea) return { allowed: true };
+        const query = {
+            role: 'agent',
+            level: level,
+            assignedArea: { $regex: new RegExp('^' + assignedArea.trim() + '$', 'i') },
+            status: { $in: ['approved', 'pending'] }
+        };
+        if (excludeUserId) {
+            query._id = { $ne: excludeUserId };
+        }
+        const existing = await User.findOne(query);
+        if (existing) {
+            return {
+                allowed: false,
+                msg: `An agent of level '${level}' is already assigned/pending for area '${assignedArea}'`
+            };
+        }
+    }
+    
+    // If the level is pincode:
+    if (level === 'pincode') {
+        if (!pincode) return { allowed: true };
+        // Find if the pincode document exists and check if activeAgentId is set
+        let pinDoc = await Pincode.findOne({ code: pincode });
+        if (pinDoc && pinDoc.activeAgentId) {
+            if (excludeUserId && pinDoc.activeAgentId.toString() === excludeUserId.toString()) {
+                return { allowed: true };
+            }
+            return {
+                allowed: false,
+                msg: `A pincode agent is already assigned to pincode '${pincode}'`
+            };
+        }
+        
+        // Also check the User model for any pending/approved pincode agent with this assignedPincode code
+        if (pinDoc) {
+            const query = {
+                role: 'agent',
+                level: 'pincode',
+                assignedPincode: pinDoc._id,
+                status: { $in: ['approved', 'pending'] }
+            };
+            if (excludeUserId) {
+                query._id = { $ne: excludeUserId };
+            }
+            const existing = await User.findOne(query);
+            if (existing) {
+                return {
+                    allowed: false,
+                    msg: `A pincode agent is already assigned/pending for pincode '${pincode}'`
+                };
+            }
+        }
+    }
+    return { allowed: true };
+};
+
 // Create Agent Directly
 router.post('/create-agent', [auth, adminAuth], async (req, res) => {
     const { name, email, phone, password, level, assignedArea, pincode, status, bankDetails } = req.body;
@@ -1272,6 +1379,12 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
         const bcrypt = require('bcryptjs');
         let user = await User.findOne({ email });
         if (user) return res.status(400).json({ msg: 'Agent user already exists' });
+
+        // Enforce Agent Area limitations
+        const limitCheck = await checkAgentLimitation(level, assignedArea, pincode);
+        if (!limitCheck.allowed) {
+            return res.status(400).json({ msg: limitCheck.msg });
+        }
 
         let assignedPincode = null;
         if (pincode) {
