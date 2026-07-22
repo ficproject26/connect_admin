@@ -2859,6 +2859,7 @@ function App() {
                       <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                         <th className="px-6 py-4">Vendor</th>
                         <th className="px-6 py-4">Customer</th>
+                        <th className="px-6 py-4">Booking Schedule</th>
                         <th className="px-6 py-4">Amount</th>
                         <th className="px-6 py-4">Commission</th>
                         <th className="px-6 py-4">Status</th>
@@ -2875,6 +2876,10 @@ function App() {
                           <td className="px-6 py-4">
                             <span className="block font-semibold">{booking.customerId?.name || 'Unknown Customer'}</span>
                             <span className="text-xs text-slate-400">{booking.customerId?.phone}</span>
+                          </td>
+                          <td className="px-6 py-4 text-xs font-semibold text-slate-750 dark:text-slate-300">
+                            <div>📅 {booking.appointmentDate || (booking.createdAt ? booking.createdAt.substring(0, 10) : 'N/A')}</div>
+                            <div className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold mt-0.5">⌚ {booking.appointmentTimeSlot || 'Standard Slot'}</div>
                           </td>
                           <td className="px-6 py-4 font-bold text-emerald-500">₹{booking.amount}</td>
                           <td className="px-6 py-4 font-bold text-primary-500">₹{booking.commission}</td>
@@ -2911,10 +2916,11 @@ function App() {
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">Candidate</th>
-                        <th className="px-6 py-4">Position</th>
-                        <th className="px-6 py-4">Experience</th>
+                        <th className="px-6 py-4">App ID</th>
+                        <th className="px-6 py-4">Candidate & Cust ID</th>
+                        <th className="px-6 py-4">Position & Company (HR)</th>
                         <th className="px-6 py-4">Status</th>
+                        <th className="px-6 py-4">Resume</th>
                         <th className="px-6 py-4">Applied Date</th>
                         <th className="px-6 py-4 text-right">Actions</th>
                       </tr>
@@ -2922,12 +2928,19 @@ function App() {
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                       {jobs.map((job) => (
                         <tr key={job._id}>
+                          <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">
+                            #{String(job.applicationId || job._id).substring(0, 8).toUpperCase()}
+                          </td>
                           <td className="px-6 py-4">
                             <span className="block font-bold text-slate-800 dark:text-slate-200">{job.candidateName}</span>
-                            <span className="text-xs text-slate-400">{job.email} | {job.phone}</span>
+                            <span className="block text-[11px] text-slate-400 font-semibold mt-0.5">ID: {job.customerId}</span>
+                            <span className="block text-xs text-slate-400 mt-0.5">{job.email} | {job.phone}</span>
                           </td>
-                          <td className="px-6 py-4 font-semibold text-primary-500">{job.position}</td>
-                          <td className="px-6 py-4 text-xs">{job.experience || 'N/A'}</td>
+                          <td className="px-6 py-4">
+                            <span className="block font-bold text-primary-500">{job.position}</span>
+                            <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mt-0.5">{job.companyName || 'Connect Portal Inc.'}</span>
+                            <span className="block text-[10px] text-slate-400 mt-0.5">HR: {job.hrName || 'HR Team'}</span>
+                          </td>
                           <td className="px-6 py-4">
                             <select 
                               value={job.status} 
@@ -2940,14 +2953,39 @@ function App() {
                               <option value="rejected">Rejected</option>
                             </select>
                           </td>
-                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(job.createdAt).toLocaleDateString()}</td>
+                          <td className="px-6 py-4">
+                            {job.resumeUrl ? (
+                              <a 
+                                href={job.resumeUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                              >
+                                <FileText className="w-3.5 h-3.5" /> View Resume
+                              </a>
+                            ) : (
+                              <span className="text-xs text-slate-450 italic">No Resume</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(job.createdAt || job.appliedDate).toLocaleDateString()}</td>
                           <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => executeAction(`/admin/jobs/${job._id}`, 'DELETE')}
-                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
-                            >
-                              Delete
-                            </button>
+                            <div className="flex items-center justify-end gap-3">
+                              <button 
+                                onClick={() => {
+                                  setModalData(job);
+                                  setShowModal('view-job');
+                                }}
+                                className="text-primary-605 dark:text-primary-400 hover:underline text-xs font-bold"
+                              >
+                                View
+                              </button>
+                              <button 
+                                onClick={() => executeAction(`/admin/jobs/${job._id}`, 'DELETE')}
+                                className="text-rose-500 hover:text-rose-600 text-xs font-bold"
+                              >
+                                Delete
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -5448,6 +5486,121 @@ function App() {
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Add Application</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW JOB APPLICATION MODAL */}
+      {showModal === 'view-job' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-xl rounded-3xl p-6 space-y-6 overflow-y-auto max-h-[90vh] shadow-2xl">
+            <div className="flex justify-between items-center pb-3 border-b dark:border-slate-800">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Candidate Job Application Details</h3>
+              <span className="text-xs font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2.5 py-1 rounded-lg">
+                #{String(modalData.applicationId || modalData._id).toUpperCase()}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Candidate Info */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-primary-500 uppercase tracking-wider">Candidate Information</h4>
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase">Candidate Name</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{modalData.candidateName}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase">Customer ID</span>
+                  <span className="font-semibold text-slate-805 dark:text-slate-300">{modalData.customerId}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase">Email Address</span>
+                  <span className="text-sm text-slate-700 dark:text-slate-300">{modalData.email}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase">Phone Number</span>
+                  <span className="text-sm text-slate-700 dark:text-slate-300">{modalData.phone}</span>
+                </div>
+              </div>
+
+              {/* Job & Company Info */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-primary-500 uppercase tracking-wider">Job & Company Details</h4>
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase">Position / Role</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{modalData.position}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase">Company Name</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{modalData.companyName || 'Connect Portal Inc.'}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase">HR Name</span>
+                  <span className="text-sm text-slate-700 dark:text-slate-300">{modalData.hrName || 'HR Team'}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase">Experience</span>
+                  <span className="text-sm text-slate-700 dark:text-slate-300">{modalData.experience || 'N/A'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Resume & Status */}
+            <div className="space-y-4 pt-3 border-t dark:border-slate-800">
+              <h4 className="text-xs font-bold text-primary-500 uppercase tracking-wider">Status & Documents</h4>
+              <div className="flex flex-col sm:flex-row gap-6">
+                <div className="flex-1">
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Resume / CV</span>
+                  {modalData.resumeUrl ? (
+                    <a 
+                      href={modalData.resumeUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="inline-flex items-center gap-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-600 hover:text-white transition-all w-full justify-center"
+                    >
+                      <FileText className="w-4 h-4" /> View Resume Document
+                    </a>
+                  ) : (
+                    <span className="text-xs text-slate-400 italic block py-2">No resume provided.</span>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Application Status</span>
+                  <select 
+                    value={modalData.status} 
+                    onChange={(e) => {
+                      executeAction(`/admin/jobs/${modalData._id}`, 'PUT', { status: e.target.value });
+                      setModalData({ ...modalData, status: e.target.value });
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm px-3.5 py-2.5 font-semibold text-slate-800 dark:text-slate-200"
+                  >
+                    <option value="applied">Applied</option>
+                    <option value="interviewing">Interviewing</option>
+                    <option value="selected">Selected</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+              </div>
+              <div className="pt-2">
+                <span className="block text-[10px] text-slate-400 font-bold uppercase">Applied Date</span>
+                <span className="text-xs text-slate-500 font-medium">
+                  {new Date(modalData.createdAt || modalData.appliedDate).toLocaleDateString('en-US', {
+                    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                    hour: 'numeric', minute: 'numeric'
+                  })}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t dark:border-slate-800">
+              <button 
+                type="button" 
+                onClick={() => setShowModal(null)} 
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
+              >
+                Close Details
+              </button>
+            </div>
           </div>
         </div>
       )}

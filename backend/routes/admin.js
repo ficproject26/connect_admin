@@ -1527,19 +1527,50 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
         const customJobs = await Order.find({ type: { $in: ['Job', 'Jobs'] } })
             .sort({ createdAt: -1 });
 
-        const resolvedDbJobs = dbJobs.map(j => j.toObject ? j.toObject() : j);
-        const resolvedCustomJobs = customJobs.map(order => ({
-            _id: order._id,
-            candidateName: order.memberName || order.customer_name || 'Unknown Candidate',
-            email: order.candidateEmail || 'N/A',
-            phone: order.customer_phone || 'N/A',
-            position: order.product_details || 'Job Application',
-            experience: order.experience || 'Fresher',
-            status: (order.status || 'applied').toLowerCase(),
-            createdAt: order.createdAt
-        }));
+        // Resolve vendor and customer for custom jobs
+        const resolvedCustomJobs = await resolveVendorAndCustomer(customJobs);
 
-        const allJobs = [...resolvedDbJobs, ...resolvedCustomJobs].sort((a, b) => {
+        const mappedDbJobs = dbJobs.map(j => {
+            const obj = j.toObject ? j.toObject() : j;
+            const custIdVal = obj.customerId || 'CUST-' + String(obj._id).substring(18, 24).toUpperCase();
+            return {
+                ...obj,
+                applicationId: obj.applicationId || obj._id,
+                candidateName: obj.candidateName,
+                customerId: custIdVal,
+                position: obj.position,
+                companyName: obj.companyName || 'Connect Portal Inc.',
+                hrName: obj.hrName || 'HR Team',
+                status: obj.status,
+                resumeUrl: obj.resumeUrl || obj.resume || '',
+                createdAt: obj.createdAt
+            };
+        });
+
+        const mappedCustomJobs = resolvedCustomJobs.map(order => {
+            const appId = order.order_number || order.id || order._id;
+            const custIdVal = (order.customerId && (order.customerId.memberId || order.customerId._id || order.customerId.id)) || 'CUST-' + String(order._id).substring(18, 24).toUpperCase();
+            const companyName = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || 'Connect Partner';
+            const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || 'HR Manager';
+
+            return {
+                _id: order._id,
+                applicationId: appId,
+                candidateName: order.customerId?.name || order.memberName || order.customer_name || 'Unknown Candidate',
+                email: order.candidateEmail || order.customerId?.email || 'N/A',
+                phone: order.customer_phone || order.customerId?.phone || 'N/A',
+                position: order.product_details || 'Job Application',
+                experience: order.experience || 'Fresher',
+                status: (order.status || 'applied').toLowerCase(),
+                createdAt: order.createdAt,
+                customerId: custIdVal,
+                companyName,
+                hrName,
+                resumeUrl: order.candidateResume || ''
+            };
+        });
+
+        const allJobs = [...mappedDbJobs, ...mappedCustomJobs].sort((a, b) => {
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         });
 
