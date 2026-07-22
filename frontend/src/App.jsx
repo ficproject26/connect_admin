@@ -3591,10 +3591,9 @@ function App() {
             });
 
             // Pagination slice
-            const itemsPerPage = 5;
-            const displayedMainList = filteredMainList.slice((mainCatPage - 1) * itemsPerPage, mainCatPage * itemsPerPage);
-            const displayedSubList = filteredSubList.slice((subCatPage - 1) * itemsPerPage, subCatPage * itemsPerPage);
-            const displayedChildList = filteredChildList.slice((childCatPage - 1) * itemsPerPage, childCatPage * itemsPerPage);
+            const displayedMainList = filteredMainList;
+            const displayedSubList = filteredSubList;
+            const displayedChildList = filteredChildList;
 
             return (
               <div className="space-y-6">
@@ -3792,38 +3791,20 @@ function App() {
                     </button>
                   </div>
 
-                  {/* View Mode Toggle */}
-                  <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 shrink-0">
-                    <button 
-                      onClick={() => setCategoryViewMode('cards')}
-                      className={`p-1.5 rounded-lg transition-all ${categoryViewMode === 'cards' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-                      title="3-Column Cascading View"
-                    >
-                      <LayoutGrid className="w-4 h-4" />
-                    </button>
-                    <button 
-                      onClick={() => setCategoryViewMode('table')}
-                      className={`p-1.5 rounded-lg transition-all ${categoryViewMode === 'table' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
-                      title="Table View"
-                    >
-                      <List className="w-4 h-4" />
-                    </button>
-                  </div>
                 </div>
 
-                {/* 3-Column Cascading UI */}
-                {categoryViewMode === 'cards' ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
-                    {/* Column 1: Main Categories */}
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
-                      <div>
-                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800">
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                            1. Main Categories ({filteredMainList.length})
-                          </h3>
-                        </div>
+                {/* 3-Column Cascading Category Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
+                  {/* Column 1: Main Categories */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
+                    <div>
+                      <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800">
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                          1. Main Categories ({filteredMainList.length})
+                        </h3>
+                      </div>
 
-                        <div className="space-y-3">
+                      <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1 scrollbar-thin">
                           {displayedMainList.map((mainItem) => {
                             const isSelected = activeMainCatName === mainItem.name;
                             return (
@@ -3927,26 +3908,6 @@ function App() {
                         </div>
                       </div>
 
-                      {/* Pagination */}
-                      <div className="flex items-center justify-center gap-2 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
-                        <button 
-                          disabled={mainCatPage <= 1}
-                          onClick={() => setMainCatPage(p => Math.max(1, p - 1))}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <span className="w-7 h-7 flex items-center justify-center bg-indigo-600 text-white rounded-lg text-xs font-bold">
-                          {mainCatPage}
-                        </span>
-                        <button 
-                          disabled={mainCatPage >= Math.ceil(filteredMainList.length / itemsPerPage)}
-                          onClick={() => setMainCatPage(p => p + 1)}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
                     </div>
 
                     {/* Column 2: Sub Categories */}
@@ -3969,7 +3930,7 @@ function App() {
                           </button>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1 scrollbar-thin">
                           {displayedSubList.map((subItem) => {
                             const isSelected = activeSubCatName === subItem.name;
                             return (
@@ -4069,26 +4030,6 @@ function App() {
                         </div>
                       </div>
 
-                      {/* Pagination */}
-                      <div className="flex items-center justify-center gap-2 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
-                        <button 
-                          disabled={subCatPage <= 1}
-                          onClick={() => setSubCatPage(p => Math.max(1, p - 1))}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <span className="w-7 h-7 flex items-center justify-center bg-indigo-600 text-white rounded-lg text-xs font-bold">
-                          {subCatPage}
-                        </span>
-                        <button 
-                          disabled={subCatPage >= Math.ceil(filteredSubList.length / itemsPerPage)}
-                          onClick={() => setSubCatPage(p => p + 1)}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
                     </div>
 
                     {/* Column 3: Child Categories */}
@@ -4112,7 +4053,7 @@ function App() {
                           </button>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1 scrollbar-thin">
                           {displayedChildList.map((childItem) => (
                             <div 
                               key={childItem.name}
@@ -4192,90 +4133,8 @@ function App() {
                         </div>
                       </div>
 
-                      {/* Pagination */}
-                      <div className="flex items-center justify-center gap-2 pt-4 mt-4 border-t border-slate-100 dark:border-slate-800">
-                        <button 
-                          disabled={childCatPage <= 1}
-                          onClick={() => setChildCatPage(p => Math.max(1, p - 1))}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <span className="w-7 h-7 flex items-center justify-center bg-indigo-600 text-white rounded-lg text-xs font-bold">
-                          {childCatPage}
-                        </span>
-                        <button 
-                          disabled={childCatPage >= Math.ceil(filteredChildList.length / itemsPerPage)}
-                          onClick={() => setChildCatPage(p => p + 1)}
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 disabled:opacity-30 disabled:cursor-not-allowed hover:bg-slate-50 dark:hover:bg-slate-800"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
                     </div>
                   </div>
-                ) : (
-                  /* Table View Fallback */
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                            <th className="px-6 py-4">First Category</th>
-                            <th className="px-6 py-4">Second Category (Sub)</th>
-                            <th className="px-6 py-4">Third Category (Sub-sub)</th>
-                            <th className="px-6 py-4">Description</th>
-                            <th className="px-6 py-4">Status</th>
-                            <th className="px-6 py-4 text-right">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                          {categories.map((c) => (
-                            <tr key={c._id}>
-                              <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{c.name}</td>
-                              <td className="px-6 py-4 text-slate-600 dark:text-slate-400 font-semibold">{c.subcategory || '—'}</td>
-                              <td className="px-6 py-4 text-indigo-600 font-semibold">{c.subSubcategory || '—'}</td>
-                              <td className="px-6 py-4 text-xs">{c.description || 'No description'}</td>
-                              <td className="px-6 py-4">
-                                <button 
-                                  onClick={() => executeAction(`/admin/categories/${c._id}`, 'PUT', { isActive: !c.isActive })}
-                                  className={`px-2 py-0.5 rounded-full text-xs font-bold capitalize ${c.isActive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}
-                                >
-                                  {c.isActive ? 'Active' : 'Inactive'}
-                                </button>
-                              </td>
-                              <td className="px-6 py-4 text-right flex gap-3 justify-end items-center">
-                                <button 
-                                  onClick={() => { setModalData(c); setShowModal('edit-category'); }}
-                                  className="text-indigo-600 hover:text-indigo-500 text-xs font-semibold"
-                                >
-                                  Edit
-                                </button>
-                                <button 
-                                  onClick={async () => {
-                                    if (confirm(`Delete category "${c.name}${c.subcategory ? ' > ' + c.subcategory : ''}${c.subSubcategory ? ' > ' + c.subSubcategory : ''}"?`)) {
-                                      if (c._id) {
-                                        await executeAction(`/admin/categories/${c._id}`, 'DELETE');
-                                      }
-                                      const params = new URLSearchParams();
-                                      if (c.name) params.set('name', c.name);
-                                      if (c.subcategory) params.set('subcategory', c.subcategory);
-                                      if (c.subSubcategory) params.set('subSubcategory', c.subSubcategory);
-                                      await executeAction(`/admin/categories-hierarchy?${params.toString()}`, 'DELETE');
-                                    }
-                                  }}
-                                  className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
-                                >
-                                  Delete
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )}
 
                 {/* Category Management Guide */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-5">
