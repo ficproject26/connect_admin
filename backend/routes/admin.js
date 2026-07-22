@@ -1713,6 +1713,16 @@ router.put('/jobs/:id', [auth, adminAuth], async (req, res) => {
         if (!job) {
             const orderJob = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
             if (orderJob) {
+                try {
+                    const syncUrl = `http://localhost:8001/api/orders/${orderJob.id || orderJob._id}/status`;
+                    await fetch(syncUrl, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: req.body.status })
+                    }).then(r => r.json()).catch(err => console.warn('Customer backend status sync from admin failed:', err.message));
+                } catch (err) {
+                    console.warn('Native fetch failed for customer sync:', err.message);
+                }
                 job = {
                     _id: orderJob._id,
                     candidateName: orderJob.memberName || orderJob.customer_name || 'Unknown Candidate',
