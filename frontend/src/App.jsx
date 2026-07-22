@@ -1479,8 +1479,12 @@ function App() {
 
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
                               <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                <span className="block text-slate-400">Pincode</span>
-                                <span className="font-bold">{agent.assignedPincode?.code || 'None'}</span>
+                                <span className="block text-slate-400 capitalize">{agent.level || 'pincode'}</span>
+                                <span className="font-bold">
+                                  {agent.level === 'pincode' || !agent.level 
+                                    ? (agent.assignedPincode?.code || 'None') 
+                                    : (agent.assignedArea || 'None')}
+                                </span>
                               </div>
                               <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
                                 <span className="block text-slate-400">Wallet</span>
@@ -1563,8 +1567,12 @@ function App() {
 
                             <div className="grid grid-cols-2 gap-2.5 text-center text-xs">
                               <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Pincode</span>
-                                <span className="font-bold text-slate-700 dark:text-slate-300">{agent.assignedPincode?.code || 'None'}</span>
+                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{agent.level || 'pincode'}</span>
+                                <span className="font-bold text-slate-700 dark:text-slate-300">
+                                  {agent.level === 'pincode' || !agent.level 
+                                    ? (agent.assignedPincode?.code || 'None') 
+                                    : (agent.assignedArea || 'None')}
+                                </span>
                               </div>
                               <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
                                 <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Wallet</span>
@@ -5143,7 +5151,7 @@ function App() {
 
       {showModal === 'edit-agent' && modalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Edit Agent Details</h3>
             <form 
               onSubmit={async (e) => {
@@ -5153,9 +5161,10 @@ function App() {
                 const phone = e.target.phone.value;
                 const level = e.target.level.value;
                 const assignedArea = e.target.assignedArea.value;
+                const pincode = e.target.pincode.value;
                 const isActive = e.target.isActive.checked;
                 
-                await executeAction(`/admin/update-agent/${modalData._id}`, 'PUT', { name, email, phone, level, assignedArea });
+                await executeAction(`/admin/update-agent/${modalData._id}`, 'PUT', { name, email, phone, level, assignedArea, pincode });
                 await executeAction(`/admin/activate-agent/${modalData._id}`, 'PUT', { isActive });
                 setShowModal(null);
               }}
@@ -5165,13 +5174,15 @@ function App() {
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
                 <input name="name" required defaultValue={modalData.name || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email</label>
-                <input name="email" required defaultValue={modalData.email || ''} type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone</label>
-                <input name="phone" required defaultValue={modalData.phone || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email</label>
+                  <input name="email" required defaultValue={modalData.email || ''} type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone</label>
+                  <input name="phone" required defaultValue={modalData.phone || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -5188,9 +5199,15 @@ function App() {
                   <input name="assignedArea" defaultValue={modalData.assignedArea || ''} type="text" placeholder="State/Dist name" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
-              <div className="flex items-center gap-3 py-2">
-                <input name="isActive" id="isActive" defaultChecked={modalData.isActive || false} type="checkbox" className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-slate-300" />
-                <label htmlFor="isActive" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Is Profile Active</label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Assigned Pincode</label>
+                  <input name="pincode" defaultValue={modalData.assignedPincode?.code || ''} type="text" placeholder="e.g. 600001" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                </div>
+                <div className="flex items-center gap-3 pt-6">
+                  <input name="isActive" id="isActive" defaultChecked={modalData.isActive || false} type="checkbox" className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-slate-300" />
+                  <label htmlFor="isActive" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Is Profile Active</label>
+                </div>
               </div>
               
               <div className="flex gap-2 justify-end pt-4">
