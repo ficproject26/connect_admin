@@ -8,6 +8,11 @@ const OrderSchema = new mongoose.Schema({
     amount: { type: Number },
     commission: { type: Number },
     status: { type: String },
+    type: { type: String },
+    candidateEmail: { type: String },
+    candidateResume: { type: String },
+    experience: { type: String },
+    candidateEducation: { type: String },
     createdAt: { type: Date, default: Date.now }
 }, { strict: false });
 

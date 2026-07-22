@@ -1584,6 +1584,7 @@ const resolveVendorAndCustomer = async (items) => {
 
         resolvedItems.push({
             ...doc,
+            createdAt: doc.created_at || doc.createdAt,
             vendorId: vendor,
             customerId: customer,
             amount,
@@ -1675,7 +1676,7 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
                 position: order.product_details || 'Job Application',
                 experience: order.experience || 'Fresher',
                 status: (order.status || 'applied').toLowerCase(),
-                createdAt: order.createdAt,
+                createdAt: order.created_at || order.createdAt,
                 customerId: custIdVal,
                 companyName,
                 hrName,
@@ -1731,7 +1732,7 @@ router.put('/jobs/:id', [auth, adminAuth], async (req, res) => {
                     position: orderJob.product_details || 'Job Application',
                     experience: orderJob.experience || 'Fresher',
                     status: (orderJob.status || 'applied').toLowerCase(),
-                    createdAt: orderJob.createdAt
+                    createdAt: orderJob.created_at || orderJob.createdAt
                 };
             }
         }
