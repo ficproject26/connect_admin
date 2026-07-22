@@ -3817,7 +3817,7 @@ function App() {
                         </h3>
                       </div>
 
-                      <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1 scrollbar-thin">
+                      <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
                           {displayedMainList.map((mainItem) => {
                             const isSelected = activeMainCatName === mainItem.name;
                             return (
@@ -3911,7 +3911,7 @@ function App() {
                                 </div>
 
                                 {isSelected && (
-                                  <div className="hidden lg:block absolute -right-3 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
+                                  <div className="hidden lg:block absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
                                     <ArrowRight className="w-3.5 h-3.5" />
                                   </div>
                                 )}
@@ -3943,7 +3943,7 @@ function App() {
                           </button>
                         </div>
 
-                        <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1 scrollbar-thin">
+                        <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
                           {displayedSubList.map((subItem) => {
                             const isSelected = activeSubCatName === subItem.name;
                             return (
@@ -4033,7 +4033,7 @@ function App() {
                                 </div>
 
                                 {isSelected && (
-                                  <div className="hidden lg:block absolute -right-3 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
+                                  <div className="hidden lg:block absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
                                     <ArrowRight className="w-3.5 h-3.5" />
                                   </div>
                                 )}
@@ -4066,7 +4066,7 @@ function App() {
                           </button>
                         </div>
 
-                        <div className="space-y-3 max-h-[550px] overflow-y-auto pr-1 scrollbar-thin">
+                        <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
                           {displayedChildList.map((childItem) => (
                             <div 
                               key={childItem.name}
