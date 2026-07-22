@@ -537,6 +537,19 @@ function App() {
     setUser(null);
   };
 
+  const [toasts, setToasts] = useState([]);
+
+  const addToast = (message, type = 'info') => {
+    const id = Date.now() + Math.random();
+    const text = typeof message === 'object' ? (message.message || message.text) : message;
+    const msgType = typeof message === 'object' ? (message.type || type) : type;
+    const newToast = { id, text, type: msgType };
+    setToasts(prev => [...prev.slice(-4), newToast]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4000);
+  };
+
   // API Action Mutators
   const executeAction = async (endpoint, method = 'POST', body = null) => {
     try {
@@ -551,21 +564,21 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.msg || data.error || "Action failed.");
+        addToast(data.msg || data.error || "Action failed.", 'error');
         return { success: false, data };
       }
       fetchData();
       return { success: true, data };
     } catch (err) {
       console.error("API action failed:", err);
-      alert("API Action failed: Server unreachable or request rejected.");
+      addToast("API Action failed: Server unreachable or request rejected.", 'error');
       return { success: false };
     }
   };
 
   // Mock Exports
   const handleExport = (format) => {
-    alert(`Generating and downloading ${reportType}_report.${format} ...`);
+    addToast(`Generating and downloading ${reportType}_report.${format} ...`, 'info');
   };
 
   if (!user) {
@@ -927,7 +940,7 @@ function App() {
 
             {/* Notifications */}
             <button 
-              onClick={() => alert("You have no new notifications.")}
+              onClick={() => addToast("You have no new notifications.", 'info')}
               className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer relative"
               title="Notifications"
             >
@@ -2771,7 +2784,7 @@ function App() {
                 </div>
 
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
-                  <button onClick={() => alert('Settings Saved Successfully!')} className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-all">
+                  <button onClick={() => addToast('Settings Saved Successfully!', 'success')} className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-all">
                     Save Changes
                   </button>
                 </div>
@@ -5188,7 +5201,7 @@ function App() {
                 const status = e.target.status.value;
                 
                 if (password !== confirmPassword) {
-                  alert("Passwords do not match!");
+                  addToast("Passwords do not match!", 'error');
                   return;
                 }
 
@@ -6244,6 +6257,44 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* -------------------- SLEEK TOAST NOTIFICATIONS -------------------- */}
+      <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full px-4 sm:px-0">
+        {toasts.map((t) => {
+          const isError = t.type === 'error' || (t.text || '').toLowerCase().includes('failed') || (t.text || '').toLowerCase().includes('error') || (t.text || '').toLowerCase().includes('denied') || (t.text || '').toLowerCase().includes('rejected');
+          const isSuccess = t.type === 'success' || (t.text || '').toLowerCase().includes('success') || (t.text || '').toLowerCase().includes('added') || (t.text || '').toLowerCase().includes('saved') || (t.text || '').toLowerCase().includes('approved') || (t.text || '').toLowerCase().includes('created');
+
+          return (
+            <div 
+              key={t.id}
+              className={`pointer-events-auto flex items-center justify-between gap-3 px-4 py-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl transition-all duration-300 transform translate-y-0 ${
+                isError 
+                  ? 'bg-rose-950/90 text-rose-100 border-rose-800/60 shadow-rose-950/40' 
+                  : isSuccess 
+                  ? 'bg-emerald-950/90 text-emerald-100 border-emerald-800/60 shadow-emerald-950/40'
+                  : 'bg-slate-900/90 text-slate-100 border-slate-700/60 shadow-slate-950/50'
+              }`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                {isError ? (
+                  <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                ) : isSuccess ? (
+                  <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+                ) : (
+                  <Sparkles className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
+                )}
+                <span className="text-xs font-bold leading-snug break-words">{t.text}</span>
+              </div>
+              <button 
+                onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer border-none shrink-0"
+              >
+                <XCircle className="w-3.5 h-3.5 opacity-60 hover:opacity-100" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
 
     </div>
   );
