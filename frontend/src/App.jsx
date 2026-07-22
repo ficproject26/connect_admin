@@ -2903,12 +2903,6 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Job Applications</h3>
-                <button 
-                  onClick={() => setShowModal('job')}
-                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
-                >
-                  Add Candidate Application
-                </button>
               </div>
 
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
