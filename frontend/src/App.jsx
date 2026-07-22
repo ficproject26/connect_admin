@@ -540,11 +540,14 @@ function App() {
   // API Action Mutators
   const executeAction = async (endpoint, method = 'POST', body = null) => {
     try {
-      const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+      const headers = { 'x-auth-token': token };
+      if (body) {
+        headers['Content-Type'] = 'application/json';
+      }
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method,
         headers,
-        body: body ? JSON.stringify(body) : null
+        body: body ? JSON.stringify(body) : undefined
       });
       const data = await res.json();
       if (!res.ok) {
@@ -4249,7 +4252,18 @@ function App() {
                                   Edit
                                 </button>
                                 <button 
-                                  onClick={() => executeAction(`/admin/categories/${c._id}`, 'DELETE')}
+                                  onClick={async () => {
+                                    if (confirm(`Delete category "${c.name}${c.subcategory ? ' > ' + c.subcategory : ''}${c.subSubcategory ? ' > ' + c.subSubcategory : ''}"?`)) {
+                                      if (c._id) {
+                                        await executeAction(`/admin/categories/${c._id}`, 'DELETE');
+                                      }
+                                      const params = new URLSearchParams();
+                                      if (c.name) params.set('name', c.name);
+                                      if (c.subcategory) params.set('subcategory', c.subcategory);
+                                      if (c.subSubcategory) params.set('subSubcategory', c.subSubcategory);
+                                      await executeAction(`/admin/categories-hierarchy?${params.toString()}`, 'DELETE');
+                                    }
+                                  }}
                                   className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
                                 >
                                   Delete
