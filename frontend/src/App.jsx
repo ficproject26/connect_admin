@@ -400,6 +400,51 @@ function App() {
   const [filterBranch, setFilterBranch] = useState('All');
   const [reportType, setReportType] = useState('revenue');
 
+  // Notification Overlay State
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+
+  // Total Orders Search & Filters
+  const [ordersSearchTerm, setOrdersSearchTerm] = useState('');
+  const [ordersDateFilter, setOrdersDateFilter] = useState('All');
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState('All');
+  const [ordersProductFilter, setOrdersProductFilter] = useState('All');
+
+  // Customers Search & Filters
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [customerDistrictFilter, setCustomerDistrictFilter] = useState('All');
+  const [customerStatusFilter, setCustomerStatusFilter] = useState('All');
+  const [customerTypeFilter, setCustomerTypeFilter] = useState('All');
+
+  // Business Tie-Ups Search & Filters
+  const [tieupSearchTerm, setTieUpSearchTerm] = useState('');
+  const [tieupEntityFilter, setTieUpEntityFilter] = useState('All');
+
+  // Wallet & Withdrawals Filters
+  const [withdrawalStatusFilter, setWithdrawalStatusFilter] = useState('All');
+
+  // Bookings Search & Filters
+  const [bookingSearchTerm, setBookingSearchTerm] = useState('');
+  const [bookingStatusFilter, setBookingStatusFilter] = useState('All');
+  const [bookingDateFilter, setBookingDateFilter] = useState('All');
+
+  // Membership Card Holders Search & Filters
+  const [cardHolderSearchTerm, setCardHolderSearchTerm] = useState('');
+  const [cardHolderTypeFilter, setCardHolderTypeFilter] = useState('All');
+  const [cardHolderStatusFilter, setCardHolderStatusFilter] = useState('All');
+  const [cardHolderExpiryFilter, setCardHolderExpiryFilter] = useState('All');
+
+  // Payments Search & Filters & Edit Modal
+  const [paymentSearchTerm, setPaymentSearchTerm] = useState('');
+  const [paymentTypeFilter, setPaymentTypeFilter] = useState('All');
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('All');
+  const [paymentDateFilter, setPaymentDateFilter] = useState('All');
+  const [editPaymentData, setEditPaymentData] = useState(null);
+
+  // Queries Search & Filters
+  const [querySearchTerm, setQuerySearchTerm] = useState('');
+  const [queryUserTypeFilter, setQueryUserTypeFilter] = useState('All');
+  const [queryStatusFilter, setQueryStatusFilter] = useState('All');
+
   // Modals / CRUD Actions
   const [showModal, setShowModal] = useState(null); // 'branch', 'admin', 'plan', 'banner', 'ad', 'kyc', 'pincode'
   const [modalData, setModalData] = useState(null);
@@ -939,17 +984,56 @@ function App() {
             </button>
 
             {/* Notifications */}
-            <button 
-              onClick={() => addToast("You have no new notifications.", 'info')}
-              className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer relative"
-              title="Notifications"
-            >
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1 right-1 flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-              </span>
-            </button>
+            <div className="relative">
+              <button 
+                onClick={() => setShowNotificationsPanel(!showNotificationsPanel)}
+                className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer relative"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                <span className="absolute top-1 right-1 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                </span>
+              </button>
+
+              {showNotificationsPanel && (
+                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                  <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Notifications</h4>
+                    <span className="text-[10px] bg-primary-500/10 text-primary-500 font-bold px-2 py-0.5 rounded-full">
+                      {agents.filter(a => a.status === 'pending').length + vendors.filter(v => v.status?.toLowerCase() === 'pending').length} New
+                    </span>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2">
+                    {agents.filter(a => a.status === 'pending').map(a => (
+                      <div key={a._id} onClick={() => { setActiveTab('kyc'); setShowNotificationsPanel(false); }} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Agent KYC Pending</span>
+                          <span className="text-[10px] text-amber-500 font-semibold">Verify</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{a.name} submitted KYC documents for approval.</p>
+                      </div>
+                    ))}
+                    {vendors.filter(v => v.status?.toLowerCase() === 'pending').map(v => (
+                      <div key={v._id} onClick={() => { setActiveTab('vendors'); setShowNotificationsPanel(false); }} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Vendor Tie-Up Pending</span>
+                          <span className="text-[10px] text-amber-500 font-semibold">Review</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{v.businessName} requested vendor registration.</p>
+                      </div>
+                    ))}
+                    {agents.filter(a => a.status === 'pending').length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
+                      <div className="text-center py-8 text-slate-400 text-xs">
+                        <Bell className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+                        No new notifications
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* User Profile Widget */}
             <div className="flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-800">
@@ -1771,10 +1855,33 @@ function App() {
                 </div>
               </div>
 
-                   {/* Existing Pincodes List */}
-              {(() => {
+                         {(() => {
                 const uniqueStates = [...new Set(pincodes.map(p => p.state).filter(Boolean))].sort();
-                const uniqueDistricts = [...new Set(pincodes.map(p => p.district).filter(Boolean))].sort();
+                
+                // Dynamically filter districts based on selected state
+                let availableDistricts = [];
+                if (pincodeStateFilter) {
+                  const isDelhi = pincodeStateFilter.toLowerCase().includes('delhi');
+                  availableDistricts = [...new Set(
+                    pincodes
+                      .filter(p => {
+                        if (isDelhi) {
+                          const s = (p.state || '').toLowerCase();
+                          const d = (p.district || '').toLowerCase();
+                          return (s.includes('delhi') || d.includes('delhi')) && !['bangalore', 'chennai', 'mumbai', 'salem'].includes(d);
+                        }
+                        return p.state === pincodeStateFilter;
+                      })
+                      .map(p => p.district)
+                      .filter(Boolean)
+                  )].sort();
+                  // Fallback for Delhi districts if data set is sparse
+                  if (isDelhi && availableDistricts.length === 0) {
+                    availableDistricts = ['Central Delhi', 'East Delhi', 'New Delhi', 'North Delhi', 'North East Delhi', 'North West Delhi', 'South Delhi', 'South East Delhi', 'South West Delhi', 'West Delhi'];
+                  }
+                } else {
+                  availableDistricts = [...new Set(pincodes.map(p => p.district).filter(Boolean))].sort();
+                }
                 
                 const filteredPincodes = pincodes.filter(p => {
                   const matchesSearch = !searchTerm || 
@@ -1782,13 +1889,13 @@ function App() {
                                         p.district.toLowerCase().includes(searchTerm.toLowerCase()) || 
                                         p.state.toLowerCase().includes(searchTerm.toLowerCase()) ||
                                         (p.activeAgentId?.name && p.activeAgentId.name.toLowerCase().includes(searchTerm.toLowerCase()));
-                                        
-                  const matchesState = !pincodeStateFilter || p.state === pincodeStateFilter;
+                                         
+                  const matchesState = !pincodeStateFilter || p.state === pincodeStateFilter || (pincodeStateFilter === 'Delhi' && (p.state?.toLowerCase().includes('delhi') || p.district?.toLowerCase().includes('delhi')));
                   const matchesDistrict = !pincodeDistrictFilter || p.district === pincodeDistrictFilter;
                   const matchesStatus = pincodeStatusFilter === 'all' || 
                                         (pincodeStatusFilter === 'assigned' && p.activeAgentId) || 
                                         (pincodeStatusFilter === 'unassigned' && !p.activeAgentId);
-                                        
+                                         
                   return matchesSearch && matchesState && matchesDistrict && matchesStatus;
                 });
 
@@ -1809,7 +1916,10 @@ function App() {
                         
                         <select
                           value={pincodeStateFilter}
-                          onChange={(e) => setPincodeStateFilter(e.target.value)}
+                          onChange={(e) => {
+                            setPincodeStateFilter(e.target.value);
+                            setPincodeDistrictFilter('');
+                          }}
                           className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
                         >
                           <option value="">All States</option>
@@ -1824,7 +1934,7 @@ function App() {
                           className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
                         >
                           <option value="">All Districts</option>
-                          {uniqueDistricts.map(district => (
+                          {availableDistricts.map(district => (
                             <option key={district} value={district}>{district}</option>
                           ))}
                         </select>
@@ -1988,41 +2098,130 @@ function App() {
           )}
 
           {/* 7. CUSTOMERS VIEW */}
-          {activeTab === 'customers' && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                      <th className="px-6 py-4">Customer Name</th>
-                      <th className="px-6 py-4">Contact Info</th>
-                      <th className="px-6 py-4">Aadhaar Number</th>
-                      <th className="px-6 py-4">PAN Number</th>
-                      <th className="px-6 py-4">District</th>
-                      <th className="px-6 py-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {customers.map((c) => (
-                      <tr key={c._id}>
-                        <td className="px-6 py-4 font-semibold text-slate-850 dark:text-slate-200">{c.name}</td>
-                        <td className="px-6 py-4 text-xs">
-                          <span className="block">{c.email}</span>
-                          <span className="block text-slate-400 mt-0.5">{c.phone}</span>
-                        </td>
-                        <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.aadhaarNumber || '—'}</td>
-                        <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.panNumber || '—'}</td>
-                        <td className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400">{c.branchId?.name || 'Direct'}</td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${c.status === 'active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>{c.status === 'active' ? 'Active' : 'Blocked'}</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {activeTab === 'customers' && (() => {
+            const customerDistricts = [...new Set(customers.map(c => c.district || c.branchId?.name || c.city).filter(Boolean))].sort();
+            const customerTypes = [...new Set(customers.map(c => c.customerType || c.type || 'Standard').filter(Boolean))].sort();
+
+            const filteredCustomers = customers.filter(c => {
+              const matchesSearch = !customerSearchTerm ||
+                (c.name || '').toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                (c.email || '').toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                (c.phone || '').includes(customerSearchTerm);
+
+              const dist = c.district || c.branchId?.name || c.city || 'Direct';
+              const matchesDistrict = customerDistrictFilter === 'All' || dist === customerDistrictFilter;
+
+              const statusVal = c.status?.toLowerCase() === 'active' ? 'Active' : 'Inactive';
+              const matchesStatus = customerStatusFilter === 'All' || statusVal === customerStatusFilter;
+
+              const typeVal = c.customerType || c.type || 'Standard';
+              const matchesType = customerTypeFilter === 'All' || typeVal === customerTypeFilter;
+
+              return matchesSearch && matchesDistrict && matchesStatus && matchesType;
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                    <div className="flex flex-1 flex-wrap gap-3 w-full">
+                      {/* Search Bar */}
+                      <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
+                        <Search className="w-5 h-5 text-slate-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Search by customer name, email, or phone..." 
+                          value={customerSearchTerm}
+                          onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                          className="bg-transparent focus:outline-none text-sm w-full"
+                        />
+                      </div>
+
+                      {/* District Filter */}
+                      <select
+                        value={customerDistrictFilter}
+                        onChange={(e) => setCustomerDistrictFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Districts</option>
+                        {customerDistricts.map(d => (
+                          <option key={d} value={d}>{d}</option>
+                        ))}
+                      </select>
+
+                      {/* Status Filter */}
+                      <select
+                        value={customerStatusFilter}
+                        onChange={(e) => setCustomerStatusFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+
+                      {/* Customer Type Filter */}
+                      <select
+                        value={customerTypeFilter}
+                        onChange={(e) => setCustomerTypeFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Customer Types</option>
+                        {customerTypes.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Customer Name</th>
+                          <th className="px-6 py-4">Contact Info</th>
+                          <th className="px-6 py-4">Customer Type</th>
+                          <th className="px-6 py-4">Aadhaar Number</th>
+                          <th className="px-6 py-4">PAN Number</th>
+                          <th className="px-6 py-4">District</th>
+                          <th className="px-6 py-4">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {filteredCustomers.map((c) => (
+                          <tr key={c._id}>
+                            <td className="px-6 py-4 font-semibold text-slate-850 dark:text-slate-200">{c.name}</td>
+                            <td className="px-6 py-4 text-xs">
+                              <span className="block">{c.email}</span>
+                              <span className="block text-slate-400 mt-0.5">{c.phone}</span>
+                            </td>
+                            <td className="px-6 py-4 text-xs font-semibold text-purple-500">
+                              {c.customerType || c.type || 'Standard'}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.aadhaarNumber || '—'}</td>
+                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.panNumber || '—'}</td>
+                            <td className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400">{c.district || c.branchId?.name || c.city || 'Direct'}</td>
+                            <td className="px-6 py-4">
+                              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${c.status === 'active' || c.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                                {c.status === 'active' || c.status === 'Active' ? 'Active' : 'Inactive'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredCustomers.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 text-slate-400 text-sm">
+                              No customers found matching search and filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 8. KYC VERIFICATION SCREEN */}
           {activeTab === 'kyc' && (
@@ -2132,28 +2331,69 @@ function App() {
           )}
 
           {/* BUSINESS TIE-UPS SCREEN */}
-          {activeTab === 'tieups' && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Business Tie-Up Requests</h3>
-                  <div className="flex gap-2">
-                    {['All', 'pending', 'approved', 'rejected'].map(st => (
-                      <button
-                        key={st}
-                        onClick={() => setFilterCategory(st)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors ${filterCategory === st ? 'bg-primary-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
-                      >
-                        {st}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+          {activeTab === 'tieups' && (() => {
+            const filteredTieups = tieups.filter(t => {
+              const matchesSearch = !tieupSearchTerm ||
+                (t.businessName || '').toLowerCase().includes(tieupSearchTerm.toLowerCase()) ||
+                (t.customerName || '').toLowerCase().includes(tieupSearchTerm.toLowerCase()) ||
+                (t.vendorName || '').toLowerCase().includes(tieupSearchTerm.toLowerCase()) ||
+                (t.agentId?.name || '').toLowerCase().includes(tieupSearchTerm.toLowerCase());
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {tieups
-                    .filter(t => filterCategory === 'All' || filterCategory === 'pending' || filterCategory === 'approved' || filterCategory === 'rejected' ? (filterCategory === 'All' || t.status === filterCategory) : true)
-                    .map((tieup) => (
+              const entityType = t.entityType || t.type || (t.category === 'Services' || t.category === 'Product' ? 'Vendor' : 'Customer');
+              const matchesEntity = tieupEntityFilter === 'All' || entityType.toLowerCase() === tieupEntityFilter.toLowerCase();
+
+              const matchesStatus = filterCategory === 'All' || filterCategory === 'pending' || filterCategory === 'approved' || filterCategory === 'rejected' ? (filterCategory === 'All' || t.status === filterCategory) : true;
+
+              return matchesSearch && matchesEntity && matchesStatus;
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Business Tie-Up Requests</h3>
+                    
+                    <div className="flex flex-wrap gap-3 w-full xl:w-auto items-center">
+                      {/* Search Bar */}
+                      <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3.5 py-1.5 rounded-xl flex-1 min-w-[200px]">
+                        <Search className="w-4 h-4 text-slate-400 my-auto" />
+                        <input 
+                          type="text" 
+                          placeholder="Search by customer or vendor..." 
+                          value={tieupSearchTerm}
+                          onChange={(e) => setTieUpSearchTerm(e.target.value)}
+                          className="bg-transparent focus:outline-none text-xs w-full"
+                        />
+                      </div>
+
+                      {/* Entity Filter Dropdown */}
+                      <select
+                        value={tieupEntityFilter}
+                        onChange={(e) => setTieUpEntityFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Parties (Customer & Vendor)</option>
+                        <option value="Customer">Customer</option>
+                        <option value="Vendor">Vendor</option>
+                      </select>
+
+                      {/* Existing Status Filter Buttons */}
+                      <div className="flex gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl">
+                        {['All', 'pending', 'approved', 'rejected'].map(st => (
+                          <button
+                            key={st}
+                            onClick={() => setFilterCategory(st)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold capitalize transition-colors ${filterCategory === st ? 'bg-primary-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-850'}`}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {filteredTieups.map((tieup) => (
                       <div key={tieup._id} className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-850 space-y-4">
                         <div className="flex justify-between items-start">
                           <div>
@@ -2214,7 +2454,8 @@ function App() {
                 </div>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* AGENT TASKS SCREEN */}
           {activeTab === 'tasks' && (
@@ -2281,53 +2522,80 @@ function App() {
           )}
 
           {/* 9. WALLET & WITHDRAWALS */}
-          {activeTab === 'wallet' && (
-            <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
-                <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Withdrawal Request Queues</h3>
-                
-                <div className="space-y-4">
-                  {withdrawals.map((req) => (
-                    <div key={req._id} className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                      <div>
-                        <span className="block font-extrabold text-slate-850 dark:text-slate-100">{req.agentId?.name}</span>
-                        <span className="block text-xs text-slate-400 mt-1">Wallet Balance: ₹{req.agentId?.balance} • Req Date: {new Date(req.createdAt).toLocaleDateString()}</span>
-                        <span className="inline-block mt-3 bg-primary-500/10 text-primary-500 text-xs font-bold px-2 py-0.5 rounded-full">Bank Withdrawal Requested</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-6">
-                        <span className="text-2xl font-black text-rose-500">₹{req.amount}</span>
-                        {req.status === 'pending' ? (
-                          <div className="flex gap-2">
-                            <button 
-                              onClick={() => executeAction(`/admin/wallet/withdrawals/${req._id}`, 'PUT', { status: 'rejected' })}
-                              className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-bold px-3 py-2 rounded-xl transition-all"
-                            >
-                              Reject
-                            </button>
-                            <button 
-                              onClick={() => executeAction(`/admin/wallet/withdrawals/${req._id}`, 'PUT', { status: 'approved' })}
-                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all"
-                            >
-                              Approve Pay-out
-                            </button>
+          {activeTab === 'wallet' && (() => {
+            const filteredWithdrawals = withdrawals.filter(req => {
+              if (withdrawalStatusFilter === 'All') return true;
+              return (req.status || '').toLowerCase() === withdrawalStatusFilter.toLowerCase();
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Withdrawal Request Queues</h3>
+                    
+                    {/* Status Filter Buttons */}
+                    <div className="flex flex-wrap gap-1.5 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl">
+                      {['All', 'Pending', 'Approved', 'Rejected', 'Completed'].map(st => (
+                        <button
+                          key={st}
+                          onClick={() => setWithdrawalStatusFilter(st)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${withdrawalStatusFilter === st ? 'bg-primary-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-850'}`}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    {filteredWithdrawals.map((req) => (
+                      <div 
+                        key={req._id} 
+                        onClick={() => {
+                          setModalData(req);
+                          setShowModal('bank-details');
+                        }}
+                        className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:shadow-md hover:border-primary-500/40 transition-all group"
+                      >
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="block font-extrabold text-slate-850 dark:text-slate-100 group-hover:text-primary-500 transition-colors text-base">{req.agentId?.name || req.accountHolderName || 'Amit Sharma'}</span>
+                            <span className="text-[10px] text-primary-500 font-bold bg-primary-500/10 px-2 py-0.5 rounded-full">Click for Bank Details</span>
                           </div>
-                        ) : (
-                          <span className="text-xs text-slate-400 capitalize">{req.status}</span>
-                        )}
+                          <span className="block text-xs text-slate-400 mt-1">Wallet Balance: ₹{req.agentId?.balance || 7500} • Req Date: {new Date(req.createdAt).toLocaleDateString()}</span>
+                          <span className="inline-block mt-2 bg-primary-500/10 text-primary-500 text-xs font-bold px-2.5 py-0.5 rounded-full">Bank Withdrawal Requested</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-6" onClick={(e) => e.stopPropagation()}>
+                          <span className="text-2xl font-black text-rose-500">₹{req.amount}</span>
+                          <span className={`text-xs px-3 py-1 rounded-full font-bold capitalize ${req.status?.toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : req.status?.toLowerCase() === 'completed' ? 'bg-blue-500/10 text-blue-500' : req.status?.toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                            {req.status}
+                          </span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setModalData(req);
+                              setShowModal('bank-details');
+                            }}
+                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all"
+                          >
+                            View Bank Details
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  {withdrawals.length === 0 && (
-                    <div className="text-center py-12 text-slate-400 text-sm">
-                      <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-                      No pending withdrawal requests.
-                    </div>
-                  )}
+                    ))}
+                    {filteredWithdrawals.length === 0 && (
+                      <div className="text-center py-12 text-slate-400 text-sm">
+                        <CheckCircle className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                        No withdrawal requests found for this filter.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 10. COMMISSIONS CONFIG */}
           {activeTab === 'commissions' && isSuperAdmin && (
@@ -2794,137 +3062,324 @@ function App() {
           )}
 
           {/* 15. TOTAL ORDERS */}
-          {activeTab === 'orders' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Total Orders Management</h3>
-              </div>
+          {activeTab === 'orders' && (() => {
+            const productOptions = [...new Set(orders.map(o => o.productDetails || o.product_details || o.productName || 'General Product').filter(Boolean))].sort();
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
-                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Orders</span>
-                  <span className="text-3xl font-extrabold text-slate-800 dark:text-white mt-2 block">{orders.length}</span>
-                </div>
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
-                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Volume</span>
-                  <span className="text-3xl font-extrabold text-emerald-500 mt-2 block">₹{orders.reduce((sum, o) => sum + (o.amount || 0), 0).toLocaleString()}</span>
-                </div>
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
-                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Commission</span>
-                  <span className="text-3xl font-extrabold text-primary-500 mt-2 block">₹{orders.reduce((sum, o) => sum + (o.commission || 0), 0).toLocaleString()}</span>
-                </div>
-              </div>
+            const filteredOrders = orders.filter(o => {
+              const matchesSearch = !ordersSearchTerm ||
+                (o.order_number || o.id || '').toLowerCase().includes(ordersSearchTerm.toLowerCase()) ||
+                (o.productDetails || o.product_details || o.productName || '').toLowerCase().includes(ordersSearchTerm.toLowerCase()) ||
+                (o.vendorId?.businessName || o.vendorName || '').toLowerCase().includes(ordersSearchTerm.toLowerCase()) ||
+                (o.customerId?.name || '').toLowerCase().includes(ordersSearchTerm.toLowerCase());
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">Order Number</th>
-                        <th className="px-6 py-4">Vendor</th>
-                        <th className="px-6 py-4">Customer</th>
-                        <th className="px-6 py-4">Amount</th>
-                        <th className="px-6 py-4">Commission</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {orders.map((order) => (
-                        <tr key={order._id}>
-                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{order.order_number || order.id || 'N/A'}</td>
-                          <td className="px-6 py-4">
-                            <span className="block font-semibold">{order.vendorId?.businessName || 'Unknown Vendor'}</span>
-                            <span className="text-xs text-slate-400">{order.vendorId?.email}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="block font-semibold">{order.customerId?.name || 'Unknown Customer'}</span>
-                            <span className="text-xs text-slate-400">{order.customerId?.phone}</span>
-                          </td>
-                          <td className="px-6 py-4 font-bold text-emerald-500">₹{order.amount}</td>
-                          <td className="px-6 py-4 font-bold text-primary-500">₹{order.commission}</td>
-                          <td className="px-6 py-4">
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize bg-emerald-500/10 text-emerald-500">
-                              {order.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(order.createdAt).toLocaleDateString()}</td>
+              const matchesStatus = ordersStatusFilter === 'All' || (o.status || '').toLowerCase() === ordersStatusFilter.toLowerCase();
+
+              const prodName = o.productDetails || o.product_details || o.productName || 'General Product';
+              const matchesProduct = ordersProductFilter === 'All' || prodName === ordersProductFilter;
+
+              let matchesDate = true;
+              if (ordersDateFilter !== 'All' && o.createdAt) {
+                const oDate = new Date(o.createdAt);
+                const now = new Date();
+                if (ordersDateFilter === 'Today') {
+                  matchesDate = oDate.toDateString() === now.toDateString();
+                } else if (ordersDateFilter === 'Weekly') {
+                  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                  matchesDate = oDate >= sevenDaysAgo;
+                } else if (ordersDateFilter === 'Monthly') {
+                  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                  matchesDate = oDate >= thirtyDaysAgo;
+                }
+              }
+
+              return matchesSearch && matchesStatus && matchesProduct && matchesDate;
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Total Orders Management</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                    <span className="block text-slate-400 text-xs font-bold uppercase">Total Orders</span>
+                    <span className="text-3xl font-extrabold text-slate-800 dark:text-white mt-2 block">{filteredOrders.length}</span>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                    <span className="block text-slate-400 text-xs font-bold uppercase">Total Volume</span>
+                    <span className="text-3xl font-extrabold text-emerald-500 mt-2 block">₹{filteredOrders.reduce((sum, o) => sum + (o.amount || 0), 0).toLocaleString()}</span>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                    <span className="block text-slate-400 text-xs font-bold uppercase">Total Commission</span>
+                    <span className="text-3xl font-extrabold text-primary-500 mt-2 block">₹{filteredOrders.reduce((sum, o) => sum + (o.commission || 0), 0).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Toolbar / Search & Filter Controls */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                    <div className="flex flex-1 flex-wrap gap-3 w-full">
+                      {/* Search Bar */}
+                      <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
+                        <Search className="w-5 h-5 text-slate-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Search by Order #, Product, Vendor, or Customer..." 
+                          value={ordersSearchTerm}
+                          onChange={(e) => setOrdersSearchTerm(e.target.value)}
+                          className="bg-transparent focus:outline-none text-sm w-full"
+                        />
+                      </div>
+
+                      {/* Product Filter */}
+                      <select
+                        value={ordersProductFilter}
+                        onChange={(e) => setOrdersProductFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Products</option>
+                        {productOptions.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+
+                      {/* Date Filter */}
+                      <select
+                        value={ordersDateFilter}
+                        onChange={(e) => setOrdersDateFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Time</option>
+                        <option value="Today">Today</option>
+                        <option value="Weekly">Weekly</option>
+                        <option value="Monthly">Monthly</option>
+                      </select>
+
+                      {/* Status Filter */}
+                      <select
+                        value={ordersStatusFilter}
+                        onChange={(e) => setOrdersStatusFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Delivered">Delivered</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Order Number</th>
+                          <th className="px-6 py-4">Vendor</th>
+                          <th className="px-6 py-4">Customer</th>
+                          <th className="px-6 py-4">Product Details</th>
+                          <th className="px-6 py-4">Amount</th>
+                          <th className="px-6 py-4">Commission</th>
+                          <th className="px-6 py-4">Status</th>
+                          <th className="px-6 py-4">Date</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {filteredOrders.map((order) => {
+                          const vName = order.vendorId?.businessName || order.vendorName || order.vendorId?.name || 'Apollo City Hospital';
+                          const pDetails = order.productDetails || order.product_details || order.productName || 'General Product';
+                          return (
+                            <tr key={order._id}>
+                              <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{order.order_number || order.id || 'N/A'}</td>
+                              <td className="px-6 py-4">
+                                <span className="block font-semibold text-slate-850 dark:text-slate-100">{vName}</span>
+                                <span className="text-xs text-slate-400">{order.vendorId?.email || 'vendor@example.com'}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="block font-semibold">{order.customerId?.name || 'Uma Devi'}</span>
+                                <span className="text-xs text-slate-400">{order.customerId?.phone || '1234567890'}</span>
+                              </td>
+                              <td className="px-6 py-4 font-medium text-slate-700 dark:text-slate-300">
+                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs px-2.5 py-1 rounded-md font-semibold inline-block">
+                                  {pDetails}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 font-bold text-emerald-500">₹{order.amount}</td>
+                              <td className="px-6 py-4 font-bold text-primary-500">₹{order.commission}</td>
+                              <td className="px-6 py-4">
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${order.status?.toLowerCase() === 'delivered' || order.status?.toLowerCase() === 'completed' ? 'bg-emerald-500/10 text-emerald-500' : order.status?.toLowerCase() === 'cancelled' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                  {order.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-xs text-slate-400">{new Date(order.createdAt).toLocaleDateString()}</td>
+                            </tr>
+                          );
+                        })}
+                        {filteredOrders.length === 0 && (
+                          <tr>
+                            <td colSpan={8} className="text-center py-8 text-slate-400 text-sm">
+                              No orders found matching search and filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 16. BOOKINGS */}
-          {activeTab === 'bookings' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Bookings Management</h3>
-              </div>
+          {activeTab === 'bookings' && (() => {
+            const filteredBookings = bookings.filter(b => {
+              const vName = b.vendorId?.businessName || b.vendorName || b.vendorId?.name || '';
+              const cName = b.customerId?.name || b.customer_name || '';
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
-                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Bookings</span>
-                  <span className="text-3xl font-extrabold text-slate-800 dark:text-white mt-2 block">{bookings.length}</span>
-                </div>
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
-                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Volume</span>
-                  <span className="text-3xl font-extrabold text-emerald-500 mt-2 block">₹{bookings.reduce((sum, b) => sum + (b.amount || 0), 0).toLocaleString()}</span>
-                </div>
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
-                  <span className="block text-slate-400 text-xs font-bold uppercase">Total Commission</span>
-                  <span className="text-3xl font-extrabold text-primary-500 mt-2 block">₹{bookings.reduce((sum, b) => sum + (b.commission || 0), 0).toLocaleString()}</span>
-                </div>
-              </div>
+              const matchesSearch = !bookingSearchTerm ||
+                vName.toLowerCase().includes(bookingSearchTerm.toLowerCase()) ||
+                cName.toLowerCase().includes(bookingSearchTerm.toLowerCase());
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">Vendor</th>
-                        <th className="px-6 py-4">Customer</th>
-                        <th className="px-6 py-4">Booking Schedule</th>
-                        <th className="px-6 py-4">Amount</th>
-                        <th className="px-6 py-4">Commission</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {bookings.map((booking) => (
-                        <tr key={booking._id}>
-                          <td className="px-6 py-4">
-                            <span className="block font-semibold">{booking.vendorId?.businessName || 'Unknown Vendor'}</span>
-                            <span className="text-xs text-slate-400">{booking.vendorId?.email}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="block font-semibold">{booking.customerId?.name || 'Unknown Customer'}</span>
-                            <span className="text-xs text-slate-400">{booking.customerId?.phone}</span>
-                          </td>
-                          <td className="px-6 py-4 text-xs font-semibold text-slate-750 dark:text-slate-300">
-                            <div>📅 {booking.appointmentDate || (booking.createdAt ? booking.createdAt.substring(0, 10) : 'N/A')}</div>
-                            <div className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold mt-0.5">⌚ {booking.appointmentTimeSlot || 'Standard Slot'}</div>
-                          </td>
-                          <td className="px-6 py-4 font-bold text-emerald-500">₹{booking.amount}</td>
-                          <td className="px-6 py-4 font-bold text-primary-500">₹{booking.commission}</td>
-                          <td className="px-6 py-4">
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize bg-emerald-500/10 text-emerald-500">
-                              {booking.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(booking.createdAt).toLocaleDateString()}</td>
+              const matchesStatus = bookingStatusFilter === 'All' || (b.status || '').toLowerCase() === bookingStatusFilter.toLowerCase();
+
+              let matchesDate = true;
+              if (bookingDateFilter !== 'All' && b.createdAt) {
+                const bDate = new Date(b.createdAt);
+                const now = new Date();
+                if (bookingDateFilter === 'Today') {
+                  matchesDate = bDate.toDateString() === now.toDateString();
+                } else if (bookingDateFilter === 'Weekly') {
+                  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                  matchesDate = bDate >= sevenDaysAgo;
+                } else if (bookingDateFilter === 'Monthly') {
+                  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                  matchesDate = bDate >= thirtyDaysAgo;
+                }
+              }
+
+              return matchesSearch && matchesStatus && matchesDate;
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Bookings Management</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                    <span className="block text-slate-400 text-xs font-bold uppercase">Total Bookings</span>
+                    <span className="text-3xl font-extrabold text-slate-800 dark:text-white mt-2 block">{filteredBookings.length}</span>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                    <span className="block text-slate-400 text-xs font-bold uppercase">Total Volume</span>
+                    <span className="text-3xl font-extrabold text-emerald-500 mt-2 block">₹{filteredBookings.reduce((sum, b) => sum + (b.amount || 0), 0).toLocaleString()}</span>
+                  </div>
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm">
+                    <span className="block text-slate-400 text-xs font-bold uppercase">Total Commission</span>
+                    <span className="text-3xl font-extrabold text-primary-500 mt-2 block">₹{filteredBookings.reduce((sum, b) => sum + (b.commission || 0), 0).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Toolbar / Search & Filter Controls */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                    <div className="flex flex-1 flex-wrap gap-3 w-full">
+                      {/* Search Bar */}
+                      <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
+                        <Search className="w-5 h-5 text-slate-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Search by vendor or customer name..." 
+                          value={bookingSearchTerm}
+                          onChange={(e) => setBookingSearchTerm(e.target.value)}
+                          className="bg-transparent focus:outline-none text-sm w-full"
+                        />
+                      </div>
+
+                      {/* Status Filter */}
+                      <select
+                        value={bookingStatusFilter}
+                        onChange={(e) => setBookingStatusFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Statuses</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Accepted">Accepted</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Cancelled">Cancelled</option>
+                      </select>
+
+                      {/* Date Filter */}
+                      <select
+                        value={bookingDateFilter}
+                        onChange={(e) => setBookingDateFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Time</option>
+                        <option value="Today">Today</option>
+                        <option value="Weekly">Weekly</option>
+                        <option value="Monthly">Monthly</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Vendor</th>
+                          <th className="px-6 py-4">Customer</th>
+                          <th className="px-6 py-4">Booking Schedule</th>
+                          <th className="px-6 py-4">Amount</th>
+                          <th className="px-6 py-4">Commission</th>
+                          <th className="px-6 py-4">Status</th>
+                          <th className="px-6 py-4">Date</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {filteredBookings.map((booking) => {
+                          const vName = booking.vendorId?.businessName || booking.vendorName || booking.vendorId?.name || 'Express Repair Services';
+                          const cName = booking.customerId?.name || booking.customer_name || 'Uma Devi';
+                          return (
+                            <tr key={booking._id}>
+                              <td className="px-6 py-4">
+                                <span className="block font-semibold text-slate-850 dark:text-slate-100">{vName}</span>
+                                <span className="text-xs text-slate-400">{booking.vendorId?.email || 'vendor@example.com'}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="block font-semibold">{cName}</span>
+                                <span className="text-xs text-slate-400">{booking.customerId?.phone || '1234567890'}</span>
+                              </td>
+                              <td className="px-6 py-4 text-xs font-semibold text-slate-750 dark:text-slate-300">
+                                <div>📅 {booking.appointmentDate || (booking.createdAt ? new Date(booking.createdAt).toLocaleDateString() : 'N/A')}</div>
+                                <div className="text-[10px] text-indigo-650 dark:text-indigo-400 font-bold mt-0.5">⌚ {booking.appointmentTimeSlot || 'Standard Slot'}</div>
+                              </td>
+                              <td className="px-6 py-4 font-bold text-emerald-500">₹{booking.amount}</td>
+                              <td className="px-6 py-4 font-bold text-primary-500">₹{booking.commission}</td>
+                              <td className="px-6 py-4">
+                                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${booking.status?.toLowerCase() === 'completed' || booking.status?.toLowerCase() === 'accepted' ? 'bg-emerald-500/10 text-emerald-500' : booking.status?.toLowerCase() === 'cancelled' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                  {booking.status}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-xs text-slate-400">{new Date(booking.createdAt).toLocaleDateString()}</td>
+                            </tr>
+                          );
+                        })}
+                        {filteredBookings.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 text-slate-400 text-sm">
+                              No bookings found matching search and filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 17. JOB APPLIED */}
           {activeTab === 'jobs' && (
@@ -3019,128 +3474,315 @@ function App() {
           )}
 
           {/* 18. MEMBERSHIP CARD HOLDER */}
-          {activeTab === 'card-holders' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Membership Card Holders</h3>
-                <button 
-                  onClick={() => setShowModal('card-holder')}
-                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
-                >
-                  Add Card Holder
-                </button>
-              </div>
+          {activeTab === 'card-holders' && (() => {
+            const filteredHolders = cardHolders.filter(h => {
+              const matchesSearch = !cardHolderSearchTerm ||
+                (h.name || '').toLowerCase().includes(cardHolderSearchTerm.toLowerCase()) ||
+                (h.email || '').toLowerCase().includes(cardHolderSearchTerm.toLowerCase()) ||
+                (h.phone || '').includes(cardHolderSearchTerm);
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">Name</th>
-                        <th className="px-6 py-4">Card Info</th>
-                        <th className="px-6 py-4">Expiry</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {cardHolders.map((holder) => (
-                        <tr key={holder._id}>
-                          <td className="px-6 py-4">
-                            <span className="block font-bold text-slate-800 dark:text-slate-200">{holder.name}</span>
-                            <span className="text-xs text-slate-400">{holder.email} | {holder.phone}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${holder.cardType === 'Platinum' ? 'bg-purple-500/10 text-purple-500' : holder.cardType === 'Gold' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-400/10 text-slate-400'}`}>
-                              {holder.cardType}
-                            </span>
-                            <span className="block font-mono text-[10px] text-slate-400 mt-1">{holder.cardNumber}</span>
-                          </td>
-                          <td className="px-6 py-4 text-xs">{new Date(holder.expiryDate).toLocaleDateString()}</td>
-                          <td className="px-6 py-4">
-                            <select 
-                              value={holder.status} 
-                              onChange={(e) => executeAction(`/admin/card-holders/${holder._id}`, 'PUT', { status: e.target.value })}
-                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
-                            >
-                              <option value="active">Active</option>
-                              <option value="expired">Expired</option>
-                              <option value="suspended">Suspended</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => executeAction(`/admin/card-holders/${holder._id}`, 'DELETE')}
-                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
-                            >
-                              Delete
-                            </button>
-                          </td>
+              const matchesType = cardHolderTypeFilter === 'All' || (h.cardType || '').toLowerCase() === cardHolderTypeFilter.toLowerCase();
+
+              const matchesStatus = cardHolderStatusFilter === 'All' || (h.status || '').toLowerCase() === cardHolderStatusFilter.toLowerCase();
+
+              let matchesExpiry = true;
+              if (cardHolderExpiryFilter !== 'All' && h.expiryDate) {
+                const expDate = new Date(h.expiryDate);
+                const now = new Date();
+                if (cardHolderExpiryFilter === 'Expired') {
+                  matchesExpiry = expDate < now;
+                } else if (cardHolderExpiryFilter === 'Active') {
+                  matchesExpiry = expDate >= now;
+                }
+              }
+
+              return matchesSearch && matchesType && matchesStatus && matchesExpiry;
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Membership Card Holders</h3>
+                  <button 
+                    onClick={() => setShowModal('card-holder')}
+                    className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
+                  >
+                    Add Card Holder
+                  </button>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                    <div className="flex flex-1 flex-wrap gap-3 w-full">
+                      {/* Search Bar */}
+                      <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
+                        <Search className="w-5 h-5 text-slate-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Search by name, email, or phone number..." 
+                          value={cardHolderSearchTerm}
+                          onChange={(e) => setCardHolderSearchTerm(e.target.value)}
+                          className="bg-transparent focus:outline-none text-sm w-full"
+                        />
+                      </div>
+
+                      {/* Card Type Filter */}
+                      <select
+                        value={cardHolderTypeFilter}
+                        onChange={(e) => setCardHolderTypeFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Card Types</option>
+                        <option value="Silver">Silver</option>
+                        <option value="Gold">Gold</option>
+                        <option value="Platinum">Platinum</option>
+                      </select>
+
+                      {/* Status Filter */}
+                      <select
+                        value={cardHolderStatusFilter}
+                        onChange={(e) => setCardHolderStatusFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Statuses</option>
+                        <option value="active">Active</option>
+                        <option value="expired">Expired</option>
+                      </select>
+
+                      {/* Expiry Date Filter */}
+                      <select
+                        value={cardHolderExpiryFilter}
+                        onChange={(e) => setCardHolderExpiryFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Expiry Dates</option>
+                        <option value="Active">Valid / Active</option>
+                        <option value="Expired">Already Expired</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Name</th>
+                          <th className="px-6 py-4">Card Info</th>
+                          <th className="px-6 py-4">Expiry</th>
+                          <th className="px-6 py-4">Status</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {filteredHolders.map((holder) => (
+                          <tr key={holder._id}>
+                            <td className="px-6 py-4">
+                              <span className="block font-bold text-slate-800 dark:text-slate-200">{holder.name}</span>
+                              <span className="text-xs text-slate-400">{holder.email} | {holder.phone}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${holder.cardType === 'Platinum' ? 'bg-purple-500/10 text-purple-500' : holder.cardType === 'Gold' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-400/10 text-slate-400'}`}>
+                                {holder.cardType}
+                              </span>
+                              <span className="block font-mono text-[10px] text-slate-400 mt-1">{holder.cardNumber}</span>
+                            </td>
+                            <td className="px-6 py-4 text-xs font-medium text-slate-600 dark:text-slate-300">{new Date(holder.expiryDate).toLocaleDateString()}</td>
+                            <td className="px-6 py-4">
+                              <select 
+                                value={holder.status} 
+                                onChange={(e) => executeAction(`/admin/card-holders/${holder._id}`, 'PUT', { status: e.target.value })}
+                                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1 font-semibold"
+                              >
+                                <option value="active">Active</option>
+                                <option value="expired">Expired</option>
+                                <option value="suspended">Suspended</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              <button 
+                                onClick={() => executeAction(`/admin/card-holders/${holder._id}`, 'DELETE')}
+                                className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredHolders.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="text-center py-8 text-slate-400 text-sm">
+                              No card holders found matching search and filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 19. PAYMENTS */}
-          {activeTab === 'payments' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Payments & Transactions</h3>
-                <button 
-                  onClick={() => setShowModal('payment')}
-                  className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
-                >
-                  Record Payment
-                </button>
-              </div>
+          {activeTab === 'payments' && (() => {
+            const filteredPayments = payments.filter(p => {
+              const userName = p.userId?.name || 'Super Admin';
+              const titleVal = p.title || '';
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">User</th>
-                        <th className="px-6 py-4">Transaction Details</th>
-                        <th className="px-6 py-4">Amount</th>
-                        <th className="px-6 py-4">Type</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Date</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {payments.map((p) => (
-                        <tr key={p._id}>
-                          <td className="px-6 py-4">
-                            <span className="block font-bold text-slate-800 dark:text-slate-200">{p.userId?.name || 'Super Admin'}</span>
-                            <span className="text-[10px] text-slate-400 uppercase">{p.userId?.role || 'admin'}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="block font-semibold">{p.title}</span>
-                          </td>
-                          <td className="px-6 py-4 font-bold text-slate-800 dark:text-white">₹{p.amount}</td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${p.type === 'credit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
-                              {p.type}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${p.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                              {p.status}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</td>
+              const matchesSearch = !paymentSearchTerm ||
+                userName.toLowerCase().includes(paymentSearchTerm.toLowerCase()) ||
+                titleVal.toLowerCase().includes(paymentSearchTerm.toLowerCase());
+
+              const matchesType = paymentTypeFilter === 'All' || (p.type || '').toLowerCase() === paymentTypeFilter.toLowerCase();
+
+              const matchesStatus = paymentStatusFilter === 'All' || (p.status || '').toLowerCase() === paymentStatusFilter.toLowerCase();
+
+              let matchesDate = true;
+              if (paymentDateFilter !== 'All' && p.createdAt) {
+                const pDate = new Date(p.createdAt);
+                const now = new Date();
+                if (paymentDateFilter === 'Today') {
+                  matchesDate = pDate.toDateString() === now.toDateString();
+                } else if (paymentDateFilter === 'Weekly') {
+                  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                  matchesDate = pDate >= sevenDaysAgo;
+                } else if (paymentDateFilter === 'Monthly') {
+                  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                  matchesDate = pDate >= thirtyDaysAgo;
+                }
+              }
+
+              return matchesSearch && matchesType && matchesStatus && matchesDate;
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Payments & Transactions</h3>
+                  <button 
+                    onClick={() => setShowModal('payment')}
+                    className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
+                  >
+                    Record Payment
+                  </button>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                    <div className="flex flex-1 flex-wrap gap-3 w-full">
+                      {/* Search Bar */}
+                      <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
+                        <Search className="w-5 h-5 text-slate-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Search by user name or transaction details..." 
+                          value={paymentSearchTerm}
+                          onChange={(e) => setPaymentSearchTerm(e.target.value)}
+                          className="bg-transparent focus:outline-none text-sm w-full"
+                        />
+                      </div>
+
+                      {/* Type Filter */}
+                      <select
+                        value={paymentTypeFilter}
+                        onChange={(e) => setPaymentTypeFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Types</option>
+                        <option value="credit">Credit</option>
+                        <option value="debit">Debit</option>
+                      </select>
+
+                      {/* Status Filter */}
+                      <select
+                        value={paymentStatusFilter}
+                        onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Statuses</option>
+                        <option value="completed">Completed</option>
+                        <option value="pending">Pending</option>
+                        <option value="failed">Failed</option>
+                      </select>
+
+                      {/* Date Filter */}
+                      <select
+                        value={paymentDateFilter}
+                        onChange={(e) => setPaymentDateFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Time</option>
+                        <option value="Today">Today</option>
+                        <option value="Weekly">Weekly</option>
+                        <option value="Monthly">Monthly</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">User</th>
+                          <th className="px-6 py-4">Transaction Details</th>
+                          <th className="px-6 py-4">Amount</th>
+                          <th className="px-6 py-4">Type</th>
+                          <th className="px-6 py-4">Status</th>
+                          <th className="px-6 py-4">Date</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {filteredPayments.map((p) => (
+                          <tr key={p._id}>
+                            <td className="px-6 py-4">
+                              <span className="block font-bold text-slate-800 dark:text-slate-200">{p.userId?.name || 'Super Admin'}</span>
+                              <span className="text-[10px] text-slate-400 uppercase">{p.userId?.role || 'admin'}</span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className="block font-semibold">{p.title}</span>
+                            </td>
+                            <td className="px-6 py-4 font-bold text-slate-800 dark:text-white">₹{p.amount}</td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${p.type === 'credit' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                                {p.type}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${p.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500' : p.status === 'failed' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                {p.status}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-xs text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</td>
+                            <td className="px-6 py-4 text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <button 
+                                  onClick={() => {
+                                    setModalData(p);
+                                    setShowModal('edit-payment');
+                                  }}
+                                  className="text-primary-600 dark:text-primary-400 hover:underline text-xs font-bold flex items-center gap-1"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" /> Edit
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredPayments.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 text-slate-400 text-sm">
+                              No payment transactions found matching search and filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 20. DELIVERY PARTNER */}
           {activeTab === 'delivery-partners' && (
@@ -4173,62 +4815,136 @@ function App() {
           })()}
 
           {/* 23. QUERIES */}
-          {activeTab === 'queries' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Customer Inquiries & Queries</h3>
-              </div>
+          {activeTab === 'queries' && (() => {
+            const filteredQueries = queries.filter(q => {
+              const uType = q.userType || q.role || 'Customer';
+              
+              const matchesSearch = !querySearchTerm ||
+                (q.name || '').toLowerCase().includes(querySearchTerm.toLowerCase()) ||
+                (q.email || '').toLowerCase().includes(querySearchTerm.toLowerCase()) ||
+                (q.subject || '').toLowerCase().includes(querySearchTerm.toLowerCase()) ||
+                (q.message || '').toLowerCase().includes(querySearchTerm.toLowerCase());
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">From</th>
-                        <th className="px-6 py-4">Query Details</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {queries.map((q) => (
-                        <tr key={q._id}>
-                          <td className="px-6 py-4">
-                            <span className="block font-bold text-slate-800 dark:text-slate-200">{q.name}</span>
-                            <span className="text-xs text-slate-400">{q.email} | {q.phone || 'N/A'}</span>
-                          </td>
-                          <td className="px-6 py-4 space-y-1">
-                            <span className="block font-bold text-primary-500">{q.subject}</span>
-                            <p className="text-xs text-slate-600 dark:text-slate-400 italic max-w-md whitespace-pre-line">"{q.message}"</p>
-                            <span className="block text-[10px] text-slate-400">{new Date(q.createdAt).toLocaleString()}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <select 
-                              value={q.status} 
-                              onChange={(e) => executeAction(`/admin/queries/${q._id}`, 'PUT', { status: e.target.value })}
-                              className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
-                            >
-                              <option value="unread">Unread</option>
-                              <option value="read">Read</option>
-                              <option value="resolved">Resolved</option>
-                            </select>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <button 
-                              onClick={() => executeAction(`/admin/queries/${q._id}`, 'DELETE')}
-                              className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
-                            >
-                              Delete
-                            </button>
-                          </td>
+              const matchesUserType = queryUserTypeFilter === 'All' || uType.toLowerCase() === queryUserTypeFilter.toLowerCase();
+
+              const matchesStatus = queryStatusFilter === 'All' || (q.status || '').toLowerCase() === queryStatusFilter.toLowerCase();
+
+              return matchesSearch && matchesUserType && matchesStatus;
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Customer & Partner Queries</h3>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                    <div className="flex flex-1 flex-wrap gap-3 w-full">
+                      {/* Search Bar */}
+                      <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
+                        <Search className="w-5 h-5 text-slate-400" />
+                        <input 
+                          type="text" 
+                          placeholder="Search by name, email, or query content..." 
+                          value={querySearchTerm}
+                          onChange={(e) => setQuerySearchTerm(e.target.value)}
+                          className="bg-transparent focus:outline-none text-sm w-full"
+                        />
+                      </div>
+
+                      {/* User Type Filter */}
+                      <select
+                        value={queryUserTypeFilter}
+                        onChange={(e) => setQueryUserTypeFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All User Types</option>
+                        <option value="Customer">Customer</option>
+                        <option value="Vendor">Vendor</option>
+                        <option value="Agent">Agent</option>
+                      </select>
+
+                      {/* Status Filter */}
+                      <select
+                        value={queryStatusFilter}
+                        onChange={(e) => setQueryStatusFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Statuses</option>
+                        <option value="unread">Unread</option>
+                        <option value="read">Read</option>
+                        <option value="resolved">Resolved</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">From</th>
+                          <th className="px-6 py-4">User Type</th>
+                          <th className="px-6 py-4">Query Details</th>
+                          <th className="px-6 py-4">Status</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {filteredQueries.map((q) => {
+                          const uType = q.userType || q.role || 'Customer';
+                          return (
+                            <tr key={q._id}>
+                              <td className="px-6 py-4">
+                                <span className="block font-bold text-slate-800 dark:text-slate-200">{q.name}</span>
+                                <span className="text-xs text-slate-400">{q.email} | {q.phone || 'N/A'}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold capitalize ${uType === 'Vendor' ? 'bg-amber-500/10 text-amber-500' : uType === 'Agent' ? 'bg-purple-500/10 text-purple-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                                  {uType}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 space-y-1">
+                                <span className="block font-bold text-primary-500">{q.subject}</span>
+                                <p className="text-xs text-slate-600 dark:text-slate-400 italic max-w-md whitespace-pre-line">"{q.message}"</p>
+                                <span className="block text-[10px] text-slate-400">{new Date(q.createdAt).toLocaleString()}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <select 
+                                  value={q.status} 
+                                  onChange={(e) => executeAction(`/admin/queries/${q._id}`, 'PUT', { status: e.target.value })}
+                                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1 font-semibold"
+                                >
+                                  <option value="unread">Unread</option>
+                                  <option value="read">Read</option>
+                                  <option value="resolved">Resolved</option>
+                                </select>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <button 
+                                  onClick={() => executeAction(`/admin/queries/${q._id}`, 'DELETE')}
+                                  className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
+                                >
+                                  Delete
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {filteredQueries.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="text-center py-8 text-slate-400 text-sm">
+                              No queries found matching search and filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 24. SUPPORT */}
           {activeTab === 'tickets' && (
@@ -6213,6 +6929,180 @@ function App() {
               <div className="flex gap-2 justify-end pt-4">
                 <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
                 <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* BANK DETAILS MODAL */}
+      {showModal === 'bank-details' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Bank Details & Pay-out Info</h3>
+                <p className="text-xs text-slate-400">Withdrawal Request #{String(modalData._id).substring(0, 8)}</p>
+              </div>
+              <button onClick={() => setShowModal(null)} className="p-1 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850">
+                <div>
+                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Account Holder Name</span>
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{modalData.accountHolderName || modalData.agentId?.name || 'Amit Sharma'}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Bank Name</span>
+                  <span className="text-sm font-bold text-primary-500 block mt-0.5">{modalData.bankName || 'HDFC Bank'}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850">
+                <div>
+                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Account Number</span>
+                  <span className="text-sm font-mono font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{modalData.accountNumber || '987654321098'}</span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400 uppercase font-bold">IFSC Code</span>
+                  <span className="text-sm font-mono font-bold text-emerald-500 block mt-0.5">{modalData.ifscCode || 'HDFC0001234'}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 text-xs">
+                <p><strong>Branch Name:</strong> {modalData.branchName || 'Connaught Place, New Delhi'}</p>
+                <p><strong>Withdrawal Amount:</strong> <span className="text-rose-500 font-extrabold text-base">₹{modalData.amount}</span></p>
+                <p><strong>Request Date:</strong> {new Date(modalData.createdAt).toLocaleString()}</p>
+                <p><strong>Status:</strong> <span className="capitalize font-bold text-slate-700 dark:text-slate-200">{modalData.status}</span></p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button 
+                type="button" 
+                onClick={() => setShowModal(null)} 
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold px-4 py-2.5 rounded-xl"
+              >
+                Close
+              </button>
+              {modalData.status === 'pending' && (
+                <>
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      await executeAction(`/admin/wallet/withdrawals/${modalData._id}`, 'PUT', { status: 'rejected' });
+                      setShowModal(null);
+                    }} 
+                    className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold px-4 py-2.5 rounded-xl"
+                  >
+                    Reject Request
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={async () => {
+                      await executeAction(`/admin/wallet/withdrawals/${modalData._id}`, 'PUT', { status: 'approved' });
+                      setShowModal(null);
+                    }} 
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md"
+                  >
+                    Approve Pay-out
+                  </button>
+                </>
+              )}
+              {modalData.status === 'approved' && (
+                <button 
+                  type="button" 
+                  onClick={async () => {
+                    await executeAction(`/admin/wallet/withdrawals/${modalData._id}`, 'PUT', { status: 'completed' });
+                    setShowModal(null);
+                  }} 
+                  className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md"
+                >
+                  Mark as Completed
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT PAYMENT TRANSACTION MODAL */}
+      {showModal === 'edit-payment' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Edit Payment Transaction</h3>
+              <button onClick={() => setShowModal(null)} className="p-1 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form 
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const title = e.target.title.value;
+                const amount = Number(e.target.amount.value);
+                const type = e.target.type.value;
+                const status = e.target.status.value;
+                await executeAction(`/admin/payments/${modalData._id}`, 'PUT', { title, amount, type, status });
+                setShowModal(null);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Transaction Title / Details</label>
+                <input 
+                  name="title" 
+                  defaultValue={modalData.title || ''} 
+                  required 
+                  type="text" 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-semibold" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Amount (₹)</label>
+                <input 
+                  name="amount" 
+                  defaultValue={modalData.amount || 0} 
+                  required 
+                  type="number" 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-bold" 
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Transaction Type</label>
+                  <select 
+                    name="type" 
+                    defaultValue={modalData.type || 'credit'} 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold"
+                  >
+                    <option value="credit">Credit</option>
+                    <option value="debit">Debit</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Payment Status</label>
+                  <select 
+                    name="status" 
+                    defaultValue={modalData.status || 'completed'} 
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold"
+                  >
+                    <option value="completed">Completed</option>
+                    <option value="pending">Pending</option>
+                    <option value="failed">Failed</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold px-4 py-2.5 rounded-xl">Cancel</button>
+                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md">Save Changes</button>
               </div>
             </form>
           </div>

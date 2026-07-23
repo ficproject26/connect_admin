@@ -7,6 +7,7 @@ const QuerySchema = new mongoose.Schema({
     subject: { type: String, required: true },
     message: { type: String, required: true },
     status: { type: String, enum: ['unread', 'read', 'resolved'], default: 'unread' },
+    userType: { type: String, enum: ['Customer', 'Vendor', 'Agent'], default: 'Customer' },
     createdAt: { type: Date, default: Date.now }
 });
 
