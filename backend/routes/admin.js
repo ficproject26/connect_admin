@@ -2030,13 +2030,13 @@ const buildCategoryTree = async () => {
     return roots;
 };
 
-// GET full category tree (PUBLIC — no auth required)
+// GET all categories
 router.get('/categories', async (req, res) => {
     try {
-        const tree = await buildCategoryTree();
-        res.json(tree);
+        const categories = await Category.find().sort({ sortOrder: 1, name: 1 }).lean();
+        res.json(categories);
     } catch (err) {
-        console.error('Error fetching category tree:', err);
+        console.error('Error fetching categories:', err);
         res.status(500).json({ error: err.message || 'Server error' });
     }
 });
