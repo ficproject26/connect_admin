@@ -25,6 +25,7 @@ const Query = require('../models/Query');
 const SupportTicket = require('../models/SupportTicket');
 const Announcement = require('../models/Announcement');
 const ExclusiveOffer = require('../models/ExclusiveOffer');
+const Category = require('../models/Category');
 
 const adminAuth = async (req, res, next) => {
     try {
