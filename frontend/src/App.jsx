@@ -4228,28 +4228,67 @@ function App() {
               }
             });
 
-            // 2. Merge database categories strictly under the 7 Main Categories
+            // 2. Collect Deletion Markers from Database
+            const allSubDeletedMains = new Set();
+            const allChildDeletedSubs = new Set();
+            const deletedSubSet = new Set();
+            const deletedChildSet = new Set();
+
             (categories || []).forEach(c => {
-              let mainName = SYSTEM_MAIN_CATS.find(m => m.toLowerCase() === (c.name || '').toLowerCase());
-              
               if (c.isDeleted || c.description === 'DELETED_HIERARCHY_MARKER') {
-                const targetMain = mainName || c.name;
-                if (catTree[targetMain]) {
-                  if (c.subcategory === 'ALL_SUBCATEGORIES_DELETED_MARKER') {
-                    catTree[targetMain].subcategories = {};
-                  } else if (c.subcategory && catTree[targetMain].subcategories?.[c.subcategory]) {
-                    if (c.subSubcategory === 'ALL_CHILD_DELETED_MARKER') {
-                      catTree[targetMain].subcategories[c.subcategory].childCategories = [];
-                    } else if (c.subSubcategory) {
-                      catTree[targetMain].subcategories[c.subcategory].childCategories = 
-                        (catTree[targetMain].subcategories[c.subcategory].childCategories || []).filter(ch => ch.name !== c.subSubcategory);
-                    } else {
-                      delete catTree[targetMain].subcategories[c.subcategory];
-                    }
+                let mName = SYSTEM_MAIN_CATS.find(m => m.toLowerCase() === (c.name || '').toLowerCase()) || c.name || '';
+                
+                if (c.subcategory === 'ALL_SUBCATEGORIES_DELETED_MARKER') {
+                  if (mName) allSubDeletedMains.add(mName.toLowerCase());
+                } else if (c.subSubcategory === 'ALL_CHILD_DELETED_MARKER') {
+                  if (mName && c.subcategory) {
+                    allChildDeletedSubs.add(`${mName.toLowerCase()}::${c.subcategory.toLowerCase()}`);
+                  }
+                } else if (c.subSubcategory) {
+                  if (mName && c.subcategory) {
+                    deletedChildSet.add(`${mName.toLowerCase()}::${c.subcategory.toLowerCase()}::${c.subSubcategory.toLowerCase()}`);
+                  }
+                } else if (c.subcategory) {
+                  if (mName) {
+                    deletedSubSet.add(`${mName.toLowerCase()}::${c.subcategory.toLowerCase()}`);
                   }
                 }
+              }
+            });
+
+            // 3. Apply Deletion Markers to initial catTree
+            SYSTEM_MAIN_CATS.forEach(mainName => {
+              const mainLower = mainName.toLowerCase();
+              if (allSubDeletedMains.has(mainLower)) {
+                catTree[mainName].subcategories = {};
                 return;
               }
+
+              Object.keys(catTree[mainName].subcategories).forEach(subName => {
+                const subKey = `${mainLower}::${subName.toLowerCase()}`;
+                
+                if (deletedSubSet.has(subKey)) {
+                  delete catTree[mainName].subcategories[subName];
+                  return;
+                }
+
+                if (allChildDeletedSubs.has(subKey)) {
+                  catTree[mainName].subcategories[subName].childCategories = [];
+                } else {
+                  catTree[mainName].subcategories[subName].childCategories = 
+                    (catTree[mainName].subcategories[subName].childCategories || []).filter(ch => {
+                      const childKey = `${subKey}::${ch.name.toLowerCase()}`;
+                      return !deletedChildSet.has(childKey);
+                    });
+                }
+              });
+            });
+
+            // 4. Merge active database category overrides & additions
+            (categories || []).forEach(c => {
+              if (c.isDeleted || c.description === 'DELETED_HIERARCHY_MARKER') return;
+
+              let mainName = SYSTEM_MAIN_CATS.find(m => m.toLowerCase() === (c.name || '').toLowerCase());
 
               // If it's a main category doc matching one of our 7 main categories
               if (mainName && (!c.subcategory || c.subcategory === mainName) && !c.subSubcategory) {
@@ -4261,7 +4300,6 @@ function App() {
 
               // Find target main category for sub/child items
               if (!mainName && c.subcategory) {
-                // Try finding parent main category
                 mainName = SYSTEM_MAIN_CATS.find(m => {
                   const subData = TAXONOMY[m];
                   return subData && (Array.isArray(subData) ? subData.includes(c.name) : Object.keys(subData).includes(c.name) || Object.keys(subData).includes(c.subcategory));
@@ -4269,9 +4307,20 @@ function App() {
               }
 
               const targetMainName = mainName || "Products";
+              const targetMainLower = targetMainName.toLowerCase();
+
+              // If all subcategories were batch-deleted for this main category, do not re-add
+              if (allSubDeletedMains.has(targetMainLower)) return;
+
               if (catTree[targetMainName]) {
                 const subName = c.subcategory || (c.level === 'sub' ? c.name : '');
                 if (subName) {
+                  const subLower = subName.toLowerCase();
+                  const subKey = `${targetMainLower}::${subLower}`;
+
+                  // If this subcategory was deleted, do not re-add
+                  if (deletedSubSet.has(subKey)) return;
+
                   if (!catTree[targetMainName].subcategories[subName]) {
                     catTree[targetMainName].subcategories[subName] = {
                       _id: c._id,
@@ -4288,8 +4337,14 @@ function App() {
 
                   const childName = c.subSubcategory || (c.level === 'child' ? c.name : '');
                   if (childName && childName !== subName) {
+                    // If all child categories were batch-deleted for this subcategory, do not re-add child
+                    if (allChildDeletedSubs.has(subKey)) return;
+
+                    const childKey = `${subKey}::${childName.toLowerCase()}`;
+                    if (deletedChildSet.has(childKey)) return;
+
                     const childArr = catTree[targetMainName].subcategories[subName].childCategories;
-                    const existingIdx = childArr.findIndex(ch => ch.name === childName);
+                    const existingIdx = childArr.findIndex(ch => ch.name.toLowerCase() === childName.toLowerCase());
                     if (existingIdx >= 0) {
                       childArr[existingIdx] = {
                         _id: c._id,
