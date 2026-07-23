@@ -31,6 +31,11 @@ const CategorySchema = new mongoose.Schema({
     // Description
     description: { type: String, default: '' },
 
+    // Legacy hierarchy & deletion marker fields
+    isDeleted: { type: Boolean, default: false },
+    subcategory: { type: String, default: '' },
+    subSubcategory: { type: String, default: '' },
+
     // Display order within its parent group
     sortOrder: { type: Number, default: 0 },
 

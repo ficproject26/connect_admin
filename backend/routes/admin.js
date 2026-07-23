@@ -2259,6 +2259,10 @@ router.delete('/categories/:id', [auth, adminAuth], async (req, res) => {
 router.delete('/categories-hierarchy', [auth, adminAuth], async (req, res) => {
     try {
         const { name, subcategory, subSubcategory } = req.query;
+        const targetName = subSubcategory || subcategory || name || 'deleted';
+        const levelVal = subSubcategory ? 'child' : (subcategory ? 'sub' : 'main');
+        const slugVal = slugify(targetName + '-' + Date.now());
+
         const filter = {};
         if (name) filter.name = name;
         if (subcategory) filter.subcategory = subcategory;
@@ -2269,9 +2273,11 @@ router.delete('/categories-hierarchy', [auth, adminAuth], async (req, res) => {
             await Category.deleteMany(filter);
         }
 
-        // 2. Insert deletion marker so predefined TAXONOMY entries also stay deleted
+        // 2. Insert deletion marker with required level & slug
         const deletionMarker = new Category({
-            name: name || '',
+            name: name || targetName,
+            level: levelVal,
+            slug: slugVal,
             subcategory: subcategory || '',
             subSubcategory: subSubcategory || '',
             isActive: false,
