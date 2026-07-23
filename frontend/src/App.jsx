@@ -3220,7 +3220,7 @@ function App() {
                           <th className="px-6 py-4">Order Number</th>
                           <th className="px-6 py-4">Vendor</th>
                           <th className="px-6 py-4">Customer</th>
-                          <th className="px-6 py-4">Product Details</th>
+                          <th className="px-6 py-4">Service / Product Details</th>
                           <th className="px-6 py-4">Amount</th>
                           <th className="px-6 py-4">Commission</th>
                           <th className="px-6 py-4">Status</th>
@@ -3230,7 +3230,7 @@ function App() {
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {filteredOrders.map((order) => {
                           const vName = order.vendorId?.businessName || order.vendorName || order.vendorId?.name || 'Apollo City Hospital';
-                          const pDetails = order.productDetails || order.product_details || order.productName || 'General Product';
+                          const pDetails = order.serviceName || order.service || order.productDetails || order.product_details || order.productName || 'General Product / Service';
                           return (
                             <tr key={order._id}>
                               <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{order.order_number || order.id || 'N/A'}</td>
@@ -3373,6 +3373,7 @@ function App() {
                         <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
                           <th className="px-6 py-4">Vendor</th>
                           <th className="px-6 py-4">Customer</th>
+                          <th className="px-6 py-4">Service</th>
                           <th className="px-6 py-4">Booking Schedule</th>
                           <th className="px-6 py-4">Amount</th>
                           <th className="px-6 py-4">Commission</th>
@@ -3384,6 +3385,8 @@ function App() {
                         {filteredBookings.map((booking) => {
                           const vName = booking.vendorId?.businessName || booking.vendorName || booking.vendorId?.name || 'Express Repair Services';
                           const cName = booking.customerId?.name || booking.customer_name || 'Uma Devi';
+                          const serviceVal = booking.serviceName || booking.service || booking.serviceType || booking.product_details || booking.productDetails || booking.category || 'AC Repair & Maintenance Service';
+                          const categoryVal = booking.category || 'Services';
                           return (
                             <tr key={booking._id}>
                               <td className="px-6 py-4">
@@ -3393,6 +3396,12 @@ function App() {
                               <td className="px-6 py-4">
                                 <span className="block font-semibold">{cName}</span>
                                 <span className="text-xs text-slate-400">{booking.customerId?.phone || '1234567890'}</span>
+                              </td>
+                              <td className="px-6 py-4 font-medium text-slate-700 dark:text-slate-300">
+                                <span className="bg-primary-50 dark:bg-primary-950/40 text-primary-600 dark:text-primary-400 border border-primary-200 dark:border-primary-900/40 px-2.5 py-1 rounded-md text-xs font-bold inline-block">
+                                  {serviceVal}
+                                </span>
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase mt-0.5">{categoryVal}</span>
                               </td>
                               <td className="px-6 py-4 text-xs font-semibold text-slate-750 dark:text-slate-300">
                                 <div>📅 {booking.appointmentDate || (booking.createdAt ? new Date(booking.createdAt).toLocaleDateString() : 'N/A')}</div>
@@ -3411,7 +3420,7 @@ function App() {
                         })}
                         {filteredBookings.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="text-center py-8 text-slate-400 text-sm">
+                            <td colSpan={8} className="text-center py-8 text-slate-400 text-sm">
                               No bookings found matching search and filters.
                             </td>
                           </tr>
