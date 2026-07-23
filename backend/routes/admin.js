@@ -874,12 +874,12 @@ router.get('/wallet/withdrawals', [auth, adminAuth], async (req, res) => {
 
             return {
                 ...doc,
-                accountHolderName: doc.accountHolderName || bank.accountHolderName || agent.name || 'Amit Sharma',
-                bankName: doc.bankName || bank.bankName || 'HDFC Bank',
-                accountNumber: doc.accountNumber || bank.accountNumber || '987654321098',
-                ifscCode: doc.ifscCode || bank.ifscCode || 'HDFC0001234',
-                branchName: doc.branchName || bank.branchName || 'Connaught Place, New Delhi',
-                amount: doc.amount || 5000,
+                accountHolderName: doc.accountHolderName || bank.accountHolderName || agent.name || 'N/A',
+                bankName: doc.bankName || bank.bankName || 'N/A',
+                accountNumber: doc.accountNumber || bank.accountNumber || 'N/A',
+                ifscCode: doc.ifscCode || bank.ifscCode || 'N/A',
+                branchName: doc.branchName || bank.branchName || 'N/A',
+                amount: doc.amount || 0,
                 status: doc.status || 'pending',
                 createdAt: doc.createdAt || new Date()
             };
@@ -1503,7 +1503,7 @@ const resolveVendorAndCustomer = async (items) => {
                     const matchedBiz = (dbVendorUser.businesses || []).find(b => b._id && b._id.toString() === vendor.toString());
                     vendor = {
                         _id: dbVendorUser._id,
-                        businessName: matchedBiz?.businessName || dbVendorUser.businessName || dbVendorUser.name || explicitVendorName || 'Apollo City Hospital',
+                        businessName: matchedBiz?.businessName || dbVendorUser.businessName || dbVendorUser.name || explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A'),
                         name: dbVendorUser.name,
                         email: dbVendorUser.email,
                         mobileNumber: dbVendorUser.mobileNumber || 'N/A'
@@ -1527,16 +1527,16 @@ const resolveVendorAndCustomer = async (items) => {
                         vendor = fallbackVendorDoc.toObject();
                     } else {
                         vendor = {
-                            businessName: 'Apollo City Hospital',
-                            email: 'vendor@example.com',
-                            mobileNumber: '9876543220'
+                            businessName: 'N/A',
+                            email: 'N/A',
+                            mobileNumber: 'N/A'
                         };
                     }
                 }
             } catch (e) {
                 console.error("Resolve vendor failed:", e);
                 vendor = {
-                    businessName: explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'Apollo City Hospital'),
+                    businessName: explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A'),
                     email: 'N/A',
                     mobileNumber: 'N/A'
                 };
@@ -1552,16 +1552,16 @@ const resolveVendorAndCustomer = async (items) => {
                 vendor = fallbackVendorDoc.toObject();
             } else {
                 vendor = {
-                    businessName: 'Apollo City Hospital',
-                    email: 'vendor@example.com',
-                    mobileNumber: '9876543220'
+                    businessName: 'N/A',
+                    email: 'N/A',
+                    mobileNumber: 'N/A'
                 };
             }
         }
 
-        // Ensure businessName is never "Unknown Vendor"
-        if (!vendor.businessName || vendor.businessName === 'Unknown Vendor') {
-            vendor.businessName = explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'Apollo City Hospital');
+        // Ensure businessName is set
+        if (!vendor.businessName) {
+            vendor.businessName = explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A');
         }
 
         // 2. Resolve Customer
@@ -1595,9 +1595,9 @@ const resolveVendorAndCustomer = async (items) => {
                 }
             } else {
                 customer = {
-                    name: 'Uma Devi',
-                    phone: '1234567890',
-                    email: 'uma@example.com'
+                    name: 'N/A',
+                    phone: 'N/A',
+                    email: 'N/A'
                 };
             }
         } else if (typeof customer === 'string') {
@@ -1998,14 +1998,260 @@ router.delete('/support-team/:id', [auth, adminAuth], async (req, res) => {
     }
 });
 
-// GET all categories
+// ==========================================
+// CATEGORY MANAGEMENT — Hierarchical 3-Tier System
+// Main Categories are SYSTEM-LOCKED (isSystem: true)
+// Admin can only manage Sub Categories and Child Categories
+// ==========================================
+
+const slugify = (str) => str.toLowerCase().replace(/[&]/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+// Helper: build full category tree
+const buildCategoryTree = async () => {
+    const all = await Category.find().sort({ sortOrder: 1, name: 1 }).lean();
+    const map = {};
+    const roots = [];
+
+    // Index all categories by _id
+    all.forEach(c => {
+        c.children = [];
+        map[c._id.toString()] = c;
+    });
+
+    // Build parent-child relationships
+    all.forEach(c => {
+        if (c.parentId && map[c.parentId.toString()]) {
+            map[c.parentId.toString()].children.push(c);
+        } else if (!c.parentId) {
+            roots.push(c);
+        }
+    });
+
+    return roots;
+};
+
+// GET full category tree (PUBLIC — no auth required)
 router.get('/categories', async (req, res) => {
     try {
-        const categories = await Category.find().sort({ name: 1 });
+        const tree = await buildCategoryTree();
+        res.json(tree);
+    } catch (err) {
+        console.error('Error fetching category tree:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// GET flat list of all categories (for admin table views)
+router.get('/categories-flat', async (req, res) => {
+    try {
+        const categories = await Category.find().sort({ sortOrder: 1, name: 1 }).lean();
         res.json(categories);
     } catch (err) {
         console.error(err);
-        res.status(500).send('Server error');
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// GET single category by ID
+router.get('/categories/:id', async (req, res) => {
+    try {
+        const cat = await Category.findById(req.params.id).lean();
+        if (!cat) return res.status(404).json({ error: 'Category not found' });
+        // Attach children
+        cat.children = await Category.find({ parentId: cat._id }).sort({ sortOrder: 1 }).lean();
+        res.json(cat);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// POST create sub or child category (Admin only)
+router.post('/categories', [auth, adminAuth], async (req, res) => {
+    try {
+        const { name, parentId, level, description, icon, banner, themeColor, isFeatured } = req.body;
+
+        if (!name || !parentId || !level) {
+            return res.status(400).json({ error: 'name, parentId, and level are required' });
+        }
+
+        if (level === 'main') {
+            return res.status(403).json({ error: 'Main categories are system-locked and cannot be created via API' });
+        }
+
+        // Verify parent exists
+        const parent = await Category.findById(parentId);
+        if (!parent) {
+            return res.status(404).json({ error: 'Parent category not found' });
+        }
+
+        // Validate hierarchy: sub must have main parent, child must have sub parent
+        if (level === 'sub' && parent.level !== 'main') {
+            return res.status(400).json({ error: 'Sub categories must have a main category as parent' });
+        }
+        if (level === 'child' && parent.level !== 'sub') {
+            return res.status(400).json({ error: 'Child categories must have a sub category as parent' });
+        }
+
+        // Get next sort order
+        const maxOrder = await Category.findOne({ parentId }).sort({ sortOrder: -1 }).select('sortOrder');
+        const nextOrder = (maxOrder?.sortOrder ?? -1) + 1;
+
+        const newCat = await Category.create({
+            level,
+            name: name.trim(),
+            slug: slugify(name.trim()),
+            parentId,
+            isSystem: false,
+            isEditable: true,
+            isDeletable: true,
+            isActive: true,
+            isVisible: true,
+            isFeatured: isFeatured || false,
+            description: description || '',
+            icon: icon || '',
+            banner: banner || '',
+            themeColor: themeColor || '',
+            sortOrder: nextOrder
+        });
+
+        // Emit real-time update
+        const io = req.app.get('io');
+        if (io) io.emit('categories:updated', { action: 'create', category: newCat });
+
+        res.json(newCat);
+    } catch (err) {
+        console.error('Error creating category:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// PUT update category (Admin only — rejects system-locked categories)
+router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const cat = await Category.findById(req.params.id);
+        if (!cat) return res.status(404).json({ error: 'Category not found' });
+
+        // SYSTEM LOCK: Main categories cannot be modified
+        if (cat.isSystem) {
+            return res.status(403).json({ error: '🔒 System-locked Main Categories cannot be modified' });
+        }
+
+        // Prevent changing level or isSystem
+        const updates = { ...req.body };
+        delete updates.level;
+        delete updates.isSystem;
+        delete updates.isDeletable;
+        delete updates.isEditable;
+        delete updates._id;
+
+        // Auto-generate slug if name changed
+        if (updates.name) {
+            updates.slug = slugify(updates.name.trim());
+            updates.name = updates.name.trim();
+        }
+
+        updates.updatedAt = new Date();
+
+        const updated = await Category.findByIdAndUpdate(req.params.id, updates, { new: true });
+
+        // Emit real-time update
+        const io = req.app.get('io');
+        if (io) io.emit('categories:updated', { action: 'update', category: updated });
+
+        res.json(updated);
+    } catch (err) {
+        console.error('Error updating category:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// PUT toggle active/featured status (Admin only — rejects system-locked)
+router.put('/categories/:id/toggle', [auth, adminAuth], async (req, res) => {
+    try {
+        const cat = await Category.findById(req.params.id);
+        if (!cat) return res.status(404).json({ error: 'Category not found' });
+
+        if (cat.isSystem) {
+            return res.status(403).json({ error: '🔒 System-locked Main Categories cannot be toggled' });
+        }
+
+        const { field } = req.body; // 'isActive', 'isFeatured', 'isVisible'
+        const allowedFields = ['isActive', 'isFeatured', 'isVisible'];
+        if (!field || !allowedFields.includes(field)) {
+            return res.status(400).json({ error: `field must be one of: ${allowedFields.join(', ')}` });
+        }
+
+        cat[field] = !cat[field];
+        cat.updatedAt = new Date();
+        await cat.save();
+
+        // Emit real-time update
+        const io = req.app.get('io');
+        if (io) io.emit('categories:updated', { action: 'toggle', category: cat });
+
+        res.json(cat);
+    } catch (err) {
+        console.error('Error toggling category:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// PUT reorder categories (Admin only)
+router.put('/categories-reorder', [auth, adminAuth], async (req, res) => {
+    try {
+        const { orderedIds } = req.body; // Array of category _id strings in new order
+        if (!Array.isArray(orderedIds)) {
+            return res.status(400).json({ error: 'orderedIds must be an array' });
+        }
+
+        const bulkOps = orderedIds.map((id, index) => ({
+            updateOne: {
+                filter: { _id: id, isSystem: false },
+                update: { $set: { sortOrder: index, updatedAt: new Date() } }
+            }
+        }));
+
+        await Category.bulkWrite(bulkOps);
+
+        // Emit real-time update
+        const io = req.app.get('io');
+        if (io) io.emit('categories:updated', { action: 'reorder' });
+
+        res.json({ msg: 'Categories reordered successfully' });
+    } catch (err) {
+        console.error('Error reordering categories:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// DELETE category (Admin only — rejects system-locked, cascades to children)
+router.delete('/categories/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const cat = await Category.findById(req.params.id);
+        if (!cat) return res.status(404).json({ error: 'Category not found' });
+
+        // SYSTEM LOCK: Main categories cannot be deleted
+        if (cat.isSystem) {
+            return res.status(403).json({ error: '🔒 System-locked Main Categories cannot be deleted' });
+        }
+
+        // Cascade delete: remove all children
+        if (cat.level === 'sub') {
+            // Delete all child categories under this sub
+            await Category.deleteMany({ parentId: cat._id });
+        }
+
+        await Category.findByIdAndDelete(req.params.id);
+
+        // Emit real-time update
+        const io = req.app.get('io');
+        if (io) io.emit('categories:updated', { action: 'delete', categoryId: req.params.id });
+
+        res.json({ msg: 'Category deleted successfully' });
+    } catch (err) {
+        console.error('Error deleting category:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
     }
 });
 
@@ -2020,76 +2266,6 @@ router.get('/public/banners', async (req, res) => {
     }
 });
 
-// POST new category
-router.post('/categories', [auth, adminAuth], async (req, res) => {
-    try {
-        // Drop unique index on name if it exists to allow hierarchical category records
-        try {
-            await Category.collection.dropIndex('name_1');
-        } catch (idxErr) {
-            // Index might not exist, ignore
-        }
-        
-        const newCat = new Category(req.body);
-        const cat = await newCat.save();
-        res.json(cat);
-    } catch (err) {
-        console.error("Error creating category:", err);
-        res.status(500).json({ error: err.message || 'Server error' });
-    }
-});
-
-// PUT update category
-router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
-    try {
-        const cat = await Category.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        res.json(cat);
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
-    }
-});
-
-// DELETE category
-router.delete('/categories/:id', [auth, adminAuth], async (req, res) => {
-    try {
-        await Category.findByIdAndDelete(req.params.id);
-        res.json({ msg: 'Category deleted' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
-    }
-});
-
-// DELETE category hierarchy endpoint
-router.delete('/categories-hierarchy', [auth, adminAuth], async (req, res) => {
-    try {
-        const { name, subcategory, subSubcategory } = req.query;
-        const filter = {};
-        if (name) filter.name = name;
-        if (subcategory) filter.subcategory = subcategory;
-        if (subSubcategory) filter.subSubcategory = subSubcategory;
-
-        // 1. Delete matching existing records
-        await Category.deleteMany(filter);
-
-        // 2. Insert deletion marker so predefined TAXONOMY entries also stay deleted
-        const deletionMarker = new Category({
-            name: name || '',
-            subcategory: subcategory || '',
-            subSubcategory: subSubcategory || '',
-            isActive: false,
-            isDeleted: true,
-            description: 'DELETED_HIERARCHY_MARKER'
-        });
-        await deletionMarker.save();
-
-        res.json({ msg: 'Category hierarchy deleted' });
-    } catch (err) {
-        console.error("Error deleting category hierarchy:", err);
-        res.status(500).json({ error: err.message || 'Server error' });
-    }
-});
 
 // GET all queries
 router.get('/queries', [auth, adminAuth], async (req, res) => {

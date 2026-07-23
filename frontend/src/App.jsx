@@ -6,7 +6,7 @@ import {
   Search, Filter, ChevronRight, Download, CreditCard, Clock,
   ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, EyeOff, UploadCloud, Bell, User,
   Briefcase, Truck, Headphones, Folder, HelpCircle, MessageSquare, Megaphone, ShoppingBag, Calendar, Contact,
-  MoreVertical, RotateCcw, LayoutGrid, List, Smartphone, Laptop, Tv, Home, Shirt, Sparkles, Package, Utensils, Tag, Activity, ArrowRight, ChevronLeft
+  MoreVertical, RotateCcw, LayoutGrid, List, Smartphone, Laptop, Tv, Home, Shirt, Sparkles, Package, Utensils, Tag, Activity, ArrowRight, ChevronLeft, Lock
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -4491,75 +4491,24 @@ function App() {
                                     {getCatIcon(mainItem.name, 'main')}
                                   </div>
                                   <div className="min-w-0">
-                                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{mainItem.name}</h4>
+                                    <div className="flex items-center gap-1.5">
+                                      <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                      <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{mainItem.name}</h4>
+                                    </div>
                                     <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{mainItem.description}</p>
                                     <div className="flex items-center gap-1.5 mt-1">
-                                      <span className={`w-1.5 h-1.5 rounded-full ${mainItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-                                      <span className={`text-[10px] font-bold ${mainItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                                        {mainItem.isActive !== false ? 'Active' : 'Inactive'}
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                        System Locked (Active)
                                       </span>
                                     </div>
                                   </div>
                                 </div>
 
                                 <div className="flex items-center gap-2 shrink-0">
-                                  <span className="bg-indigo-100/70 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-900/50">
-                                    {Object.keys(mainItem.subcategories || {}).length}
+                                  <span className="bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900/40 flex items-center gap-1 shadow-xs">
+                                    <Lock className="w-2.5 h-2.5" /> Read Only
                                   </span>
-                                  
-                                  <div className="relative">
-                                    <button 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActiveCatMenuId(activeCatMenuId === `main-${mainItem.name}` ? null : `main-${mainItem.name}`);
-                                      }}
-                                      className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </button>
-                                    {activeCatMenuId === `main-${mainItem.name}` && (
-                                      <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
-                                        <button 
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setActiveCatMenuId(null);
-                                            setModalData(mainItem);
-                                            setShowModal('edit-category');
-                                          }}
-                                          className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
-                                        >
-                                          Edit
-                                        </button>
-                                        <button 
-                                          onClick={async (e) => {
-                                            e.stopPropagation();
-                                            setActiveCatMenuId(null);
-                                            if (mainItem._id) {
-                                              await executeAction(`/admin/categories/${mainItem._id}`, 'PUT', { isActive: !mainItem.isActive });
-                                            }
-                                          }}
-                                          className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
-                                        >
-                                          Toggle Status
-                                        </button>
-                                        <button 
-                                          onClick={async (e) => {
-                                            e.stopPropagation();
-                                            setActiveCatMenuId(null);
-                                            if (confirm(`Are you sure you want to delete main category "${mainItem.name}" and all its subcategories?`)) {
-                                              if (mainItem._id) {
-                                                await executeAction(`/admin/categories/${mainItem._id}`, 'DELETE');
-                                              }
-                                              await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(mainItem.name)}`, 'DELETE');
-                                            }
-                                          }}
-                                          className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
-                                        >
-                                          Delete
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
                                 </div>
 
                                 {isSelected && (
