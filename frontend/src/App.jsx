@@ -967,13 +967,7 @@ function App() {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Syncing Indicator */}
-            {loading && (
-              <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] font-bold animate-pulse">
-                <RotateCcw className="w-3.5 h-3.5 animate-spin" />
-                <span className="hidden sm:inline">Syncing...</span>
-              </div>
-            )}
+
 
             {/* Dark Mode toggle button */}
             <button 
