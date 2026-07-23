@@ -4538,21 +4538,41 @@ function App() {
                     {/* Column 2: Sub Categories */}
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
                       <div>
-                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
                           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                             2. Sub Categories ({filteredSubList.length}) <span className="text-slate-400 font-normal">- {activeMainCatName}</span>
                           </h3>
-                          <button 
-                            onClick={() => {
-                              setAddFirstCategory(activeMainCatName);
-                              setCategoryModalTier('sub');
-                              setShowModal('category');
-                            }}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {displayedSubList.length > 0 && (
+                              <button 
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  for (const subItem of displayedSubList) {
+                                    if (subItem._id) {
+                                      await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
+                                    }
+                                    await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
+                                title="Remove All Sub Categories"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete All
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setAddFirstCategory(activeMainCatName);
+                                setCategoryModalTier('sub');
+                                setShowModal('category');
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Add
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
@@ -4588,7 +4608,22 @@ function App() {
                                   <span className="bg-indigo-100/70 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-900/50">
                                     {(subItem.childCategories || []).length}
                                   </span>
-                                  
+
+                                  {/* Direct Delete Button */}
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (subItem._id) {
+                                        await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
+                                      }
+                                      await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
+                                    }}
+                                    className="p-1.5 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                                    title="Delete Sub Category"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+
                                   <div className="relative">
                                     <button 
                                       onClick={(e) => {
@@ -4658,22 +4693,42 @@ function App() {
                     {/* Column 3: Child Categories */}
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
                       <div>
-                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
                           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
                             3. Child Categories ({filteredChildList.length}) <span className="text-slate-400 font-normal">- {activeSubCatName}</span>
                           </h3>
-                          <button 
-                            onClick={() => {
-                              setAddFirstCategory(activeMainCatName);
-                              setAddSecondCategory(activeSubCatName);
-                              setCategoryModalTier('child');
-                              setShowModal('category');
-                            }}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {displayedChildList.length > 0 && (
+                              <button 
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  for (const childItem of displayedChildList) {
+                                    if (childItem._id) {
+                                      await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                    }
+                                    await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
+                                title="Remove All Child Categories"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Delete All
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => {
+                                setAddFirstCategory(activeMainCatName);
+                                setAddSecondCategory(activeSubCatName);
+                                setCategoryModalTier('child');
+                                setShowModal('category');
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              Add
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
@@ -4698,56 +4753,73 @@ function App() {
                                 </div>
                               </div>
 
-                              <div className="relative shrink-0">
-                                <button 
-                                  onClick={(e) => {
+                              <div className="flex items-center gap-2 shrink-0">
+                                {/* Direct Delete Button */}
+                                <button
+                                  onClick={async (e) => {
                                     e.stopPropagation();
-                                    setActiveCatMenuId(activeCatMenuId === `child-${childItem.name}` ? null : `child-${childItem.name}`);
+                                    if (childItem._id) {
+                                      await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                    }
+                                    await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
                                   }}
-                                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                  className="p-1.5 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                                  title="Delete Child Category"
                                 >
-                                  <MoreVertical className="w-4 h-4" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
-                                {activeCatMenuId === `child-${childItem.name}` && (
-                                  <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
-                                    <button 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActiveCatMenuId(null);
-                                        setModalData({ ...childItem, name: activeMainCatName, subcategory: activeSubCatName, subSubcategory: childItem.name });
-                                        setShowModal('edit-category');
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
-                                    >
-                                      Edit
-                                    </button>
-                                    <button 
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        setActiveCatMenuId(null);
-                                        if (childItem._id) {
-                                          await executeAction(`/admin/categories/${childItem._id}`, 'PUT', { isActive: !childItem.isActive });
-                                        }
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
-                                    >
-                                      Toggle Status
-                                    </button>
-                                    <button 
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        setActiveCatMenuId(null);
-                                        if (childItem._id) {
-                                          await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
-                                        }
-                                        await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
-                                    >
-                                      Delete
-                                    </button>
-                                  </div>
-                                )}
+
+                                <div className="relative">
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setActiveCatMenuId(activeCatMenuId === `child-${childItem.name}` ? null : `child-${childItem.name}`);
+                                    }}
+                                    className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                  >
+                                    <MoreVertical className="w-4 h-4" />
+                                  </button>
+                                  {activeCatMenuId === `child-${childItem.name}` && (
+                                    <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
+                                      <button 
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setActiveCatMenuId(null);
+                                          setModalData({ ...childItem, name: activeMainCatName, subcategory: activeSubCatName, subSubcategory: childItem.name });
+                                          setShowModal('edit-category');
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button 
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          setActiveCatMenuId(null);
+                                          if (childItem._id) {
+                                            await executeAction(`/admin/categories/${childItem._id}`, 'PUT', { isActive: !childItem.isActive });
+                                          }
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                      >
+                                        Toggle Status
+                                      </button>
+                                      <button 
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          setActiveCatMenuId(null);
+                                          if (childItem._id) {
+                                            await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                          }
+                                          await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           ))}
