@@ -2069,39 +2069,87 @@ router.get('/categories/:id', async (req, res) => {
 // POST create sub or child category (Admin only)
 router.post('/categories', [auth, adminAuth], async (req, res) => {
     try {
-        const { name, parentId, level, description, icon, banner, themeColor, isFeatured } = req.body;
+        let { name, parentId, level, subcategory, subSubcategory, description, icon, banner, themeColor, isFeatured } = req.body;
 
-        if (!name || !parentId || !level) {
-            return res.status(400).json({ error: 'name, parentId, and level are required' });
+        // Auto-resolve level, name, and parentId if form-based subcategory / subSubcategory is passed
+        let targetName = name;
+        let parentDoc = null;
+
+        if (subSubcategory || level === 'child') {
+            level = 'child';
+            targetName = (subSubcategory || name || '').trim();
+
+            if (parentId) {
+                parentDoc = await Category.findById(parentId);
+            }
+            if (!parentDoc && subcategory) {
+                parentDoc = await Category.findOne({ name: subcategory, level: 'sub' });
+                if (!parentDoc && name) {
+                    let mainParent = await Category.findOne({ name: name, level: 'main' });
+                    if (!mainParent) {
+                        mainParent = await Category.create({
+                            level: 'main',
+                            name: name.trim(),
+                            slug: slugify(name.trim()),
+                            isSystem: true,
+                            isActive: true
+                        });
+                    }
+                    parentDoc = await Category.create({
+                        level: 'sub',
+                        name: subcategory.trim(),
+                        slug: slugify(subcategory.trim()),
+                        parentId: mainParent._id,
+                        name: name.trim(),
+                        subcategory: subcategory.trim(),
+                        isActive: true
+                    });
+                }
+            }
+        } else if (subcategory || level === 'sub') {
+            level = 'sub';
+            targetName = (subcategory || name || '').trim();
+
+            if (parentId) {
+                parentDoc = await Category.findById(parentId);
+            }
+            if (!parentDoc && name) {
+                parentDoc = await Category.findOne({ name: name, level: 'main' });
+                if (!parentDoc) {
+                    parentDoc = await Category.create({
+                        level: 'main',
+                        name: name.trim(),
+                        slug: slugify(name.trim()),
+                        isSystem: true,
+                        isActive: true
+                    });
+                }
+            }
+        } else if (parentId) {
+            parentDoc = await Category.findById(parentId);
+        }
+
+        if (!targetName) {
+            return res.status(400).json({ error: 'Category name is required' });
         }
 
         if (level === 'main') {
             return res.status(403).json({ error: 'Main categories are system-locked and cannot be created via API' });
         }
 
-        // Verify parent exists
-        const parent = await Category.findById(parentId);
-        if (!parent) {
-            return res.status(404).json({ error: 'Parent category not found' });
-        }
-
-        // Validate hierarchy: sub must have main parent, child must have sub parent
-        if (level === 'sub' && parent.level !== 'main') {
-            return res.status(400).json({ error: 'Sub categories must have a main category as parent' });
-        }
-        if (level === 'child' && parent.level !== 'sub') {
-            return res.status(400).json({ error: 'Child categories must have a sub category as parent' });
-        }
+        const parentObjId = parentDoc ? parentDoc._id : null;
 
         // Get next sort order
-        const maxOrder = await Category.findOne({ parentId }).sort({ sortOrder: -1 }).select('sortOrder');
+        const maxOrder = await Category.findOne({ parentId: parentObjId }).sort({ sortOrder: -1 }).select('sortOrder');
         const nextOrder = (maxOrder?.sortOrder ?? -1) + 1;
 
         const newCat = await Category.create({
-            level,
-            name: name.trim(),
-            slug: slugify(name.trim()),
-            parentId,
+            level: level || 'sub',
+            name: name ? name.trim() : targetName,
+            subcategory: subcategory ? subcategory.trim() : (level === 'sub' ? targetName : ''),
+            subSubcategory: subSubcategory ? subSubcategory.trim() : (level === 'child' ? targetName : ''),
+            slug: slugify(targetName + '-' + Date.now()),
+            parentId: parentObjId,
             isSystem: false,
             isEditable: true,
             isDeletable: true,

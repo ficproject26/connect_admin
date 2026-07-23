@@ -6410,11 +6410,11 @@ function App() {
             <form 
               onSubmit={async (e) => {
                 e.preventDefault();
-                const name = e.target.name.value;
-                const subcategory = e.target.subcategory.value;
+                const name = addFirstCategory || e.target.name?.value || '';
+                const subcategory = categoryModalTier === 'sub' ? e.target.subcategory.value : (addSecondCategory || e.target.subcategory?.value || '');
                 const subSubcategory = categoryModalTier === 'child' ? (e.target.subSubcategory?.value || '') : '';
                 const description = e.target.description.value;
-                await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description });
+                await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level: categoryModalTier });
                 setShowModal(null);
               }}
               className="space-y-4"
