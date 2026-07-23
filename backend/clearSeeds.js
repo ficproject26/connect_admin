@@ -12,12 +12,18 @@ const Branch = require('./models/Branch');
 const WithdrawalRequest = require('./models/WithdrawalRequest');
 const Banner = require('./models/Banner');
 const Advertisement = require('./models/Advertisement');
+const Query = require('./models/Query');
+const SupportTicket = require('./models/SupportTicket');
+const JobApplied = require('./models/JobApplied');
+const CardHolder = require('./models/CardHolder');
+const Transaction = require('./models/Transaction');
+const Announcement = require('./models/Announcement');
 
 dotenv.config();
 
 const clearMockData = async () => {
     try {
-        await mongoose.connect(process.env.MONGO_URI);
+        await mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URI);
         console.log('Connected to MongoDB for clearing...');
 
         // Delete all agents/users except admins and selvi
@@ -26,7 +32,7 @@ const clearMockData = async () => {
         });
         console.log(`Deleted users count: ${deleteUsersResult.deletedCount}`);
 
-        // Delete other collections entirely
+        // Delete mock collections
         await Pincode.deleteMany({});
         await Vendor.deleteMany({});
         await Customer.deleteMany({});
@@ -36,6 +42,12 @@ const clearMockData = async () => {
         await WithdrawalRequest.deleteMany({});
         await Banner.deleteMany({});
         await Advertisement.deleteMany({});
+        await Query.deleteMany({});
+        await SupportTicket.deleteMany({});
+        await JobApplied.deleteMany({});
+        await CardHolder.deleteMany({});
+        await Transaction.deleteMany({});
+        await Announcement.deleteMany({});
 
         console.log('Successfully cleared all seeded mock data from database!');
         process.exit(0);
