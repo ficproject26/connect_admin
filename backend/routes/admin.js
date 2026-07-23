@@ -2211,6 +2211,23 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
             return res.status(403).json({ error: 'Main categories are system-locked and cannot be created via API' });
         }
 
+        // Clear any batch deletion markers so newly created category items display immediately
+        if ((level === 'sub' || !subSubcategory) && name) {
+            const mainReg = new RegExp(`^${name.trim()}$`, 'i');
+            await Category.deleteMany({
+                name: mainReg,
+                subcategory: 'ALL_SUBCATEGORIES_DELETED_MARKER'
+            });
+        }
+
+        if ((level === 'child' || subSubcategory) && subcategory) {
+            const subReg = new RegExp(`^${subcategory.trim()}$`, 'i');
+            await Category.deleteMany({
+                subcategory: subReg,
+                subSubcategory: 'ALL_CHILD_DELETED_MARKER'
+            });
+        }
+
         const parentObjId = parentDoc ? parentDoc._id : null;
 
         // Get next sort order

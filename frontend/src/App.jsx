@@ -4256,10 +4256,27 @@ function App() {
               }
             });
 
+            // Check if active non-deleted subcategories exist in DB for main categories
+            const activeDbSubs = new Set();
+            const activeDbChildren = new Set();
+
+            (categories || []).forEach(c => {
+              if (!c.isDeleted && c.description !== 'DELETED_HIERARCHY_MARKER') {
+                let mName = SYSTEM_MAIN_CATS.find(m => m.toLowerCase() === (c.name || '').toLowerCase()) || c.name || '';
+                if (mName && c.subcategory && c.subcategory !== 'ALL_SUBCATEGORIES_DELETED_MARKER') {
+                  activeDbSubs.add(mName.toLowerCase());
+                  if (c.subSubcategory && c.subSubcategory !== 'ALL_CHILD_DELETED_MARKER') {
+                    activeDbChildren.add(`${mName.toLowerCase()}::${c.subcategory.toLowerCase()}`);
+                  }
+                }
+              }
+            });
+
             // 3. Apply Deletion Markers to initial catTree
             SYSTEM_MAIN_CATS.forEach(mainName => {
               const mainLower = mainName.toLowerCase();
-              if (allSubDeletedMains.has(mainLower)) {
+              // Only clear initial taxonomy subcategories if no active DB subcategories exist
+              if (allSubDeletedMains.has(mainLower) && !activeDbSubs.has(mainLower)) {
                 catTree[mainName].subcategories = {};
                 return;
               }
@@ -4272,7 +4289,7 @@ function App() {
                   return;
                 }
 
-                if (allChildDeletedSubs.has(subKey)) {
+                if (allChildDeletedSubs.has(subKey) && !activeDbChildren.has(subKey)) {
                   catTree[mainName].subcategories[subName].childCategories = [];
                 } else {
                   catTree[mainName].subcategories[subName].childCategories = 
@@ -4309,16 +4326,13 @@ function App() {
               const targetMainName = mainName || "Products";
               const targetMainLower = targetMainName.toLowerCase();
 
-              // If all subcategories were batch-deleted for this main category, do not re-add
-              if (allSubDeletedMains.has(targetMainLower)) return;
-
               if (catTree[targetMainName]) {
                 const subName = c.subcategory || (c.level === 'sub' ? c.name : '');
-                if (subName) {
+                if (subName && subName !== 'ALL_SUBCATEGORIES_DELETED_MARKER') {
                   const subLower = subName.toLowerCase();
                   const subKey = `${targetMainLower}::${subLower}`;
 
-                  // If this subcategory was deleted, do not re-add
+                  // If this specific subcategory was individually deleted, do not re-add
                   if (deletedSubSet.has(subKey)) return;
 
                   if (!catTree[targetMainName].subcategories[subName]) {
@@ -4336,10 +4350,7 @@ function App() {
                   }
 
                   const childName = c.subSubcategory || (c.level === 'child' ? c.name : '');
-                  if (childName && childName !== subName) {
-                    // If all child categories were batch-deleted for this subcategory, do not re-add child
-                    if (allChildDeletedSubs.has(subKey)) return;
-
+                  if (childName && childName !== subName && childName !== 'ALL_CHILD_DELETED_MARKER') {
                     const childKey = `${subKey}::${childName.toLowerCase()}`;
                     if (deletedChildSet.has(childKey)) return;
 
