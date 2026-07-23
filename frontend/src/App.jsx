@@ -4115,10 +4115,23 @@ function App() {
             const catTree = {};
 
             // 1. Load from predefined TAXONOMY
-            Object.keys(TAXONOMY).forEach(mainName => {
+            const MAIN_DESCRIPTIONS = {
+              "Services": "Repairs, salon, cleaning, tutoring and professional services",
+              "Products": "Products categories and items",
+              "Daily Needs": "Daily Needs categories and items",
+              "Food": "Food categories and items",
+              "Stay": "Stay categories and items",
+              "Travel": "Travel categories and items",
+              "Jobs": "Jobs categories and items"
+            };
+
+            const SYSTEM_MAIN_CATS = ["Services", "Products", "Daily Needs", "Food", "Stay", "Travel", "Jobs"];
+
+            // 1. Load from predefined TAXONOMY for the 7 System Main Categories
+            SYSTEM_MAIN_CATS.forEach(mainName => {
               catTree[mainName] = {
                 name: mainName,
-                description: `${mainName} categories and items`,
+                description: MAIN_DESCRIPTIONS[mainName] || `${mainName} categories and items`,
                 isActive: true,
                 subcategories: {}
               };
@@ -4148,82 +4161,86 @@ function App() {
               }
             });
 
-            // 2. Merge database categories & process deletion markers
+            // 2. Merge database categories strictly under the 7 Main Categories
             (categories || []).forEach(c => {
-              const mainName = c.name;
-              if (!mainName) return;
-
+              let mainName = SYSTEM_MAIN_CATS.find(m => m.toLowerCase() === (c.name || '').toLowerCase());
+              
               if (c.isDeleted || c.description === 'DELETED_HIERARCHY_MARKER') {
-                if (catTree[mainName]) {
-                  if (c.subcategory && catTree[mainName].subcategories?.[c.subcategory]) {
+                const targetMain = mainName || c.name;
+                if (catTree[targetMain]) {
+                  if (c.subcategory && catTree[targetMain].subcategories?.[c.subcategory]) {
                     if (c.subSubcategory) {
-                      catTree[mainName].subcategories[c.subcategory].childCategories = 
-                        (catTree[mainName].subcategories[c.subcategory].childCategories || []).filter(ch => ch.name !== c.subSubcategory);
+                      catTree[targetMain].subcategories[c.subcategory].childCategories = 
+                        (catTree[targetMain].subcategories[c.subcategory].childCategories || []).filter(ch => ch.name !== c.subSubcategory);
                     } else {
-                      delete catTree[mainName].subcategories[c.subcategory];
+                      delete catTree[targetMain].subcategories[c.subcategory];
                     }
-                  } else if (!c.subcategory) {
-                    delete catTree[mainName];
                   }
                 }
                 return;
               }
 
-              if (!catTree[mainName]) {
-                catTree[mainName] = {
-                  _id: c._id,
-                  name: mainName,
-                  description: c.description || `${mainName} category`,
-                  isActive: c.isActive !== undefined ? c.isActive : true,
-                  subcategories: {}
-                };
-              } else if (!c.subcategory && !c.subSubcategory) {
+              // If it's a main category doc matching one of our 7 main categories
+              if (mainName && (!c.subcategory || c.subcategory === mainName) && !c.subSubcategory) {
                 catTree[mainName]._id = c._id;
                 if (c.description) catTree[mainName].description = c.description;
                 if (c.isActive !== undefined) catTree[mainName].isActive = c.isActive;
+                return;
               }
 
-              if (c.subcategory) {
-                const subName = c.subcategory;
-                if (!catTree[mainName].subcategories[subName]) {
-                  catTree[mainName].subcategories[subName] = {
-                    _id: c._id,
-                    name: subName,
-                    description: c.description || `${subName} subcategory`,
-                    isActive: c.isActive !== undefined ? c.isActive : true,
-                    childCategories: []
-                  };
-                } else if (!c.subSubcategory) {
-                  catTree[mainName].subcategories[subName]._id = c._id;
-                  if (c.description) catTree[mainName].subcategories[subName].description = c.description;
-                  if (c.isActive !== undefined) catTree[mainName].subcategories[subName].isActive = c.isActive;
-                }
+              // Find target main category for sub/child items
+              if (!mainName && c.subcategory) {
+                // Try finding parent main category
+                mainName = SYSTEM_MAIN_CATS.find(m => {
+                  const subData = TAXONOMY[m];
+                  return subData && (Array.isArray(subData) ? subData.includes(c.name) : Object.keys(subData).includes(c.name) || Object.keys(subData).includes(c.subcategory));
+                });
+              }
 
-                if (c.subSubcategory) {
-                  const childName = c.subSubcategory;
-                  const childArr = catTree[mainName].subcategories[subName].childCategories;
-                  const existingIdx = childArr.findIndex(ch => ch.name === childName);
-                  if (existingIdx >= 0) {
-                    childArr[existingIdx] = {
+              const targetMainName = mainName || "Products";
+              if (catTree[targetMainName]) {
+                const subName = c.subcategory || (c.level === 'sub' ? c.name : '');
+                if (subName) {
+                  if (!catTree[targetMainName].subcategories[subName]) {
+                    catTree[targetMainName].subcategories[subName] = {
                       _id: c._id,
-                      name: childName,
-                      description: c.description || `${childName} category`,
-                      isActive: c.isActive !== undefined ? c.isActive : true
+                      name: subName,
+                      description: c.description || `${subName} subcategory`,
+                      isActive: c.isActive !== undefined ? c.isActive : true,
+                      childCategories: []
                     };
-                  } else {
-                    childArr.push({
-                      _id: c._id,
-                      name: childName,
-                      description: c.description || `${childName} category`,
-                      isActive: c.isActive !== undefined ? c.isActive : true
-                    });
+                  } else if (!c.subSubcategory && c.level !== 'child') {
+                    catTree[targetMainName].subcategories[subName]._id = c._id;
+                    if (c.description) catTree[targetMainName].subcategories[subName].description = c.description;
+                    if (c.isActive !== undefined) catTree[targetMainName].subcategories[subName].isActive = c.isActive;
+                  }
+
+                  const childName = c.subSubcategory || (c.level === 'child' ? c.name : '');
+                  if (childName && childName !== subName) {
+                    const childArr = catTree[targetMainName].subcategories[subName].childCategories;
+                    const existingIdx = childArr.findIndex(ch => ch.name === childName);
+                    if (existingIdx >= 0) {
+                      childArr[existingIdx] = {
+                        _id: c._id,
+                        name: childName,
+                        description: c.description || `${childName} category`,
+                        isActive: c.isActive !== undefined ? c.isActive : true
+                      };
+                    } else {
+                      childArr.push({
+                        _id: c._id,
+                        name: childName,
+                        description: c.description || `${childName} category`,
+                        isActive: c.isActive !== undefined ? c.isActive : true
+                      });
+                    }
                   }
                 }
               }
             });
 
-            // Compute KPI Counts
-            const allMainCats = Object.values(catTree);
+            // Compute KPI Counts & strictly restrict Main Categories list to the 7 System Categories
+            const allMainCats = SYSTEM_MAIN_CATS.map(m => catTree[m]).filter(Boolean);
             let totalSubCatsCount = 0;
             let totalChildCatsCount = 0;
             let activeCount = 0;
