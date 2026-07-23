@@ -4621,7 +4621,6 @@ function App() {
                                               if (subItem._id) {
                                                 await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
                                               }
-                                              await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
                                             }
                                           }}
                                           className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
@@ -4732,7 +4731,6 @@ function App() {
                                           if (childItem._id) {
                                             await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
                                           }
-                                          await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
                                         }
                                       }}
                                       className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
