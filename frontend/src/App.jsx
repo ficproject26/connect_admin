@@ -420,6 +420,7 @@ function App() {
   const [tieupEntityFilter, setTieUpEntityFilter] = useState('All');
 
   // Wallet & Withdrawals Filters
+  const [withdrawalSearchTerm, setWithdrawalSearchTerm] = useState('');
   const [withdrawalStatusFilter, setWithdrawalStatusFilter] = useState('All');
 
   // Bookings Search & Filters
@@ -2524,30 +2525,68 @@ function App() {
           {/* 9. WALLET & WITHDRAWALS */}
           {activeTab === 'wallet' && (() => {
             const filteredWithdrawals = withdrawals.filter(req => {
-              if (withdrawalStatusFilter === 'All') return true;
-              return (req.status || '').toLowerCase() === withdrawalStatusFilter.toLowerCase();
+              const nameVal = req.agentId?.name || req.accountHolderName || 'Amit Sharma';
+              const emailVal = req.agentId?.email || '';
+              const phoneVal = req.agentId?.phone || '';
+              const bankVal = req.bankName || '';
+              const accVal = req.accountNumber || '';
+              const ifscVal = req.ifscCode || '';
+              const branchVal = req.branchName || '';
+
+              const matchesSearch = !withdrawalSearchTerm ||
+                nameVal.toLowerCase().includes(withdrawalSearchTerm.toLowerCase()) ||
+                emailVal.toLowerCase().includes(withdrawalSearchTerm.toLowerCase()) ||
+                phoneVal.includes(withdrawalSearchTerm) ||
+                bankVal.toLowerCase().includes(withdrawalSearchTerm.toLowerCase()) ||
+                accVal.includes(withdrawalSearchTerm) ||
+                ifscVal.toLowerCase().includes(withdrawalSearchTerm.toLowerCase()) ||
+                branchVal.toLowerCase().includes(withdrawalSearchTerm.toLowerCase());
+
+              const matchesStatus = withdrawalStatusFilter === 'All' || (req.status || '').toLowerCase() === withdrawalStatusFilter.toLowerCase();
+
+              return matchesSearch && matchesStatus;
             });
 
             return (
               <div className="space-y-6">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Withdrawal Request Queues</h3>
+                  
+                  {/* Top Bar with Title, Search Bar & Status Filters */}
+                  <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                    <div>
+                      <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Withdrawal Request Queues</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Manage agent payout requests and view complete applicant details</p>
+                    </div>
                     
-                    {/* Status Filter Buttons */}
-                    <div className="flex flex-wrap gap-1.5 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl">
-                      {['All', 'Pending', 'Approved', 'Rejected', 'Completed'].map(st => (
-                        <button
-                          key={st}
-                          onClick={() => setWithdrawalStatusFilter(st)}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${withdrawalStatusFilter === st ? 'bg-primary-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-850'}`}
-                        >
-                          {st}
-                        </button>
-                      ))}
+                    <div className="flex flex-wrap gap-3 w-full xl:w-auto items-center">
+                      {/* Search Bar */}
+                      <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[260px]">
+                        <Search className="w-4 h-4 text-slate-400 my-auto" />
+                        <input 
+                          type="text" 
+                          placeholder="Search by name, phone, email, or bank details..." 
+                          value={withdrawalSearchTerm}
+                          onChange={(e) => setWithdrawalSearchTerm(e.target.value)}
+                          className="bg-transparent focus:outline-none text-xs w-full"
+                        />
+                      </div>
+
+                      {/* Status Filter Buttons */}
+                      <div className="flex flex-wrap gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl">
+                        {['All', 'Pending', 'Approved', 'Rejected', 'Completed'].map(st => (
+                          <button
+                            key={st}
+                            onClick={() => setWithdrawalStatusFilter(st)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${withdrawalStatusFilter === st ? 'bg-primary-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-850'}`}
+                          >
+                            {st}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   
+                  {/* Withdrawal List Cards */}
                   <div className="space-y-4">
                     {filteredWithdrawals.map((req) => (
                       <div 
@@ -2558,29 +2597,39 @@ function App() {
                         }}
                         className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 cursor-pointer hover:shadow-md hover:border-primary-500/40 transition-all group"
                       >
-                        <div>
+                        <div className="space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="block font-extrabold text-slate-850 dark:text-slate-100 group-hover:text-primary-500 transition-colors text-base">{req.agentId?.name || req.accountHolderName || 'Amit Sharma'}</span>
-                            <span className="text-[10px] text-primary-500 font-bold bg-primary-500/10 px-2 py-0.5 rounded-full">Click for Bank Details</span>
+                            <span className="block font-extrabold text-slate-850 dark:text-slate-100 group-hover:text-primary-500 transition-colors text-base">
+                              {req.agentId?.name || req.accountHolderName || 'Amit Sharma'}
+                            </span>
+                            <span className="text-[10px] text-primary-500 font-bold bg-primary-500/10 px-2.5 py-0.5 rounded-full border border-primary-500/20">
+                              Click for Full Person & Bank Details
+                            </span>
                           </div>
-                          <span className="block text-xs text-slate-400 mt-1">Wallet Balance: ₹{req.agentId?.balance || 7500} • Req Date: {new Date(req.createdAt).toLocaleDateString()}</span>
-                          <span className="inline-block mt-2 bg-primary-500/10 text-primary-500 text-xs font-bold px-2.5 py-0.5 rounded-full">Bank Withdrawal Requested</span>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            <strong>Contact:</strong> {req.agentId?.email || 'amit@example.com'} • {req.agentId?.phone || '9876543210'}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            <strong>Wallet Balance:</strong> <span className="text-emerald-500 font-bold">₹{req.agentId?.balance || 7500}</span> • <strong>Req Date:</strong> {new Date(req.createdAt).toLocaleString()}
+                          </p>
                         </div>
                         
-                        <div className="flex items-center gap-6" onClick={(e) => e.stopPropagation()}>
-                          <span className="text-2xl font-black text-rose-500">₹{req.amount}</span>
-                          <span className={`text-xs px-3 py-1 rounded-full font-bold capitalize ${req.status?.toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : req.status?.toLowerCase() === 'completed' ? 'bg-blue-500/10 text-blue-500' : req.status?.toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                            {req.status}
-                          </span>
+                        <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="text-right">
+                            <span className="text-2xl font-black text-rose-500 block">₹{req.amount}</span>
+                            <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider inline-block mt-0.5 ${req.status?.toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : req.status?.toLowerCase() === 'completed' ? 'bg-blue-500/10 text-blue-500' : req.status?.toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                              {req.status}
+                            </span>
+                          </div>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setModalData(req);
                               setShowModal('bank-details');
                             }}
-                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all"
+                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-md"
                           >
-                            View Bank Details
+                            View Full Details
                           </button>
                         </div>
                       </div>
@@ -2588,7 +2637,7 @@ function App() {
                     {filteredWithdrawals.length === 0 && (
                       <div className="text-center py-12 text-slate-400 text-sm">
                         <CheckCircle className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                        No withdrawal requests found for this filter.
+                        No withdrawal requests found matching search and filters.
                       </div>
                     )}
                   </div>
@@ -6935,13 +6984,13 @@ function App() {
         </div>
       )}
 
-      {/* BANK DETAILS MODAL */}
+      {/* BANK & PERSON DETAILS MODAL */}
       {showModal === 'bank-details' && modalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 space-y-6 shadow-2xl my-8">
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Bank Details & Pay-out Info</h3>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Applicant & Bank Details</h3>
                 <p className="text-xs text-slate-400">Withdrawal Request #{String(modalData._id).substring(0, 8)}</p>
               </div>
               <button onClick={() => setShowModal(null)} className="p-1 rounded-xl text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">
@@ -6949,34 +6998,80 @@ function App() {
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850">
-                <div>
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Account Holder Name</span>
-                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{modalData.accountHolderName || modalData.agentId?.name || 'Amit Sharma'}</span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Bank Name</span>
-                  <span className="text-sm font-bold text-primary-500 block mt-0.5">{modalData.bankName || 'HDFC Bank'}</span>
+            <div className="space-y-5">
+              {/* Section 1: Requesting Person Info */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-primary-500">1. Requesting Person Profile</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 text-xs">
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Full Name</span>
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{modalData.agentId?.name || modalData.accountHolderName || 'Amit Sharma'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Email Address</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 block mt-0.5">{modalData.agentId?.email || 'amit@example.com'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Phone Number</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 block mt-0.5">{modalData.agentId?.phone || '9876543210'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Role / Level</span>
+                    <span className="font-bold text-purple-500 capitalize block mt-0.5">{modalData.agentId?.level || modalData.agentId?.role || 'Pincode Agent'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Assigned Location</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 block mt-0.5">{modalData.agentId?.assignedDistrict || 'New Delhi'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Wallet Balance</span>
+                    <span className="font-extrabold text-emerald-500 block mt-0.5">₹{modalData.agentId?.balance || 7500}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Commission Earned</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">₹{modalData.agentId?.commissionEarned || 3500}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Vendors Added</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">{modalData.agentId?.vendorsAdded || 4} Vendors</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Aadhaar / PAN</span>
+                    <span className="font-mono text-[11px] text-slate-600 dark:text-slate-400 block mt-0.5">
+                      {modalData.agentId?.kyc?.aadhaarNumber || '123456789012'} | {modalData.agentId?.kyc?.panNumber || 'ABCDE1234F'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850">
-                <div>
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold">Account Number</span>
-                  <span className="text-sm font-mono font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{modalData.accountNumber || '987654321098'}</span>
+              {/* Section 2: Bank Account & Payout Info */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-500">2. Bank & Pay-out Details</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850">
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Account Holder Name</span>
+                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{modalData.accountHolderName || modalData.agentId?.name || 'Amit Sharma'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Bank Name</span>
+                    <span className="text-sm font-bold text-primary-500 block mt-0.5">{modalData.bankName || 'HDFC Bank'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">Account Number</span>
+                    <span className="text-sm font-mono font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{modalData.accountNumber || '987654321098'}</span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-bold">IFSC Code</span>
+                    <span className="text-sm font-mono font-bold text-emerald-500 block mt-0.5">{modalData.ifscCode || 'HDFC0001234'}</span>
+                  </div>
                 </div>
-                <div>
-                  <span className="block text-[10px] text-slate-400 uppercase font-bold">IFSC Code</span>
-                  <span className="text-sm font-mono font-bold text-emerald-500 block mt-0.5">{modalData.ifscCode || 'HDFC0001234'}</span>
-                </div>
-              </div>
 
-              <div className="space-y-2 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 text-xs">
-                <p><strong>Branch Name:</strong> {modalData.branchName || 'Connaught Place, New Delhi'}</p>
-                <p><strong>Withdrawal Amount:</strong> <span className="text-rose-500 font-extrabold text-base">₹{modalData.amount}</span></p>
-                <p><strong>Request Date:</strong> {new Date(modalData.createdAt).toLocaleString()}</p>
-                <p><strong>Status:</strong> <span className="capitalize font-bold text-slate-700 dark:text-slate-200">{modalData.status}</span></p>
+                <div className="space-y-2 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 text-xs">
+                  <p><strong>Branch Name:</strong> {modalData.branchName || 'Connaught Place, New Delhi'}</p>
+                  <p><strong>Withdrawal Amount Requested:</strong> <span className="text-rose-500 font-extrabold text-lg">₹{modalData.amount}</span></p>
+                  <p><strong>Request Date & Time:</strong> {new Date(modalData.createdAt).toLocaleString()}</p>
+                  <p><strong>Current Request Status:</strong> <span className="capitalize font-bold text-slate-800 dark:text-slate-100">{modalData.status}</span></p>
+                </div>
               </div>
             </div>
 
