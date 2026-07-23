@@ -21,10 +21,10 @@ const JobApplied = require('../models/JobApplied');
 const CardHolder = require('../models/CardHolder');
 const DeliveryPartner = require('../models/DeliveryPartner');
 const SupportTeam = require('../models/SupportTeam');
-const Category = require('../models/Category');
 const Query = require('../models/Query');
 const SupportTicket = require('../models/SupportTicket');
 const Announcement = require('../models/Announcement');
+const ExclusiveOffer = require('../models/ExclusiveOffer');
 
 const adminAuth = async (req, res, next) => {
     try {
@@ -1069,6 +1069,79 @@ router.delete('/ads/:id', [auth, adminAuth], async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
+    }
+});
+
+// ==========================================
+// EXCLUSIVE OFFERS API ENDPOINTS
+// ==========================================
+
+// GET public exclusive offers for customer app
+router.get('/public/exclusive-offers', async (req, res) => {
+    try {
+        const offers = await ExclusiveOffer.find({ isActive: true }).sort({ createdAt: -1 });
+        res.json(offers);
+    } catch (err) {
+        console.error('Error fetching public exclusive offers:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+router.get('/exclusive-offers/public', async (req, res) => {
+    try {
+        const offers = await ExclusiveOffer.find({ isActive: true }).sort({ createdAt: -1 });
+        res.json(offers);
+    } catch (err) {
+        console.error('Error fetching public exclusive offers:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// GET all exclusive offers (admin)
+router.get('/exclusive-offers', [auth, adminAuth], async (req, res) => {
+    try {
+        const offers = await ExclusiveOffer.find().sort({ createdAt: -1 });
+        res.json(offers);
+    } catch (err) {
+        console.error('Error fetching exclusive offers:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// POST create new exclusive offer
+router.post('/exclusive-offers', [auth, adminAuth], async (req, res) => {
+    try {
+        const { title, discount, code, category, desc, imageUrl, redirectLink, endDate } = req.body;
+        if (!title || !discount || !code) {
+            return res.status(400).json({ error: 'Title, Discount Badge, and Code are required' });
+        }
+        const offer = new ExclusiveOffer({
+            title: title.trim(),
+            discount: discount.trim(),
+            code: code.toUpperCase().trim(),
+            category: category || 'Services',
+            desc: desc || '',
+            imageUrl: imageUrl || '',
+            redirectLink: redirectLink || '',
+            endDate: endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            isActive: true
+        });
+        await offer.save();
+        res.json(offer);
+    } catch (err) {
+        console.error('Error creating exclusive offer:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+// DELETE exclusive offer
+router.delete('/exclusive-offers/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await ExclusiveOffer.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Exclusive offer deleted successfully' });
+    } catch (err) {
+        console.error('Error deleting exclusive offer:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
     }
 });
 
