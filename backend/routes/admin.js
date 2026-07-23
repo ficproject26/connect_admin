@@ -2341,6 +2341,63 @@ router.delete('/categories-hierarchy', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// DELETE batch categories (Delete All Sub Categories or Delete All Child Categories)
+router.delete('/categories-batch-delete', [auth, adminAuth], async (req, res) => {
+    try {
+        const { mainName, subName, scope } = req.body;
+
+        if (scope === 'all-sub' && mainName) {
+            const mainReg = new RegExp(`^${mainName.trim()}$`, 'i');
+            
+            await Category.deleteMany({
+                $or: [
+                    { name: mainReg, level: { $in: ['sub', 'child'] } },
+                    { name: mainReg, subcategory: { $exists: true, $ne: '' } }
+                ]
+            });
+
+            await Category.create({
+                name: mainName.trim(),
+                level: 'sub',
+                slug: slugify(`del-all-sub-${mainName}-${Date.now()}`),
+                subcategory: 'ALL_SUBCATEGORIES_DELETED_MARKER',
+                isDeleted: true,
+                description: 'DELETED_HIERARCHY_MARKER'
+            });
+
+            return res.json({ msg: `All subcategories deleted for ${mainName}` });
+        }
+
+        if (scope === 'all-child' && subName) {
+            const subReg = new RegExp(`^${subName.trim()}$`, 'i');
+
+            await Category.deleteMany({
+                $or: [
+                    { subcategory: subReg, level: 'child' },
+                    { subcategory: subReg, subSubcategory: { $exists: true, $ne: '' } }
+                ]
+            });
+
+            await Category.create({
+                name: mainName ? mainName.trim() : '',
+                level: 'child',
+                slug: slugify(`del-all-child-${subName}-${Date.now()}`),
+                subcategory: subName.trim(),
+                subSubcategory: 'ALL_CHILD_DELETED_MARKER',
+                isDeleted: true,
+                description: 'DELETED_HIERARCHY_MARKER'
+            });
+
+            return res.json({ msg: `All child categories deleted for ${subName}` });
+        }
+
+        return res.status(400).json({ error: 'Invalid batch delete parameters' });
+    } catch (err) {
+        console.error('Error in categories batch delete:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
 // GET all active banners (public)
 router.get('/public/banners', async (req, res) => {
     try {

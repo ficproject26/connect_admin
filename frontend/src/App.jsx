@@ -4168,8 +4168,12 @@ function App() {
               if (c.isDeleted || c.description === 'DELETED_HIERARCHY_MARKER') {
                 const targetMain = mainName || c.name;
                 if (catTree[targetMain]) {
-                  if (c.subcategory && catTree[targetMain].subcategories?.[c.subcategory]) {
-                    if (c.subSubcategory) {
+                  if (c.subcategory === 'ALL_SUBCATEGORIES_DELETED_MARKER') {
+                    catTree[targetMain].subcategories = {};
+                  } else if (c.subcategory && catTree[targetMain].subcategories?.[c.subcategory]) {
+                    if (c.subSubcategory === 'ALL_CHILD_DELETED_MARKER') {
+                      catTree[targetMain].subcategories[c.subcategory].childCategories = [];
+                    } else if (c.subSubcategory) {
                       catTree[targetMain].subcategories[c.subcategory].childCategories = 
                         (catTree[targetMain].subcategories[c.subcategory].childCategories || []).filter(ch => ch.name !== c.subSubcategory);
                     } else {
@@ -4543,16 +4547,11 @@ function App() {
                             2. Sub Categories ({filteredSubList.length}) <span className="text-slate-400 font-normal">- {activeMainCatName}</span>
                           </h3>
                           <div className="flex items-center gap-2">
-                            {displayedSubList.length > 0 && (
+                             {displayedSubList.length > 0 && (
                               <button 
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  for (const subItem of displayedSubList) {
-                                    if (subItem._id) {
-                                      await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
-                                    }
-                                    await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
-                                  }
+                                  await executeAction('/admin/categories-batch-delete', 'DELETE', { mainName: activeMainCatName, scope: 'all-sub' });
                                 }}
                                 className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
                                 title="Remove All Sub Categories"
@@ -4702,12 +4701,7 @@ function App() {
                               <button 
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  for (const childItem of displayedChildList) {
-                                    if (childItem._id) {
-                                      await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
-                                    }
-                                    await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
-                                  }
+                                  await executeAction('/admin/categories-batch-delete', 'DELETE', { mainName: activeMainCatName, subName: activeSubCatName, scope: 'all-child' });
                                 }}
                                 className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
                                 title="Remove All Child Categories"
