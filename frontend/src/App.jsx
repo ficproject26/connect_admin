@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Users, UserCheck, ShieldAlert, FileText, CheckCircle, XCircle, 
+  Users, UserCheck, ShieldAlert, FileText, CheckCircle, XCircle, X, 
   MapPin, Settings, DollarSign, Award, Image, BarChart3, 
   Layers, LogOut, Menu, Sun, Moon, Plus, Edit2, Trash2, 
   Search, Filter, ChevronRight, Download, CreditCard, Clock,
