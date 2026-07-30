@@ -13,6 +13,7 @@ const UserSchema = new mongoose.Schema({
     assignedDistrict: { type: String }, // For district agents / admin
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' }, // For branch admin / staff / agents
     adminRole: { type: String, enum: ['super-admin', 'branch-admin', 'staff'], default: 'staff' },
+    registrationId: { type: String },
     
     // Vendor profile fields
     vendorType: { type: String },

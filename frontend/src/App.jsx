@@ -2055,7 +2055,10 @@ function App() {
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {filteredCustomers.map((c) => (
                           <tr key={c._id}>
-                            <td className="px-6 py-4 font-semibold text-slate-850 dark:text-slate-200">{c.name}</td>
+                            <td className="px-6 py-4">
+                              <span className="block font-semibold text-slate-850 dark:text-slate-200">{c.name}</span>
+                              <span className="block text-[11px] text-slate-400 mt-0.5 font-mono">{c.customerId || c._id}</span>
+                            </td>
                             <td className="px-6 py-4 text-xs">
                               <span className="block">{c.email}</span>
                               <span className="block text-slate-400 mt-0.5">{c.phone}</span>

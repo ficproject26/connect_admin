@@ -477,6 +477,42 @@ router.delete('/admins/:id', [auth, adminAuth], async (req, res) => {
 // ==========================================
 router.get('/agents', [auth, adminAuth], async (req, res) => {
     try {
+        // Sync any agents from 'agents' collection into 'users' collection
+        const db = mongoose.connection.db;
+        if (db) {
+            try {
+                const rawAgents = await db.collection('agents').find().toArray();
+                for (const rAgent of rawAgents) {
+                    if (rAgent.email) {
+                        const existingUser = await User.findOne({ email: rAgent.email.toLowerCase() });
+                        if (!existingUser) {
+                            const territoryStr = rAgent.territory?.state || rAgent.territory?.district || rAgent.territory?.division || rAgent.territory?.pincode || '';
+                            await User.create({
+                                name: rAgent.name,
+                                email: rAgent.email.toLowerCase(),
+                                phone: rAgent.phone,
+                                password: rAgent.password,
+                                role: 'agent',
+                                level: rAgent.role || 'pincode',
+                                assignedArea: territoryStr,
+                                registrationId: rAgent.registrationId,
+                                status: rAgent.kycStatus || 'pending',
+                                isActive: rAgent.kycStatus === 'approved',
+                                kyc: {
+                                    aadhaarImage: rAgent.kycDocs?.aadhaarCard || '',
+                                    panImage: rAgent.kycDocs?.panCard || '',
+                                    selfie: rAgent.kycDocs?.passportPhoto || ''
+                                },
+                                createdAt: rAgent.createdAt || new Date()
+                            });
+                        }
+                    }
+                }
+            } catch (syncErr) {
+                console.error("Error syncing agents collection:", syncErr);
+            }
+        }
+
         const filter = { role: 'agent' };
         if (req.adminUser.adminRole !== 'super-admin') {
             filter.branchId = req.adminUser.branchId;
@@ -1239,6 +1275,17 @@ router.put('/approve-agent/:id', [auth, adminAuth], async (req, res) => {
         }
 
         await agent.save();
+
+        // Also update standalone 'agents' collection if present
+        const db = mongoose.connection.db;
+        if (db && agent.email) {
+            const syncKycStatus = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : agent.status;
+            await db.collection('agents').updateOne(
+                { email: agent.email.toLowerCase() },
+                { $set: { kycStatus: syncKycStatus, rejectionReason: req.body.rejectionReason || '' } }
+            );
+        }
+
         res.json(agent);
     } catch (err) {
         console.error(err);
