@@ -1139,11 +1139,11 @@ function App() {
                     <span className="bg-rose-500/10 text-rose-500 text-xs px-2 py-0.5 rounded-full font-bold">Alert</span>
                   </div>
                   <div className="space-y-3">
-                    {agents.filter(a => a.status === 'pending').map((pAgent, idx) => (
+                    {agents.filter(a => (a.status || '').toLowerCase() === 'pending').map((pAgent, idx) => (
                       <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
                         <div>
                           <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pAgent.name}</span>
-                          <span className="text-xs text-slate-400">Agent KYC Pending • {pAgent.assignedDistrict}</span>
+                          <span className="text-xs text-slate-400">Agent KYC Pending • {pAgent.assignedArea || pAgent.assignedDistrict || pAgent.level || 'Pending Request'}</span>
                         </div>
                         <button 
                           onClick={() => { setActiveTab('kyc') }}
@@ -2117,7 +2117,7 @@ function App() {
                   {agents
                     .filter(a => {
                       const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
-                      return a.status === currentFilter;
+                      return (a.status || '').toLowerCase() === currentFilter.toLowerCase();
                     })
                     .map((agent) => (
                     <div key={agent._id} className="py-5 space-y-4">

@@ -105,18 +105,21 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         const totalHotels = await Vendor.countDocuments({ category: 'Hotels', ...(isBranchScoped ? { branchId } : {}) });
         const totalServices = await Vendor.countDocuments({ category: 'Services', ...(isBranchScoped ? { branchId } : {}) });
         
+        const agentBranchFilter = isBranchScoped ? { $or: [{ branchId }, { branchId: null }, { branchId: { $exists: false } }] } : {};
+        const pendingStatusFilter = { status: { $in: ['pending', 'Pending'] } };
+
         const activeMembershipPlans = await MembershipPlan.countDocuments({ isActive: true });
-        const pendingVendorApprovals = await Vendor.countDocuments({ status: 'pending', ...(isBranchScoped ? { branchId } : {}) });
-        const pendingAgentApprovals = await User.countDocuments({ role: 'agent', status: 'pending', ...(isBranchScoped ? { branchId } : {}) });
-        const pendingKYCRequests = await User.countDocuments({ role: 'agent', status: 'pending', ...(isBranchScoped ? { branchId } : {}) });
+        const pendingVendorApprovals = await Vendor.countDocuments({ status: { $in: ['pending', 'Pending'] }, ...(isBranchScoped ? { branchId } : {}) });
+        const pendingAgentApprovals = await User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter });
+        const pendingKYCRequests = await User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter });
 
         // Requested extra KPIs
-        const pendingAgentKYC = await User.countDocuments({ role: 'agent', status: 'pending', ...(isBranchScoped ? { branchId } : {}) });
-        const pendingVendorKYC = await Vendor.countDocuments({ kycStatus: 'pending', ...(isBranchScoped ? { branchId } : {}) });
-        const stateAgents = await User.countDocuments({ role: 'agent', level: 'state', ...(isBranchScoped ? { branchId } : {}) });
-        const districtAgents = await User.countDocuments({ role: 'agent', level: 'district', ...(isBranchScoped ? { branchId } : {}) });
-        const subDistrictAgents = await User.countDocuments({ role: 'agent', level: 'division', ...(isBranchScoped ? { branchId } : {}) });
-        const pincodeAgents = await User.countDocuments({ role: 'agent', level: 'pincode', ...(isBranchScoped ? { branchId } : {}) });
+        const pendingAgentKYC = await User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter });
+        const pendingVendorKYC = await Vendor.countDocuments({ kycStatus: { $in: ['pending', 'Pending'] }, ...(isBranchScoped ? { branchId } : {}) });
+        const stateAgents = await User.countDocuments({ role: 'agent', level: 'state', ...agentBranchFilter });
+        const districtAgents = await User.countDocuments({ role: 'agent', level: 'district', ...agentBranchFilter });
+        const subDistrictAgents = await User.countDocuments({ role: 'agent', level: 'division', ...agentBranchFilter });
+        const pincodeAgents = await User.countDocuments({ role: 'agent', level: 'pincode', ...agentBranchFilter });
         const subAdmins = await User.countDocuments({ role: 'admin', adminRole: { $in: ['branch-admin', 'staff'] }, ...(isBranchScoped ? { branchId } : {}) });
 
 
@@ -515,7 +518,11 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
         const filter = { role: 'agent' };
         if (req.adminUser.adminRole !== 'super-admin') {
-            filter.branchId = req.adminUser.branchId;
+            filter.$or = [
+                { branchId: req.adminUser.branchId },
+                { branchId: null },
+                { branchId: { $exists: false } }
+            ];
         }
         const agents = await User.find(filter)
             .populate('branchId', 'name')
