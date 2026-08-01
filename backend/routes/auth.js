@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const Pincode = require('../models/Pincode');
 const User = require('../models/User');
 
@@ -133,41 +134,137 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     try {
-        let user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ msg: 'Invalid Credentials' });
+        const lowerEmail = (email || '').toLowerCase().trim();
+        let user = await User.findOne({ email: lowerEmail });
+        if (!user) return res.status(401).json({ message: 'Invalid email or password', msg: 'Invalid Credentials' });
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ msg: 'Invalid Credentials' });
+        if (!isMatch) return res.status(401).json({ message: 'Invalid email or password', msg: 'Invalid Credentials' });
 
-        // Check status for agents
-        if (user.role === 'agent') {
-            if (user.status === 'pending') {
-                return res.status(403).json({ msg: 'Your account is under verification', status: 'pending' });
+        // For agents: enforce status check (pending/rejected block login)
+        if (user.role === 'agent' || user.role === 'Agent') {
+            // Sync kycStatus from agents collection if available
+            try {
+                const agentDoc = await mongoose.connection.db.collection('agents').findOne({ email: lowerEmail });
+                if (agentDoc && agentDoc.kycStatus && agentDoc.kycStatus !== user.status) {
+                    // Sync agents kycStatus back to users status
+                    user.status = agentDoc.kycStatus;
+                    await user.save();
+                }
+            } catch (syncErr) {
+                console.error('kycStatus sync error:', syncErr);
             }
-            if (user.status === 'rejected') {
-                return res.status(403).json({ msg: 'Your registration was rejected', status: 'rejected' });
+
+            const userStatus = (user.status || 'pending').toLowerCase();
+            if (userStatus === 'pending') {
+                return res.status(403).json({
+                    message: 'Your registration has been submitted successfully. You can log in only after Admin approval.',
+                    status: 'pending',
+                    registrationId: user.registrationId || 'N/A',
+                    role: user.level || 'pincode'
+                });
+            }
+            if (userStatus === 'rejected' || userStatus === 'suspended') {
+                return res.status(403).json({
+                    message: `Your registration application was rejected.`,
+                    status: userStatus,
+                    registrationId: user.registrationId || 'N/A',
+                    role: user.level || 'pincode'
+                });
             }
         }
 
         const payload = { user: { id: user.id, role: user.role } };
         jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 360000 }, (err, token) => {
             if (err) throw err;
-            res.json({ 
-                token, 
-                user: { 
-                    id: user.id, 
-                    name: user.name, 
-                    role: user.role, 
-                    adminRole: user.adminRole,
-                    branchId: user.branchId,
-                    status: user.status, 
-                    isActive: user.isActive 
-                } 
-            });
+
+            // Build user object (for Admin frontend)
+            const userObj = {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+                adminRole: user.adminRole,
+                branchId: user.branchId,
+                status: user.status,
+                isActive: user.isActive
+            };
+
+            // Build agent object (for Agent App frontend) — mirrors Agent backend response shape
+            const agentObj = {
+                _id: user.id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone || '',
+                role: user.level || user.role || 'pincode',
+                level: user.level || 'pincode',
+                registrationId: user.registrationId || '',
+                kycStatus: user.status === 'approved' ? 'approved' : user.status || 'pending',
+                territory: { state: user.assignedArea || '' },
+                kyc: user.kyc || {},
+                registrationFeePaid: user.isActive || false,
+                performanceScore: 0,
+                status: user.status,
+                isActive: user.isActive,
+                createdAt: user.createdAt || new Date().toISOString(),
+                updatedAt: user.updatedAt || new Date().toISOString()
+            };
+
+            res.json({ token, user: userObj, agent: agentObj });
         });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server error');
+    }
+});
+
+// @route    GET api/auth/me
+// @desc     Get current logged-in agent/user profile (supports both Bearer and x-auth-token)
+// @access   Private
+router.get('/me', async (req, res) => {
+    try {
+        // Accept both Authorization: Bearer <token> and x-auth-token header
+        let token = req.header('x-auth-token');
+        const authHeader = req.header('Authorization') || req.header('authorization');
+        if (!token && authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
+        }
+        if (!token) return res.status(401).json({ message: 'No token, authorization denied' });
+
+        const decoded = require('jsonwebtoken').verify(token, process.env.JWT_SECRET);
+        const userId = decoded.user?.id || decoded.agentId;
+        if (!userId) return res.status(401).json({ message: 'Invalid token payload' });
+
+        const user = await User.findById(userId).select('-password');
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        // Return agent-shape for agent users
+        if (user.role === 'agent' || user.role === 'Agent') {
+            const agent = {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone || '',
+                role: user.level || 'pincode',
+                level: user.level || 'pincode',
+                registrationId: user.registrationId || '',
+                kycStatus: user.status === 'approved' ? 'approved' : user.status || 'pending',
+                territory: { state: user.assignedArea || '' },
+                kyc: user.kyc || {},
+                registrationFeePaid: user.isActive || false,
+                performanceScore: 0,
+                status: user.status,
+                isActive: user.isActive,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt
+            };
+            return res.json({ agent });
+        }
+
+        return res.json({ user });
+    } catch (err) {
+        console.error('GET /auth/me error:', err.message);
+        return res.status(401).json({ message: 'Token is not valid' });
     }
 });
 
