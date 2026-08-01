@@ -516,7 +516,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             }
         }
 
-        const filter = { role: 'agent' };
+        const filter = { role: { $in: ['agent', 'Agent'] } };
         if (req.adminUser.adminRole !== 'super-admin') {
             filter.$or = [
                 { branchId: req.adminUser.branchId },

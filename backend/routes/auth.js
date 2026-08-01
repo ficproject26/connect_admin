@@ -11,70 +11,119 @@ const User = require('../models/User');
 router.post('/register', async (req, res) => {
     const { name, email, password, role, level } = req.body;
     try {
-        let user = await User.findOne({ email });
-        if (user) return res.status(400).json({ msg: 'User already exists' });
+        const lowerEmail = (email || '').toLowerCase().trim();
+        let user = await User.findOne({ email: lowerEmail });
+        if (user) return res.status(400).json({ message: 'Email already registered', msg: 'User already exists' });
 
-        // Resolve Pincode ID from 6-digit code or assignedPincodeId
+        if (req.body.phone) {
+            let existingPhone = await User.findOne({ phone: req.body.phone });
+            if (existingPhone) return res.status(400).json({ message: 'Phone number already registered', msg: 'Phone number already registered' });
+        }
+
+        // Generate unique Registration ID: REG-YYYYMMDD-XXXX
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randDigits = Math.floor(1000 + Math.random() * 9000);
+        const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
+
+        // Extract territory string
+        const territory = req.body.territory || {};
+        const territoryStr = territory.state || territory.district || territory.division || territory.pincode || req.body.assignedArea || '';
+
+        // Resolve Pincode ID if pincode code is provided
         let pincodeId = req.body.assignedPincode;
-        if (!pincodeId && req.body.pincode) {
-            let pinDoc = await Pincode.findOne({ code: req.body.pincode });
+        const pincodeCode = territory.pincode || req.body.pincode;
+        if (!pincodeId && pincodeCode) {
+            let pinDoc = await Pincode.findOne({ code: pincodeCode });
             if (!pinDoc) {
                 pinDoc = new Pincode({
-                    code: req.body.pincode,
-                    name: req.body.postOffice || req.body.city || 'Connaught Place',
-                    district: req.body.district || 'New Delhi',
-                    state: req.body.state || 'Delhi'
+                    code: pincodeCode,
+                    name: req.body.postOffice || req.body.city || 'Default Office',
+                    district: territory.district || req.body.district || 'Default District',
+                    state: territory.state || req.body.state || 'Default State'
                 });
                 await pinDoc.save();
             }
             pincodeId = pinDoc._id;
         }
 
-        // Map KYC fields from mobile app keys to schema keys
+        // Map KYC fields
         let kycMapped = {};
-        if (req.body.kyc) {
-            kycMapped = {
-                aadhaarNumber: req.body.kyc.aadhaarNumber || '',
-                aadhaarImage: req.body.kyc.aadhaarImage || '',
-                panNumber: req.body.kyc.panNumber || 'PENDING',
-                panImage: req.body.kyc.otherDocImage || req.body.kyc.panImage || '',
-                selfie: req.body.kyc.selfie || '',
-                businessProofImage: req.body.kyc.businessProofImage || req.body.kyc.otherDocImage || ''
-            };
-        }
+        const kDocs = req.body.kycDocs || req.body.kyc || {};
+        kycMapped = {
+            aadhaarNumber: kDocs.aadhaarNumber || '',
+            aadhaarImage: kDocs.aadhaarCard || kDocs.aadhaarImage || '',
+            panNumber: kDocs.panNumber || '',
+            panImage: kDocs.panCard || kDocs.panImage || '',
+            selfie: kDocs.passportPhoto || kDocs.selfie || '',
+            businessProofImage: kDocs.signature || kDocs.businessProofImage || ''
+        };
+
+        const agentRole = role || level || 'pincode';
 
         user = new User({ 
             name, 
-            email, 
+            email: lowerEmail, 
             phone: req.body.phone,
             password, 
-            role: role || 'agent', 
-            level: level || 'pincode',
+            role: 'agent', 
+            level: agentRole,
+            assignedArea: territoryStr,
+            registrationId,
+            status: 'pending',
+            isActive: false,
             kyc: kycMapped,
-            assignedPincode: pincodeId || null
+            assignedPincode: pincodeId || null,
+            createdAt: new Date()
         });
+
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(password, salt);
         await user.save();
 
-        const payload = { user: { id: user.id, role: user.role } };
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 360000 }, (err, token) => {
-            if (err) throw err;
-            res.json({ 
-                token, 
-                user: { 
-                    id: user.id, 
-                    name: user.name, 
-                    role: user.role, 
-                    adminRole: user.adminRole,
-                    branchId: user.branchId,
-                    status: user.status 
-                } 
-            });
+        // Also sync to agents collection for dual compatibility
+        try {
+            const db = mongoose.connection.db;
+            if (db) {
+                await db.collection('agents').updateOne(
+                    { email: lowerEmail },
+                    {
+                        $set: {
+                            name,
+                            email: lowerEmail,
+                            phone: req.body.phone,
+                            password: user.password,
+                            role: agentRole,
+                            registrationId,
+                            territory,
+                            kycStatus: 'pending',
+                            registrationFeePaid: false,
+                            createdAt: new Date()
+                        }
+                    },
+                    { upsert: true }
+                );
+            }
+        } catch (syncErr) {
+            console.error("Error syncing to agents collection:", syncErr);
+        }
+
+        return res.status(201).json({ 
+            message: 'Agent registered successfully. Pending Admin approval.',
+            registrationId,
+            role: agentRole,
+            status: 'pending',
+            agent: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                role: agentRole,
+                status: 'pending',
+                registrationId
+            }
         });
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
+        console.error('Registration error:', err);
+        return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
 });
 
