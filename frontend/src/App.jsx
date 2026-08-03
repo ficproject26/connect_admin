@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, UserCheck, ShieldAlert, FileText, CheckCircle, XCircle, X, 
-  MapPin, Settings, DollarSign, Award, Image, BarChart3, 
-  Layers, LogOut, Menu, Sun, Moon, Plus, Edit2, Trash2, 
+import {
+  Users, UserCheck, ShieldAlert, FileText, CheckCircle, XCircle, X,
+  MapPin, Settings, DollarSign, Award, Image, BarChart3,
+  Layers, LogOut, Menu, Sun, Moon, Plus, Edit2, Trash2,
   Search, Filter, ChevronRight, Download, CreditCard, Clock,
   ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, EyeOff, UploadCloud, Bell, User,
   Briefcase, Truck, Headphones, Folder, HelpCircle, MessageSquare, Megaphone, ShoppingBag, Calendar, Contact,
   MoreVertical, RotateCcw, LayoutGrid, List, Smartphone, Laptop, Tv, Home, Shirt, Sparkles, Package, Utensils, Tag, Activity, ArrowRight, ChevronLeft, Lock
 } from 'lucide-react';
-import { 
+import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
@@ -18,11 +18,11 @@ const getBackendUrl = () => {
   const hostname = window.location.hostname;
   // Local development: point to local backend server
   if (
-    !hostname || 
-    hostname === 'localhost' || 
-    hostname === '127.0.0.1' || 
-    hostname.startsWith('192.168.') || 
-    hostname.startsWith('10.') || 
+    !hostname ||
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
     hostname.startsWith('172.')
   ) {
     return `http://${hostname || 'localhost'}:5001/api`;
@@ -94,7 +94,7 @@ class ErrorBoundary extends React.Component {
             {this.state.error?.stack || this.state.error?.toString()}
           </pre>
           <div className="mt-6 flex gap-3">
-            <button 
+            <button
               onClick={() => {
                 localStorage.clear();
                 window.location.reload();
@@ -103,7 +103,7 @@ class ErrorBoundary extends React.Component {
             >
               Clear Session & Reload
             </button>
-            <button 
+            <button
               onClick={() => window.location.reload()}
               className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold px-5 py-2.5 rounded-xl transition-all text-sm"
             >
@@ -129,7 +129,9 @@ function App() {
   const [onboardType, setOnboardType] = useState('delivery-partner');
   const [showAgentPassword, setShowAgentPassword] = useState(false);
   const [showAgentConfirmPassword, setShowAgentConfirmPassword] = useState(false);
-  const [agentViewMode, setAgentViewMode] = useState('list');
+  const [agentViewMode, setAgentViewMode] = useState('tree');
+  const [expandedAgents, setExpandedAgents] = useState({});
+  const [showOnboardingRequestsModal, setShowOnboardingRequestsModal] = useState(false);
   const [pincodeStateFilter, setPincodeStateFilter] = useState('');
   const [pincodeDistrictFilter, setPincodeDistrictFilter] = useState('');
   const [pincodeStatusFilter, setPincodeStatusFilter] = useState('all');
@@ -185,8 +187,8 @@ function App() {
   // Dark Mode State
   const [darkMode, setDarkMode] = useState(() => {
     try {
-      return localStorage.getItem('theme') === 'dark' || 
-             (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      return localStorage.getItem('theme') === 'dark' ||
+        (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
     } catch (e) {
       return false;
     }
@@ -213,7 +215,7 @@ function App() {
   const [reports, setReports] = useState([]);
   const [tieups, setTieUps] = useState([]);
   const [tasks, setTasks] = useState([]);
-  
+
   // New States
   const [orders, setOrders] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -227,11 +229,11 @@ function App() {
   const [tickets, setTickets] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [exclusiveOffers, setExclusiveOffers] = useState([]);
-  
+
   // Refined UX States
   const [selectedPlanTab, setSelectedPlanTab] = useState(0);
   const [kycPreviewImage, setKycPreviewImage] = useState(null);
-  
+
   // Pincode Master Lookup States
   const [lookupPincode, setLookupPincode] = useState('');
   const [lookupResults, setLookupResults] = useState([]);
@@ -324,10 +326,10 @@ function App() {
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
-      try { localStorage.setItem('theme', 'dark'); } catch(e){}
+      try { localStorage.setItem('theme', 'dark'); } catch (e) { }
     } else {
       document.documentElement.classList.remove('dark');
-      try { localStorage.setItem('theme', 'light'); } catch(e){}
+      try { localStorage.setItem('theme', 'light'); } catch (e) { }
     }
   }, [darkMode]);
 
@@ -337,7 +339,7 @@ function App() {
     setLoading(true);
     try {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-      
+
       const fetchTasks = [
         // 1. Dashboard KPIs (Check auth status)
         fetch(`${API_BASE}/admin/dashboard-stats`, { headers }).then(async r => {
@@ -412,7 +414,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
-      
+
       const contentType = res.headers.get('content-type');
       let data = {};
       if (contentType && contentType.includes('application/json')) {
@@ -421,7 +423,7 @@ function App() {
         const textResponse = await res.text();
         throw new Error(`Server returned non-JSON response (URL: ${loginUrl}). Response: ${textResponse.substring(0, 100)}...`);
       }
-      
+
       if (!res.ok) {
         throw new Error(data.msg || data.error || 'Authentication failed');
       }
@@ -431,7 +433,7 @@ function App() {
       try {
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
-      } catch (e) {}
+      } catch (e) { }
 
 
       setToken(data.token);
@@ -449,7 +451,7 @@ function App() {
     try {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-    } catch (e) {}
+    } catch (e) { }
     setToken('');
     setUser(null);
   };
@@ -505,7 +507,7 @@ function App() {
         {/* Decorative background elements */}
         <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600 rounded-full filter blur-[150px] opacity-20 pointer-events-none"></div>
         <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-600 rounded-full filter blur-[150px] opacity-20 pointer-events-none"></div>
-        
+
         <div className="w-full max-w-md bg-slate-800/40 border border-slate-700/60 p-8 rounded-3xl backdrop-blur-xl shadow-2xl relative z-10">
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-20 h-20 bg-white rounded-2xl shadow-lg mb-4 overflow-hidden">
@@ -525,8 +527,8 @@ function App() {
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Email Address</label>
-              <input 
-                type="email" 
+              <input
+                type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="e.g. admin@example.com"
@@ -537,8 +539,8 @@ function App() {
 
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Password</label>
-              <input 
-                type="password" 
+              <input
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
@@ -547,8 +549,8 @@ function App() {
               />
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               disabled={loading}
               className="w-full bg-gradient-to-r from-primary-600 to-purple-600 hover:from-primary-500 hover:to-purple-500 text-white font-semibold py-3.5 rounded-xl transition-all duration-200 shadow-lg hover:shadow-primary-500/20 active:scale-95 disabled:opacity-50"
             >
@@ -587,7 +589,7 @@ function App() {
 
   return (
     <div className="min-h-screen flex bg-slate-100 dark:bg-slate-950 transition-colors duration-200">
-      
+
       {/* SIDEBAR */}
       <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-white border-r border-slate-800 transition-transform duration-300 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-0 lg:-translate-x-full'} lg:sticky lg:top-0 lg:h-screen lg:translate-x-0`}>
         <div className="h-full flex flex-col justify-between py-6 px-4 overflow-hidden">
@@ -603,57 +605,57 @@ function App() {
             </div>
 
             <nav className="space-y-1 overflow-y-auto flex-1 pr-1">
-              <button 
-                onClick={() => setActiveTab('dashboard')} 
+              <button
+                onClick={() => setActiveTab('dashboard')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'dashboard' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Layers className="w-4 h-4" /> Dashboard
               </button>
 
-              <button 
-                onClick={() => setActiveTab('agents')} 
+              <button
+                onClick={() => setActiveTab('agents')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'agents' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Users className="w-4 h-4" /> Agent Directory
               </button>
 
-              <button 
-                onClick={() => setActiveTab('vendors')} 
+              <button
+                onClick={() => setActiveTab('vendors')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'vendors' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Layers className="w-4 h-4" /> Vendor Directory
               </button>
 
-              <button 
-                onClick={() => setActiveTab('customers')} 
+              <button
+                onClick={() => setActiveTab('customers')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'customers' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Users className="w-4 h-4" /> Customers
               </button>
 
-              <button 
-                onClick={() => setActiveTab('kyc')} 
+              <button
+                onClick={() => setActiveTab('kyc')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'kyc' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <FileText className="w-4 h-4" /> KYC Verification
               </button>
 
-              <button 
-                onClick={() => setActiveTab('tieups')} 
+              <button
+                onClick={() => setActiveTab('tieups')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tieups' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Layers className="w-4 h-4" /> Business Tie-ups
               </button>
 
-              <button 
-                onClick={() => setActiveTab('tasks')} 
+              <button
+                onClick={() => setActiveTab('tasks')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tasks' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <CheckCircle className="w-4 h-4" /> Agent Tasks
               </button>
 
-              <button 
-                onClick={() => setActiveTab('wallet')} 
+              <button
+                onClick={() => setActiveTab('wallet')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'wallet' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <DollarSign className="w-4 h-4" /> Wallet & Withdrawals
@@ -661,22 +663,22 @@ function App() {
 
               {isSuperAdmin && (
                 <>
-                  <button 
-                    onClick={() => setActiveTab('commissions')} 
+                  <button
+                    onClick={() => setActiveTab('commissions')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'commissions' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
                   >
                     <CreditCard className="w-4 h-4" /> Commissions Config
                   </button>
 
-                  <button 
-                    onClick={() => setActiveTab('memberships')} 
+                  <button
+                    onClick={() => setActiveTab('memberships')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'memberships' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
                   >
                     <Award className="w-4 h-4" /> Membership Plans
                   </button>
 
-                  <button 
-                    onClick={() => setActiveTab('banners')} 
+                  <button
+                    onClick={() => setActiveTab('banners')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'banners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
                   >
                     <Image className="w-4 h-4" /> Banner Management
@@ -684,106 +686,106 @@ function App() {
                 </>
               )}
 
-              <button 
-                onClick={() => setActiveTab('reports')} 
+              <button
+                onClick={() => setActiveTab('reports')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'reports' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <BarChart3 className="w-4 h-4" /> Business Reports
               </button>
 
-              <button 
-                onClick={() => setActiveTab('orders')} 
+              <button
+                onClick={() => setActiveTab('orders')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'orders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <ShoppingBag className="w-4 h-4" /> Total Orders
               </button>
 
-              <button 
-                onClick={() => setActiveTab('bookings')} 
+              <button
+                onClick={() => setActiveTab('bookings')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'bookings' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Calendar className="w-4 h-4" /> Bookings
               </button>
 
-              <button 
-                onClick={() => setActiveTab('jobs')} 
+              <button
+                onClick={() => setActiveTab('jobs')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'jobs' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Briefcase className="w-4 h-4" /> Job Applied
               </button>
 
-              <button 
-                onClick={() => setActiveTab('card-holders')} 
+              <button
+                onClick={() => setActiveTab('card-holders')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'card-holders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Contact className="w-4 h-4" /> Membership Card
               </button>
 
-              <button 
-                onClick={() => setActiveTab('payments')} 
+              <button
+                onClick={() => setActiveTab('payments')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payments' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <CreditCard className="w-4 h-4" /> Payments
               </button>
 
-              <button 
-                onClick={() => setActiveTab('delivery-partners')} 
+              <button
+                onClick={() => setActiveTab('delivery-partners')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'delivery-partners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Truck className="w-4 h-4" /> Delivery Partners
               </button>
 
-              <button 
-                onClick={() => setActiveTab('technicians')} 
+              <button
+                onClick={() => setActiveTab('technicians')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'technicians' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Contact className="w-4 h-4" /> Technicians
               </button>
 
-              <button 
-                onClick={() => setActiveTab('executives')} 
+              <button
+                onClick={() => setActiveTab('executives')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'executives' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <UserCheck className="w-4 h-4" /> Executives
               </button>
 
-              <button 
-                onClick={() => setActiveTab('support-team')} 
+              <button
+                onClick={() => setActiveTab('support-team')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'support-team' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Headphones className="w-4 h-4" /> Customer Support Team
               </button>
 
-              <button 
-                onClick={() => setActiveTab('categories')} 
+              <button
+                onClick={() => setActiveTab('categories')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'categories' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Folder className="w-4 h-4" /> Category Management
               </button>
 
-              <button 
-                onClick={() => setActiveTab('queries')} 
+              <button
+                onClick={() => setActiveTab('queries')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'queries' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <HelpCircle className="w-4 h-4" /> Queries
               </button>
 
-              <button 
-                onClick={() => setActiveTab('tickets')} 
+              <button
+                onClick={() => setActiveTab('tickets')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tickets' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <MessageSquare className="w-4 h-4" /> Support
               </button>
 
-              <button 
-                onClick={() => setActiveTab('announcements')} 
+              <button
+                onClick={() => setActiveTab('announcements')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'announcements' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Megaphone className="w-4 h-4" /> Announcements
               </button>
 
-              <button 
-                onClick={() => setActiveTab('settings')} 
+              <button
+                onClick={() => setActiveTab('settings')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'settings' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Settings className="w-4 h-4" /> System Settings
@@ -795,7 +797,7 @@ function App() {
 
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        
+
         {/* HEADER BAR */}
         <header className="h-20 glass sticky top-0 z-20 px-8 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80">
           <div className="flex items-center gap-4">
@@ -816,7 +818,7 @@ function App() {
 
 
             {/* Dark Mode toggle button */}
-            <button 
+            <button
               onClick={() => setDarkMode(!darkMode)}
               className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer"
               title="Toggle theme"
@@ -826,7 +828,7 @@ function App() {
 
             {/* Notifications */}
             <div className="relative">
-              <button 
+              <button
                 onClick={() => setShowNotificationsPanel(!showNotificationsPanel)}
                 className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer relative"
                 title="Notifications"
@@ -878,7 +880,7 @@ function App() {
 
             {/* User Profile Widget */}
             <div className="flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-800">
-              <button 
+              <button
                 onClick={() => setActiveTab('settings')}
                 className="w-9 h-9 rounded-full bg-primary-500 hover:bg-primary-600 flex items-center justify-center font-bold text-white text-sm shadow-sm transition-colors cursor-pointer"
                 title="View Profile"
@@ -889,7 +891,7 @@ function App() {
                 <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">{user?.name || 'Super Admin'}</span>
                 <span className="block text-[10px] text-slate-400 font-medium capitalize">{(user?.adminRole || 'Admin User').replace('-', ' ')}</span>
               </div>
-              <button 
+              <button
                 onClick={handleLogout}
                 className="ml-1 p-2 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-all active:scale-95 cursor-pointer"
                 title="Sign Out"
@@ -902,292 +904,292 @@ function App() {
 
         {/* PAGE VIEWS */}
         <main className="p-6 max-w-7xl w-full mx-auto space-y-6">
-          
+
 
 
           {/* 1. DASHBOARD VIEW */}
           {activeTab === 'dashboard' && (
             stats ? (
               <div className="max-w-7xl mx-auto space-y-6">
-              
-              {/* KPI Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                {[
-                  { 
-                    title: 'Total Revenue', 
-                    value: `₹${stats.kpis.totalRevenue.toLocaleString()}`, 
-                    change: '+12.4% vs last mo', 
-                    icon: DollarSign, 
-                    cardBg: 'bg-emerald-50 dark:bg-emerald-950/20', 
-                    borderColor: 'border-emerald-100 dark:border-emerald-900/30',
-                    titleColor: 'text-emerald-700 dark:text-emerald-400', 
-                    valueColor: 'text-emerald-900 dark:text-emerald-300', 
-                    changeColor: 'text-emerald-600/80 dark:text-emerald-500',
-                    iconColor: 'text-emerald-600'
-                  },
-                  { 
-                    title: 'Total Orders', 
-                    value: stats.kpis.totalOrders, 
-                    change: '+8.2% vs last mo', 
-                    icon: FileText, 
-                    cardBg: 'bg-blue-50 dark:bg-blue-950/20', 
-                    borderColor: 'border-blue-100 dark:border-blue-900/30',
-                    titleColor: 'text-blue-700 dark:text-blue-400', 
-                    valueColor: 'text-blue-900 dark:text-blue-300', 
-                    changeColor: 'text-blue-600/80 dark:text-blue-500',
-                    iconColor: 'text-blue-600'
-                  },
-                  { 
-                    title: 'Total Agents', 
-                    value: stats.kpis.totalAgents, 
-                    change: `${stats.kpis.pendingAgentApprovals} pending approval`, 
-                    icon: Users, 
-                    cardBg: 'bg-purple-50 dark:bg-purple-950/20', 
-                    borderColor: 'border-purple-100 dark:border-purple-900/30',
-                    titleColor: 'text-purple-700 dark:text-purple-400', 
-                    valueColor: 'text-purple-900 dark:text-purple-300', 
-                    changeColor: 'text-purple-600/80 dark:text-purple-500',
-                    iconColor: 'text-purple-600'
-                  },
-                  { 
-                    title: 'Total Vendors', 
-                    value: stats.kpis.totalVendors, 
-                    change: `${stats.kpis.pendingVendorApprovals} pending approval`, 
-                    icon: Award, 
-                    cardBg: 'bg-amber-50 dark:bg-amber-950/20', 
-                    borderColor: 'border-amber-100 dark:border-amber-900/30',
-                    titleColor: 'text-amber-700 dark:text-amber-400', 
-                    valueColor: 'text-amber-900 dark:text-amber-300', 
-                    changeColor: 'text-amber-600/80 dark:text-amber-500',
-                    iconColor: 'text-amber-600'
-                  }
-                ].map((kpi, idx) => (
-                  <div key={idx} className={`${kpi.cardBg} p-6 rounded-3xl shadow-sm border ${kpi.borderColor} flex items-center justify-between hover:scale-[1.02] transition-all hover:shadow-md`}>
-                    <div>
-                      <span className={`block text-xs font-extrabold uppercase tracking-wider ${kpi.titleColor}`}>{kpi.title}</span>
-                      <span className={`block text-3xl font-black mt-2.5 ${kpi.valueColor}`}>{kpi.value}</span>
-                      <span className={`block text-xs font-semibold mt-2 ${kpi.changeColor}`}>{kpi.change}</span>
+
+                {/* KPI Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                  {[
+                    {
+                      title: 'Total Revenue',
+                      value: `₹${stats.kpis.totalRevenue.toLocaleString()}`,
+                      change: '+12.4% vs last mo',
+                      icon: DollarSign,
+                      cardBg: 'bg-emerald-50 dark:bg-emerald-950/20',
+                      borderColor: 'border-emerald-100 dark:border-emerald-900/30',
+                      titleColor: 'text-emerald-700 dark:text-emerald-400',
+                      valueColor: 'text-emerald-900 dark:text-emerald-300',
+                      changeColor: 'text-emerald-600/80 dark:text-emerald-500',
+                      iconColor: 'text-emerald-600'
+                    },
+                    {
+                      title: 'Total Orders',
+                      value: stats.kpis.totalOrders,
+                      change: '+8.2% vs last mo',
+                      icon: FileText,
+                      cardBg: 'bg-blue-50 dark:bg-blue-950/20',
+                      borderColor: 'border-blue-100 dark:border-blue-900/30',
+                      titleColor: 'text-blue-700 dark:text-blue-400',
+                      valueColor: 'text-blue-900 dark:text-blue-300',
+                      changeColor: 'text-blue-600/80 dark:text-blue-500',
+                      iconColor: 'text-blue-600'
+                    },
+                    {
+                      title: 'Total Agents',
+                      value: stats.kpis.totalAgents,
+                      change: `${stats.kpis.pendingAgentApprovals} pending approval`,
+                      icon: Users,
+                      cardBg: 'bg-purple-50 dark:bg-purple-950/20',
+                      borderColor: 'border-purple-100 dark:border-purple-900/30',
+                      titleColor: 'text-purple-700 dark:text-purple-400',
+                      valueColor: 'text-purple-900 dark:text-purple-300',
+                      changeColor: 'text-purple-600/80 dark:text-purple-500',
+                      iconColor: 'text-purple-600'
+                    },
+                    {
+                      title: 'Total Vendors',
+                      value: stats.kpis.totalVendors,
+                      change: `${stats.kpis.pendingVendorApprovals} pending approval`,
+                      icon: Award,
+                      cardBg: 'bg-amber-50 dark:bg-amber-950/20',
+                      borderColor: 'border-amber-100 dark:border-amber-900/30',
+                      titleColor: 'text-amber-700 dark:text-amber-400',
+                      valueColor: 'text-amber-900 dark:text-amber-300',
+                      changeColor: 'text-amber-600/80 dark:text-amber-500',
+                      iconColor: 'text-amber-600'
+                    }
+                  ].map((kpi, idx) => (
+                    <div key={idx} className={`${kpi.cardBg} p-6 rounded-3xl shadow-sm border ${kpi.borderColor} flex items-center justify-between hover:scale-[1.02] transition-all hover:shadow-md`}>
+                      <div>
+                        <span className={`block text-xs font-extrabold uppercase tracking-wider ${kpi.titleColor}`}>{kpi.title}</span>
+                        <span className={`block text-3xl font-black mt-2.5 ${kpi.valueColor}`}>{kpi.value}</span>
+                        <span className={`block text-xs font-semibold mt-2 ${kpi.changeColor}`}>{kpi.change}</span>
+                      </div>
+                      <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 shrink-0">
+                        <kpi.icon className={`w-5 h-5 ${kpi.iconColor}`} />
+                      </div>
                     </div>
-                    <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 shrink-0">
-                      <kpi.icon className={`w-5 h-5 ${kpi.iconColor}`} />
+                  ))}
+                </div>
+
+                {/* Extra KPIs */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                  {[
+                    {
+                      label: 'Agent Pending KYC',
+                      val: stats.kpis.pendingAgentKYC ?? 0,
+                      bg: 'bg-rose-50/50 dark:bg-rose-950/10',
+                      border: 'border-rose-100 dark:border-rose-900/30',
+                      text: 'text-rose-600 dark:text-rose-400'
+                    },
+                    {
+                      label: 'Vendor Pending KYC',
+                      val: stats.kpis.pendingVendorKYC ?? 0,
+                      bg: 'bg-orange-50/50 dark:bg-orange-950/10',
+                      border: 'border-orange-100 dark:border-orange-900/30',
+                      text: 'text-orange-600 dark:text-orange-400'
+                    },
+                    {
+                      label: 'State Agent',
+                      val: stats.kpis.stateAgents ?? 0,
+                      bg: 'bg-blue-50/50 dark:bg-blue-950/10',
+                      border: 'border-blue-100 dark:border-blue-900/30',
+                      text: 'text-blue-600 dark:text-blue-400'
+                    },
+                    {
+                      label: 'District Agent',
+                      val: stats.kpis.districtAgents ?? 0,
+                      bg: 'bg-indigo-50/50 dark:bg-indigo-950/10',
+                      border: 'border-indigo-100 dark:border-indigo-900/30',
+                      text: 'text-indigo-600 dark:text-indigo-400'
+                    },
+                    {
+                      label: 'Sub District Agent',
+                      val: stats.kpis.subDistrictAgents ?? 0,
+                      bg: 'bg-violet-50/50 dark:bg-violet-950/10',
+                      border: 'border-violet-100 dark:border-violet-900/30',
+                      text: 'text-violet-600 dark:text-violet-400'
+                    },
+                    {
+                      label: 'Pincode Agent',
+                      val: stats.kpis.pincodeAgents ?? 0,
+                      bg: 'bg-purple-50/50 dark:bg-purple-950/10',
+                      border: 'border-purple-100 dark:border-purple-900/30',
+                      text: 'text-purple-600 dark:text-purple-400'
+                    }
+                  ].map((sub, sIdx) => (
+                    <div
+                      key={sIdx}
+                      className={`${sub.bg} border ${sub.border} p-4 rounded-2xl shadow-sm text-center flex flex-col justify-center items-center hover:scale-[1.03] transition-all duration-300 hover:shadow-md`}
+                    >
+                      <span className="block text-2xl font-black text-slate-800 dark:text-white">{sub.val}</span>
+                      <span className={`block text-[11px] font-extrabold mt-1.5 uppercase tracking-wider leading-tight ${sub.text}`}>
+                        {sub.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Charts Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                  {/* Revenue Trend Area Chart */}
+                  <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Revenue Overview</h3>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={stats.charts.revenueOverview}>
+                          <defs>
+                            <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2} />
+                              <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                          <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
+                          <YAxis stroke="#94a3b8" fontSize={11} />
+                          <Tooltip />
+                          <Area type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Extra KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                {[
-                  { 
-                    label: 'Agent Pending KYC', 
-                    val: stats.kpis.pendingAgentKYC ?? 0, 
-                    bg: 'bg-rose-50/50 dark:bg-rose-950/10',
-                    border: 'border-rose-100 dark:border-rose-900/30',
-                    text: 'text-rose-600 dark:text-rose-400' 
-                  },
-                  { 
-                    label: 'Vendor Pending KYC', 
-                    val: stats.kpis.pendingVendorKYC ?? 0, 
-                    bg: 'bg-orange-50/50 dark:bg-orange-950/10',
-                    border: 'border-orange-100 dark:border-orange-900/30',
-                    text: 'text-orange-600 dark:text-orange-400' 
-                  },
-                  { 
-                    label: 'State Agent', 
-                    val: stats.kpis.stateAgents ?? 0, 
-                    bg: 'bg-blue-50/50 dark:bg-blue-950/10',
-                    border: 'border-blue-100 dark:border-blue-900/30',
-                    text: 'text-blue-600 dark:text-blue-400' 
-                  },
-                  { 
-                    label: 'District Agent', 
-                    val: stats.kpis.districtAgents ?? 0, 
-                    bg: 'bg-indigo-50/50 dark:bg-indigo-950/10',
-                    border: 'border-indigo-100 dark:border-indigo-900/30',
-                    text: 'text-indigo-600 dark:text-indigo-400' 
-                  },
-                  { 
-                    label: 'Sub District Agent', 
-                    val: stats.kpis.subDistrictAgents ?? 0, 
-                    bg: 'bg-violet-50/50 dark:bg-violet-950/10',
-                    border: 'border-violet-100 dark:border-violet-900/30',
-                    text: 'text-violet-600 dark:text-violet-400' 
-                  },
-                  { 
-                    label: 'Pincode Agent', 
-                    val: stats.kpis.pincodeAgents ?? 0, 
-                    bg: 'bg-purple-50/50 dark:bg-purple-950/10',
-                    border: 'border-purple-100 dark:border-purple-900/30',
-                    text: 'text-purple-600 dark:text-purple-400' 
-                  }
-                ].map((sub, sIdx) => (
-                  <div 
-                    key={sIdx} 
-                    className={`${sub.bg} border ${sub.border} p-4 rounded-2xl shadow-sm text-center flex flex-col justify-center items-center hover:scale-[1.03] transition-all duration-300 hover:shadow-md`}
-                  >
-                    <span className="block text-2xl font-black text-slate-800 dark:text-white">{sub.val}</span>
-                    <span className={`block text-[11px] font-extrabold mt-1.5 uppercase tracking-wider leading-tight ${sub.text}`}>
-                      {sub.label}
-                    </span>
+                  {/* Category Wise Revenue Pie Chart */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Category Wise Revenue</h3>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={stats.charts.categoryWiseRevenue}
+                            cx="50%"
+                            cy="55%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                            nameKey="category"
+                          >
+                            {stats.charts.categoryWiseRevenue.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={11} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Charts Section */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Revenue Trend Area Chart */}
-                <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Revenue Overview</h3>
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={stats.charts.revenueOverview}>
-                        <defs>
-                          <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2}/>
-                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
-                        <YAxis stroke="#94a3b8" fontSize={11} />
-                        <Tooltip />
-                        <Area type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
                 </div>
 
-                {/* Category Wise Revenue Pie Chart */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Category Wise Revenue</h3>
-                  <div className="h-72">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={stats.charts.categoryWiseRevenue}
-                          cx="50%"
-                          cy="55%"
-                          innerRadius={60}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="value"
-                          nameKey="category"
-                        >
-                          {stats.charts.categoryWiseRevenue.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={11} />
-                      </PieChart>
-                    </ResponsiveContainer>
+                {/* Branch Wise Revenue (Super Admin exclusive comparison) */}
+                {isSuperAdmin && (
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">District Wise Performance</h3>
+                    <div className="h-64">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={stats.charts.branchWiseRevenue}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                          <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
+                          <YAxis stroke="#94a3b8" fontSize={11} />
+                          <Tooltip />
+                          <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                </div>
+                )}
 
-              </div>
+                {/* Recent Notifications / Approvals */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-              {/* Branch Wise Revenue (Super Admin exclusive comparison) */}
-              {isSuperAdmin && (
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">District Wise Performance</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={stats.charts.branchWiseRevenue}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
-                        <YAxis stroke="#94a3b8" fontSize={11} />
-                        <Tooltip />
-                        <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  {/* Pending Approvals */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pending Action Items</h3>
+                      <span className="bg-rose-500/10 text-rose-500 text-xs px-2 py-0.5 rounded-full font-bold">Alert</span>
+                    </div>
+                    <div className="space-y-3">
+                      {agents.filter(a => (a.status || '').toLowerCase() === 'pending').map((pAgent, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
+                          <div>
+                            <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pAgent.name}</span>
+                            <span className="text-xs text-slate-400">Agent KYC Pending • {pAgent.assignedArea || pAgent.assignedDistrict || pAgent.level || 'Pending Request'}</span>
+                          </div>
+                          <button
+                            onClick={() => { setActiveTab('kyc') }}
+                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                          >
+                            Verify KYC
+                          </button>
+                        </div>
+                      ))}
+                      {vendors.filter(v => v.status?.toLowerCase() === 'pending').map((pVendor, idx) => (
+                        <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
+                          <div>
+                            <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pVendor.businessName}</span>
+                            <span className="text-xs text-slate-400">New Vendor Tie-Up • {pVendor.category}</span>
+                          </div>
+                          <button
+                            onClick={() => { setActiveTab('vendors') }}
+                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                          >
+                            Approve
+                          </button>
+                        </div>
+                      ))}
+                      {agents.filter(a => a.status === 'pending').length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
+                        <div className="text-center py-6 text-slate-400 text-sm">
+                          <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                          No pending approvals!
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
 
-              {/* Recent Notifications / Approvals */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Pending Approvals */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pending Action Items</h3>
-                    <span className="bg-rose-500/10 text-rose-500 text-xs px-2 py-0.5 rounded-full font-bold">Alert</span>
-                  </div>
-                  <div className="space-y-3">
-                    {agents.filter(a => (a.status || '').toLowerCase() === 'pending').map((pAgent, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
-                        <div>
-                          <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pAgent.name}</span>
-                          <span className="text-xs text-slate-400">Agent KYC Pending • {pAgent.assignedArea || pAgent.assignedDistrict || pAgent.level || 'Pending Request'}</span>
+                  {/* Latest Activity Log */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Latest Platform Activity</h3>
+                    <div className="space-y-4">
+                      {stats.recent.latestVendors.slice(0, 3).map((v, idx) => (
+                        <div key={idx} className="flex gap-3 items-start text-sm">
+                          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+                            <Award className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-850 dark:text-slate-200">
+                              Vendor tie-up <span className="text-primary-500">{v.businessName}</span> submitted.
+                            </p>
+                            <span className="text-[10px] text-slate-400">Category: {v.category}</span>
+                          </div>
                         </div>
-                        <button 
-                          onClick={() => { setActiveTab('kyc') }}
-                          className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
-                        >
-                          Verify KYC
-                        </button>
-                      </div>
-                    ))}
-                    {vendors.filter(v => v.status?.toLowerCase() === 'pending').map((pVendor, idx) => (
-                      <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
-                        <div>
-                          <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pVendor.businessName}</span>
-                          <span className="text-xs text-slate-400">New Vendor Tie-Up • {pVendor.category}</span>
+                      ))}
+                      {stats.recent.latestAgents.slice(0, 2).map((a, idx) => (
+                        <div key={idx} className="flex gap-3 items-start text-sm">
+                          <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                            <Users className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-slate-850 dark:text-slate-200">
+                              New agent onboarding: <span className="text-purple-500">{a.name}</span> ({a.email})
+                            </p>
+                            <span className="text-[10px] text-slate-400">Level: {a.level}</span>
+                          </div>
                         </div>
-                        <button 
-                          onClick={() => { setActiveTab('vendors') }}
-                          className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
-                        >
-                          Approve
-                        </button>
-                      </div>
-                    ))}
-                    {agents.filter(a => a.status === 'pending').length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
-                      <div className="text-center py-6 text-slate-400 text-sm">
-                        <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                        No pending approvals!
-                      </div>
-                    )}
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                {/* Latest Activity Log */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Latest Platform Activity</h3>
-                  <div className="space-y-4">
-                    {stats.recent.latestVendors.slice(0, 3).map((v, idx) => (
-                      <div key={idx} className="flex gap-3 items-start text-sm">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
-                          <Award className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-850 dark:text-slate-200">
-                            Vendor tie-up <span className="text-primary-500">{v.businessName}</span> submitted.
-                          </p>
-                          <span className="text-[10px] text-slate-400">Category: {v.category}</span>
-                        </div>
-                      </div>
-                    ))}
-                    {stats.recent.latestAgents.slice(0, 2).map((a, idx) => (
-                      <div key={idx} className="flex gap-3 items-start text-sm">
-                        <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
-                          <Users className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-850 dark:text-slate-200">
-                            New agent onboarding: <span className="text-purple-500">{a.name}</span> ({a.email})
-                          </p>
-                          <span className="text-[10px] text-slate-400">Level: {a.level}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
 
               </div>
-
-            </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-slate-500">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
@@ -1202,15 +1204,15 @@ function App() {
               <div className="flex justify-between items-center">
                 <div className="flex gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl w-80">
                   <Search className="w-5 h-5 text-slate-400" />
-                  <input 
-                    type="text" 
-                    placeholder="Search districts..." 
+                  <input
+                    type="text"
+                    placeholder="Search districts..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="bg-transparent focus:outline-none text-sm w-full"
                   />
                 </div>
-                <button 
+                <button
                   onClick={() => { setModalData(null); setShowModal('branch'); }}
                   className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-md active:scale-95"
                 >
@@ -1254,13 +1256,13 @@ function App() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right space-x-2">
-                            <button 
+                            <button
                               onClick={() => { setModalData(b); setShowModal('branch'); }}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-primary-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             >
                               <Edit2 className="w-4 h-4" />
                             </button>
-                            <button 
+                            <button
                               onClick={() => executeAction(`/admin/branches/${b._id}`, 'DELETE')}
                               className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                             >
@@ -1268,7 +1270,7 @@ function App() {
                             </button>
                           </td>
                         </tr>
-                    ))}
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -1280,7 +1282,7 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Administrators & Permissions</h3>
-                <button 
+                <button
                   onClick={() => { setModalData(null); setShowModal('admin'); }}
                   className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition-all shadow-md"
                 >
@@ -1306,13 +1308,13 @@ function App() {
                       )}
                     </div>
                     <div className="flex gap-2">
-                      <button 
+                      <button
                         onClick={() => { setModalData(adm); setShowModal('admin'); }}
                         className="p-2 text-slate-400 hover:text-primary-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
                         onClick={() => executeAction(`/admin/admins/${adm._id}`, 'DELETE')}
                         className="p-2 text-slate-400 hover:text-rose-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
                       >
@@ -1328,40 +1330,40 @@ function App() {
           {/* 4. AGENTS DIRECTORY */}
           {activeTab === 'agents' && (
             <div className="space-y-6">
-              
+
               {/* Agent Level & Network Overview Cards */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
                 <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Agent Network Breakdown</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  <div 
+                  <div
                     onClick={() => setAgentLevelFilter('all')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'all' ? 'bg-primary-500/10 border-2 border-primary-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
                     <span className="block text-2xl font-black text-primary-500">{agents.length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">Total Agents</span>
                   </div>
-                  <div 
+                  <div
                     onClick={() => setAgentLevelFilter('state')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'state' ? 'bg-purple-500/10 border-2 border-purple-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
                     <span className="block text-2xl font-black text-purple-500">{agents.filter(a => (a.level || '').toLowerCase() === 'state').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">State Agents</span>
                   </div>
-                  <div 
+                  <div
                     onClick={() => setAgentLevelFilter('district')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'district' ? 'bg-blue-500/10 border-2 border-blue-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
                     <span className="block text-2xl font-black text-blue-500">{agents.filter(a => (a.level || '').toLowerCase() === 'district').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">District Agents</span>
                   </div>
-                  <div 
+                  <div
                     onClick={() => setAgentLevelFilter('division')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'division' ? 'bg-indigo-500/10 border-2 border-indigo-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
                     <span className="block text-2xl font-black text-indigo-500">{agents.filter(a => ['division', 'divisional'].includes((a.level || '').toLowerCase())).length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">Divisional Agents</span>
                   </div>
-                  <div 
+                  <div
                     onClick={() => setAgentLevelFilter('pincode')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'pincode' ? 'bg-emerald-500/10 border-2 border-emerald-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
@@ -1376,9 +1378,9 @@ function App() {
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
                   <div className="flex gap-2 bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl flex-1 border border-slate-200/60 dark:border-slate-850 w-full sm:max-w-md">
                     <Search className="w-5 h-5 text-slate-400" />
-                    <input 
-                      type="text" 
-                      placeholder="Search by name, email, pincode, area..." 
+                    <input
+                      type="text"
+                      placeholder="Search by name, email, pincode, area..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="bg-transparent focus:outline-none text-sm w-full"
@@ -1386,14 +1388,21 @@ function App() {
                   </div>
                   <div className="flex gap-3 items-center w-full sm:w-auto justify-between sm:justify-end">
                     <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-                      <button 
+                      <button
+                        type="button"
+                        onClick={() => setAgentViewMode('tree')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${agentViewMode === 'tree' ? 'bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-300'}`}
+                      >
+                        Hierarchy Tree
+                      </button>
+                      <button
                         type="button"
                         onClick={() => setAgentViewMode('list')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${agentViewMode === 'list' ? 'bg-white dark:bg-slate-900 text-slate-850 dark:text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-300'}`}
                       >
                         List
                       </button>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setAgentViewMode('grid')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${agentViewMode === 'grid' ? 'bg-white dark:bg-slate-900 text-slate-855 dark:text-slate-100 shadow-sm' : 'text-slate-400 hover:text-slate-300'}`}
@@ -1401,7 +1410,21 @@ function App() {
                         Grid
                       </button>
                     </div>
-                    <button 
+
+                    <button
+                      type="button"
+                      onClick={() => setShowOnboardingRequestsModal(true)}
+                      className="bg-amber-500 hover:bg-amber-600 text-white font-semibold px-3.5 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 text-xs"
+                    >
+                      <UserCheck className="w-4 h-4" /> Agent Onboarding Requests
+                      {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length > 0 && (
+                        <span className="bg-white text-amber-800 font-extrabold text-[10px] px-1.5 py-0.2 rounded-full shadow-xs">
+                          {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length}
+                        </span>
+                      )}
+                    </button>
+
+                    <button
                       onClick={() => { setModalData(null); setShowModal('create-agent'); }}
                       className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 text-xs"
                     >
@@ -1424,16 +1447,14 @@ function App() {
                       key={filter.id}
                       type="button"
                       onClick={() => setAgentLevelFilter(filter.id)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                        agentLevelFilter === filter.id 
-                          ? 'bg-primary-600 text-white shadow-sm font-bold' 
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${agentLevelFilter === filter.id
+                          ? 'bg-primary-600 text-white shadow-sm font-bold'
                           : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
-                      }`}
+                        }`}
                     >
                       <span>{filter.label}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                        agentLevelFilter === filter.id ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
-                      }`}>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${agentLevelFilter === filter.id ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                        }`}>
                         {filter.count}
                       </span>
                     </button>
@@ -1443,8 +1464,8 @@ function App() {
                 {(() => {
                   const filteredAgents = agents.filter(a => {
                     const query = searchTerm.toLowerCase();
-                    const matchesSearch = !query || 
-                      (a.name || '').toLowerCase().includes(query) || 
+                    const matchesSearch = !query ||
+                      (a.name || '').toLowerCase().includes(query) ||
                       (a.email || '').toLowerCase().includes(query) ||
                       (a.phone && a.phone.includes(query)) ||
                       (a.assignedArea && a.assignedArea.toLowerCase().includes(query)) ||
@@ -1468,13 +1489,289 @@ function App() {
                     );
                   }
 
+                  if (agentViewMode === 'tree') {
+                    // Tree Hierarchy View
+                    const stateAgents = filteredAgents.filter(a => (a.level || '').toLowerCase() === 'state');
+                    const topLevelAgents = stateAgents.length > 0 ? stateAgents : filteredAgents;
+
+                    return (
+                      <div className="p-6 space-y-5 bg-slate-50/40 dark:bg-slate-950/20">
+                        {topLevelAgents.map((stAgent) => {
+                          const stId = stAgent._id;
+                          const isStExpanded = !!expandedAgents[stId];
+
+                          // Find district agents under this state agent
+                          const districtAgents = filteredAgents.filter(a =>
+                            (a.level || '').toLowerCase() === 'district' && (
+                              a.parentAgentId === stId ||
+                              (a.assignedArea && stAgent.assignedArea && a.assignedArea.toLowerCase().includes(stAgent.assignedArea.toLowerCase())) ||
+                              (a.assignedState && stAgent.assignedArea && stAgent.assignedArea.toLowerCase().includes(a.assignedState.toLowerCase())) ||
+                              stateAgents.length <= 1
+                            )
+                          );
+
+                          return (
+                            <div key={stId} className="bg-white dark:bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-5 shadow-sm space-y-4 transition-all">
+                              {/* State Agent Header */}
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center gap-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => setExpandedAgents(prev => ({ ...prev, [stId]: !prev[stId] }))}
+                                    className="w-9 h-9 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all shadow-xs"
+                                    title={isStExpanded ? "Collapse District Agents" : "Expand District Agents"}
+                                  >
+                                    <ChevronRight className={`w-5 h-5 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
+                                  </button>
+                                  <div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider">
+                                        STATE AGENT
+                                      </span>
+                                      <span className="text-xs font-mono text-slate-400 font-bold">
+                                        ID: AG-STATE-{stId.slice(-4)}
+                                      </span>
+                                      <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full capitalize ${stAgent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500'}`}>
+                                        {stAgent.status || 'Approved'}
+                                      </span>
+                                    </div>
+                                    <h4 className="text-lg font-black text-slate-850 dark:text-slate-100 mt-1 flex items-center gap-2">
+                                      {stAgent.name}
+                                    </h4>
+                                    <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
+                                      <MapPin className="w-3.5 h-3.5 text-blue-500" /> State Territory: <span className="font-bold text-slate-700 dark:text-slate-300">{stAgent.assignedArea || 'State Territory'}</span>
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 justify-end">
+                                  <button
+                                    onClick={() => { setModalData({ agentId: stAgent._id }); setShowModal('assign-task'); }}
+                                    className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                  >
+                                    Assign Task
+                                  </button>
+                                  <button
+                                    onClick={() => { setModalData(stAgent); setShowModal('edit-agent'); }}
+                                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                </div>
+                              </div>
+
+                              {/* Level 2: District Agents Container */}
+                              {isStExpanded && (
+                                <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-amber-400 dark:border-amber-600/70 space-y-4 pt-2">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-extrabold uppercase text-amber-600 dark:text-amber-400 tracking-wider">
+                                      District Agents ({districtAgents.length})
+                                    </span>
+                                  </div>
+
+                                  {districtAgents.map((distAgent) => {
+                                    const distId = distAgent._id;
+                                    const isDistExpanded = !!expandedAgents[distId];
+
+                                    // Find divisional agents under this district agent
+                                    const divAgents = filteredAgents.filter(a =>
+                                      ['division', 'divisional'].includes((a.level || '').toLowerCase()) && (
+                                        a.parentAgentId === distId ||
+                                        (a.assignedArea && distAgent.assignedArea && a.assignedArea.toLowerCase().includes(distAgent.assignedArea.toLowerCase())) ||
+                                        agents.filter(x => (x.level || '').toLowerCase() === 'district').length <= 1
+                                      )
+                                    );
+
+                                    return (
+                                      <div key={distId} className="bg-white dark:bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-4 shadow-sm space-y-3">
+                                        {/* District Agent Header */}
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+                                          <div className="flex items-center gap-3">
+                                            <button
+                                              type="button"
+                                              onClick={() => setExpandedAgents(prev => ({ ...prev, [distId]: !prev[distId] }))}
+                                              className="w-8 h-8 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all shadow-xs"
+                                              title={isDistExpanded ? "Collapse Divisional Agents" : "Expand Divisional Agents"}
+                                            >
+                                              <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
+                                            </button>
+                                            <div>
+                                              <div className="flex items-center gap-2 flex-wrap">
+                                                <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider">
+                                                  DISTRICT AGENT
+                                                </span>
+                                                <span className="text-xs font-mono text-slate-400 font-bold">
+                                                  ID: AG-DIST-{distId.slice(-4)}
+                                                </span>
+                                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${distAgent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                                  {distAgent.status || 'Approved'}
+                                                </span>
+                                              </div>
+                                              <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5">
+                                                {distAgent.name}
+                                              </h5>
+                                              <p className="text-xs text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+                                                <MapPin className="w-3 h-3 text-amber-500" /> District: <span className="font-bold text-slate-700 dark:text-slate-300">{distAgent.assignedArea || 'District Territory'}</span>
+                                              </p>
+                                            </div>
+                                          </div>
+
+                                          <div className="flex items-center gap-2 justify-end">
+                                            <button
+                                              onClick={() => { setModalData({ agentId: distAgent._id }); setShowModal('assign-task'); }}
+                                              className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-2.5 py-1 rounded-xl transition-colors"
+                                            >
+                                              Assign Task
+                                            </button>
+                                            <button
+                                              onClick={() => { setModalData(distAgent); setShowModal('edit-agent'); }}
+                                              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-2.5 py-1 rounded-xl transition-colors"
+                                            >
+                                              Edit
+                                            </button>
+                                          </div>
+                                        </div>
+
+                                        {/* Level 3: Divisional Agents Container */}
+                                        {isDistExpanded && (
+                                          <div className="ml-2 sm:ml-5 pl-3 sm:pl-4 border-l-2 border-indigo-400 dark:border-indigo-600/70 space-y-3 pt-2">
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-xs font-extrabold uppercase text-indigo-600 dark:text-indigo-400 tracking-wider">
+                                                Divisional Agents ({divAgents.length})
+                                              </span>
+                                            </div>
+
+                                            {divAgents.map((divAgent) => {
+                                              const divId = divAgent._id;
+                                              const isDivExpanded = !!expandedAgents[divId];
+
+                                              // Find pincode agents under this divisional agent
+                                              const pincodeAgents = filteredAgents.filter(a =>
+                                                (a.level || 'pincode').toLowerCase() === 'pincode' && (
+                                                  a.parentAgentId === divId ||
+                                                  (a.assignedArea && divAgent.assignedArea && a.assignedArea.toLowerCase().includes(divAgent.assignedArea.toLowerCase())) ||
+                                                  agents.filter(x => ['division', 'divisional'].includes((x.level || '').toLowerCase())).length <= 1
+                                                )
+                                              );
+
+                                              return (
+                                                <div key={divId} className="bg-white dark:bg-slate-900 border-2 border-indigo-500/70 rounded-2xl p-3.5 shadow-sm space-y-2.5">
+                                                  {/* Divisional Agent Header */}
+                                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                                                    <div className="flex items-center gap-2.5">
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => setExpandedAgents(prev => ({ ...prev, [divId]: !prev[divId] }))}
+                                                        className="w-7 h-7 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all shadow-xs"
+                                                        title={isDivExpanded ? "Collapse Pincode Agents" : "Expand Pincode Agents"}
+                                                      >
+                                                        <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
+                                                      </button>
+                                                      <div>
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                          <span className="bg-indigo-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                                            DIVISIONAL AGENT
+                                                          </span>
+                                                          <span className="text-[11px] font-mono text-slate-400 font-bold">
+                                                            ID: AG-DIV-{divId.slice(-4)}
+                                                          </span>
+                                                        </div>
+                                                        <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5">
+                                                          {divAgent.name}
+                                                        </h6>
+                                                        <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
+                                                          <MapPin className="w-3 h-3 text-indigo-500" /> Division: <span className="font-bold text-slate-700 dark:text-slate-300">{divAgent.assignedArea || 'Division Territory'}</span>
+                                                        </p>
+                                                      </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 justify-end">
+                                                      <button
+                                                        onClick={() => { setModalData({ agentId: divAgent._id }); setShowModal('assign-task'); }}
+                                                        className="bg-primary-600 hover:bg-primary-500 text-white text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors"
+                                                      >
+                                                        Assign Task
+                                                      </button>
+                                                      <button
+                                                        onClick={() => { setModalData(divAgent); setShowModal('edit-agent'); }}
+                                                        className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors"
+                                                      >
+                                                        Edit
+                                                      </button>
+                                                    </div>
+                                                  </div>
+
+                                                  {/* Level 4: Pincode Agents Container */}
+                                                  {isDivExpanded && (
+                                                    <div className="ml-2 sm:ml-4 pl-3 border-l-2 border-emerald-400 dark:border-emerald-600/70 space-y-2 pt-1.5">
+                                                      <div className="flex items-center justify-between">
+                                                        <span className="text-[11px] font-extrabold uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">
+                                                          Pincode Agents ({pincodeAgents.length})
+                                                        </span>
+                                                      </div>
+
+                                                      {pincodeAgents.map((pinAgent) => (
+                                                        <div key={pinAgent._id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                          <div className="flex items-center gap-2.5">
+                                                            <span className="bg-emerald-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                                                              PINCODE AGENT
+                                                            </span>
+                                                            <div>
+                                                              <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block">{pinAgent.name}</span>
+                                                              <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                                                                <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{pinAgent.assignedPincode?.code || pinAgent.pincode || pinAgent.assignedArea || '635109'}</span>
+                                                              </span>
+                                                            </div>
+                                                          </div>
+
+                                                          <div className="flex items-center gap-1.5 justify-end">
+                                                            <button
+                                                              onClick={() => { setModalData(pinAgent); setShowModal('agent-details'); }}
+                                                              className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors"
+                                                            >
+                                                              Details
+                                                            </button>
+                                                          </div>
+                                                        </div>
+                                                      ))}
+
+                                                      {pincodeAgents.length === 0 && (
+                                                        <p className="text-xs text-slate-400 italic py-1">No pincode agents assigned under this division.</p>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              );
+                                            })}
+
+                                            {divAgents.length === 0 && (
+                                              <p className="text-xs text-slate-400 italic py-1">No divisional agents assigned under this district.</p>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+
+                                  {districtAgents.length === 0 && (
+                                    <p className="text-xs text-slate-400 italic py-1">No district agents assigned under this state agent.</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+
                   return agentViewMode === 'list' ? (
                     <div className="divide-y divide-slate-200 dark:divide-slate-800">
                       {filteredAgents.map((agent) => {
                         const agentLvl = (agent.level || 'pincode').toLowerCase();
                         return (
                           <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                            <div 
+                            <div
                               onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
                               className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-1 cursor-pointer"
                             >
@@ -1483,12 +1780,11 @@ function App() {
                                 <div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors">{agent.name}</span>
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                                      agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
-                                      agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
-                                      ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
-                                      'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                                    }`}>
+                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                        agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                          ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
+                                            'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                      }`}>
                                       {agent.level || 'pincode'} Agent
                                     </span>
                                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
@@ -1507,8 +1803,8 @@ function App() {
                                 <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
                                   <span className="block text-slate-400 capitalize">{agent.level || 'pincode'}</span>
                                   <span className="font-bold">
-                                    {agent.level === 'pincode' || !agent.level 
-                                      ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None')) 
+                                    {agent.level === 'pincode' || !agent.level
+                                      ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None'))
                                       : (agent.assignedArea || 'None')}
                                   </span>
                                 </div>
@@ -1528,20 +1824,20 @@ function App() {
                             </div>
 
                             <div className="flex gap-2 justify-end">
-                              <button 
+                              <button
                                 onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
                                 className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                               >
                                 Assign Task
                               </button>
-                              <button 
+                              <button
                                 onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
                                 className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                               >
                                 Edit
                               </button>
                               {agent.status === 'approved' ? (
-                                <button 
+                                <button
                                   onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
                                   className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                                 >
@@ -1549,13 +1845,13 @@ function App() {
                                 </button>
                               ) : (
                                 <>
-                                  <button 
+                                  <button
                                     onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
                                     className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                                   >
                                     Reject
                                   </button>
-                                  <button 
+                                  <button
                                     onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
                                     className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                                   >
@@ -1574,7 +1870,7 @@ function App() {
                         const agentLvl = (agent.level || 'pincode').toLowerCase();
                         return (
                           <div key={agent._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                            <div 
+                            <div
                               onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
                               className="cursor-pointer space-y-4"
                             >
@@ -1583,12 +1879,11 @@ function App() {
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors truncate">{agent.name}</span>
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
-                                      agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
-                                      agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
-                                      ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
-                                      'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                                    }`}>
+                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                        agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                          ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
+                                            'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                      }`}>
                                       {agent.level || 'pincode'} Agent
                                     </span>
                                     <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
@@ -1604,8 +1899,8 @@ function App() {
                                 <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
                                   <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{agent.level || 'pincode'}</span>
                                   <span className="font-bold text-slate-700 dark:text-slate-300">
-                                    {agent.level === 'pincode' || !agent.level 
-                                      ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None')) 
+                                    {agent.level === 'pincode' || !agent.level
+                                      ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None'))
                                       : (agent.assignedArea || 'None')}
                                   </span>
                                 </div>
@@ -1625,20 +1920,20 @@ function App() {
                             </div>
 
                             <div className="flex flex-wrap gap-2 justify-end pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                              <button 
+                              <button
                                 onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
                                 className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
                               >
                                 Assign Task
                               </button>
-                              <button 
+                              <button
                                 onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
                                 className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
                               >
                                 Edit
                               </button>
                               {agent.status === 'approved' ? (
-                                <button 
+                                <button
                                   onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
                                   className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
                                 >
@@ -1646,13 +1941,13 @@ function App() {
                                 </button>
                               ) : (
                                 <>
-                                  <button 
+                                  <button
                                     onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
                                     className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
                                   >
                                     Reject
                                   </button>
-                                  <button 
+                                  <button
                                     onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
                                     className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
                                   >
@@ -1674,20 +1969,20 @@ function App() {
           {/* 5. PINCODE MANAGEMENT */}
           {activeTab === 'pincodes' && (
             <div className="space-y-6">
-              
+
               {/* PINCODE MASTER LOOKUP CARD */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-6 max-w-xl mx-auto">
                 <h3 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">Pincode Master</h3>
-                
+
                 <div className="space-y-4">
                   <div className="relative">
                     <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Enter 6-Digit Pincode</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       maxLength={6}
                       value={lookupPincode}
                       onChange={(e) => handlePincodeLookup(e.target.value)}
-                      placeholder="e.g. 635301" 
+                      placeholder="e.g. 635301"
                       className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:border-primary-500 transition-colors font-mono tracking-widest text-lg"
                     />
                     {lookupLoading && (
@@ -1698,7 +1993,7 @@ function App() {
                   {/* Post Office Selection Dropdown */}
                   {lookupResults.length > 0 && (
                     <div className="relative">
-                      <button 
+                      <button
                         type="button"
                         onClick={() => setShowOfficeDropdown(!showOfficeDropdown)}
                         className="w-full bg-white dark:bg-slate-900 border border-primary-500 text-primary-600 font-semibold py-2.5 px-4 rounded-xl text-sm transition-all hover:bg-primary-50/50 flex justify-between items-center"
@@ -1706,7 +2001,7 @@ function App() {
                         <span>{selectedOffice ? `Selected: ${selectedOffice.Name}` : `Select Post Office (${lookupResults.length} found)`}</span>
                         <ChevronRight className={`w-4 h-4 transform transition-transform ${showOfficeDropdown ? 'rotate-90' : ''}`} />
                       </button>
-                      
+
                       {showOfficeDropdown && (
                         <div className="absolute z-10 w-full mt-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y dark:divide-slate-800">
                           {lookupResults.map((office, idx) => (
@@ -1747,19 +2042,19 @@ function App() {
                         <div className="grid grid-cols-2 gap-y-2 text-xs">
                           <span className="text-slate-400">Post Office:</span>
                           <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.Name}</span>
-                          
+
                           <span className="text-slate-400">District:</span>
                           <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.District}</span>
-                          
+
                           <span className="text-slate-400">State:</span>
                           <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.State}</span>
-                          
+
                           <span className="text-slate-400">Division:</span>
                           <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.Division || 'N/A'}</span>
-                          
+
                           <span className="text-slate-400">Region:</span>
                           <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.Region || 'N/A'}</span>
-                          
+
                           <span className="text-slate-400">Delivery Status:</span>
                           <span className="font-bold text-right text-slate-800 dark:text-slate-200">{selectedOffice.DeliveryStatus}</span>
                         </div>
@@ -1791,9 +2086,9 @@ function App() {
                 </div>
               </div>
 
-                         {(() => {
+              {(() => {
                 const uniqueStates = [...new Set(pincodes.map(p => p.state).filter(Boolean))].sort();
-                
+
                 // Dynamically filter districts based on selected state
                 let availableDistricts = [];
                 if (pincodeStateFilter) {
@@ -1818,20 +2113,20 @@ function App() {
                 } else {
                   availableDistricts = [...new Set(pincodes.map(p => p.district).filter(Boolean))].sort();
                 }
-                
+
                 const filteredPincodes = pincodes.filter(p => {
-                  const matchesSearch = !searchTerm || 
-                                        p.code.includes(searchTerm) || 
-                                        p.district.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                        p.state.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                        (p.activeAgentId?.name && p.activeAgentId.name.toLowerCase().includes(searchTerm.toLowerCase()));
-                                         
+                  const matchesSearch = !searchTerm ||
+                    p.code.includes(searchTerm) ||
+                    p.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    p.state.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (p.activeAgentId?.name && p.activeAgentId.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
                   const matchesState = !pincodeStateFilter || p.state === pincodeStateFilter || (pincodeStateFilter === 'Delhi' && (p.state?.toLowerCase().includes('delhi') || p.district?.toLowerCase().includes('delhi')));
                   const matchesDistrict = !pincodeDistrictFilter || p.district === pincodeDistrictFilter;
-                  const matchesStatus = pincodeStatusFilter === 'all' || 
-                                        (pincodeStatusFilter === 'assigned' && p.activeAgentId) || 
-                                        (pincodeStatusFilter === 'unassigned' && !p.activeAgentId);
-                                         
+                  const matchesStatus = pincodeStatusFilter === 'all' ||
+                    (pincodeStatusFilter === 'assigned' && p.activeAgentId) ||
+                    (pincodeStatusFilter === 'unassigned' && !p.activeAgentId);
+
                   return matchesSearch && matchesState && matchesDistrict && matchesStatus;
                 });
 
@@ -1841,15 +2136,15 @@ function App() {
                       <div className="flex flex-1 flex-wrap gap-3 w-full">
                         <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[200px]">
                           <Search className="w-5 h-5 text-slate-400" />
-                          <input 
-                            type="text" 
-                            placeholder="Search pincode, district, state, agent..." 
+                          <input
+                            type="text"
+                            placeholder="Search pincode, district, state, agent..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="bg-transparent focus:outline-none text-sm w-full"
                           />
                         </div>
-                        
+
                         <select
                           value={pincodeStateFilter}
                           onChange={(e) => {
@@ -1887,13 +2182,13 @@ function App() {
                       </div>
 
                       <div className="flex gap-2 shrink-0 w-full xl:w-auto justify-end">
-                        <button 
+                        <button
                           onClick={() => { setModalData(null); setShowModal('pincode'); }}
                           className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 text-xs"
                         >
                           Assign Pincode
                         </button>
-                        <button 
+                        <button
                           onClick={() => { setModalData(null); setShowModal('create-pincode'); }}
                           className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 text-xs"
                         >
@@ -1917,7 +2212,7 @@ function App() {
                             </span>
                           </div>
                           {pin.activeAgentId && (
-                            <button 
+                            <button
                               onClick={() => executeAction('/admin/pincodes/remove', 'POST', { pincodeId: pin._id })}
                               className="text-xs font-bold text-rose-500 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-all"
                             >
@@ -1936,11 +2231,11 @@ function App() {
           {/* 6. VENDOR MANAGEMENT & TIE-UPS */}
           {activeTab === 'vendors' && (
             <div className="space-y-6">
-              
+
               {/* Category Filter */}
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {['All', ...new Set(categories.map(c => c.name))].map((cat) => (
-                  <button 
+                  <button
                     key={cat}
                     onClick={() => setFilterCategory(cat)}
                     className={`px-4 py-2 rounded-xl text-xs font-bold shrink-0 transition-all ${filterCategory === cat ? 'bg-primary-600 text-white shadow-md' : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50'}`}
@@ -1956,7 +2251,7 @@ function App() {
                   .filter(v => filterCategory === 'All' || v.category === filterCategory || (v.vendorType && v.vendorType.toLowerCase().includes(filterCategory.toLowerCase())) || (v.subcategory && v.subcategory.toLowerCase().includes(filterCategory.toLowerCase())))
                   .map((vendor) => (
                     <div key={vendor._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4 hover:shadow-md transition-shadow">
-                      <div 
+                      <div
                         onClick={() => { setModalData(vendor); setShowModal('vendor-details'); }}
                         className="cursor-pointer space-y-4"
                       >
@@ -1999,7 +2294,7 @@ function App() {
 
                       <div className="flex gap-2 justify-end">
                         {vendor.status?.toLowerCase() !== 'rejected' && (
-                          <button 
+                          <button
                             onClick={() => executeAction(`/admin/vendors/${vendor._id}/reject`, 'PUT', {})}
                             className="bg-slate-100 hover:bg-rose-500/10 dark:bg-slate-800 hover:text-rose-500 text-slate-600 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-all"
                           >
@@ -2007,14 +2302,14 @@ function App() {
                           </button>
                         )}
                         {vendor.status?.toLowerCase() !== 'approved' && (
-                          <button 
+                          <button
                             onClick={() => executeAction(`/admin/vendors/${vendor._id}/approve`, 'PUT', {})}
                             className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-all"
                           >
                             Approve Vendor
                           </button>
                         )}
-                        <button 
+                        <button
                           onClick={() => {
                             if (window.confirm(`Are you sure you want to delete ${vendor.businessName}?`)) {
                               executeAction(`/admin/vendors/${vendor._id}`, 'DELETE');
@@ -2027,7 +2322,7 @@ function App() {
                         </button>
                       </div>
                     </div>
-                ))}
+                  ))}
               </div>
 
             </div>
@@ -2064,9 +2359,9 @@ function App() {
                       {/* Search Bar */}
                       <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
                         <Search className="w-5 h-5 text-slate-400" />
-                        <input 
-                          type="text" 
-                          placeholder="Search by customer name, email, or phone..." 
+                        <input
+                          type="text"
+                          placeholder="Search by customer name, email, or phone..."
                           value={customerSearchTerm}
                           onChange={(e) => setCustomerSearchTerm(e.target.value)}
                           className="bg-transparent focus:outline-none text-sm w-full"
@@ -2183,7 +2478,7 @@ function App() {
                     })}
                   </div>
                 </div>
-                
+
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
                   {agents
                     .filter(a => {
@@ -2195,73 +2490,72 @@ function App() {
                       return aStatus === currentFilter;
                     })
                     .map((agent) => (
-                    <div key={agent._id} className="py-5 space-y-4">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{agent.name}</span>
-                          <span className="block text-xs text-slate-400">{agent.email} • {agent.phone}</span>
+                      <div key={agent._id} className="py-5 space-y-4">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{agent.name}</span>
+                            <span className="block text-xs text-slate-400">{agent.email} • {agent.phone}</span>
+                          </div>
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                              agent.status === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
+                                'bg-amber-500/10 text-amber-500'
+                            }`}>
+                            KYC {agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}
+                          </span>
                         </div>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
-                          agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 
-                          agent.status === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 
-                          'bg-amber-500/10 text-amber-500'
-                        }`}>
-                          KYC {agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}
-                        </span>
-                      </div>
 
-                      {/* Documents viewer */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        <div 
-                          onClick={() => setKycPreviewImage(agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500')}
-                          className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                        >
-                          <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
-                          <img src={agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
-                          <span className="block text-[10px] font-mono mt-2">{agent.kyc?.aadhaarNumber || '987654321098'}</span>
+                        {/* Documents viewer */}
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <div
+                            onClick={() => setKycPreviewImage(agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500')}
+                            className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                          >
+                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
+                            <img src={agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
+                            <span className="block text-[10px] font-mono mt-2">{agent.kyc?.aadhaarNumber || '987654321098'}</span>
+                          </div>
+                          <div
+                            onClick={() => setKycPreviewImage(agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500')}
+                            className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                          >
+                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
+                            <img src={agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
+                            <span className="block text-[10px] font-mono mt-2">{agent.kyc?.panNumber || 'ABCDE1234F'}</span>
+                          </div>
+                          <div
+                            onClick={() => setKycPreviewImage(agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500')}
+                            className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                          >
+                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Video/Photo</span>
+                            <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
+                          </div>
+                          <div
+                            onClick={() => setKycPreviewImage(agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500')}
+                            className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                          >
+                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
+                            <img src={agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
+                          </div>
                         </div>
-                        <div 
-                          onClick={() => setKycPreviewImage(agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500')}
-                          className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                        >
-                          <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
-                          <img src={agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
-                          <span className="block text-[10px] font-mono mt-2">{agent.kyc?.panNumber || 'ABCDE1234F'}</span>
-                        </div>
-                        <div 
-                          onClick={() => setKycPreviewImage(agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500')}
-                          className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                        >
-                          <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Video/Photo</span>
-                          <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
-                        </div>
-                        <div 
-                          onClick={() => setKycPreviewImage(agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500')}
-                          className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                        >
-                          <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
-                          <img src={agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
-                        </div>
-                      </div>
 
-                      {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((agent.status || '').toLowerCase()) && (
-                        <div className="flex gap-3 justify-end">
-                          <button 
-                            onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
-                            className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
-                          >
-                            Reject / Request Reupload
-                          </button>
-                          <button 
-                            onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
-                          >
-                            Verify & Approve KYC
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((agent.status || '').toLowerCase()) && (
+                          <div className="flex gap-3 justify-end">
+                            <button
+                              onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                              className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                            >
+                              Reject / Request Reupload
+                            </button>
+                            <button
+                              onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                            >
+                              Verify & Approve KYC
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   {agents.filter(a => {
                     const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
                     const aStatus = (a.status || '').toLowerCase();
@@ -2270,11 +2564,11 @@ function App() {
                     }
                     return aStatus === currentFilter;
                   }).length === 0 && (
-                    <div className="text-center py-12 text-slate-400 text-sm">
-                      <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                      No agents found for this status.
-                    </div>
-                  )}
+                      <div className="text-center py-12 text-slate-400 text-sm">
+                        <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                        No agents found for this status.
+                      </div>
+                    )}
                 </div>
               </div>
             </div>
@@ -2302,14 +2596,14 @@ function App() {
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
                   <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                     <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Business Tie-Up Requests</h3>
-                    
+
                     <div className="flex flex-wrap gap-3 w-full xl:w-auto items-center">
                       {/* Search Bar */}
                       <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-3.5 py-1.5 rounded-xl flex-1 min-w-[200px]">
                         <Search className="w-4 h-4 text-slate-400 my-auto" />
-                        <input 
-                          type="text" 
-                          placeholder="Search by customer or vendor..." 
+                        <input
+                          type="text"
+                          placeholder="Search by customer or vendor..."
                           value={tieupSearchTerm}
                           onChange={(e) => setTieUpSearchTerm(e.target.value)}
                           className="bg-transparent focus:outline-none text-xs w-full"
@@ -2395,15 +2689,15 @@ function App() {
                         </div>
                       </div>
                     ))}
-                  {tieups.length === 0 && (
-                    <div className="col-span-2 text-center py-12 text-slate-400 text-sm">
-                      <Layers className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                      No business tie-up requests found.
-                    </div>
-                  )}
+                    {tieups.length === 0 && (
+                      <div className="col-span-2 text-center py-12 text-slate-400 text-sm">
+                        <Layers className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+                        No business tie-up requests found.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
             );
           })()}
 
@@ -2499,21 +2793,21 @@ function App() {
             return (
               <div className="space-y-6">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
-                  
+
                   {/* Top Bar with Title, Search Bar & Status Filters */}
                   <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
                     <div>
                       <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Withdrawal Request Queues</h3>
                       <p className="text-xs text-slate-400 mt-0.5">Manage agent payout requests and view complete applicant details</p>
                     </div>
-                    
+
                     <div className="flex flex-wrap gap-3 w-full xl:w-auto items-center">
                       {/* Search Bar */}
                       <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[260px]">
                         <Search className="w-4 h-4 text-slate-400 my-auto" />
-                        <input 
-                          type="text" 
-                          placeholder="Search by name, phone, email, or bank details..." 
+                        <input
+                          type="text"
+                          placeholder="Search by name, phone, email, or bank details..."
                           value={withdrawalSearchTerm}
                           onChange={(e) => setWithdrawalSearchTerm(e.target.value)}
                           className="bg-transparent focus:outline-none text-xs w-full"
@@ -2534,12 +2828,12 @@ function App() {
                       </div>
                     </div>
                   </div>
-                  
+
                   {/* Withdrawal List Cards */}
                   <div className="space-y-4">
                     {filteredWithdrawals.map((req) => (
-                      <div 
-                        key={req._id} 
+                      <div
+                        key={req._id}
                         onClick={() => {
                           setModalData(req);
                           setShowModal('bank-details');
@@ -2562,7 +2856,7 @@ function App() {
                             <strong>Wallet Balance:</strong> <span className="text-emerald-500 font-bold">₹{req.agentId?.balance || 7500}</span> • <strong>Req Date:</strong> {new Date(req.createdAt).toLocaleString()}
                           </p>
                         </div>
-                        
+
                         <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
                           <div className="text-right">
                             <span className="text-2xl font-black text-rose-500 block">₹{req.amount}</span>
@@ -2600,8 +2894,8 @@ function App() {
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
                 <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Global & District Commission Rates</h3>
-                
-                <form 
+
+                <form
                   onSubmit={async (e) => {
                     e.preventDefault();
                     const value = e.target.value.value;
@@ -2658,7 +2952,7 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Vendor Membership Plans</h3>
-                <button 
+                <button
                   onClick={() => { setModalData(null); setShowModal('plan'); }}
                   className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md"
                 >
@@ -2705,7 +2999,7 @@ function App() {
                         <div className="space-y-4">
                           <div className="flex justify-between items-start">
                             <span className="text-xs uppercase font-extrabold tracking-widest text-primary-400">{tierText}</span>
-                            <button 
+                            <button
                               onClick={() => executeAction(`/admin/memberships/plans/${activePlan._id}`, 'DELETE')}
                               className="text-slate-500 hover:text-rose-500 p-1.5 rounded-lg transition-colors"
                               title="Delete Plan"
@@ -2713,9 +3007,9 @@ function App() {
                               <Trash2 className="w-5 h-5" />
                             </button>
                           </div>
-                          
+
                           <h4 className="text-2xl font-black">{activePlan.name}</h4>
-                          
+
                           <div className="flex items-baseline gap-1.5 pt-2 border-b border-slate-800 pb-4">
                             <span className="text-4xl font-black">₹{activePlan.price}</span>
                             <span className="text-sm text-slate-400">/ {activePlan.duration} days</span>
@@ -2749,7 +3043,7 @@ function App() {
                         <div className={`w-full max-w-[420px] aspect-[1.58/1] rounded-3xl bg-gradient-to-br ${cardGradient} p-8 flex flex-col justify-between shadow-2xl relative overflow-hidden transition-transform duration-300 hover:scale-[1.02]`}>
                           {/* Glossy Overlay */}
                           <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/10 pointer-events-none"></div>
-                          
+
                           {/* Top Card Info */}
                           <div className="flex justify-between items-start relative z-10">
                             <div className="flex flex-col">
@@ -2801,19 +3095,19 @@ function App() {
           {/* 12. BANNER & ADS */}
           {activeTab === 'banners' && isSuperAdmin && (
             <div className="space-y-6">
-              
+
               {/* Banners CRUD */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Promotional Banners</h3>
-                  <button 
+                  <button
                     onClick={() => setShowModal('banner')}
                     className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                   >
                     Add Banner
                   </button>
                 </div>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {banners.map((b) => (
                     <div key={b._id} className="border border-slate-200 dark:border-slate-850 rounded-xl overflow-hidden bg-slate-50 dark:bg-slate-950 flex">
@@ -2825,7 +3119,7 @@ function App() {
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-emerald-500 text-[10px] font-bold">Active</span>
-                          <button 
+                          <button
                             onClick={() => executeAction(`/admin/banners/${b._id}`, 'DELETE')}
                             className="text-rose-500 text-[10px] font-bold"
                           >
@@ -2842,7 +3136,7 @@ function App() {
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Paid Advertisements Campaigns</h3>
-                  <button 
+                  <button
                     onClick={() => setShowModal('ad')}
                     className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                   >
@@ -2857,7 +3151,7 @@ function App() {
                         <span className="font-bold text-sm">{ad.title}</span>
                         <span className="text-emerald-500 text-xs font-bold">Earnings: ₹{ad.revenue}</span>
                       </div>
-                      
+
                       <div className="grid grid-cols-3 gap-2 text-center text-xs">
                         <div className="bg-white dark:bg-slate-900 p-2 rounded-lg">
                           <span className="block text-slate-400 text-[10px]">Impressions</span>
@@ -2884,7 +3178,7 @@ function App() {
                     <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Exclusive Offers & Deals</h3>
                     <p className="text-xs text-slate-400 mt-0.5">Manage exclusive discount offers visible on the Customer Dashboard</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setShowModal('exclusive-offer')}
                     className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
                   >
@@ -2916,7 +3210,7 @@ function App() {
                             {offer.code}
                           </span>
                         </div>
-                        <button 
+                        <button
                           onClick={() => executeAction(`/admin/exclusive-offers/${offer._id}`, 'DELETE')}
                           className="text-rose-600 hover:text-rose-700 dark:text-rose-400 text-xs font-bold transition-colors cursor-pointer"
                         >
@@ -2940,22 +3234,22 @@ function App() {
           {activeTab === 'reports' && (
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
-                
+
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <div className="flex gap-2">
-                    <button 
+                    <button
                       onClick={() => setReportType('revenue')}
                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${reportType === 'revenue' ? 'bg-primary-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                     >
                       District Revenue Reports
                     </button>
-                    <button 
+                    <button
                       onClick={() => setReportType('vendors')}
                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${reportType === 'vendors' ? 'bg-primary-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                     >
                       Vendor Performance Reports
                     </button>
-                    <button 
+                    <button
                       onClick={() => setReportType('agents')}
                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${reportType === 'agents' ? 'bg-primary-600 text-white shadow-md' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
                     >
@@ -3070,9 +3364,9 @@ function App() {
           {activeTab === 'settings' && (
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl shadow-sm space-y-6">
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
+
                   {/* General Config */}
                   <div className="space-y-4">
                     <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">General Platform Settings</h4>
@@ -3177,9 +3471,9 @@ function App() {
                       {/* Search Bar */}
                       <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
                         <Search className="w-5 h-5 text-slate-400" />
-                        <input 
-                          type="text" 
-                          placeholder="Search by Order #, Product, Vendor, or Customer..." 
+                        <input
+                          type="text"
+                          placeholder="Search by Order #, Product, Vendor, or Customer..."
                           value={ordersSearchTerm}
                           onChange={(e) => setOrdersSearchTerm(e.target.value)}
                           className="bg-transparent focus:outline-none text-sm w-full"
@@ -3342,9 +3636,9 @@ function App() {
                       {/* Search Bar */}
                       <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
                         <Search className="w-5 h-5 text-slate-400" />
-                        <input 
-                          type="text" 
-                          placeholder="Search by vendor or customer name..." 
+                        <input
+                          type="text"
+                          placeholder="Search by vendor or customer name..."
                           value={bookingSearchTerm}
                           onChange={(e) => setBookingSearchTerm(e.target.value)}
                           className="bg-transparent focus:outline-none text-sm w-full"
@@ -3482,8 +3776,8 @@ function App() {
                             <span className="block text-[10px] text-slate-400 mt-0.5">HR: {job.hrName || 'HR Team'}</span>
                           </td>
                           <td className="px-6 py-4">
-                            <select 
-                              value={job.status} 
+                            <select
+                              value={job.status}
                               onChange={(e) => executeAction(`/admin/jobs/${job._id}`, 'PUT', { status: e.target.value })}
                               className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
                             >
@@ -3495,10 +3789,10 @@ function App() {
                           </td>
                           <td className="px-6 py-4">
                             {job.resumeUrl ? (
-                              <a 
-                                href={job.resumeUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
+                              <a
+                                href={job.resumeUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
                               >
                                 <FileText className="w-3.5 h-3.5" /> View Resume
@@ -3510,7 +3804,7 @@ function App() {
                           <td className="px-6 py-4 text-xs text-slate-400">{new Date(job.createdAt || job.appliedDate).toLocaleDateString()}</td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-3">
-                              <button 
+                              <button
                                 onClick={() => {
                                   setModalData(job);
                                   setShowModal('view-job');
@@ -3519,7 +3813,7 @@ function App() {
                               >
                                 View
                               </button>
-                              <button 
+                              <button
                                 onClick={() => executeAction(`/admin/jobs/${job._id}`, 'DELETE')}
                                 className="text-rose-500 hover:text-rose-600 text-xs font-bold"
                               >
@@ -3566,7 +3860,7 @@ function App() {
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Membership Card Holders</h3>
-                  <button 
+                  <button
                     onClick={() => setShowModal('card-holder')}
                     className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
                   >
@@ -3580,9 +3874,9 @@ function App() {
                       {/* Search Bar */}
                       <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
                         <Search className="w-5 h-5 text-slate-400" />
-                        <input 
-                          type="text" 
-                          placeholder="Search by name, email, or phone number..." 
+                        <input
+                          type="text"
+                          placeholder="Search by name, email, or phone number..."
                           value={cardHolderSearchTerm}
                           onChange={(e) => setCardHolderSearchTerm(e.target.value)}
                           className="bg-transparent focus:outline-none text-sm w-full"
@@ -3651,8 +3945,8 @@ function App() {
                             </td>
                             <td className="px-6 py-4 text-xs font-medium text-slate-600 dark:text-slate-300">{new Date(holder.expiryDate).toLocaleDateString()}</td>
                             <td className="px-6 py-4">
-                              <select 
-                                value={holder.status} 
+                              <select
+                                value={holder.status}
                                 onChange={(e) => executeAction(`/admin/card-holders/${holder._id}`, 'PUT', { status: e.target.value })}
                                 className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1 font-semibold"
                               >
@@ -3662,7 +3956,7 @@ function App() {
                               </select>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <button 
+                              <button
                                 onClick={() => executeAction(`/admin/card-holders/${holder._id}`, 'DELETE')}
                                 className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
                               >
@@ -3722,7 +4016,7 @@ function App() {
               <div className="space-y-6">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Payments & Transactions</h3>
-                  <button 
+                  <button
                     onClick={() => setShowModal('payment')}
                     className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
                   >
@@ -3736,9 +4030,9 @@ function App() {
                       {/* Search Bar */}
                       <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
                         <Search className="w-5 h-5 text-slate-400" />
-                        <input 
-                          type="text" 
-                          placeholder="Search by user name or transaction details..." 
+                        <input
+                          type="text"
+                          placeholder="Search by user name or transaction details..."
                           value={paymentSearchTerm}
                           onChange={(e) => setPaymentSearchTerm(e.target.value)}
                           className="bg-transparent focus:outline-none text-sm w-full"
@@ -3819,7 +4113,7 @@ function App() {
                             <td className="px-6 py-4 text-xs text-slate-400">{new Date(p.createdAt).toLocaleDateString()}</td>
                             <td className="px-6 py-4 text-right">
                               <div className="flex items-center justify-end gap-2">
-                                <button 
+                                <button
                                   onClick={() => {
                                     setModalData(p);
                                     setShowModal('edit-payment');
@@ -3852,7 +4146,7 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Delivery Partners</h3>
-                <button 
+                <button
                   onClick={() => { setOnboardType('delivery-partner'); setShowModal('delivery-partner'); }}
                   className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                 >
@@ -3887,8 +4181,8 @@ function App() {
                             </td>
                             <td className="px-6 py-4">{dp.city}</td>
                             <td className="px-6 py-4">
-                              <select 
-                                value={dp.status} 
+                              <select
+                                value={dp.status}
                                 onChange={(e) => executeAction(`/admin/delivery-partners/${dp._id}`, 'PUT', { status: e.target.value })}
                                 className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
                               >
@@ -3898,7 +4192,7 @@ function App() {
                               </select>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <button 
+                              <button
                                 onClick={() => executeAction(`/admin/delivery-partners/${dp._id}`, 'DELETE')}
                                 className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
                               >
@@ -3919,7 +4213,7 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Service Technicians</h3>
-                <button 
+                <button
                   onClick={() => { setOnboardType('technician'); setShowModal('delivery-partner'); }}
                   className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                 >
@@ -3955,8 +4249,8 @@ function App() {
                             </td>
                             <td className="px-6 py-4">{dp.city}</td>
                             <td className="px-6 py-4">
-                              <select 
-                                value={dp.status} 
+                              <select
+                                value={dp.status}
                                 onChange={(e) => executeAction(`/admin/delivery-partners/${dp._id}`, 'PUT', { status: e.target.value })}
                                 className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
                               >
@@ -3966,7 +4260,7 @@ function App() {
                               </select>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <button 
+                              <button
                                 onClick={() => executeAction(`/admin/delivery-partners/${dp._id}`, 'DELETE')}
                                 className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
                               >
@@ -3987,7 +4281,7 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Executives</h3>
-                <button 
+                <button
                   onClick={() => { setOnboardType('executive'); setShowModal('delivery-partner'); }}
                   className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                 >
@@ -4023,8 +4317,8 @@ function App() {
                             </td>
                             <td className="px-6 py-4">{dp.city}</td>
                             <td className="px-6 py-4">
-                              <select 
-                                value={dp.status} 
+                              <select
+                                value={dp.status}
                                 onChange={(e) => executeAction(`/admin/delivery-partners/${dp._id}`, 'PUT', { status: e.target.value })}
                                 className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
                               >
@@ -4034,7 +4328,7 @@ function App() {
                               </select>
                             </td>
                             <td className="px-6 py-4 text-right">
-                              <button 
+                              <button
                                 onClick={() => executeAction(`/admin/delivery-partners/${dp._id}`, 'DELETE')}
                                 className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
                               >
@@ -4055,7 +4349,7 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Customer Support Team</h3>
-                <button 
+                <button
                   onClick={() => setShowModal('support-team')}
                   className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                 >
@@ -4083,8 +4377,8 @@ function App() {
                           </td>
                           <td className="px-6 py-4 capitalize font-semibold text-primary-500">{st.role}</td>
                           <td className="px-6 py-4">
-                            <select 
-                              value={st.status} 
+                            <select
+                              value={st.status}
                               onChange={(e) => executeAction(`/admin/support-team/${st._id}`, 'PUT', { status: e.target.value })}
                               className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
                             >
@@ -4093,7 +4387,7 @@ function App() {
                             </select>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button 
+                            <button
                               onClick={() => executeAction(`/admin/support-team/${st._id}`, 'DELETE')}
                               className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
                             >
@@ -4115,7 +4409,7 @@ function App() {
             const getCatIcon = (name, type = 'main') => {
               const iconClass = "w-4 h-4";
               const n = (name || '').toLowerCase();
-              
+
               if (n.includes('product') || n.includes('bag')) return <ShoppingBag className={iconClass} />;
               if (n.includes('service') || n.includes('briefcase')) return <Briefcase className={iconClass} />;
               if (n.includes('daily') || n.includes('grocery') || n.includes('need')) return <Package className={iconClass} />;
@@ -4190,7 +4484,7 @@ function App() {
             (categories || []).forEach(c => {
               if (c.isDeleted || c.description === 'DELETED_HIERARCHY_MARKER') {
                 let mName = SYSTEM_MAIN_CATS.find(m => m.toLowerCase() === (c.name || '').toLowerCase()) || c.name || '';
-                
+
                 if (c.subcategory === 'ALL_SUBCATEGORIES_DELETED_MARKER') {
                   if (mName) allSubDeletedMains.add(mName.toLowerCase());
                 } else if (c.subSubcategory === 'ALL_CHILD_DELETED_MARKER') {
@@ -4236,7 +4530,7 @@ function App() {
 
               Object.keys(catTree[mainName].subcategories).forEach(subName => {
                 const subKey = `${mainLower}::${subName.toLowerCase()}`;
-                
+
                 if (deletedSubSet.has(subKey)) {
                   delete catTree[mainName].subcategories[subName];
                   return;
@@ -4245,7 +4539,7 @@ function App() {
                 if (allChildDeletedSubs.has(subKey) && !activeDbChildren.has(subKey)) {
                   catTree[mainName].subcategories[subName].childCategories = [];
                 } else {
-                  catTree[mainName].subcategories[subName].childCategories = 
+                  catTree[mainName].subcategories[subName].childCategories =
                     (catTree[mainName].subcategories[subName].childCategories || []).filter(ch => {
                       const childKey = `${subKey}::${ch.name.toLowerCase()}`;
                       return !deletedChildSet.has(childKey);
@@ -4354,43 +4648,43 @@ function App() {
             const activeMainCatName = selectedMainCat && catTree[selectedMainCat] ? selectedMainCat : (allMainCats[0]?.name || "Products");
             const currentMainObj = catTree[activeMainCatName] || allMainCats[0] || { subcategories: {} };
             const allSubCatsForMain = Object.values(currentMainObj.subcategories || {});
-            
-            const activeSubCatName = selectedSubCat && currentMainObj.subcategories?.[selectedSubCat] 
-              ? selectedSubCat 
+
+            const activeSubCatName = selectedSubCat && currentMainObj.subcategories?.[selectedSubCat]
+              ? selectedSubCat
               : (allSubCatsForMain[0]?.name || "");
-            
+
             const currentSubObj = currentMainObj.subcategories?.[activeSubCatName] || allSubCatsForMain[0] || { childCategories: [] };
             const allChildCatsForSub = currentSubObj.childCategories || [];
 
             // Filters
             const filteredMainList = allMainCats.filter(m => {
-              const matchesSearch = !catSearchTerm || 
-                m.name.toLowerCase().includes(catSearchTerm.toLowerCase()) || 
+              const matchesSearch = !catSearchTerm ||
+                m.name.toLowerCase().includes(catSearchTerm.toLowerCase()) ||
                 (m.description || '').toLowerCase().includes(catSearchTerm.toLowerCase());
               const matchesMain = catMainFilter === 'All' || m.name === catMainFilter;
-              const matchesStatus = catStatusFilter === 'All Status' || 
-                (catStatusFilter === 'Active' && m.isActive !== false) || 
+              const matchesStatus = catStatusFilter === 'All Status' ||
+                (catStatusFilter === 'Active' && m.isActive !== false) ||
                 (catStatusFilter === 'Inactive' && m.isActive === false);
               return matchesSearch && matchesMain && matchesStatus;
             });
 
             const filteredSubList = allSubCatsForMain.filter(s => {
-              const matchesSearch = !catSearchTerm || 
-                s.name.toLowerCase().includes(catSearchTerm.toLowerCase()) || 
+              const matchesSearch = !catSearchTerm ||
+                s.name.toLowerCase().includes(catSearchTerm.toLowerCase()) ||
                 (s.description || '').toLowerCase().includes(catSearchTerm.toLowerCase());
               const matchesSub = catSubFilter === 'All' || s.name === catSubFilter;
-              const matchesStatus = catStatusFilter === 'All Status' || 
-                (catStatusFilter === 'Active' && s.isActive !== false) || 
+              const matchesStatus = catStatusFilter === 'All Status' ||
+                (catStatusFilter === 'Active' && s.isActive !== false) ||
                 (catStatusFilter === 'Inactive' && s.isActive === false);
               return matchesSearch && matchesSub && matchesStatus;
             });
 
             const filteredChildList = allChildCatsForSub.filter(ch => {
-              const matchesSearch = !catSearchTerm || 
-                ch.name.toLowerCase().includes(catSearchTerm.toLowerCase()) || 
+              const matchesSearch = !catSearchTerm ||
+                ch.name.toLowerCase().includes(catSearchTerm.toLowerCase()) ||
                 (ch.description || '').toLowerCase().includes(catSearchTerm.toLowerCase());
-              const matchesStatus = catStatusFilter === 'All Status' || 
-                (catStatusFilter === 'Active' && ch.isActive !== false) || 
+              const matchesStatus = catStatusFilter === 'All Status' ||
+                (catStatusFilter === 'Active' && ch.isActive !== false) ||
                 (catStatusFilter === 'Inactive' && ch.isActive === false);
               return matchesSearch && matchesStatus;
             });
@@ -4483,8 +4777,8 @@ function App() {
                     {/* Search Input */}
                     <div className="relative min-w-[220px] flex-1">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         value={catSearchTerm}
                         onChange={(e) => setCatSearchTerm(e.target.value)}
                         placeholder="Search categories..."
@@ -4495,7 +4789,7 @@ function App() {
                     {/* Main Category Dropdown */}
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Main Category</label>
-                      <select 
+                      <select
                         value={catMainFilter}
                         onChange={(e) => {
                           setCatMainFilter(e.target.value);
@@ -4513,7 +4807,7 @@ function App() {
                     {/* Sub Category Dropdown */}
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Sub Category</label>
-                      <select 
+                      <select
                         value={catSubFilter}
                         onChange={(e) => {
                           setCatSubFilter(e.target.value);
@@ -4531,7 +4825,7 @@ function App() {
                     {/* Status Dropdown */}
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Status</label>
-                      <select 
+                      <select
                         value={catStatusFilter}
                         onChange={(e) => setCatStatusFilter(e.target.value)}
                         className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 [&>option]:bg-white [&>option]:dark:bg-slate-950"
@@ -4543,7 +4837,7 @@ function App() {
                     </div>
 
                     {/* Reset Button */}
-                    <button 
+                    <button
                       onClick={() => {
                         setCatSearchTerm("");
                         setCatMainFilter("All");
@@ -4571,327 +4865,185 @@ function App() {
                       </div>
 
                       <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
-                          {displayedMainList.map((mainItem) => {
-                            const isSelected = activeMainCatName === mainItem.name;
-                            return (
-                              <div 
-                                key={mainItem.name}
-                                onClick={() => {
-                                  setSelectedMainCat(mainItem.name);
-                                  const firstSub = Object.keys(mainItem.subcategories || {})[0];
-                                  if (firstSub) setSelectedSubCat(firstSub);
-                                }}
-                                className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative group flex items-center justify-between ${
-                                  isSelected 
-                                    ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 ring-2 ring-indigo-500/20 shadow-sm' 
-                                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
-                                }`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-900/40 shrink-0">
-                                    {getCatIcon(mainItem.name, 'main')}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5">
-                                      <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                                      <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{mainItem.name}</h4>
-                                    </div>
-                                    <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{mainItem.description}</p>
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                                        System Locked (Active)
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className="bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900/40 flex items-center gap-1 shadow-xs">
-                                    <Lock className="w-2.5 h-2.5" /> Read Only
-                                  </span>
-                                </div>
-
-                                {isSelected && (
-                                  <div className="hidden lg:block absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
-                                    <ArrowRight className="w-3.5 h-3.5" />
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Column 2: Sub Categories */}
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
-                      <div>
-                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                            2. Sub Categories ({filteredSubList.length}) <span className="text-slate-400 font-normal">- {activeMainCatName}</span>
-                          </h3>
-                          <div className="flex items-center gap-2">
-                             {displayedSubList.length > 0 && (
-                              <button 
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await executeAction('/admin/categories-batch-delete', 'DELETE', { mainName: activeMainCatName, scope: 'all-sub' });
-                                }}
-                                className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
-                                title="Remove All Sub Categories"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Delete All
-                              </button>
-                            )}
-                            <button 
+                        {displayedMainList.map((mainItem) => {
+                          const isSelected = activeMainCatName === mainItem.name;
+                          return (
+                            <div
+                              key={mainItem.name}
                               onClick={() => {
-                                setAddFirstCategory(activeMainCatName);
-                                setCategoryModalTier('sub');
-                                setShowModal('category');
+                                setSelectedMainCat(mainItem.name);
+                                const firstSub = Object.keys(mainItem.subcategories || {})[0];
+                                if (firstSub) setSelectedSubCat(firstSub);
                               }}
-                              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              Add
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
-                          {displayedSubList.map((subItem) => {
-                            const isSelected = activeSubCatName === subItem.name;
-                            return (
-                              <div 
-                                key={subItem.name}
-                                onClick={() => setSelectedSubCat(subItem.name)}
-                                className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative group flex items-center justify-between ${
-                                  isSelected 
-                                    ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 ring-2 ring-indigo-500/20 shadow-sm' 
-                                    : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                              className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative group flex items-center justify-between ${isSelected
+                                  ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 ring-2 ring-indigo-500/20 shadow-sm'
+                                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
                                 }`}
-                              >
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/40 shrink-0">
-                                    {getCatIcon(subItem.name, 'sub')}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{subItem.name}</h4>
-                                    <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{subItem.description}</p>
-                                    <div className="flex items-center gap-1.5 mt-1">
-                                      <span className={`w-1.5 h-1.5 rounded-full ${subItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-                                      <span className={`text-[10px] font-bold ${subItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                                        {subItem.isActive !== false ? 'Active' : 'Inactive'}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <span className="bg-indigo-100/70 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-900/50">
-                                    {(subItem.childCategories || []).length}
-                                  </span>
-
-                                  {/* Direct Delete Button */}
-                                  <button
-                                    onClick={async (e) => {
-                                      e.stopPropagation();
-                                      if (subItem._id) {
-                                        await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
-                                      }
-                                      await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
-                                    }}
-                                    className="p-1.5 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                                    title="Delete Sub Category"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-
-                                  <div className="relative">
-                                    <button 
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setActiveCatMenuId(activeCatMenuId === `sub-${subItem.name}` ? null : `sub-${subItem.name}`);
-                                      }}
-                                      className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </button>
-                                    {activeCatMenuId === `sub-${subItem.name}` && (
-                                      <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
-                                        <button 
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setActiveCatMenuId(null);
-                                            setModalData({ ...subItem, name: activeMainCatName, subcategory: subItem.name });
-                                            setShowModal('edit-category');
-                                          }}
-                                          className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
-                                        >
-                                          Edit
-                                        </button>
-                                        <button 
-                                          onClick={async (e) => {
-                                            e.stopPropagation();
-                                            setActiveCatMenuId(null);
-                                            if (subItem._id) {
-                                              await executeAction(`/admin/categories/${subItem._id}`, 'PUT', { isActive: !subItem.isActive });
-                                            }
-                                          }}
-                                          className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
-                                        >
-                                          Toggle Status
-                                        </button>
-                                        <button 
-                                          onClick={async (e) => {
-                                            e.stopPropagation();
-                                            setActiveCatMenuId(null);
-                                            if (subItem._id) {
-                                              await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
-                                            }
-                                            await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
-                                          }}
-                                          className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
-                                        >
-                                          Delete
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {isSelected && (
-                                  <div className="hidden lg:block absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
-                                    <ArrowRight className="w-3.5 h-3.5" />
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                    </div>
-
-                    {/* Column 3: Child Categories */}
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
-                      <div>
-                        <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
-                          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                            3. Child Categories ({filteredChildList.length}) <span className="text-slate-400 font-normal">- {activeSubCatName}</span>
-                          </h3>
-                          <div className="flex items-center gap-2">
-                            {displayedChildList.length > 0 && (
-                              <button 
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  await executeAction('/admin/categories-batch-delete', 'DELETE', { mainName: activeMainCatName, subName: activeSubCatName, scope: 'all-child' });
-                                }}
-                                className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
-                                title="Remove All Child Categories"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Delete All
-                              </button>
-                            )}
-                            <button 
-                              onClick={() => {
-                                setAddFirstCategory(activeMainCatName);
-                                setAddSecondCategory(activeSubCatName);
-                                setCategoryModalTier('child');
-                                setShowModal('category');
-                              }}
-                              className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              Add
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
-                          {displayedChildList.map((childItem) => (
-                            <div 
-                              key={childItem.name}
-                              className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-all flex items-center justify-between group"
                             >
                               <div className="flex items-center gap-3 min-w-0">
-                                <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0 font-bold text-xs uppercase flex items-center justify-center w-10 h-10">
-                                  {childItem.name.substring(0, 2)}
+                                <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-900/40 shrink-0">
+                                  {getCatIcon(mainItem.name, 'main')}
                                 </div>
                                 <div className="min-w-0">
-                                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{childItem.name}</h4>
-                                  <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{childItem.description || `${childItem.name} category`}</p>
+                                  <div className="flex items-center gap-1.5">
+                                    <Lock className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{mainItem.name}</h4>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{mainItem.description}</p>
                                   <div className="flex items-center gap-1.5 mt-1">
-                                    <span className={`w-1.5 h-1.5 rounded-full ${childItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
-                                    <span className={`text-[10px] font-bold ${childItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                                      {childItem.isActive !== false ? 'Active' : 'Inactive'}
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                      System Locked (Active)
                                     </span>
                                   </div>
                                 </div>
                               </div>
 
                               <div className="flex items-center gap-2 shrink-0">
+                                <span className="bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-900/40 flex items-center gap-1 shadow-xs">
+                                  <Lock className="w-2.5 h-2.5" /> Read Only
+                                </span>
+                              </div>
+
+                              {isSelected && (
+                                <div className="hidden lg:block absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Column 2: Sub Categories */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
+                    <div>
+                      <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                          2. Sub Categories ({filteredSubList.length}) <span className="text-slate-400 font-normal">- {activeMainCatName}</span>
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          {displayedSubList.length > 0 && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await executeAction('/admin/categories-batch-delete', 'DELETE', { mainName: activeMainCatName, scope: 'all-sub' });
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
+                              title="Remove All Sub Categories"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete All
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setAddFirstCategory(activeMainCatName);
+                              setCategoryModalTier('sub');
+                              setShowModal('category');
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
+                        {displayedSubList.map((subItem) => {
+                          const isSelected = activeSubCatName === subItem.name;
+                          return (
+                            <div
+                              key={subItem.name}
+                              onClick={() => setSelectedSubCat(subItem.name)}
+                              className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative group flex items-center justify-between ${isSelected
+                                  ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/30 ring-2 ring-indigo-500/20 shadow-sm'
+                                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700'
+                                }`}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/40 shrink-0">
+                                  {getCatIcon(subItem.name, 'sub')}
+                                </div>
+                                <div className="min-w-0">
+                                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{subItem.name}</h4>
+                                  <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{subItem.description}</p>
+                                  <div className="flex items-center gap-1.5 mt-1">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${subItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                                    <span className={`text-[10px] font-bold ${subItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                                      {subItem.isActive !== false ? 'Active' : 'Inactive'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="bg-indigo-100/70 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 text-xs font-bold px-2.5 py-1 rounded-full border border-indigo-200 dark:border-indigo-900/50">
+                                  {(subItem.childCategories || []).length}
+                                </span>
+
                                 {/* Direct Delete Button */}
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    if (childItem._id) {
-                                      await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                    if (subItem._id) {
+                                      await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
                                     }
-                                    await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                    await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
                                   }}
                                   className="p-1.5 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                                  title="Delete Child Category"
+                                  title="Delete Sub Category"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
 
                                 <div className="relative">
-                                  <button 
+                                  <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setActiveCatMenuId(activeCatMenuId === `child-${childItem.name}` ? null : `child-${childItem.name}`);
+                                      setActiveCatMenuId(activeCatMenuId === `sub-${subItem.name}` ? null : `sub-${subItem.name}`);
                                     }}
                                     className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
                                   >
                                     <MoreVertical className="w-4 h-4" />
                                   </button>
-                                  {activeCatMenuId === `child-${childItem.name}` && (
+                                  {activeCatMenuId === `sub-${subItem.name}` && (
                                     <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
-                                      <button 
+                                      <button
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setActiveCatMenuId(null);
-                                          setModalData({ ...childItem, name: activeMainCatName, subcategory: activeSubCatName, subSubcategory: childItem.name });
+                                          setModalData({ ...subItem, name: activeMainCatName, subcategory: subItem.name });
                                           setShowModal('edit-category');
                                         }}
                                         className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
                                       >
                                         Edit
                                       </button>
-                                      <button 
+                                      <button
                                         onClick={async (e) => {
                                           e.stopPropagation();
                                           setActiveCatMenuId(null);
-                                          if (childItem._id) {
-                                            await executeAction(`/admin/categories/${childItem._id}`, 'PUT', { isActive: !childItem.isActive });
+                                          if (subItem._id) {
+                                            await executeAction(`/admin/categories/${subItem._id}`, 'PUT', { isActive: !subItem.isActive });
                                           }
                                         }}
                                         className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
                                       >
                                         Toggle Status
                                       </button>
-                                      <button 
+                                      <button
                                         onClick={async (e) => {
                                           e.stopPropagation();
                                           setActiveCatMenuId(null);
-                                          if (childItem._id) {
-                                            await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                          if (subItem._id) {
+                                            await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
                                           }
-                                          await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                          await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
                                         }}
                                         className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
                                       >
@@ -4901,13 +5053,153 @@ function App() {
                                   )}
                                 </div>
                               </div>
+
+                              {isSelected && (
+                                <div className="hidden lg:block absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-indigo-600 text-white rounded-full p-1 shadow-md">
+                                  <ArrowRight className="w-3.5 h-3.5" />
+                                </div>
+                              )}
                             </div>
-                          ))}
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Column 3: Child Categories */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-sm flex flex-col justify-between min-h-[500px]">
+                    <div>
+                      <div className="flex justify-between items-center pb-3.5 mb-4 border-b border-slate-100 dark:border-slate-800 flex-wrap gap-2">
+                        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                          3. Child Categories ({filteredChildList.length}) <span className="text-slate-400 font-normal">- {activeSubCatName}</span>
+                        </h3>
+                        <div className="flex items-center gap-2">
+                          {displayedChildList.length > 0 && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                await executeAction('/admin/categories-batch-delete', 'DELETE', { mainName: activeMainCatName, subName: activeSubCatName, scope: 'all-child' });
+                              }}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
+                              title="Remove All Child Categories"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Delete All
+                            </button>
+                          )}
+                          <button
+                            onClick={() => {
+                              setAddFirstCategory(activeMainCatName);
+                              setAddSecondCategory(activeSubCatName);
+                              setCategoryModalTier('child');
+                              setShowModal('category');
+                            }}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 px-2.5 py-1 rounded-lg transition-all"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add
+                          </button>
                         </div>
                       </div>
 
+                      <div className="space-y-3 max-h-[550px] overflow-y-auto overflow-x-hidden pr-1 scrollbar-thin">
+                        {displayedChildList.map((childItem) => (
+                          <div
+                            key={childItem.name}
+                            className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-all flex items-center justify-between group"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 shrink-0 font-bold text-xs uppercase flex items-center justify-center w-10 h-10">
+                                {childItem.name.substring(0, 2)}
+                              </div>
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{childItem.name}</h4>
+                                <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{childItem.description || `${childItem.name} category`}</p>
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${childItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
+                                  <span className={`text-[10px] font-bold ${childItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                                    {childItem.isActive !== false ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 shrink-0">
+                              {/* Direct Delete Button */}
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (childItem._id) {
+                                    await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                  }
+                                  await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                }}
+                                className="p-1.5 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                                title="Delete Child Category"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+
+                              <div className="relative">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setActiveCatMenuId(activeCatMenuId === `child-${childItem.name}` ? null : `child-${childItem.name}`);
+                                  }}
+                                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </button>
+                                {activeCatMenuId === `child-${childItem.name}` && (
+                                  <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1 text-xs">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(null);
+                                        setModalData({ ...childItem, name: activeMainCatName, subcategory: activeSubCatName, subSubcategory: childItem.name });
+                                        setShowModal('edit-category');
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(null);
+                                        if (childItem._id) {
+                                          await executeAction(`/admin/categories/${childItem._id}`, 'PUT', { isActive: !childItem.isActive });
+                                        }
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
+                                    >
+                                      Toggle Status
+                                    </button>
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(null);
+                                        if (childItem._id) {
+                                          await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                        }
+                                        await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+
                   </div>
+                </div>
 
                 {/* Category Management Guide */}
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-5">
@@ -4975,7 +5267,7 @@ function App() {
           {activeTab === 'queries' && (() => {
             const filteredQueries = queries.filter(q => {
               const uType = q.userType || q.role || 'Customer';
-              
+
               const matchesSearch = !querySearchTerm ||
                 (q.name || '').toLowerCase().includes(querySearchTerm.toLowerCase()) ||
                 (q.email || '').toLowerCase().includes(querySearchTerm.toLowerCase()) ||
@@ -5001,9 +5293,9 @@ function App() {
                       {/* Search Bar */}
                       <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[240px]">
                         <Search className="w-5 h-5 text-slate-400" />
-                        <input 
-                          type="text" 
-                          placeholder="Search by name, email, or query content..." 
+                        <input
+                          type="text"
+                          placeholder="Search by name, email, or query content..."
                           value={querySearchTerm}
                           onChange={(e) => setQuerySearchTerm(e.target.value)}
                           className="bg-transparent focus:outline-none text-sm w-full"
@@ -5067,8 +5359,8 @@ function App() {
                                 <span className="block text-[10px] text-slate-400">{new Date(q.createdAt).toLocaleString()}</span>
                               </td>
                               <td className="px-6 py-4">
-                                <select 
-                                  value={q.status} 
+                                <select
+                                  value={q.status}
                                   onChange={(e) => executeAction(`/admin/queries/${q._id}`, 'PUT', { status: e.target.value })}
                                   className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1 font-semibold"
                                 >
@@ -5078,7 +5370,7 @@ function App() {
                                 </select>
                               </td>
                               <td className="px-6 py-4 text-right">
-                                <button 
+                                <button
                                   onClick={() => executeAction(`/admin/queries/${q._id}`, 'DELETE')}
                                   className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
                                 >
@@ -5108,7 +5400,7 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Customer Support Tickets</h3>
-                <button 
+                <button
                   onClick={() => setShowModal('ticket')}
                   className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                 >
@@ -5147,8 +5439,8 @@ function App() {
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <select 
-                              value={t.assignedTo || ''} 
+                            <select
+                              value={t.assignedTo || ''}
                               onChange={(e) => executeAction(`/admin/tickets/${t._id}`, 'PUT', { assignedTo: e.target.value })}
                               className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
                             >
@@ -5159,8 +5451,8 @@ function App() {
                             </select>
                           </td>
                           <td className="px-6 py-4">
-                            <select 
-                              value={t.status} 
+                            <select
+                              value={t.status}
                               onChange={(e) => executeAction(`/admin/tickets/${t._id}`, 'PUT', { status: e.target.value })}
                               className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1 font-semibold"
                             >
@@ -5171,7 +5463,7 @@ function App() {
                             </select>
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <button 
+                            <button
                               onClick={() => executeAction(`/admin/tickets/${t._id}`, 'DELETE')}
                               className="text-rose-500 hover:text-rose-600 text-xs font-semibold"
                             >
@@ -5192,7 +5484,7 @@ function App() {
             <div className="space-y-6">
               <div className="flex justify-between items-center">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">System Announcements</h3>
-                <button 
+                <button
                   onClick={() => setShowModal('announcement')}
                   className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                 >
@@ -5206,7 +5498,7 @@ function App() {
                     <div className="space-y-2">
                       <div className="flex justify-between items-start">
                         <span className="font-extrabold text-slate-850 dark:text-slate-100 text-base">{ann.title}</span>
-                        <button 
+                        <button
                           onClick={() => executeAction(`/admin/announcements/${ann._id}`, 'DELETE')}
                           className="text-slate-400 hover:text-rose-500 p-1 rounded-lg"
                         >
@@ -5220,7 +5512,7 @@ function App() {
                       <span className="text-[10px] uppercase font-bold bg-primary-600/10 text-primary-550 px-2 py-0.5 rounded-full">
                         Audience: {ann.targetAudience}
                       </span>
-                      <button 
+                      <button
                         onClick={() => executeAction(`/admin/announcements/${ann._id}`, 'PUT', { isActive: !ann.isActive })}
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${ann.isActive ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}
                       >
@@ -5232,7 +5524,7 @@ function App() {
               </div>
             </div>
           )}
-          
+
           {/* SYSTEM SETTINGS VIEW */}
 
         </main>
@@ -5245,7 +5537,7 @@ function App() {
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
               {modalData ? 'Modify District details' : 'Create New District'}
             </h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
@@ -5256,7 +5548,7 @@ function App() {
                 const address = e.target.address.value;
                 const contactNumber = e.target.contactNumber.value;
                 const agentId = e.target.agentId.value || null;
-                
+
                 if (modalData) {
                   await executeAction(`/admin/branches/${modalData._id}`, 'PUT', { name, code, state, district, city, address, contactNumber, agentId });
                 } else {
@@ -5269,22 +5561,22 @@ function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">District Name</label>
-                  <input 
-                    name="name" 
-                    defaultValue={modalData?.name || ''} 
+                  <input
+                    name="name"
+                    defaultValue={modalData?.name || ''}
                     onChange={(e) => {
                       if (modalData) return;
                       const val = e.target.value;
                       const form = e.target.form;
                       if (!form) return;
-                      
+
                       let codeVal = '';
                       if (val.length >= 3) {
                         codeVal = val.substring(0, 3).toUpperCase() + '01';
                       } else if (val.length > 0) {
                         codeVal = val.toUpperCase() + '01';
                       }
-                      
+
                       const districtMap = {
                         'mumbai': { state: 'Maharashtra', city: 'Mumbai', code: 'MUM01' },
                         'delhi': { state: 'Delhi', city: 'Delhi', code: 'DEL01' },
@@ -5310,10 +5602,10 @@ function App() {
                         'kochi': { state: 'Kerala', city: 'Kochi', code: 'COK01' },
                         'thiruvananthapuram': { state: 'Kerala', city: 'Thiruvananthapuram', code: 'TRV01' }
                       };
-                      
+
                       const key = val.trim().toLowerCase();
                       const matched = districtMap[key];
-                      
+
                       if (matched) {
                         form.code.value = matched.code;
                         form.state.value = matched.state;
@@ -5330,9 +5622,9 @@ function App() {
                         form.contactNumber.value = val ? '9876543210' : '';
                       }
                     }}
-                    required 
-                    type="text" 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                    required
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
                   />
                 </div>
                 <div>
@@ -5395,7 +5687,7 @@ function App() {
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
               {modalData ? 'Edit Admin User' : 'Register Admin'}
             </h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
@@ -5403,7 +5695,7 @@ function App() {
                 const password = e.target.password.value;
                 const adminRole = e.target.adminRole.value;
                 const branchId = e.target.branchId.value || null;
-                
+
                 const payload = { name, email, adminRole, branchId };
                 if (password) payload.password = password;
 
@@ -5464,7 +5756,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Assign Pincode to Agent</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const pincodeId = e.target.pincodeId.value;
@@ -5509,14 +5801,14 @@ function App() {
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
               {modalData ? 'Edit Membership Plan' : 'Create Membership Plan'}
             </h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
                 const price = Number(e.target.price.value);
                 const duration = Number(e.target.duration.value);
                 const features = e.target.features.value.split(',').map(f => f.trim());
-                
+
                 if (modalData) {
                   await executeAction(`/admin/memberships/plans/${modalData._id}`, 'PUT', { name, price, duration, features });
                 } else {
@@ -5561,7 +5853,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Add Promotional Banner</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const title = e.target.title.value;
@@ -5572,9 +5864,9 @@ function App() {
                 const redirectLink = e.target.redirectLink.value;
                 const startDate = new Date();
                 const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-                
-                await executeAction('/admin/banners', 'POST', { 
-                  title, mediaType, imageUrl, videoUrl, targetAudience, redirectLink, startDate, endDate 
+
+                await executeAction('/admin/banners', 'POST', {
+                  title, mediaType, imageUrl, videoUrl, targetAudience, redirectLink, startDate, endDate
                 });
                 setShowModal(null);
               }}
@@ -5605,20 +5897,20 @@ function App() {
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Image URL</label>
                 <div className="flex gap-2 items-center">
-                  <input 
-                    name="imageUrl" 
-                    value={bannerImageUrl} 
-                    onChange={(e) => setBannerImageUrl(e.target.value)} 
-                    type="text" 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  <input
+                    name="imageUrl"
+                    value={bannerImageUrl}
+                    onChange={(e) => setBannerImageUrl(e.target.value)}
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
                   />
                   <label className="bg-[#b8860b] hover:bg-[#966d09] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs transition-all border-none">
                     <UploadCloud className="w-4 h-4" />
                     <span>Upload</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      className="hidden" 
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
@@ -5650,7 +5942,7 @@ function App() {
                           };
                           reader.readAsDataURL(file);
                         }
-                      }} 
+                      }}
                     />
                   </label>
                 </div>
@@ -5658,21 +5950,21 @@ function App() {
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Video URL (Optional)</label>
                 <div className="flex gap-2 items-center">
-                  <input 
-                    name="videoUrl" 
-                    value={bannerVideoUrl} 
-                    onChange={(e) => setBannerVideoUrl(e.target.value)} 
-                    placeholder="e.g. https://example.com/promo.mp4" 
-                    type="text" 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  <input
+                    name="videoUrl"
+                    value={bannerVideoUrl}
+                    onChange={(e) => setBannerVideoUrl(e.target.value)}
+                    placeholder="e.g. https://example.com/promo.mp4"
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
                   />
                   <label className="bg-[#b8860b] hover:bg-[#966d09] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs transition-all border-none">
                     <UploadCloud className="w-4 h-4" />
                     <span>Upload</span>
-                    <input 
-                      type="file" 
-                      accept="video/*" 
-                      className="hidden" 
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
@@ -5682,7 +5974,7 @@ function App() {
                           };
                           reader.readAsDataURL(file);
                         }
-                      }} 
+                      }}
                     />
                   </label>
                 </div>
@@ -5713,7 +6005,7 @@ function App() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const title = e.target.title.value;
@@ -5722,9 +6014,9 @@ function App() {
                 const category = e.target.category.value;
                 const desc = e.target.desc.value;
                 const imageUrl = e.target.imageUrl.value;
-                
-                await executeAction('/admin/exclusive-offers', 'POST', { 
-                  title, discount, code, category, desc, imageUrl 
+
+                await executeAction('/admin/exclusive-offers', 'POST', {
+                  title, discount, code, category, desc, imageUrl
                 });
                 setShowModal(null);
               }}
@@ -5766,15 +6058,15 @@ function App() {
               </div>
 
               <div className="flex gap-3 pt-2">
-                <button 
-                  type="button" 
-                  onClick={() => setShowModal(null)} 
+                <button
+                  type="button"
+                  onClick={() => setShowModal(null)}
                   className="w-1/2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 py-2.5 rounded-xl font-bold text-xs"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="w-1/2 bg-primary-600 hover:bg-primary-500 text-white py-2.5 rounded-xl font-bold text-xs"
                 >
                   Create Offer
@@ -5789,7 +6081,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Launch Advertisement</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const title = e.target.title.value;
@@ -5798,9 +6090,9 @@ function App() {
                 const videoUrl = e.target.videoUrl?.value || '';
                 const targetAudience = e.target.targetAudience.value;
                 const redirectLink = e.target.redirectLink.value;
-                
-                await executeAction('/admin/ads', 'POST', { 
-                  title, mediaType, imageUrl, videoUrl, targetAudience, redirectLink 
+
+                await executeAction('/admin/ads', 'POST', {
+                  title, mediaType, imageUrl, videoUrl, targetAudience, redirectLink
                 });
                 setShowModal(null);
               }}
@@ -5857,14 +6149,14 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Create New Pincode</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const pincode = e.target.pincode.value;
                 const postOffice = e.target.postOffice.value;
                 const district = e.target.district.value;
                 const state = e.target.state.value;
-                
+
                 await executeAction('/admin/save-pincode', 'POST', { pincode, postOffice, district, state });
                 setShowModal(null);
               }}
@@ -5903,14 +6195,14 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Assign Task to Agent</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const assignedTo = e.target.assignedTo.value;
                 const title = e.target.title.value;
                 const description = e.target.description.value;
                 const dueDate = e.target.dueDate.value;
-                
+
                 await executeAction('/admin/assign-task', 'POST', { assignedTo, title, description, dueDate });
                 setShowModal(null);
               }}
@@ -5954,7 +6246,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Edit Agent Details</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
@@ -5964,7 +6256,7 @@ function App() {
                 const assignedArea = e.target.assignedArea.value;
                 const pincode = e.target.pincode.value;
                 const isActive = e.target.isActive.checked;
-                
+
                 await executeAction(`/admin/update-agent/${modalData._id}`, 'PUT', { name, email, phone, level, assignedArea, pincode });
                 await executeAction(`/admin/activate-agent/${modalData._id}`, 'PUT', { isActive });
                 setShowModal(null);
@@ -6010,7 +6302,7 @@ function App() {
                   <label htmlFor="isActive" className="text-sm font-semibold text-slate-700 dark:text-slate-300">Is Profile Active</label>
                 </div>
               </div>
-              
+
               <div className="flex gap-2 justify-end pt-4">
                 <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
@@ -6028,7 +6320,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Edit Business Tie-Up Request</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const businessName = e.target.businessName.value;
@@ -6038,7 +6330,7 @@ function App() {
                 const pincode = e.target.pincode.value;
                 const businessLicense = e.target.businessLicense.value;
                 const status = e.target.status.value;
-                
+
                 await executeAction(`/admin/tie-up/${modalData._id}`, 'PUT', { businessName, category, serviceType, location, pincode, businessLicense, status });
                 setShowModal(null);
               }}
@@ -6084,7 +6376,7 @@ function App() {
                   <option value="rejected">Rejected</option>
                 </select>
               </div>
-              
+
               <div className="flex gap-2 justify-end pt-4">
                 <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
@@ -6102,7 +6394,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Register New Agent</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
@@ -6114,7 +6406,7 @@ function App() {
                 const assignedArea = e.target.assignedArea.value;
                 const pincode = e.target.pincode.value;
                 const status = e.target.status.value;
-                
+
                 if (password !== confirmPassword) {
                   addToast("Passwords do not match!", 'error');
                   return;
@@ -6126,9 +6418,9 @@ function App() {
                   accountNumber: e.target.accountNumber.value,
                   ifscCode: e.target.ifscCode.value,
                 };
-                
-                await executeAction('/admin/create-agent', 'POST', { 
-                  name, email, phone, password, level, assignedArea, pincode, status, bankDetails 
+
+                await executeAction('/admin/create-agent', 'POST', {
+                  name, email, phone, password, level, assignedArea, pincode, status, bankDetails
                 });
                 setShowModal(null);
               }}
@@ -6153,12 +6445,12 @@ function App() {
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Password</label>
                   <div className="relative">
-                    <input 
-                      name="password" 
-                      required 
-                      type={showAgentPassword ? "text" : "password"} 
-                      placeholder="••••••••" 
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3.5 pr-10 py-2 text-sm" 
+                    <input
+                      name="password"
+                      required
+                      type={showAgentPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3.5 pr-10 py-2 text-sm"
                     />
                     <button
                       type="button"
@@ -6172,12 +6464,12 @@ function App() {
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Confirm Password</label>
                   <div className="relative">
-                    <input 
-                      name="confirmPassword" 
-                      required 
-                      type={showAgentConfirmPassword ? "text" : "password"} 
-                      placeholder="••••••••" 
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3.5 pr-10 py-2 text-sm" 
+                    <input
+                      name="confirmPassword"
+                      required
+                      type={showAgentConfirmPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3.5 pr-10 py-2 text-sm"
                     />
                     <button
                       type="button"
@@ -6242,7 +6534,7 @@ function App() {
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex gap-2 justify-end pt-4">
                 <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">
                   Cancel
@@ -6261,7 +6553,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">New Job Application</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const candidateName = e.target.candidateName.value;
@@ -6368,10 +6660,10 @@ function App() {
                 <div className="flex-1">
                   <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Resume / CV</span>
                   {modalData.resumeUrl ? (
-                    <a 
-                      href={modalData.resumeUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      href={modalData.resumeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-600 hover:text-white transition-all w-full justify-center"
                     >
                       <FileText className="w-4 h-4" /> View Resume Document
@@ -6382,8 +6674,8 @@ function App() {
                 </div>
                 <div className="flex-1">
                   <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Application Status</span>
-                  <select 
-                    value={modalData.status} 
+                  <select
+                    value={modalData.status}
                     onChange={(e) => {
                       executeAction(`/admin/jobs/${modalData._id}`, 'PUT', { status: e.target.value });
                       setModalData({ ...modalData, status: e.target.value });
@@ -6409,9 +6701,9 @@ function App() {
             </div>
 
             <div className="flex justify-end pt-4 border-t dark:border-slate-800">
-              <button 
-                type="button" 
-                onClick={() => setShowModal(null)} 
+              <button
+                type="button"
+                onClick={() => setShowModal(null)}
                 className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-bold px-5 py-2.5 rounded-xl transition-colors"
               >
                 Close Details
@@ -6426,7 +6718,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">New Card Holder</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
@@ -6487,7 +6779,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Record New Transaction</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const title = e.target.title.value;
@@ -6540,7 +6832,7 @@ function App() {
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
               {onboardType === 'technician' ? 'Onboard Technician' : onboardType === 'executive' ? 'Onboard Executive' : 'Onboard Delivery Partner'}
             </h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
@@ -6601,7 +6893,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Add Customer Support Agent</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = e.target.name.value;
@@ -6651,7 +6943,7 @@ function App() {
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">
               {categoryModalTier === 'child' ? 'Add New Child Category' : 'Add New Sub Category'}
             </h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const name = addFirstCategory || e.target.name?.value || '';
@@ -6665,46 +6957,46 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Main Name)</label>
-                <input 
-                  name="name" 
-                  value={addFirstCategory} 
-                  readOnly 
-                  disabled 
-                  className="w-full bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed font-semibold" 
+                <input
+                  name="name"
+                  value={addFirstCategory}
+                  readOnly
+                  disabled
+                  className="w-full bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed font-semibold"
                 />
               </div>
 
               {categoryModalTier === 'sub' ? (
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
-                  <input 
-                    name="subcategory" 
-                    placeholder="Enter sub category name (e.g. Mobiles & Tablets)" 
-                    required 
-                    type="text" 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  <input
+                    name="subcategory"
+                    placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
+                    required
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
                   />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Name)</label>
-                    <input 
-                      name="subcategory" 
-                      value={addSecondCategory} 
-                      readOnly 
-                      disabled 
-                      className="w-full bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed font-semibold" 
+                    <input
+                      name="subcategory"
+                      value={addSecondCategory}
+                      readOnly
+                      disabled
+                      className="w-full bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed font-semibold"
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Child Name)</label>
-                    <input 
-                      name="subSubcategory" 
-                      placeholder="Enter child category (e.g. Apple)" 
-                      required 
-                      type="text" 
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                    <input
+                      name="subSubcategory"
+                      placeholder="Enter child category (e.g. Apple)"
+                      required
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
                     />
                   </div>
                 </div>
@@ -6729,7 +7021,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Create Support Ticket</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const customerName = e.target.customerName.value;
@@ -6776,7 +7068,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">New Announcement</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const title = e.target.title.value;
@@ -6815,22 +7107,22 @@ function App() {
       )}
       {/* 34. KYC DOCUMENT PREVIEW MODAL */}
       {kycPreviewImage && (
-        <div 
+        <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 cursor-pointer"
           onClick={() => setKycPreviewImage(null)}
         >
           <div className="relative max-w-4xl max-h-[85vh] w-full flex flex-col items-center justify-center">
-            <button 
-              onClick={() => setKycPreviewImage(null)} 
+            <button
+              onClick={() => setKycPreviewImage(null)}
               className="absolute top-[-40px] right-0 bg-white/10 hover:bg-white/20 text-white rounded-full p-2 transition-colors cursor-pointer text-sm font-bold border border-white/10"
             >
               ✕ Close Preview
             </button>
-            <img 
-              src={kycPreviewImage} 
-              alt="KYC Document Preview" 
+            <img
+              src={kycPreviewImage}
+              alt="KYC Document Preview"
               className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10 cursor-default"
-              onClick={(e) => e.stopPropagation()} 
+              onClick={(e) => e.stopPropagation()}
             />
           </div>
         </div>
@@ -6845,8 +7137,8 @@ function App() {
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{modalData.businessName}</h3>
                 <span className="text-xs text-slate-400">Created: {new Date(modalData.createdAt).toLocaleDateString()}</span>
               </div>
-              <button 
-                onClick={() => setShowModal(null)} 
+              <button
+                onClick={() => setShowModal(null)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
               >
                 ✕
@@ -6885,7 +7177,7 @@ function App() {
                 <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">KYC Documents & Verification</h4>
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-3">
                   <div className="flex justify-between"><span className="text-slate-400">KYC Status:</span><span className="font-bold capitalize">{modalData.kycStatus}</span></div>
-                  
+
                   {modalData.kycDocs && (
                     <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
                       {modalData.kycDocs.aadhaarNumber && (
@@ -6895,14 +7187,14 @@ function App() {
                         </div>
                       )}
                       {modalData.kycDocs.aadhaarImage && (
-                        <button 
+                        <button
                           onClick={() => setKycPreviewImage(modalData.kycDocs.aadhaarImage)}
                           className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
                         >
                           View Aadhaar Document
                         </button>
                       )}
-                      
+
                       {modalData.kycDocs.panNumber && (
                         <div className="flex justify-between items-center text-xs pt-2">
                           <span className="text-slate-400">PAN:</span>
@@ -6910,25 +7202,25 @@ function App() {
                         </div>
                       )}
                       {modalData.kycDocs.panImage && (
-                        <button 
+                        <button
                           onClick={() => setKycPreviewImage(modalData.kycDocs.panImage)}
                           className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
                         >
                           View PAN Document
                         </button>
                       )}
-                      
+
                       {modalData.kycDocs.selfie && (
-                        <button 
+                        <button
                           onClick={() => setKycPreviewImage(modalData.kycDocs.selfie)}
                           className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
                         >
                           View Selfie Profile
                         </button>
                       )}
-                      
+
                       {modalData.kycDocs.businessProofImage && (
-                        <button 
+                        <button
                           onClick={() => setKycPreviewImage(modalData.kycDocs.businessProofImage)}
                           className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
                         >
@@ -6966,8 +7258,8 @@ function App() {
             </div>
 
             <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
-              <button 
-                onClick={() => setShowModal(null)} 
+              <button
+                onClick={() => setShowModal(null)}
                 className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all"
               >
                 Close Details
@@ -6983,18 +7275,18 @@ function App() {
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-3xl rounded-3xl p-6 space-y-6 my-8">
             <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
-                <img 
-                  src={modalData.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
-                  alt="" 
-                  className="w-12 h-12 rounded-xl object-cover" 
+                <img
+                  src={modalData.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                  alt=""
+                  className="w-12 h-12 rounded-xl object-cover"
                 />
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">{modalData.name}</h3>
                   <span className="text-xs text-slate-400">Registered: {new Date(modalData.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
-              <button 
-                onClick={() => setShowModal(null)} 
+              <button
+                onClick={() => setShowModal(null)}
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
               >
                 ✕
@@ -7018,10 +7310,10 @@ function App() {
                   <div className="flex justify-between">
                     <span className="text-slate-400">Assigned Pincode:</span>
                     <span className="font-bold text-primary-500">
-                      {modalData.assignedPincode?.code || 
-                       (typeof modalData.assignedPincode === 'string' ? modalData.assignedPincode : null) || 
-                       modalData.pincode || 
-                       (/^\d{6}$/.test(modalData.assignedArea) ? modalData.assignedArea : 'None')}
+                      {modalData.assignedPincode?.code ||
+                        (typeof modalData.assignedPincode === 'string' ? modalData.assignedPincode : null) ||
+                        modalData.pincode ||
+                        (/^\d{6}$/.test(modalData.assignedArea) ? modalData.assignedArea : 'None')}
                     </span>
                   </div>
                   <div className="flex justify-between"><span className="text-slate-400">Status:</span><span className="font-semibold capitalize">{modalData.status}</span></div>
@@ -7065,14 +7357,14 @@ function App() {
                         </div>
                       )}
                       {modalData.kyc.aadhaarImage && (
-                        <button 
+                        <button
                           onClick={() => setKycPreviewImage(modalData.kyc.aadhaarImage)}
                           className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
                         >
                           View Aadhaar Document
                         </button>
                       )}
-                      
+
                       {modalData.kyc.panNumber && (
                         <div className="flex justify-between items-center text-xs pt-2">
                           <span className="text-slate-400">PAN:</span>
@@ -7080,25 +7372,25 @@ function App() {
                         </div>
                       )}
                       {modalData.kyc.panImage && (
-                        <button 
+                        <button
                           onClick={() => setKycPreviewImage(modalData.kyc.panImage)}
                           className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
                         >
                           View PAN Document
                         </button>
                       )}
-                      
+
                       {modalData.kyc.selfie && (
-                        <button 
+                        <button
                           onClick={() => setKycPreviewImage(modalData.kyc.selfie)}
                           className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
                         >
                           View Selfie Profile
                         </button>
                       )}
-                      
+
                       {modalData.kyc.businessProofImage && (
-                        <button 
+                        <button
                           onClick={() => setKycPreviewImage(modalData.kyc.businessProofImage)}
                           className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
                         >
@@ -7114,8 +7406,8 @@ function App() {
             </div>
 
             <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
-              <button 
-                onClick={() => setShowModal(null)} 
+              <button
+                onClick={() => setShowModal(null)}
                 className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all"
               >
                 Close Details
@@ -7130,7 +7422,7 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Edit Category Hierarchy</h3>
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const subcategory = e.target.subcategory.value;
@@ -7143,39 +7435,39 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Non-Editable)</label>
-                <input 
-                  disabled 
-                  value={modalData.name} 
-                  type="text" 
-                  className="w-full bg-slate-100 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-500 cursor-not-allowed" 
+                <input
+                  disabled
+                  value={modalData.name}
+                  type="text"
+                  className="w-full bg-slate-100 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-500 cursor-not-allowed"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub)</label>
-                  <input 
-                    name="subcategory" 
-                    defaultValue={modalData.subcategory || ''} 
-                    type="text" 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  <input
+                    name="subcategory"
+                    defaultValue={modalData.subcategory || ''}
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Sub-sub)</label>
-                  <input 
-                    name="subSubcategory" 
-                    defaultValue={modalData.subSubcategory || ''} 
-                    type="text" 
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" 
+                  <input
+                    name="subSubcategory"
+                    defaultValue={modalData.subSubcategory || ''}
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
                   />
                 </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
-                <textarea 
-                  name="description" 
-                  defaultValue={modalData.description || ''} 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]" 
+                <textarea
+                  name="description"
+                  defaultValue={modalData.description || ''}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]"
                 />
               </div>
 
@@ -7280,31 +7572,31 @@ function App() {
             </div>
 
             <div className="flex flex-wrap gap-2 justify-end pt-4 border-t border-slate-100 dark:border-slate-800">
-              <button 
-                type="button" 
-                onClick={() => setShowModal(null)} 
+              <button
+                type="button"
+                onClick={() => setShowModal(null)}
                 className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold px-4 py-2.5 rounded-xl"
               >
                 Close
               </button>
               {modalData.status === 'pending' && (
                 <>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={async () => {
                       await executeAction(`/admin/wallet/withdrawals/${modalData._id}`, 'PUT', { status: 'rejected' });
                       setShowModal(null);
-                    }} 
+                    }}
                     className="bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-xs font-bold px-4 py-2.5 rounded-xl"
                   >
                     Reject Request
                   </button>
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={async () => {
                       await executeAction(`/admin/wallet/withdrawals/${modalData._id}`, 'PUT', { status: 'approved' });
                       setShowModal(null);
-                    }} 
+                    }}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md"
                   >
                     Approve Pay-out
@@ -7312,12 +7604,12 @@ function App() {
                 </>
               )}
               {modalData.status === 'approved' && (
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={async () => {
                     await executeAction(`/admin/wallet/withdrawals/${modalData._id}`, 'PUT', { status: 'completed' });
                     setShowModal(null);
-                  }} 
+                  }}
                   className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-md"
                 >
                   Mark as Completed
@@ -7339,7 +7631,7 @@ function App() {
               </button>
             </div>
 
-            <form 
+            <form
               onSubmit={async (e) => {
                 e.preventDefault();
                 const title = e.target.title.value;
@@ -7353,32 +7645,32 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Transaction Title / Details</label>
-                <input 
-                  name="title" 
-                  defaultValue={modalData.title || ''} 
-                  required 
-                  type="text" 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-semibold" 
+                <input
+                  name="title"
+                  defaultValue={modalData.title || ''}
+                  required
+                  type="text"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-semibold"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Amount (₹)</label>
-                <input 
-                  name="amount" 
-                  defaultValue={modalData.amount || 0} 
-                  required 
-                  type="number" 
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-bold" 
+                <input
+                  name="amount"
+                  defaultValue={modalData.amount || 0}
+                  required
+                  type="number"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-sm font-bold"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Transaction Type</label>
-                  <select 
-                    name="type" 
-                    defaultValue={modalData.type || 'credit'} 
+                  <select
+                    name="type"
+                    defaultValue={modalData.type || 'credit'}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold"
                   >
                     <option value="credit">Credit</option>
@@ -7387,9 +7679,9 @@ function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Payment Status</label>
-                  <select 
-                    name="status" 
-                    defaultValue={modalData.status || 'completed'} 
+                  <select
+                    name="status"
+                    defaultValue={modalData.status || 'completed'}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold"
                   >
                     <option value="completed">Completed</option>
@@ -7408,6 +7700,77 @@ function App() {
         </div>
       )}
 
+      {/* AGENT ONBOARDING REQUESTS MODAL */}
+      {showOnboardingRequestsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">Agent Onboarding Requests</h3>
+                <p className="text-xs text-slate-400 mt-1">Review pending agent registration and KYC approval applications</p>
+              </div>
+              <button 
+                onClick={() => setShowOnboardingRequestsModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).map((pAgent) => (
+                <div key={pAgent._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-800 dark:text-slate-100 text-base">{pAgent.name}</span>
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                        {pAgent.level || 'Pincode'} Agent
+                      </span>
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500">
+                        {pAgent.status || 'Pending Approval'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">{pAgent.email} • {pAgent.phone}</p>
+                    <p className="text-xs text-slate-500 font-semibold">Territory/Area: {pAgent.assignedArea || 'Not assigned'}</p>
+                  </div>
+
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => { setModalData(pAgent); setShowModal('agent-details'); }}
+                      className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                    >
+                      View Details & KYC
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { status: 'rejected' });
+                      }}
+                      className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { status: 'approved' });
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow-md"
+                    >
+                      Approve Agent
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length === 0 && (
+                <div className="text-center py-12 text-slate-400">
+                  <UserCheck className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                  <p className="text-sm font-semibold">No pending agent onboarding requests at this time.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* -------------------- SLEEK TOAST NOTIFICATIONS -------------------- */}
       <div className="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none max-w-sm w-full px-4 sm:px-0">
         {toasts.map((t) => {
@@ -7415,15 +7778,14 @@ function App() {
           const isSuccess = t.type === 'success' || (t.text || '').toLowerCase().includes('success') || (t.text || '').toLowerCase().includes('added') || (t.text || '').toLowerCase().includes('saved') || (t.text || '').toLowerCase().includes('approved') || (t.text || '').toLowerCase().includes('created');
 
           return (
-            <div 
+            <div
               key={t.id}
-              className={`pointer-events-auto flex items-center justify-between gap-3 px-4 py-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl transition-all duration-300 transform translate-y-0 ${
-                isError 
-                  ? 'bg-rose-950/90 text-rose-100 border-rose-800/60 shadow-rose-950/40' 
-                  : isSuccess 
-                  ? 'bg-emerald-950/90 text-emerald-100 border-emerald-800/60 shadow-emerald-950/40'
-                  : 'bg-slate-900/90 text-slate-100 border-slate-700/60 shadow-slate-950/50'
-              }`}
+              className={`pointer-events-auto flex items-center justify-between gap-3 px-4 py-3.5 rounded-2xl shadow-2xl border backdrop-blur-xl transition-all duration-300 transform translate-y-0 ${isError
+                  ? 'bg-rose-950/90 text-rose-100 border-rose-800/60 shadow-rose-950/40'
+                  : isSuccess
+                    ? 'bg-emerald-950/90 text-emerald-100 border-emerald-800/60 shadow-emerald-950/40'
+                    : 'bg-slate-900/90 text-slate-100 border-slate-700/60 shadow-slate-950/50'
+                }`}
             >
               <div className="flex items-center gap-3 min-w-0">
                 {isError ? (
@@ -7435,7 +7797,7 @@ function App() {
                 )}
                 <span className="text-xs font-bold leading-snug break-words">{t.text}</span>
               </div>
-              <button 
+              <button
                 onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
                 className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer border-none shrink-0"
               >
