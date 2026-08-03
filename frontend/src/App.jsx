@@ -193,7 +193,7 @@ function App() {
   });
 
   // Navigation
-  const [activeTab, setActiveTab] = useState('agents');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [agentLevelFilter, setAgentLevelFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -436,7 +436,7 @@ function App() {
 
       setToken(data.token);
       setUser(data.user);
-      setActiveTab('agents');
+      setActiveTab('dashboard');
     } catch (err) {
       console.error("API Login failed:", err.message);
       setAuthError(err.message || 'Invalid Credentials or Connection Refused');
@@ -603,6 +603,13 @@ function App() {
             </div>
 
             <nav className="space-y-1 overflow-y-auto flex-1 pr-1">
+              <button 
+                onClick={() => setActiveTab('dashboard')} 
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'dashboard' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Layers className="w-4 h-4" /> Dashboard
+              </button>
+
               <button 
                 onClick={() => setActiveTab('agents')} 
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'agents' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
