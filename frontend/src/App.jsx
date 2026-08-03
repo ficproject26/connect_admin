@@ -2117,7 +2117,11 @@ function App() {
                   {agents
                     .filter(a => {
                       const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
-                      return (a.status || '').toLowerCase() === currentFilter.toLowerCase();
+                      const aStatus = (a.status || '').toLowerCase();
+                      if (currentFilter === 'pending') {
+                        return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(aStatus);
+                      }
+                      return aStatus === currentFilter;
                     })
                     .map((agent) => (
                     <div key={agent._id} className="py-5 space-y-4">
@@ -2169,7 +2173,7 @@ function App() {
                         </div>
                       </div>
 
-                      {agent.status === 'pending' && (
+                      {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((agent.status || '').toLowerCase()) && (
                         <div className="flex gap-3 justify-end">
                           <button 
                             onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
@@ -2187,7 +2191,14 @@ function App() {
                       )}
                     </div>
                   ))}
-                  {agents.filter(a => a.status === (['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending')).length === 0 && (
+                  {agents.filter(a => {
+                    const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                    const aStatus = (a.status || '').toLowerCase();
+                    if (currentFilter === 'pending') {
+                      return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(aStatus);
+                    }
+                    return aStatus === currentFilter;
+                  }).length === 0 && (
                     <div className="text-center py-12 text-slate-400 text-sm">
                       <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                       No agents found for this status.
