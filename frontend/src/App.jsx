@@ -193,7 +193,8 @@ function App() {
   });
 
   // Navigation
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState('agents');
+  const [agentLevelFilter, setAgentLevelFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Data States
@@ -435,7 +436,7 @@ function App() {
 
       setToken(data.token);
       setUser(data.user);
-      setActiveTab('dashboard');
+      setActiveTab('agents');
     } catch (err) {
       console.error("API Login failed:", err.message);
       setAuthError(err.message || 'Invalid Credentials or Connection Refused');
@@ -603,42 +604,10 @@ function App() {
 
             <nav className="space-y-1 overflow-y-auto flex-1 pr-1">
               <button 
-                onClick={() => setActiveTab('dashboard')} 
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'dashboard' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <Layers className="w-4 h-4" /> Dashboard
-              </button>
-
-              {isSuperAdmin && (
-                <>
-                  <button 
-                    onClick={() => setActiveTab('branches')} 
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'branches' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-                  >
-                    <MapPin className="w-4 h-4" /> District Management
-                  </button>
-                  
-                  <button 
-                    onClick={() => setActiveTab('admins')} 
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'admins' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-                  >
-                    <UserCheck className="w-4 h-4" /> Admin Management
-                  </button>
-                </>
-              )}
-
-              <button 
                 onClick={() => setActiveTab('agents')} 
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'agents' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Users className="w-4 h-4" /> Agent Directory
-              </button>
-
-              <button 
-                onClick={() => setActiveTab('pincodes')} 
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'pincodes' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <MapPin className="w-4 h-4" /> Pincode Management
               </button>
 
               <button 
@@ -828,7 +797,7 @@ function App() {
             </button>
             <div>
               <h2 className="text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight">
-                {activeTab === 'branches' ? 'districts' : activeTab.replace('-', ' ')}
+                {activeTab === 'agents' ? 'Agent Directory' : activeTab.replace('-', ' ')}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
                 {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -1353,25 +1322,44 @@ function App() {
           {activeTab === 'agents' && (
             <div className="space-y-6">
               
-              {/* Agent Performance Analytics Dashboard */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Agent Network Performance</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl text-center">
+              {/* Agent Level & Network Overview Cards */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Agent Network Breakdown</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                  <div 
+                    onClick={() => setAgentLevelFilter('all')}
+                    className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'all' ? 'bg-primary-500/10 border-2 border-primary-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
+                  >
                     <span className="block text-2xl font-black text-primary-500">{agents.length}</span>
-                    <span className="text-xs text-slate-400 mt-1">Total Network Agents</span>
+                    <span className="text-xs font-semibold text-slate-400 mt-1">Total Agents</span>
                   </div>
-                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl text-center">
-                    <span className="block text-2xl font-black text-emerald-500">
-                      ₹{agents.reduce((sum, a) => sum + (a.commissionEarned || 0), 0).toLocaleString()}
-                    </span>
-                    <span className="text-xs text-slate-400 mt-1">Total Commissions Disbursed</span>
+                  <div 
+                    onClick={() => setAgentLevelFilter('state')}
+                    className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'state' ? 'bg-purple-500/10 border-2 border-purple-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
+                  >
+                    <span className="block text-2xl font-black text-purple-500">{agents.filter(a => (a.level || '').toLowerCase() === 'state').length}</span>
+                    <span className="text-xs font-semibold text-slate-400 mt-1">State Agents</span>
                   </div>
-                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl text-center">
-                    <span className="block text-2xl font-black text-purple-500">
-                      {agents.reduce((sum, a) => sum + (a.vendorsAdded || 0), 0)}
-                    </span>
-                    <span className="text-xs text-slate-400 mt-1">Vendors Onboarded By Agents</span>
+                  <div 
+                    onClick={() => setAgentLevelFilter('district')}
+                    className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'district' ? 'bg-blue-500/10 border-2 border-blue-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
+                  >
+                    <span className="block text-2xl font-black text-blue-500">{agents.filter(a => (a.level || '').toLowerCase() === 'district').length}</span>
+                    <span className="text-xs font-semibold text-slate-400 mt-1">District Agents</span>
+                  </div>
+                  <div 
+                    onClick={() => setAgentLevelFilter('division')}
+                    className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'division' ? 'bg-indigo-500/10 border-2 border-indigo-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
+                  >
+                    <span className="block text-2xl font-black text-indigo-500">{agents.filter(a => ['division', 'divisional'].includes((a.level || '').toLowerCase())).length}</span>
+                    <span className="text-xs font-semibold text-slate-400 mt-1">Divisional Agents</span>
+                  </div>
+                  <div 
+                    onClick={() => setAgentLevelFilter('pincode')}
+                    className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'pincode' ? 'bg-emerald-500/10 border-2 border-emerald-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
+                  >
+                    <span className="block text-2xl font-black text-emerald-500">{agents.filter(a => (a.level || 'pincode').toLowerCase() === 'pincode').length}</span>
+                    <span className="text-xs font-semibold text-slate-400 mt-1">Pincode Agents</span>
                   </div>
                 </div>
               </div>
@@ -1383,7 +1371,7 @@ function App() {
                     <Search className="w-5 h-5 text-slate-400" />
                     <input 
                       type="text" 
-                      placeholder="Search by name, email, pincode..." 
+                      placeholder="Search by name, email, pincode, area..." 
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="bg-transparent focus:outline-none text-sm w-full"
@@ -1415,188 +1403,264 @@ function App() {
                   </div>
                 </div>
 
-                {agentViewMode === 'list' ? (
-                  <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                    {agents
-                      .filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .map((agent) => (
-                        <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
-                          <div 
-                            onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
-                            className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-1 cursor-pointer"
-                          >
-                            <div className="flex gap-4">
-                              <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover" />
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors">{agent.name}</span>
-                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                    {agent.status}
+                {/* Level Filter Bar */}
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap gap-2 items-center bg-slate-50/60 dark:bg-slate-950/40">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Agent Level:</span>
+                  {[
+                    { id: 'all', label: 'All Agents', count: agents.length },
+                    { id: 'state', label: 'State Agents', count: agents.filter(a => (a.level || '').toLowerCase() === 'state').length },
+                    { id: 'district', label: 'District Agents', count: agents.filter(a => (a.level || '').toLowerCase() === 'district').length },
+                    { id: 'division', label: 'Divisional Agents', count: agents.filter(a => ['division', 'divisional'].includes((a.level || '').toLowerCase())).length },
+                    { id: 'pincode', label: 'Pincode Agents', count: agents.filter(a => (a.level || 'pincode').toLowerCase() === 'pincode').length }
+                  ].map((filter) => (
+                    <button
+                      key={filter.id}
+                      type="button"
+                      onClick={() => setAgentLevelFilter(filter.id)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        agentLevelFilter === filter.id 
+                          ? 'bg-primary-600 text-white shadow-sm font-bold' 
+                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <span>{filter.label}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        agentLevelFilter === filter.id ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                      }`}>
+                        {filter.count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {(() => {
+                  const filteredAgents = agents.filter(a => {
+                    const query = searchTerm.toLowerCase();
+                    const matchesSearch = !query || 
+                      (a.name || '').toLowerCase().includes(query) || 
+                      (a.email || '').toLowerCase().includes(query) ||
+                      (a.phone && a.phone.includes(query)) ||
+                      (a.assignedArea && a.assignedArea.toLowerCase().includes(query)) ||
+                      (a.assignedPincode?.code && a.assignedPincode.code.includes(query));
+
+                    const lvl = (a.level || 'pincode').toLowerCase();
+                    let matchesLevel = true;
+                    if (agentLevelFilter === 'state') matchesLevel = lvl === 'state';
+                    else if (agentLevelFilter === 'district') matchesLevel = lvl === 'district';
+                    else if (agentLevelFilter === 'division') matchesLevel = lvl === 'division' || lvl === 'divisional';
+                    else if (agentLevelFilter === 'pincode') matchesLevel = lvl === 'pincode';
+
+                    return matchesSearch && matchesLevel;
+                  });
+
+                  if (filteredAgents.length === 0) {
+                    return (
+                      <div className="text-center py-12 text-slate-400 text-sm">
+                        No {agentLevelFilter !== 'all' ? `${agentLevelFilter} ` : ''}agents found matching your search.
+                      </div>
+                    );
+                  }
+
+                  return agentViewMode === 'list' ? (
+                    <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {filteredAgents.map((agent) => {
+                        const agentLvl = (agent.level || 'pincode').toLowerCase();
+                        return (
+                          <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
+                            <div 
+                              onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
+                              className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-1 cursor-pointer"
+                            >
+                              <div className="flex gap-4 items-center">
+                                <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover" />
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors">{agent.name}</span>
+                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                                      agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                      agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                      ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
+                                      'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                    }`}>
+                                      {agent.level || 'pincode'} Agent
+                                    </span>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                      {agent.status}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-slate-400 mt-1 space-x-2">
+                                    <span>{agent.phone}</span>
+                                    <span>•</span>
+                                    <span>{agent.email}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                                  <span className="block text-slate-400 capitalize">{agent.level || 'pincode'}</span>
+                                  <span className="font-bold">
+                                    {agent.level === 'pincode' || !agent.level 
+                                      ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None')) 
+                                      : (agent.assignedArea || 'None')}
                                   </span>
                                 </div>
-                                <div className="text-xs text-slate-400 mt-1 space-x-2">
-                                  <span>{agent.phone}</span>
-                                  <span>•</span>
-                                  <span>{agent.email}</span>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                                  <span className="block text-slate-400">Wallet</span>
+                                  <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                                  <span className="block text-slate-400">Vendors</span>
+                                  <span className="font-bold">{agent.vendorsAdded || 0}</span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
+                                  <span className="block text-slate-400">Commission</span>
+                                  <span className="font-bold">₹{agent.commissionEarned || 0}</span>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
-                              <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                <span className="block text-slate-400 capitalize">{agent.level || 'pincode'}</span>
-                                <span className="font-bold">
-                                  {agent.level === 'pincode' || !agent.level 
-                                    ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None')) 
-                                    : (agent.assignedArea || 'None')}
-                                </span>
-                              </div>
-                              <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                <span className="block text-slate-400">Wallet</span>
-                                <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
-                              </div>
-                              <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                <span className="block text-slate-400">Vendors</span>
-                                <span className="font-bold">{agent.vendorsAdded || 0}</span>
-                              </div>
-                              <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                <span className="block text-slate-400">Commission</span>
-                                <span className="font-bold">₹{agent.commissionEarned || 0}</span>
-                              </div>
+                            <div className="flex gap-2 justify-end">
+                              <button 
+                                onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
+                                className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                              >
+                                Assign Task
+                              </button>
+                              <button 
+                                onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
+                                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                              >
+                                Edit
+                              </button>
+                              {agent.status === 'approved' ? (
+                                <button 
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
+                                  className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                >
+                                  Suspend
+                                </button>
+                              ) : (
+                                <>
+                                  <button 
+                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                                    className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button 
+                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                  >
+                                    Approve
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6 bg-slate-50/50 dark:bg-slate-950/10">
+                      {filteredAgents.map((agent) => {
+                        const agentLvl = (agent.level || 'pincode').toLowerCase();
+                        return (
+                          <div key={agent._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                            <div 
+                              onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
+                              className="cursor-pointer space-y-4"
+                            >
+                              <div className="flex gap-3.5 items-center">
+                                <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors truncate">{agent.name}</span>
+                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${
+                                      agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                      agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                      ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
+                                      'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                    }`}>
+                                      {agent.level || 'pincode'} Agent
+                                    </span>
+                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                      {agent.status}
+                                    </span>
+                                  </div>
+                                  <span className="block text-xs text-slate-400 mt-1 truncate">{agent.email}</span>
+                                  <span className="block text-xs text-slate-400 truncate">{agent.phone}</span>
+                                </div>
+                              </div>
 
-                          <div className="flex gap-2 justify-end">
-                            <button 
-                              onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
-                              className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                            >
-                              Assign Task
-                            </button>
-                            <button 
-                              onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
-                              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                            >
-                              Edit
-                            </button>
-                            {agent.status === 'approved' ? (
-                              <button 
-                                onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
-                                className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                              >
-                                Suspend
-                              </button>
-                            ) : (
-                              <>
-                                <button 
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
-                                  className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                                >
-                                  Reject
-                                </button>
-                                <button 
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                                >
-                                  Approve
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6 bg-slate-50/50 dark:bg-slate-950/10">
-                    {agents
-                      .filter(a => a.name.toLowerCase().includes(searchTerm.toLowerCase()) || a.email.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .map((agent) => (
-                        <div key={agent._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                          <div 
-                            onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
-                            className="cursor-pointer space-y-4"
-                          >
-                            <div className="flex gap-3.5 items-center">
-                              <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors truncate">{agent.name}</span>
-                                  <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                    {agent.status}
+                              <div className="grid grid-cols-2 gap-2.5 text-center text-xs">
+                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
+                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{agent.level || 'pincode'}</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                                    {agent.level === 'pincode' || !agent.level 
+                                      ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None')) 
+                                      : (agent.assignedArea || 'None')}
                                   </span>
                                 </div>
-                                <span className="block text-xs text-slate-400 mt-1 truncate">{agent.email}</span>
-                                <span className="block text-xs text-slate-400 truncate">{agent.phone}</span>
+                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
+                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Wallet</span>
+                                  <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
+                                </div>
+                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
+                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Vendors</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">{agent.vendorsAdded || 0}</span>
+                                </div>
+                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
+                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Comm.</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300">₹{agent.commissionEarned || 0}</span>
+                                </div>
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-2.5 text-center text-xs">
-                              <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{agent.level || 'pincode'}</span>
-                                <span className="font-bold text-slate-700 dark:text-slate-300">
-                                  {agent.level === 'pincode' || !agent.level 
-                                    ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None')) 
-                                    : (agent.assignedArea || 'None')}
-                                </span>
-                              </div>
-                              <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Wallet</span>
-                                <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
-                              </div>
-                              <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Vendors</span>
-                                <span className="font-bold text-slate-700 dark:text-slate-300">{agent.vendorsAdded || 0}</span>
-                              </div>
-                              <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Comm.</span>
-                                <span className="font-bold text-slate-700 dark:text-slate-300">₹{agent.commissionEarned || 0}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 justify-end pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                            <button 
-                              onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
-                              className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                            >
-                              Assign Task
-                            </button>
-                            <button 
-                              onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
-                              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                            >
-                              Edit
-                            </button>
-                            {agent.status === 'approved' ? (
+                            <div className="flex flex-wrap gap-2 justify-end pt-3 border-t border-slate-100 dark:border-slate-800/80">
                               <button 
-                                onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
-                                className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
+                                className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
                               >
-                                Suspend
+                                Assign Task
                               </button>
-                            ) : (
-                              <>
+                              <button 
+                                onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
+                                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                              >
+                                Edit
+                              </button>
+                              {agent.status === 'approved' ? (
                                 <button 
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
-                                  className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
+                                  className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
                                 >
-                                  Reject
+                                  Suspend
                                 </button>
-                                <button 
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                                >
-                                  Approve
-                                </button>
-                              </>
-                            )}
+                              ) : (
+                                <>
+                                  <button 
+                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                                    className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                  >
+                                    Reject
+                                  </button>
+                                  <button 
+                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                  >
+                                    Approve
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                  </div>
-                )}
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </div>
-
             </div>
           )}
 
