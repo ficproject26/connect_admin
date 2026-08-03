@@ -867,11 +867,11 @@ function App() {
                   <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
                     <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Notifications</h4>
                     <span className="text-[10px] bg-primary-500/10 text-primary-500 font-bold px-2 py-0.5 rounded-full">
-                      {agents.filter(a => a.status === 'pending').length + vendors.filter(v => v.status?.toLowerCase() === 'pending').length} New
+                      {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length + vendors.filter(v => v.status?.toLowerCase() === 'pending').length} New
                     </span>
                   </div>
                   <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2">
-                    {agents.filter(a => a.status === 'pending').map(a => (
+                    {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).map(a => (
                       <div key={a._id} onClick={() => { setActiveTab('kyc'); setShowNotificationsPanel(false); }} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Agent KYC Pending</span>
@@ -889,7 +889,7 @@ function App() {
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">{v.businessName} requested vendor registration.</p>
                       </div>
                     ))}
-                    {agents.filter(a => a.status === 'pending').length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
+                    {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
                       <div className="text-center py-8 text-slate-400 text-xs">
                         <Bell className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
                         No new notifications
@@ -1447,7 +1447,7 @@ function App() {
                                 <span className="block text-slate-400 capitalize">{agent.level || 'pincode'}</span>
                                 <span className="font-bold">
                                   {agent.level === 'pincode' || !agent.level 
-                                    ? (agent.assignedPincode?.code || 'None') 
+                                    ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None')) 
                                     : (agent.assignedArea || 'None')}
                                 </span>
                               </div>
@@ -1535,7 +1535,7 @@ function App() {
                                 <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{agent.level || 'pincode'}</span>
                                 <span className="font-bold text-slate-700 dark:text-slate-300">
                                   {agent.level === 'pincode' || !agent.level 
-                                    ? (agent.assignedPincode?.code || 'None') 
+                                    ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None')) 
                                     : (agent.assignedArea || 'None')}
                                 </span>
                               </div>
@@ -5915,13 +5915,13 @@ function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Assigned Area</label>
-                  <input name="assignedArea" defaultValue={modalData.assignedArea || ''} type="text" placeholder="State/Dist name" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input name="assignedArea" defaultValue={/^\d{6}$/.test(modalData.assignedArea) ? (modalData.assignedDistrict || '') : (modalData.assignedArea || '')} type="text" placeholder="State/Dist name" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Assigned Pincode</label>
-                  <input name="pincode" defaultValue={modalData.assignedPincode?.code || ''} type="text" placeholder="e.g. 600001" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input name="pincode" defaultValue={modalData.assignedPincode?.code || (typeof modalData.assignedPincode === 'string' ? modalData.assignedPincode : null) || modalData.pincode || (/^\d{6}$/.test(modalData.assignedArea) ? modalData.assignedArea : '')} type="text" placeholder="e.g. 600001" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
                 <div className="flex items-center gap-3 pt-6">
                   <input name="isActive" id="isActive" defaultChecked={modalData.isActive || false} type="checkbox" className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-slate-300" />
@@ -6925,8 +6925,23 @@ function App() {
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
                   <div className="flex justify-between"><span className="text-slate-400">Role:</span><span className="font-semibold capitalize">{modalData.role}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Level:</span><span className="font-semibold capitalize">{modalData.level || 'pincode'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Assigned Area:</span><span className="font-semibold">{modalData.assignedArea || 'N/A'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Assigned Pincode:</span><span className="font-bold text-primary-500">{modalData.assignedPincode?.code || 'None'}</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Assigned Area:</span>
+                    <span className="font-semibold">
+                      {(modalData.level === 'pincode' || !modalData.level)
+                        ? (/^\d{6}$/.test(modalData.assignedArea) ? (modalData.assignedDistrict || modalData.territory?.district || modalData.territory?.state || 'N/A') : (modalData.assignedArea || 'N/A'))
+                        : (modalData.assignedArea || 'N/A')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Assigned Pincode:</span>
+                    <span className="font-bold text-primary-500">
+                      {modalData.assignedPincode?.code || 
+                       (typeof modalData.assignedPincode === 'string' ? modalData.assignedPincode : null) || 
+                       modalData.pincode || 
+                       (/^\d{6}$/.test(modalData.assignedArea) ? modalData.assignedArea : 'None')}
+                    </span>
+                  </div>
                   <div className="flex justify-between"><span className="text-slate-400">Status:</span><span className="font-semibold capitalize">{modalData.status}</span></div>
                 </div>
 

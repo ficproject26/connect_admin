@@ -487,12 +487,19 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 const rawAgents = await db.collection('agents').find().toArray();
                 for (const rAgent of rawAgents) {
                     if (rAgent.email) {
-                        const existingUser = await User.findOne({ email: rAgent.email.toLowerCase() });
+                        const email = rAgent.email.toLowerCase().trim();
+                        const territoryStr = rAgent.territory?.state || rAgent.territory?.district || rAgent.territory?.division || rAgent.territory?.pincode || '';
+                        const kycData = {
+                            aadhaarImage: rAgent.kycDocs?.aadhaarCard || '',
+                            panImage: rAgent.kycDocs?.panCard || '',
+                            selfie: rAgent.kycDocs?.passportPhoto || ''
+                        };
+
+                        const existingUser = await User.findOne({ email });
                         if (!existingUser) {
-                            const territoryStr = rAgent.territory?.state || rAgent.territory?.district || rAgent.territory?.division || rAgent.territory?.pincode || '';
                             await User.create({
                                 name: rAgent.name,
-                                email: rAgent.email.toLowerCase(),
+                                email: email,
                                 phone: rAgent.phone,
                                 password: rAgent.password,
                                 role: 'agent',
@@ -501,13 +508,31 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                                 registrationId: rAgent.registrationId,
                                 status: rAgent.kycStatus || 'pending',
                                 isActive: rAgent.kycStatus === 'approved',
-                                kyc: {
-                                    aadhaarImage: rAgent.kycDocs?.aadhaarCard || '',
-                                    panImage: rAgent.kycDocs?.panCard || '',
-                                    selfie: rAgent.kycDocs?.passportPhoto || ''
-                                },
+                                kyc: kycData,
                                 createdAt: rAgent.createdAt || new Date()
                             });
+                        } else {
+                            let updated = false;
+                            if (existingUser.role !== 'agent' && existingUser.role !== 'Agent') {
+                                existingUser.role = 'agent';
+                                updated = true;
+                            }
+                            if (rAgent.kycStatus && existingUser.status !== rAgent.kycStatus) {
+                                existingUser.status = rAgent.kycStatus;
+                                existingUser.isActive = (rAgent.kycStatus === 'approved');
+                                updated = true;
+                            }
+                            if (rAgent.kycDocs) {
+                                existingUser.kyc = {
+                                    aadhaarImage: rAgent.kycDocs.aadhaarCard || existingUser.kyc?.aadhaarImage || '',
+                                    panImage: rAgent.kycDocs.panCard || existingUser.kyc?.panImage || '',
+                                    selfie: rAgent.kycDocs.passportPhoto || existingUser.kyc?.selfie || ''
+                                };
+                                updated = true;
+                            }
+                            if (updated) {
+                                await existingUser.save();
+                            }
                         }
                     }
                 }
@@ -534,16 +559,42 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
     }
 });
 
-router.put('/agents/:id/status', [auth, adminAuth], async (req, res) => {
-    const { status, isActive } = req.body;
+const handleAgentStatusUpdate = async (req, res) => {
+    const { status, isActive, rejectionReason } = req.body;
     try {
         let agent = await User.findById(req.params.id);
+        if (!agent) {
+            agent = await User.findOne({ _id: req.params.id });
+        }
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 
         if (status) agent.status = status;
-        if (typeof isActive !== 'undefined') agent.isActive = isActive;
+        if (typeof isActive !== 'undefined') {
+            agent.isActive = isActive;
+        } else if (status) {
+            agent.isActive = (status === 'approved');
+        }
 
         await agent.save();
+
+        // Also sync status update to agents collection
+        const db = mongoose.connection.db;
+        if (db && agent.email) {
+            try {
+                await db.collection('agents').updateOne(
+                    { email: agent.email.toLowerCase() },
+                    {
+                        $set: {
+                            kycStatus: status,
+                            rejectionReason: rejectionReason || '',
+                            updatedAt: new Date()
+                        }
+                    }
+                );
+            } catch (aErr) {
+                console.error("Error updating agents collection:", aErr);
+            }
+        }
 
         // Update Pincode activeAgentId linkage
         if (agent.assignedPincode) {
@@ -559,7 +610,12 @@ router.put('/agents/:id/status', [auth, adminAuth], async (req, res) => {
         console.error(err);
         res.status(500).send('Server error');
     }
-});
+};
+
+router.put('/agents/:id/status', [auth, adminAuth], handleAgentStatusUpdate);
+router.put('/approve-agent/:id', [auth, adminAuth], handleAgentStatusUpdate);
+router.put('/agents/:id/approve', [auth, adminAuth], (req, res, next) => { req.body.status = 'approved'; handleAgentStatusUpdate(req, res); });
+router.put('/agents/:id/reject', [auth, adminAuth], (req, res, next) => { req.body.status = 'rejected'; handleAgentStatusUpdate(req, res); });
 
 // ==========================================
 // 5. PINCODE MANAGEMENT
@@ -1356,7 +1412,7 @@ router.put('/update-agent/:id', [auth, adminAuth], async (req, res) => {
             }
         }
 
-        const updatedAgent = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const updatedAgent = await User.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('assignedPincode', 'code name');
         res.json(updatedAgent);
     } catch (err) {
         console.error(err);
