@@ -133,6 +133,20 @@ function App() {
   const [expandedAgents, setExpandedAgents] = useState({});
   const [showOnboardingRequestsModal, setShowOnboardingRequestsModal] = useState(false);
   const [pincodeStateFilter, setPincodeStateFilter] = useState('');
+
+  // Helper to determine if an agent is a pending onboarding request
+  const isPendingAgent = (a) => {
+    if (!a) return false;
+    const s = (a.status || '').toLowerCase().trim();
+    const k = (a.kycStatus || '').toLowerCase().trim();
+    if (['approved', 'active', 'suspended'].includes(s) || ['approved', 'active', 'suspended'].includes(k)) {
+      return false;
+    }
+    if (s === 'rejected' || k === 'rejected') {
+      return false;
+    }
+    return true;
+  };
   const [pincodeDistrictFilter, setPincodeDistrictFilter] = useState('');
   const [pincodeStatusFilter, setPincodeStatusFilter] = useState('all');
 
@@ -845,17 +859,17 @@ function App() {
                   <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
                     <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Notifications</h4>
                     <span className="text-[10px] bg-primary-500/10 text-primary-500 font-bold px-2 py-0.5 rounded-full">
-                      {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length + vendors.filter(v => v.status?.toLowerCase() === 'pending').length} New
+                      {agents.filter(isPendingAgent).length + vendors.filter(v => v.status?.toLowerCase() === 'pending').length} New
                     </span>
                   </div>
                   <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2">
-                    {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).map(a => (
-                      <div key={a._id} onClick={() => { setActiveTab('kyc'); setShowNotificationsPanel(false); }} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1">
+                    {agents.filter(isPendingAgent).map(a => (
+                      <div key={a._id} onClick={() => { setShowOnboardingRequestsModal(true); setShowNotificationsPanel(false); }} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1">
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Agent KYC Pending</span>
                           <span className="text-[10px] text-amber-500 font-semibold">Verify</span>
                         </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{a.name} submitted KYC documents for approval.</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{a.name} submitted registration/KYC documents for approval.</p>
                       </div>
                     ))}
                     {vendors.filter(v => v.status?.toLowerCase() === 'pending').map(v => (
@@ -867,7 +881,7 @@ function App() {
                         <p className="text-[11px] text-slate-500 dark:text-slate-400">{v.businessName} requested vendor registration.</p>
                       </div>
                     ))}
-                    {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
+                    {agents.filter(isPendingAgent).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
                       <div className="text-center py-8 text-slate-400 text-xs">
                         <Bell className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
                         No new notifications
@@ -1413,13 +1427,16 @@ function App() {
 
                     <button
                       type="button"
-                      onClick={() => setShowOnboardingRequestsModal(true)}
+                      onClick={() => {
+                        fetchData();
+                        setShowOnboardingRequestsModal(true);
+                      }}
                       className="bg-amber-500 hover:bg-amber-600 text-white font-semibold px-3.5 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 text-xs"
                     >
                       <UserCheck className="w-4 h-4" /> Agent Onboarding Requests
-                      {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length > 0 && (
+                      {agents.filter(isPendingAgent).length > 0 && (
                         <span className="bg-white text-amber-800 font-extrabold text-[10px] px-1.5 py-0.2 rounded-full shadow-xs">
-                          {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length}
+                          {agents.filter(isPendingAgent).length}
                         </span>
                       )}
                     </button>
@@ -7718,16 +7735,16 @@ function App() {
             </div>
 
             <div className="space-y-4">
-              {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).map((pAgent) => (
+              {agents.filter(isPendingAgent).map((pAgent) => (
                 <div key={pAgent._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-slate-800 dark:text-slate-100 text-base">{pAgent.name}</span>
                       <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">
                         {pAgent.level || 'Pincode'} Agent
                       </span>
-                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500">
-                        {pAgent.status || 'Pending Approval'}
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 capitalize">
+                        {pAgent.status || pAgent.kycStatus || 'Pending Approval'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400">{pAgent.email} • {pAgent.phone}</p>
@@ -7744,6 +7761,7 @@ function App() {
                     <button
                       onClick={async () => {
                         await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { status: 'rejected' });
+                        fetchData();
                       }}
                       className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                     >
@@ -7752,6 +7770,7 @@ function App() {
                     <button
                       onClick={async () => {
                         await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { status: 'approved' });
+                        fetchData();
                       }}
                       className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow-md"
                     >
@@ -7760,7 +7779,7 @@ function App() {
                   </div>
                 </div>
               ))}
-              {agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length === 0 && (
+              {agents.filter(isPendingAgent).length === 0 && (
                 <div className="text-center py-12 text-slate-400">
                   <UserCheck className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
                   <p className="text-sm font-semibold">No pending agent onboarding requests at this time.</p>

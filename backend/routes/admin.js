@@ -488,12 +488,17 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 for (const rAgent of rawAgents) {
                     if (rAgent.email) {
                         const email = rAgent.email.toLowerCase().trim();
-                        const territoryStr = rAgent.territory?.state || rAgent.territory?.district || rAgent.territory?.division || rAgent.territory?.pincode || '';
+                        const territoryStr = rAgent.territory?.state || rAgent.territory?.district || rAgent.territory?.division || rAgent.territory?.pincode || rAgent.assignedArea || '';
                         const kycData = {
-                            aadhaarImage: rAgent.kycDocs?.aadhaarCard || '',
-                            panImage: rAgent.kycDocs?.panCard || '',
-                            selfie: rAgent.kycDocs?.passportPhoto || ''
+                            aadhaarNumber: rAgent.kycDocs?.aadhaarNumber || rAgent.kyc?.aadhaarNumber || '',
+                            aadhaarImage: rAgent.kycDocs?.aadhaarCard || rAgent.kycDocs?.aadhaarImage || rAgent.kyc?.aadhaarImage || '',
+                            panNumber: rAgent.kycDocs?.panNumber || rAgent.kyc?.panNumber || '',
+                            panImage: rAgent.kycDocs?.panCard || rAgent.kycDocs?.panImage || rAgent.kyc?.panImage || '',
+                            selfie: rAgent.kycDocs?.passportPhoto || rAgent.kycDocs?.selfie || rAgent.kyc?.selfie || '',
+                            businessProofImage: rAgent.kycDocs?.signature || rAgent.kycDocs?.businessProofImage || rAgent.kyc?.businessProofImage || ''
                         };
+
+                        const rStatus = rAgent.kycStatus || rAgent.status || 'pending';
 
                         const existingUser = await User.findOne({ email });
                         if (!existingUser) {
@@ -503,11 +508,11 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                                 phone: rAgent.phone,
                                 password: rAgent.password,
                                 role: 'agent',
-                                level: rAgent.role || 'pincode',
+                                level: rAgent.role || rAgent.level || 'pincode',
                                 assignedArea: territoryStr,
                                 registrationId: rAgent.registrationId,
-                                status: rAgent.kycStatus || 'pending',
-                                isActive: rAgent.kycStatus === 'approved',
+                                status: rStatus,
+                                isActive: rStatus === 'approved',
                                 kyc: kycData,
                                 createdAt: rAgent.createdAt || new Date()
                             });
@@ -517,16 +522,19 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                                 existingUser.role = 'agent';
                                 updated = true;
                             }
-                            if (rAgent.kycStatus && existingUser.status !== rAgent.kycStatus) {
-                                existingUser.status = rAgent.kycStatus;
-                                existingUser.isActive = (rAgent.kycStatus === 'approved');
+                            if (rStatus && existingUser.status !== rStatus) {
+                                existingUser.status = rStatus;
+                                existingUser.isActive = (rStatus === 'approved');
                                 updated = true;
                             }
-                            if (rAgent.kycDocs) {
+                            if (rAgent.kycDocs || rAgent.kyc) {
                                 existingUser.kyc = {
-                                    aadhaarImage: rAgent.kycDocs.aadhaarCard || existingUser.kyc?.aadhaarImage || '',
-                                    panImage: rAgent.kycDocs.panCard || existingUser.kyc?.panImage || '',
-                                    selfie: rAgent.kycDocs.passportPhoto || existingUser.kyc?.selfie || ''
+                                    aadhaarNumber: rAgent.kycDocs?.aadhaarNumber || rAgent.kyc?.aadhaarNumber || existingUser.kyc?.aadhaarNumber || '',
+                                    aadhaarImage: rAgent.kycDocs?.aadhaarCard || rAgent.kycDocs?.aadhaarImage || rAgent.kyc?.aadhaarImage || existingUser.kyc?.aadhaarImage || '',
+                                    panNumber: rAgent.kycDocs?.panNumber || rAgent.kyc?.panNumber || existingUser.kyc?.panNumber || '',
+                                    panImage: rAgent.kycDocs?.panCard || rAgent.kycDocs?.panImage || rAgent.kyc?.panImage || existingUser.kyc?.panImage || '',
+                                    selfie: rAgent.kycDocs?.passportPhoto || rAgent.kycDocs?.selfie || rAgent.kyc?.selfie || existingUser.kyc?.selfie || '',
+                                    businessProofImage: rAgent.kycDocs?.signature || rAgent.kycDocs?.businessProofImage || rAgent.kyc?.businessProofImage || existingUser.kyc?.businessProofImage || ''
                                 };
                                 updated = true;
                             }
