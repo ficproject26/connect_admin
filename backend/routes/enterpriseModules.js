@@ -237,7 +237,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
         }
 
         if (user) {
-            user.status = 'approved';
+            user.status = 'Approved';
             user.isActive = true;
             user.isApproved = true;
             await user.save();
@@ -253,7 +253,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
                 phone: '9876543211',
                 password: hashedPassword,
                 role: 'vendor',
-                status: 'approved',
+                status: 'Approved',
                 isActive: true,
                 isApproved: true,
                 createdAt: new Date()
