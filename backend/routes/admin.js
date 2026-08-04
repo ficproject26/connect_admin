@@ -26,6 +26,7 @@ const SupportTicket = require('../models/SupportTicket');
 const Announcement = require('../models/Announcement');
 const ExclusiveOffer = require('../models/ExclusiveOffer');
 const Category = require('../models/Category');
+const { validateIndianMobile } = require('../utils/inputValidator');
 
 const adminAuth = async (req, res, next) => {
     try {
@@ -919,7 +920,11 @@ router.put('/vendors/:id', [auth, adminAuth], async (req, res) => {
             if (businessName) vendor.businessName = businessName;
             if (contactPerson) vendor.contactPerson = contactPerson;
             if (address) vendor.address = address;
-            if (phone) vendor.phone = phone;
+            if (phone) {
+                const phoneCheck = validateIndianMobile(phone);
+                if (!phoneCheck.isValid) return res.status(400).json({ msg: phoneCheck.message });
+                vendor.phone = phoneCheck.cleanPhone;
+            }
             if (email) vendor.email = email;
             if (category) vendor.category = category;
             if (subcategory) vendor.subcategory = subcategory;
@@ -1702,6 +1707,14 @@ router.post('/save-pincode', [auth, adminAuth], async (req, res) => {
 router.post('/create-agent', [auth, adminAuth], async (req, res) => {
     const { name, email, phone, password, level, assignedArea, pincode, status, bankDetails } = req.body;
     try {
+        // Strict Indian Mobile Number Validation
+        if (phone) {
+            const phoneCheck = validateIndianMobile(phone);
+            if (!phoneCheck.isValid) {
+                return res.status(400).json({ msg: phoneCheck.message });
+            }
+        }
+
         const bcrypt = require('bcryptjs');
         let user = await User.findOne({ email });
         if (user) return res.status(400).json({ msg: 'Agent user already exists' });

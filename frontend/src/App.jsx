@@ -88,6 +88,28 @@ const getFormattedTerritory = (agent) => {
   return rawArea;
 };
 
+// Indian Mobile Number Validation Utility (^[6-9][0-9]{9}$)
+const INDIAN_MOBILE_REGEX = /^[6-9][0-9]{9}$/;
+
+const validateIndianMobile = (phone) => {
+  if (!phone || !phone.trim()) return { isValid: false, message: 'Mobile number is required.' };
+  const clean = phone.replace(/\D/g, '');
+  if (clean.length === 0) return { isValid: false, message: 'Mobile number is required.' };
+  if (!/^[6-9]/.test(clean)) return { isValid: false, message: 'Mobile number must start with 6, 7, 8, or 9.' };
+  if (clean.length < 10) return { isValid: false, message: 'Enter a valid 10-digit mobile number.' };
+  if (clean.length > 10) return { isValid: false, message: 'Mobile number cannot exceed 10 digits.' };
+  if (!INDIAN_MOBILE_REGEX.test(clean)) return { isValid: false, message: 'Enter a valid 10-digit mobile number.' };
+  return { isValid: true, message: '' };
+};
+
+// Prevents invalid input: only digits, max 10, first char must be 6-9
+const handlePhoneInput = (e) => {
+  let val = e.target.value.replace(/\D/g, ''); // strip non-digits
+  if (val.length > 0 && !/^[6-9]/.test(val)) val = ''; // first digit must be 6-9
+  if (val.length > 10) val = val.slice(0, 10); // cap at 10 digits
+  e.target.value = val;
+};
+
 const isPendingAgent = (agent) => {
   if (!agent) return false;
   const status = (agent.status || agent.kycStatus || '').toLowerCase().trim();

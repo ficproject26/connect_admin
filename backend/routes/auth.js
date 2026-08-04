@@ -9,6 +9,7 @@ const AuditLog = require('../models/AuditLog');
 const SecuritySession = require('../models/SecuritySession');
 const SecurityLog = require('../models/SecurityLog');
 const { parseDeviceInfo } = require('../middleware/security');
+const { validateIndianMobile } = require('../utils/inputValidator');
 
 // Password Strength & Policy Validator
 const validatePasswordPolicy = (password) => {
@@ -65,7 +66,12 @@ router.post('/register', async (req, res) => {
         if (user) return res.status(400).json({ message: 'Email already registered', msg: 'User already exists' });
 
         if (req.body.phone) {
-            let existingPhone = await User.findOne({ phone: req.body.phone });
+            // Strict Indian Mobile Number Validation (^[6-9][0-9]{9}$)
+            const phoneCheck = validateIndianMobile(req.body.phone);
+            if (!phoneCheck.isValid) {
+                return res.status(400).json({ message: phoneCheck.message, msg: phoneCheck.message });
+            }
+            let existingPhone = await User.findOne({ phone: phoneCheck.cleanPhone });
             if (existingPhone) return res.status(400).json({ message: 'Phone number already registered', msg: 'Phone number already registered' });
         }
 

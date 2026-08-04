@@ -8,10 +8,31 @@ const validateEmail = (email) => {
   return re.test(email.trim());
 };
 
+const validateIndianMobile = (phone) => {
+  if (!phone || typeof phone !== 'string' || !phone.trim()) {
+    return { isValid: false, message: 'Mobile number is required.' };
+  }
+  const clean = phone.replace(/\D/g, '');
+  if (clean.length === 0) {
+    return { isValid: false, message: 'Mobile number is required.' };
+  }
+  if (!/^[6-9]/.test(clean)) {
+    return { isValid: false, message: 'Mobile number must start with 6, 7, 8, or 9.' };
+  }
+  if (clean.length < 10) {
+    return { isValid: false, message: 'Enter a valid 10-digit mobile number.' };
+  }
+  if (clean.length > 10) {
+    return { isValid: false, message: 'Mobile number cannot exceed 10 digits.' };
+  }
+  if (!/^[6-9][0-9]{9}$/.test(clean)) {
+    return { isValid: false, message: 'Enter a valid 10-digit mobile number.' };
+  }
+  return { isValid: true, message: '', cleanPhone: clean };
+};
+
 const validatePhone = (phone) => {
-  if (!phone || typeof phone !== 'string') return false;
-  const cleanPhone = phone.replace(/\D/g, '');
-  return cleanPhone.length === 10 && /^[6-9]\d{9}$/.test(cleanPhone);
+  return validateIndianMobile(phone).isValid;
 };
 
 const validatePasswordPolicy = (password) => {
@@ -77,6 +98,7 @@ const sanitizeInput = (input) => {
 module.exports = {
   validateEmail,
   validatePhone,
+  validateIndianMobile,
   validatePasswordPolicy,
   validatePAN,
   validateAadhaar,
