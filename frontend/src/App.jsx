@@ -1689,10 +1689,13 @@ function App() {
                                   >
                                     <ChevronRight className={`w-5 h-5 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
                                   </button>
-                                  <div>
+                                  <div
+                                    onClick={() => { setModalData(stAgent); setShowModal('agent-details'); }}
+                                    className="cursor-pointer group"
+                                  >
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider">
-                                        {stLvl} AGENT
+                                        {stLvl === 'STATE' ? 'STATE AGENT' : `${stLvl} AGENT`}
                                       </span>
                                       <span className="text-xs font-mono text-slate-400 font-bold">
                                         ID: AG-{stLvl.slice(0, 4)}-{stId.slice(-4)}
@@ -1701,7 +1704,7 @@ function App() {
                                         {stAgent.status || 'Approved'}
                                       </span>
                                     </div>
-                                    <h4 className="text-lg font-black text-slate-850 dark:text-slate-100 mt-1 flex items-center gap-2">
+                                    <h4 className="text-lg font-black text-slate-850 dark:text-slate-100 mt-1 flex items-center gap-2 group-hover:text-blue-500 transition-colors">
                                       {stAgent.name}
                                     </h4>
                                     <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
@@ -1761,7 +1764,10 @@ function App() {
                                             >
                                               <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
                                             </button>
-                                            <div>
+                                            <div
+                                              onClick={() => { setModalData(distAgent); setShowModal('agent-details'); }}
+                                              className="cursor-pointer group"
+                                            >
                                               <div className="flex items-center gap-2 flex-wrap">
                                                 <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider">
                                                   DISTRICT AGENT
@@ -1773,7 +1779,7 @@ function App() {
                                                   {distAgent.status || 'Approved'}
                                                 </span>
                                               </div>
-                                              <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5">
+                                              <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-amber-500 transition-colors">
                                                 {distAgent.name}
                                               </h5>
                                               <p className="text-xs text-slate-400 font-medium flex items-center gap-1 mt-0.5">
@@ -1833,7 +1839,10 @@ function App() {
                                                       >
                                                         <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
                                                       </button>
-                                                      <div>
+                                                      <div
+                                                        onClick={() => { setModalData(divAgent); setShowModal('agent-details'); }}
+                                                        className="cursor-pointer group"
+                                                      >
                                                         <div className="flex items-center gap-2 flex-wrap">
                                                           <span className="bg-indigo-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
                                                             DIVISIONAL AGENT
@@ -1842,7 +1851,7 @@ function App() {
                                                             ID: AG-DIV-{divId.slice(-4)}
                                                           </span>
                                                         </div>
-                                                        <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5">
+                                                        <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-indigo-500 transition-colors">
                                                           {divAgent.name}
                                                         </h6>
                                                         <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
@@ -1882,8 +1891,11 @@ function App() {
                                                             <span className="bg-emerald-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
                                                               PINCODE AGENT
                                                             </span>
-                                                            <div>
-                                                              <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block">{pinAgent.name}</span>
+                                                            <div
+                                                              onClick={() => { setModalData(pinAgent); setShowModal('agent-details'); }}
+                                                              className="cursor-pointer group"
+                                                            >
+                                                              <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block group-hover:text-emerald-500 transition-colors">{pinAgent.name}</span>
                                                               <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
                                                                 <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{pinAgent.assignedPincode?.code || pinAgent.pincode || pinAgent.assignedArea || '635109'}</span>
                                                               </span>
@@ -7499,7 +7511,7 @@ function App() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-extrabold text-[10px] uppercase px-3 py-1 rounded-xl bg-[#864f19] text-white shadow-xs tracking-wider">
-                      {(modalData.level || 'pincode').toLowerCase()} AGENT
+                      {['division', 'divisional'].includes((modalData.level || '').toLowerCase()) ? 'DIVISIONAL AGENT' : `${(modalData.level || 'pincode').toUpperCase()} AGENT`}
                     </span>
                     <span className={`text-[10px] font-extrabold px-3 py-1 rounded-xl flex items-center gap-1 border ${
                       (modalData.status || '').toLowerCase() === 'approved'
