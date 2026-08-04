@@ -1928,6 +1928,13 @@ function App() {
                                   </button>
                                 </>
                               )}
+                              <button
+                                onClick={() => { if (window.confirm(`Are you sure you want to permanently delete agent "${agent.name}"? This action cannot be undone.`)) { executeAction(`/admin/agent/${agent._id}`, 'DELETE'); } }}
+                                className="bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                title="Permanently delete this agent"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 inline-block mr-1" />Delete
+                              </button>
                             </div>
                           </div>
                         );
@@ -2024,6 +2031,13 @@ function App() {
                                   </button>
                                 </>
                               )}
+                              <button
+                                onClick={() => { if (window.confirm(`Are you sure you want to permanently delete agent "${agent.name}"? This action cannot be undone.`)) { executeAction(`/admin/agent/${agent._id}`, 'DELETE'); } }}
+                                className="bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                title="Permanently delete this agent"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 inline-block mr-1" />Delete
+                              </button>
                             </div>
                           </div>
                         );

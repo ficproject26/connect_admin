@@ -1509,6 +1509,51 @@ router.put('/activate-agent/:id', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// Delete Agent
+router.delete('/agent/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const agent = await User.findById(req.params.id);
+        if (!agent) return res.status(404).json({ msg: 'Agent not found' });
+
+        if (agent.assignedPincode) {
+            await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: null });
+        }
+
+        const db = mongoose.connection.db;
+        if (db && agent.email) {
+            await db.collection('agents').deleteOne({ email: agent.email.toLowerCase() });
+        }
+
+        await User.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Agent deleted successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+router.delete('/agents/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const agent = await User.findById(req.params.id);
+        if (!agent) return res.status(404).json({ msg: 'Agent not found' });
+
+        if (agent.assignedPincode) {
+            await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: null });
+        }
+
+        const db = mongoose.connection.db;
+        if (db && agent.email) {
+            await db.collection('agents').deleteOne({ email: agent.email.toLowerCase() });
+        }
+
+        await User.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Agent deleted successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
 // Edit Agent Details
 router.put('/update-agent/:id', [auth, adminAuth], async (req, res) => {
     const { level, assignedArea, pincode } = req.body;
