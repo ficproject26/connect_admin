@@ -831,22 +831,19 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             {profileTab === 'timeline' && (
               <div className="space-y-3 text-xs">
                 <h4 className="font-extrabold uppercase text-slate-400 tracking-wider">Real-time Activity Timeline</h4>
-                {[
-                  { time: '09:15 AM', action: 'LOGGED IN', desc: 'Logged into Agent Portal' },
-                  { time: '09:30 AM', action: 'ADDED VENDOR', desc: 'Onboarded new electronics vendor' },
-                  { time: '10:45 AM', action: 'REGISTERED CUSTOMER', desc: 'New customer account created' },
-                  { time: '12:20 PM', action: 'MEMBERSHIP SOLD', desc: 'Gold membership plan issued' },
-                  { time: '02:10 PM', action: 'BOOKING COMPLETED', desc: 'Service booking verified' },
-                  { time: '04:45 PM', action: 'GENERATED REVENUE', desc: 'Commission payout processed' }
-                ].map((act, idx) => (
-                  <div key={idx} className="flex gap-4 items-center bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-850">
-                    <span className="font-mono font-bold text-primary-500 text-xs w-20">{act.time}</span>
-                    <div>
-                      <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{act.action}</span>
-                      <span className="text-slate-400">{act.desc}</span>
+                {(selectedAgentProfile.timeline || []).length > 0 ? (
+                  (selectedAgentProfile.timeline || []).map((act, idx) => (
+                    <div key={idx} className="flex gap-4 items-center bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-850">
+                      <span className="font-mono font-bold text-primary-500 text-xs w-20">{act.time}</span>
+                      <div>
+                        <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{act.action}</span>
+                        <span className="text-slate-400">{act.description || act.desc}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-slate-400 py-4 text-center">No activity logged for this agent yet.</p>
+                )}
               </div>
             )}
 
