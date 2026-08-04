@@ -64,6 +64,27 @@ const getSafeParsedLocalStorageItem = (key, fallbackValue) => {
   }
 };
 
+const getFormattedTerritory = (agent) => {
+  if (!agent) return 'Not assigned';
+  const level = (agent.level || agent.role || 'pincode').toLowerCase();
+  let rawArea = agent.assignedArea || (agent.territory ? [agent.territory.state, agent.territory.district, agent.territory.division, agent.territory.pincode].filter(Boolean).join(' / ') : '') || '';
+  if (!rawArea) return 'Not assigned';
+
+  if (rawArea.includes(' / ')) {
+    const parts = rawArea.split(' / ').map(s => s.trim());
+    if (level === 'state') {
+      return parts[0] || rawArea;
+    } else if (level === 'district') {
+      return parts.slice(0, 2).join(' / ') || rawArea;
+    } else if (level === 'division') {
+      return parts.slice(0, 3).join(' / ') || rawArea;
+    } else {
+      return rawArea;
+    }
+  }
+  return rawArea;
+};
+
 // --- Error Boundary to prevent blank screens ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -1135,7 +1156,7 @@ function App() {
                         <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
                           <div>
                             <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pAgent.name}</span>
-                            <span className="text-xs text-slate-400">Agent KYC Pending • {pAgent.assignedArea || pAgent.assignedDistrict || pAgent.level || 'Pending Request'}</span>
+                            <span className="text-xs text-slate-400">Agent KYC Pending • {getFormattedTerritory(pAgent)}</span>
                           </div>
                           <button
                             onClick={() => { setActiveTab('kyc') }}
@@ -7323,20 +7344,20 @@ function App() {
                   <div className="flex justify-between">
                     <span className="text-slate-400">Assigned Area:</span>
                     <span className="font-semibold">
-                      {(modalData.level === 'pincode' || !modalData.level)
-                        ? (/^\d{6}$/.test(modalData.assignedArea) ? (modalData.assignedDistrict || modalData.territory?.district || modalData.territory?.state || 'N/A') : (modalData.assignedArea || 'N/A'))
-                        : (modalData.assignedArea || 'N/A')}
+                      {getFormattedTerritory(modalData)}
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Assigned Pincode:</span>
-                    <span className="font-bold text-primary-500">
-                      {modalData.assignedPincode?.code ||
-                        (typeof modalData.assignedPincode === 'string' ? modalData.assignedPincode : null) ||
-                        modalData.pincode ||
-                        (/^\d{6}$/.test(modalData.assignedArea) ? modalData.assignedArea : 'None')}
-                    </span>
-                  </div>
+                  {((modalData.level || 'pincode').toLowerCase() === 'pincode') && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">Assigned Pincode:</span>
+                      <span className="font-bold text-primary-500">
+                        {modalData.assignedPincode?.code ||
+                          (typeof modalData.assignedPincode === 'string' ? modalData.assignedPincode : null) ||
+                          modalData.pincode ||
+                          (/^\d{6}$/.test(modalData.assignedArea) ? modalData.assignedArea : 'None')}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex justify-between"><span className="text-slate-400">Status:</span><span className="font-semibold capitalize">{modalData.status}</span></div>
                 </div>
 
@@ -7752,7 +7773,7 @@ function App() {
                       </span>
                     </div>
                     <p className="text-xs text-slate-400">{pAgent.email} • {pAgent.phone}</p>
-                    <p className="text-xs text-slate-500 font-semibold">Territory/Area: {pAgent.assignedArea || 'Not assigned'}</p>
+                    <p className="text-xs text-slate-500 font-semibold">Territory/Area: {getFormattedTerritory(pAgent)}</p>
                   </div>
 
                   <div className="flex gap-2 shrink-0">
