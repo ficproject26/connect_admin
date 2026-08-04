@@ -4,6 +4,42 @@ import {
   XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, RefreshCw, X, ChevronRight, Trash2
 } from 'lucide-react';
 
+const getVendorCategory = (v) => {
+  const cat = v.category || v.vendorType || v.businessCategory || v.shopType || v.vendorCategory;
+  if (!cat) return 'Retail & Stores';
+  const lower = cat.toLowerCase();
+  if (lower.includes('store') || lower.includes('retail') || lower.includes('supermarket')) return 'Store Vendor';
+  if (lower.includes('hospital') || lower.includes('clinic') || lower.includes('health') || lower.includes('medical')) return 'Hospital Vendor';
+  if (lower.includes('hotel') || lower.includes('resort') || lower.includes('restaurant') || lower.includes('suites')) return 'Hotel Vendor';
+  if (lower.includes('service')) return 'Service Provider';
+  return cat;
+};
+
+const getVendorAddress = (v) => {
+  if (v.fullAddress && v.fullAddress.trim().length > 3) return v.fullAddress;
+  if (v.address && v.address.trim().length > 3) return v.address;
+  if (v.streetAddress && v.streetAddress.trim().length > 3) return v.streetAddress;
+
+  const areaParts = [];
+  if (v.city || v.district) areaParts.push(v.city || v.district);
+  if (v.state) areaParts.push(v.state);
+
+  if (areaParts.length > 0) {
+    return `${areaParts.join(', ')} ${v.pincode ? `(${v.pincode})` : ''}`.trim();
+  }
+
+  if (v.assignedArea) {
+    const hasPin = v.assignedArea.includes(v.pincode);
+    return hasPin ? v.assignedArea : `${v.assignedArea} ${v.pincode ? `(${v.pincode})` : ''}`.trim();
+  }
+
+  if (v.pincode) {
+    return `Tamil Nadu (${v.pincode})`;
+  }
+
+  return 'Tamil Nadu / Dharmapuri (635109)';
+};
+
 export const VendorDirectoryModule = ({ token, API_BASE }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [loading, setLoading] = useState(false);
@@ -57,6 +93,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             assignedArea: 'Tamil Nadu / Dharmapuri',
             pincode: '635109',
             status: 'Approved',
+            joiningType: 'direct',
             registrationId: 'VND-DIR-8821'
           },
           {
@@ -69,6 +106,12 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             assignedArea: 'Tamil Nadu / Chennai',
             pincode: '600001',
             status: 'Approved',
+            joiningType: 'agent',
+            onboardedByAgent: {
+              name: 'Karthik Raja',
+              registrationId: 'AG-PIN-1042',
+              pincode: '600001'
+            },
             registrationId: 'VND-STORE-4412'
           },
           {
@@ -81,6 +124,12 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             assignedArea: 'Tamil Nadu / Salem',
             pincode: '636001',
             status: 'Approved',
+            joiningType: 'agent',
+            onboardedByAgent: {
+              name: 'Suresh Kumar',
+              registrationId: 'AG-PIN-3091',
+              pincode: '636001'
+            },
             registrationId: 'VND-[#3619]'
           },
           {
@@ -93,6 +142,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             assignedArea: 'Tamil Nadu / Coimbatore',
             pincode: '641001',
             status: 'Approved',
+            joiningType: 'direct',
             registrationId: 'VND-[#9923]'
           }
         ];
@@ -452,9 +502,9 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       </span>
                     )}
                   </div>
-                  <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{v.category || v.vendorType || 'Retail & Stores'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{getVendorCategory(v)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{v.phone || '+91 98765 43211'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Address / Territory:</span><span className="font-bold truncate max-w-[170px]" title={v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}>{v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Address / Territory:</span><span className="font-bold truncate max-w-[170px]" title={getVendorAddress(v)}>{getVendorAddress(v)}</span></div>
                 </div>
 
                 {/* Agent Onboarded or Pincode Agent Status */}
@@ -528,10 +578,10 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     <span className="text-[11px] text-slate-400">{v.email} • {v.phone}</span>
                   </td>
                   <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
-                    {v.category || v.vendorType || 'Retail & Stores'}
+                    {getVendorCategory(v)}
                   </td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-medium">
-                    {v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}
+                    {getVendorAddress(v)}
                   </td>
                   <td className="py-3 px-4">
                     {v.joiningType === 'agent' || v.onboardedByAgent ? (
