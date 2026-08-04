@@ -87,20 +87,29 @@ const getFormattedTerritory = (agent) => {
 
 const isPendingAgent = (agent) => {
   if (!agent) return false;
-  const status = (agent.status || '').toLowerCase();
-  const kycStatus = (agent.kycStatus || '').toLowerCase();
+  const status = (agent.status || agent.kycStatus || '').toLowerCase().trim();
+  const kycStatus = (agent.kycStatus || agent.status || '').toLowerCase().trim();
 
-  // Explicitly approved, rejected or suspended agents are not pending
-  if (status === 'approved' || status === 'rejected' || status === 'suspended' || kycStatus === 'approved' || kycStatus === 'rejected') {
+  // Explicitly approved, active, rejected or suspended agents are not pending onboarding requests
+  if (
+    ['approved', 'active', 'rejected', 'suspended'].includes(status) ||
+    ['approved', 'active', 'rejected', 'suspended'].includes(kycStatus)
+  ) {
     return false;
   }
 
-  // Any pending status or inactive state (that is not approved/rejected)
-  if (status === 'pending' || kycStatus === 'pending' || status.includes('pending') || kycStatus.includes('pending')) {
+  // Any pending status variant or inactive state
+  if (
+    status.includes('pending') ||
+    kycStatus.includes('pending') ||
+    status.includes('review') ||
+    status.includes('verification') ||
+    !agent.isActive
+  ) {
     return true;
   }
 
-  return !agent.isActive;
+  return false;
 };
 
 // --- Error Boundary to prevent blank screens ---
@@ -1170,7 +1179,7 @@ function App() {
                       <span className="bg-rose-500/10 text-rose-500 text-xs px-2 py-0.5 rounded-full font-bold">Alert</span>
                     </div>
                     <div className="space-y-3">
-                      {agents.filter(a => (a.status || '').toLowerCase() === 'pending').map((pAgent, idx) => (
+                      {agents.filter(isPendingAgent).map((pAgent, idx) => (
                         <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
                           <div>
                             <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pAgent.name}</span>
@@ -1198,7 +1207,7 @@ function App() {
                           </button>
                         </div>
                       ))}
-                      {agents.filter(a => a.status === 'pending').length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
+                      {agents.filter(isPendingAgent).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
                         <div className="text-center py-6 text-slate-400 text-sm">
                           <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
                           No pending approvals!
