@@ -87,11 +87,20 @@ const getFormattedTerritory = (agent) => {
 
 const isPendingAgent = (agent) => {
   if (!agent) return false;
-  const status = (agent.status || agent.kycStatus || '').toLowerCase();
-  if (status === 'approved' || status === 'rejected' || status === 'suspended') {
+  const status = (agent.status || '').toLowerCase();
+  const kycStatus = (agent.kycStatus || '').toLowerCase();
+
+  // Explicitly approved, rejected or suspended agents are not pending
+  if (status === 'approved' || status === 'rejected' || status === 'suspended' || kycStatus === 'approved' || kycStatus === 'rejected') {
     return false;
   }
-  return status === 'pending' || status === 'pending approval' || status === 'kyc pending' || !agent.isActive;
+
+  // Any pending status or inactive state (that is not approved/rejected)
+  if (status === 'pending' || kycStatus === 'pending' || status.includes('pending') || kycStatus.includes('pending')) {
+    return true;
+  }
+
+  return !agent.isActive;
 };
 
 // --- Error Boundary to prevent blank screens ---
@@ -7760,12 +7769,22 @@ function App() {
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">Agent Onboarding Requests</h3>
                 <p className="text-xs text-slate-400 mt-1">Review pending agent registration and KYC approval applications</p>
               </div>
-              <button 
-                onClick={() => setShowOnboardingRequestsModal(false)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={fetchData}
+                  className="flex items-center gap-1.5 text-xs font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 px-3 py-1.5 rounded-xl border border-primary-200 dark:border-primary-800 transition-all"
+                  title="Reload onboarding requests from server"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Refresh List
+                </button>
+                <button 
+                  onClick={() => setShowOnboardingRequestsModal(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div className="space-y-4">
