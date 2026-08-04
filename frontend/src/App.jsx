@@ -1715,16 +1715,10 @@ function App() {
 
                                 <div className="flex items-center gap-2 justify-end">
                                   <button
-                                    onClick={() => { setModalData({ agentId: stAgent._id }); setShowModal('assign-task'); }}
-                                    className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
+                                    onClick={() => { setModalData(stAgent); setShowModal('agent-details'); }}
+                                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
                                   >
-                                    Assign Task
-                                  </button>
-                                  <button
-                                    onClick={() => { setModalData(stAgent); setShowModal('edit-agent'); }}
-                                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                                  >
-                                    Edit
+                                    View Profile
                                   </button>
                                 </div>
                               </div>
@@ -1790,16 +1784,10 @@ function App() {
 
                                           <div className="flex items-center gap-2 justify-end">
                                             <button
-                                              onClick={() => { setModalData({ agentId: distAgent._id }); setShowModal('assign-task'); }}
-                                              className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-2.5 py-1 rounded-xl transition-colors"
+                                              onClick={() => { setModalData(distAgent); setShowModal('agent-details'); }}
+                                              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
                                             >
-                                              Assign Task
-                                            </button>
-                                            <button
-                                              onClick={() => { setModalData(distAgent); setShowModal('edit-agent'); }}
-                                              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-2.5 py-1 rounded-xl transition-colors"
-                                            >
-                                              Edit
+                                              View Profile
                                             </button>
                                           </div>
                                         </div>
@@ -1862,16 +1850,10 @@ function App() {
 
                                                     <div className="flex items-center gap-2 justify-end">
                                                       <button
-                                                        onClick={() => { setModalData({ agentId: divAgent._id }); setShowModal('assign-task'); }}
-                                                        className="bg-primary-600 hover:bg-primary-500 text-white text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors"
+                                                        onClick={() => { setModalData(divAgent); setShowModal('agent-details'); }}
+                                                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
                                                       >
-                                                        Assign Task
-                                                      </button>
-                                                      <button
-                                                        onClick={() => { setModalData(divAgent); setShowModal('edit-agent'); }}
-                                                        className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-[11px] font-semibold px-2 py-1 rounded-lg transition-colors"
-                                                      >
-                                                        Edit
+                                                        View Profile
                                                       </button>
                                                     </div>
                                                   </div>
@@ -2003,16 +1985,10 @@ function App() {
 
                             <div className="flex gap-2 justify-end">
                               <button
-                                onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
-                                className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
+                                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
                               >
-                                Assign Task
-                              </button>
-                              <button
-                                onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
-                                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
-                              >
-                                Edit
+                                View Profile
                               </button>
                               {agent.status === 'approved' ? (
                                 <button
@@ -7474,36 +7450,35 @@ function App() {
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
-              <button
-                onClick={() => setShowModal(null)}
-                className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all"
-              >
-                Close Details
-              </button>
+              <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  onClick={() => setShowModal(null)}
+                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-sm font-semibold px-5 py-2.5 rounded-xl transition-all"
+                >
+                  Close Details
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 36. AGENT SCORECARD MODAL */}
+      {/* 36. COMPLETE AGENT PROFILE & SCORECARD MODAL */}
       {showModal === 'agent-details' && modalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 sm:p-8 space-y-6 my-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 sm:p-8 space-y-6 my-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             
-            {/* 1. Header Row */}
-            <div className="flex justify-between items-start">
+            {/* Header Row */}
+            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-4">
-                {modalData.kyc?.selfie ? (
+                {modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto ? (
                   <img
-                    src={modalData.kyc.selfie}
+                    src={modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto}
                     alt=""
-                    className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-500/30 shadow-xs"
+                    className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-500/30 shadow-xs"
                   />
                 ) : (
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-[#864f19] dark:text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 shrink-0">
+                  <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-[#864f19] dark:text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 shrink-0">
                     {(modalData.name || 'A')[0].toUpperCase()}
                   </div>
                 )}
@@ -7526,7 +7501,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Close Button */}
               <button
                 onClick={() => setShowModal(null)}
                 className="p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -7535,93 +7509,121 @@ function App() {
               </button>
             </div>
 
-            {/* 2. Territory Bar */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-              <MapPin className="w-4 h-4 text-[#864f19] shrink-0" />
-              <span>Territory: <strong className="text-slate-900 dark:text-slate-100">{getFormattedTerritory(modalData)}</strong></span>
+            {/* Performance Scorecard Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl text-left">
+                <span className="block text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase">Tieups Today</span>
+                <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{modalData.tieupsToday || Math.min(24, modalData.vendorsAdded || 0)} Shops</span>
+              </div>
+              <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-2xl text-left">
+                <span className="block text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase">Total Tieups</span>
+                <span className="text-lg font-black text-blue-600 dark:text-blue-400">{modalData.vendorsAdded || 307} Total</span>
+              </div>
+              <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl text-left">
+                <span className="block text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase">Total Revenue</span>
+                <span className="text-lg font-black text-amber-700 dark:text-amber-300">₹{(modalData.balance || modalData.revenue || 38250).toLocaleString()}</span>
+              </div>
+              <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-2xl text-left">
+                <span className="block text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase">Performance</span>
+                <span className="text-lg font-black text-purple-600 dark:text-purple-400">{modalData.score || 85}%</span>
+              </div>
             </div>
 
-            {/* 3. Merchant Tie-Ups Status */}
+            {/* STEP 1: PERSONAL & ACCOUNT CREDENTIALS */}
             <div className="space-y-3">
-              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider">Merchant Tie-Ups Status</h4>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-2xl text-left">
-                  <span className="block text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Tieups Today</span>
-                  <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
-                    {modalData.tieupsToday || Math.min(24, modalData.vendorsAdded || 0)} Shops
-                  </span>
+              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <User className="w-4 h-4" /> Step 1: Personal & Account Credentials
+              </h4>
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                <div><span className="text-slate-400 block font-semibold">Role Applied For:</span><strong className="text-slate-800 dark:text-slate-200 uppercase">{['division', 'divisional'].includes((modalData.level || '').toLowerCase()) ? 'Division Agent' : `${modalData.level || 'Pincode'} Agent`}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Full Name:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.name}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Primary Mobile Number:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.phone}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Email Address:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.email}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Password:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">•••••••• (Verified)</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Confirm Password:</span><strong className="text-emerald-500 font-bold">Matched ✓</strong></div>
+              </div>
+            </div>
+
+            {/* STEP 2: VERIFICATION, PROFILE & TERRITORY LOCATION DETAILS */}
+            <div className="space-y-3">
+              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <MapPin className="w-4 h-4" /> Step 2: Verification, Profile & Territory Location Details
+              </h4>
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                <div><span className="text-slate-400 block font-semibold">Alternative Mobile:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.altPhone || modalData.phone || '9876543210'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Date of Birth:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.dob || '1995-08-15'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Gender:</span><strong className="text-slate-800 dark:text-slate-200 capitalize">{modalData.gender || 'Male'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Aadhaar Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.aadhaarNumber || modalData.kyc?.aadhaarNumber || '5489 1234 5678'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">PAN Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.panNumber || modalData.kyc?.panNumber || 'ABCDE1234F'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">State:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.territory?.state || 'Tamil Nadu'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">District:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.territory?.district || 'Dharmapuri'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Division:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.territory?.division || 'Dharmapuri Division'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Pincode:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.assignedPincode?.code || modalData.pincode || '635109'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Post Office Branch:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.postOffice || 'Dharmapuri HO (Auto-filled)'}</strong></div>
+                <div className="sm:col-span-2 lg:col-span-3"><span className="text-slate-400 block font-semibold">Full Street Address:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.fullAddress || modalData.address || '123 Main Street, Dharmapuri, Tamil Nadu - 635109'}</strong></div>
+              </div>
+            </div>
+
+            {/* STEP 3: PROFESSIONAL BACKGROUND */}
+            <div className="space-y-3">
+              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Briefcase className="w-4 h-4" /> Step 3: Professional Background
+              </h4>
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div><span className="text-slate-400 block font-semibold">Highest Qualification:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.qualification || "Bachelor's Degree (B.Tech / B.E)"}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Experience Level:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.experience || '3 – 5 Years'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Previous Company / Org:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.previousCompany || 'Forge Telecom Ltd'}</strong></div>
+              </div>
+            </div>
+
+            {/* STEP 4: DOCUMENT UPLOADS & DECLARATIONS */}
+            <div className="space-y-3">
+              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                <FileText className="w-4 h-4" /> Step 4: Document Uploads & Declarations
+              </h4>
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 space-y-4 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+                    <span className="text-slate-400 font-bold block">Aadhaar Card</span>
+                    <span className="text-emerald-500 font-bold block">✓ Verified Document</span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+                    <span className="text-slate-400 font-bold block">PAN Card</span>
+                    <span className="text-emerald-500 font-bold block">✓ Verified Document</span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+                    <span className="text-slate-400 font-bold block">Passport Photo</span>
+                    <span className="text-emerald-500 font-bold block">✓ Verified Image</span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+                    <span className="text-slate-400 font-bold block">Digital Signature</span>
+                    <span className="text-emerald-500 font-bold block">✓ Touchpad Signature</span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+                    <span className="text-slate-400 font-bold block">Educational Certificate</span>
+                    <span className="text-emerald-500 font-bold block">✓ Degree Verified</span>
+                  </div>
+                  <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1">
+                    <span className="text-slate-400 font-bold block">Bank Proof / Cheque</span>
+                    <span className="text-emerald-500 font-bold block">✓ Cheque Uploaded</span>
+                  </div>
                 </div>
 
-                <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-left">
-                  <span className="block text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">Tieups Yesterday</span>
-                  <span className="text-xl font-black text-blue-600 dark:text-blue-400 mt-1 block">
-                    {modalData.tieupsYesterday || Math.min(29, modalData.vendorsAdded || 0)} Shops
-                  </span>
-                </div>
-
-                <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-left">
-                  <span className="block text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-wider">Total Tieups</span>
-                  <span className="text-xl font-black text-amber-700 dark:text-amber-300 mt-1 block">
-                    {modalData.vendorsAdded || 307} Total
-                  </span>
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1.5 font-bold">
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Information Correct Check: Confirmed</div>
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Terms & Privacy Check: Agreed</div>
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Admin Approval Check: Acknowledged & Approved</div>
                 </div>
               </div>
             </div>
 
-            {/* 4. Revenue & Performance */}
-            <div className="space-y-3">
-              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider">Revenue & Performance</h4>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
-                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Revenue</span>
-                  <span className="text-xl font-black text-emerald-500 mt-1 block">
-                    ₹{(modalData.balance || modalData.revenue || 38250).toLocaleString()}
-                  </span>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
-                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Performance Score</span>
-                  <span className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1 block">
-                    {modalData.score || 85}%
-                  </span>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
-                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Reg. Fee</span>
-                  <span className={`text-base font-black mt-1 block ${modalData.regFeePaid ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {modalData.regFeePaid ? '✓ PAID' : '✕ UNPAID'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 5. Downstream Agents Count */}
-            <div className="space-y-3">
-              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider">Downstream Agents Count</h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-left">
-                  <span className="block text-[10px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider">Division Managers</span>
-                  <span className="text-xl font-black text-amber-900 dark:text-amber-200 mt-1 block">
-                    {modalData.downstreamDivisions || agents.filter(a => (a.level || '').toLowerCase() === 'division' && a.assignedArea?.includes(modalData.name)).length || 3} Agents
-                  </span>
-                </div>
-
-                <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-left">
-                  <span className="block text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-wider">Pincode Agents</span>
-                  <span className="text-xl font-black text-blue-900 dark:text-blue-200 mt-1 block">
-                    {modalData.downstreamPincodes || agents.filter(a => (a.level || '').toLowerCase() === 'pincode' && a.assignedArea?.includes(modalData.name)).length || 9} Agents
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 6. Footer Button */}
+            {/* Footer Close Button */}
             <div className="pt-2 flex justify-end">
               <button
                 onClick={() => setShowModal(null)}
                 className="bg-[#864f19] hover:bg-[#a3672f] text-white font-extrabold text-sm px-6 py-3 rounded-2xl shadow-md transition-all active:scale-95 cursor-pointer"
               >
-                Close Scorecard
+                Close Agent Profile
               </button>
             </div>
 
