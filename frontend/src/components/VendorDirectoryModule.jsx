@@ -1,0 +1,390 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Store, LayoutGrid, List, Search, Filter, Download, ArrowUpRight, CheckCircle,
+  XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, RefreshCw, X, ChevronRight
+} from 'lucide-react';
+
+export const VendorDirectoryModule = ({ token, API_BASE }) => {
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+  const [loading, setLoading] = useState(false);
+  const [vendors, setVendors] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+
+  // Filters & Search
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('all');
+  const [stateFilter, setStateFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [isDirectRequest, setIsDirectRequest] = useState(false);
+
+  // Direct Requests Drawer / Modal
+  const [showDirectModal, setShowDirectModal] = useState(false);
+  const [directRequests, setDirectRequests] = useState([]);
+
+  const fetchVendors = async () => {
+    setLoading(true);
+    try {
+      const query = new URLSearchParams({
+        search,
+        category,
+        state: stateFilter,
+        status: statusFilter,
+        isDirectRequest: isDirectRequest ? 'true' : 'false',
+        page,
+        limit: 12
+      });
+
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors?${query.toString()}`, {
+        headers: { 'x-auth-token': token }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVendors(data.vendors || []);
+        setTotal(data.total || 0);
+        setPages(data.pages || 1);
+      }
+    } catch (err) {
+      console.error('Fetch vendor directory error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchDirectRequests = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors?isDirectRequest=true&limit=50`, {
+        headers: { 'x-auth-token': token }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDirectRequests(data.vendors || []);
+      }
+    } catch (err) {
+      console.error('Fetch direct requests error:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchVendors();
+  }, [search, category, stateFilter, statusFilter, isDirectRequest, page]);
+
+  const handleAutoAssignPincodeAgent = async (vendorId) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors/auto-assign-agent`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ vendorId })
+      });
+      if (res.ok) {
+        fetchVendors();
+        if (showDirectModal) fetchDirectRequests();
+      }
+    } catch (err) {
+      console.error('Auto assign error:', err);
+    }
+  };
+
+  const exportCSV = () => {
+    const headers = ['Business Name', 'Contact Person', 'Email', 'Phone', 'Category', 'State', 'Pincode', 'Status'];
+    const rows = vendors.map(v => [
+      `"${v.businessName || v.name || ''}"`,
+      `"${v.contactPerson || ''}"`,
+      `"${v.email || ''}"`,
+      `"${v.phone || ''}"`,
+      `"${v.category || v.vendorType || ''}"`,
+      `"${v.assignedArea || ''}"`,
+      `"${v.pincode || ''}"`,
+      `"${v.status || ''}"`
+    ]);
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Vendor_Directory_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  return (
+    <div className="space-y-6 pb-12">
+
+      {/* 1. MODULE HEADER & TOOLBAR */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Vendor Directory</h2>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              Enterprise Suite
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 font-semibold mt-1">
+            Manage all registered merchants, vendor status lifecycle, and automated pincode agent verification requests.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Direct Requests Button */}
+          <button
+            onClick={() => { setShowDirectModal(true); fetchDirectRequests(); }}
+            className="px-4 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+          >
+            <Clock className="w-4 h-4" /> Direct Vendor Requests
+            <span className="bg-white text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-black">
+              {directRequests.length || '!'}
+            </span>
+          </button>
+
+          {/* Export CSV */}
+          <button
+            onClick={exportCSV}
+            className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-extrabold text-xs rounded-2xl transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </button>
+
+          {/* View Mode Toggle */}
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-2 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'grid' ? 'bg-white dark:bg-slate-900 text-primary-600 shadow-xs' : 'text-slate-400'
+              }`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`p-2 rounded-xl text-xs font-bold transition-all ${
+                viewMode === 'list' ? 'bg-white dark:bg-slate-900 text-primary-600 shadow-xs' : 'text-slate-400'
+              }`}
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. FILTERS & SEARCH TOOLBAR */}
+      <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          {/* Search Box */}
+          <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs w-full sm:w-64">
+            <Search className="w-4 h-4 text-slate-400 mr-2" />
+            <input
+              type="text"
+              placeholder="Search by Vendor Name, Business, Phone..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="bg-transparent focus:outline-none w-full text-slate-800 dark:text-slate-200 font-medium"
+            />
+          </div>
+
+          {/* Category Filter */}
+          <select
+            value={category}
+            onChange={e => setCategory(e.target.value)}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3 py-2 font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+          >
+            <option value="all">All Categories</option>
+            <option value="Store Vendor">Store Vendor</option>
+            <option value="Hospital Vendor">Hospital Vendor</option>
+            <option value="Hotel Vendor">Hotel Vendor</option>
+            <option value="Service Provider Vendor">Service Provider</option>
+          </select>
+
+          {/* Status Filter */}
+          <select
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3 py-2 font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+          >
+            <option value="all">All Statuses</option>
+            <option value="Pending Verification">Pending Verification</option>
+            <option value="Assigned">Assigned to Agent</option>
+            <option value="Under Verification">Under Verification</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+
+        <span className="text-xs font-bold text-slate-400">
+          Showing <strong>{vendors.length}</strong> of {total} Vendors
+        </span>
+      </div>
+
+      {/* 3. VENDORS GRID VIEW */}
+      {viewMode === 'grid' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {vendors.map(v => (
+            <div key={v._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary-500/30 transition-all flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-xl flex items-center justify-center border border-amber-500/20">
+                      {(v.businessName || v.name || 'V')[0].toUpperCase()}
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight">{v.businessName || v.name}</h4>
+                      <p className="text-xs text-slate-400 font-semibold">{v.contactPerson || v.email}</p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-xl ${
+                    (v.status || '').toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
+                    (v.status || '').toLowerCase() === 'assigned' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+                    'bg-amber-500/10 text-amber-700 border border-amber-500/20'
+                  }`}>
+                    {v.status || 'Pending Verification'}
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{v.category || v.vendorType || 'Store'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{v.phone}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Territory:</span><span className="font-bold truncate max-w-[150px]">{v.assignedArea || 'Tamil Nadu'}</span></div>
+                </div>
+
+                {/* Auto Pincode Agent Status */}
+                <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
+                    <UserCheck className="w-4 h-4" />
+                    <span>Agent: <strong>{v.assignedPincodeAgent?.name || 'Unassigned'}</strong></span>
+                  </div>
+                  {!v.assignedPincodeAgent && (
+                    <button
+                      onClick={() => handleAutoAssignPincodeAgent(v._id)}
+                      className="text-[10px] font-black uppercase px-2 py-1 rounded-lg bg-blue-600 text-white shadow-xs hover:bg-blue-700 transition-all cursor-pointer"
+                    >
+                      Auto Assign
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-2 text-right">
+                <span className="text-[10px] text-slate-400 font-semibold">Reg ID: {v.registrationId || v._id}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* 4. VENDORS LIST VIEW */}
+      {viewMode === 'list' && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-4 shadow-xs overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                <th className="py-3 px-4">Business & Contact</th>
+                <th className="py-3 px-4">Category</th>
+                <th className="py-3 px-4">Territory / Area</th>
+                <th className="py-3 px-4">Pincode Agent</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-850 text-xs">
+              {vendors.map(v => (
+                <tr key={v._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40">
+                  <td className="py-3 px-4">
+                    <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{v.businessName || v.name}</span>
+                    <span className="text-[11px] text-slate-400">{v.email} • {v.phone}</span>
+                  </td>
+                  <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
+                    {v.category || v.vendorType || 'Store'}
+                  </td>
+                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-medium">
+                    {v.assignedArea || 'Tamil Nadu'}
+                  </td>
+                  <td className="py-3 px-4">
+                    {v.assignedPincodeAgent ? (
+                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                        <UserCheck className="w-3.5 h-3.5" /> {v.assignedPincodeAgent.name}
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleAutoAssignPincodeAgent(v._id)}
+                        className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
+                      >
+                        Auto Assign Agent
+                      </button>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
+                      {v.status || 'Pending Verification'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <span className="text-[11px] text-slate-400 font-mono">{v.registrationId || v._id}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* 5. DIRECT VENDOR REQUESTS MODAL */}
+      {showDirectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-3xl rounded-3xl p-6 space-y-6 my-8 shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-500/10 text-amber-700 rounded-2xl">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Direct Vendor Registration Requests</h3>
+                  <p className="text-xs text-slate-400">Incoming vendor applications directly submitted from Website</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDirectModal(false)} className="p-2 text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+              {directRequests.map(dr => (
+                <div key={dr._id} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{dr.businessName || dr.name}</h4>
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700">
+                        {dr.status || 'Pending Verification'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">{dr.contactPerson} • {dr.email} • {dr.phone}</p>
+                    <p className="text-xs text-slate-400 font-mono mt-0.5">Category: {dr.category || dr.vendorType || 'Store'}</p>
+                  </div>
+
+                  <button
+                    onClick={() => handleAutoAssignPincodeAgent(dr._id)}
+                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <UserCheck className="w-4 h-4" /> Auto Assign Pincode Agent
+                  </button>
+                </div>
+              ))}
+
+              {directRequests.length === 0 && (
+                <div className="text-center py-12 text-slate-400">
+                  <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs font-bold">No pending direct vendor requests at the moment.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+};

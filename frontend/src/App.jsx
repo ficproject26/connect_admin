@@ -15,6 +15,11 @@ import {
 import { AgentPerformanceDashboard } from './components/AgentPerformanceDashboard';
 import { SecurityDashboard } from './components/SecurityDashboard';
 import { AdminSecurityDashboard } from './components/AdminSecurityDashboard';
+import { VendorDirectoryModule } from './components/VendorDirectoryModule';
+import { MembershipCardManagement } from './components/MembershipCardManagement';
+import { EnterprisePaymentDashboard } from './components/EnterprisePaymentDashboard';
+import { PayrollManagement } from './components/PayrollManagement';
+import { CustomerSupportTeamManagement } from './components/CustomerSupportTeamManagement';
 
 const getBackendUrl = () => {
   if (typeof window === 'undefined') return 'http://localhost:5001/api';
@@ -719,6 +724,41 @@ function App() {
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'cyber-security' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <ShieldAlert className="w-4 h-4 text-rose-400" /> Cyber Security
+              </button>
+
+              <button
+                onClick={() => setActiveTab('vendor-directory-enterprise')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'vendor-directory-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Store className="w-4 h-4 text-amber-400" /> Vendor Directory
+              </button>
+
+              <button
+                onClick={() => setActiveTab('membership-cards-enterprise')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'membership-cards-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <CreditCard className="w-4 h-4 text-purple-400" /> Membership Cards
+              </button>
+
+              <button
+                onClick={() => setActiveTab('payment-enterprise')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payment-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <DollarSign className="w-4 h-4 text-emerald-400" /> Payment Dashboard
+              </button>
+
+              <button
+                onClick={() => setActiveTab('payroll-enterprise')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payroll-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Award className="w-4 h-4 text-cyan-400" /> Payroll Management
+              </button>
+
+              <button
+                onClick={() => setActiveTab('support-team-enterprise')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'support-team-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Headphones className="w-4 h-4 text-blue-400" /> Support Team
               </button>
 
               <button
@@ -1458,6 +1498,31 @@ function App() {
           {/* AGENT PERFORMANCE MONITORING SYSTEM */}
           {activeTab === 'agent-performance' && (
             <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
+          )}
+
+          {/* ENTERPRISE VENDOR DIRECTORY */}
+          {activeTab === 'vendor-directory-enterprise' && (
+            <VendorDirectoryModule token={token} API_BASE={API_BASE} />
+          )}
+
+          {/* MEMBERSHIP CARD MANAGEMENT */}
+          {activeTab === 'membership-cards-enterprise' && (
+            <MembershipCardManagement token={token} API_BASE={API_BASE} />
+          )}
+
+          {/* ENTERPRISE PAYMENT DASHBOARD */}
+          {activeTab === 'payment-enterprise' && (
+            <EnterprisePaymentDashboard token={token} API_BASE={API_BASE} />
+          )}
+
+          {/* PAYROLL MANAGEMENT */}
+          {activeTab === 'payroll-enterprise' && (
+            <PayrollManagement token={token} API_BASE={API_BASE} />
+          )}
+
+          {/* CUSTOMER SUPPORT TEAM HIERARCHY */}
+          {activeTab === 'support-team-enterprise' && (
+            <CustomerSupportTeamManagement token={token} API_BASE={API_BASE} />
           )}
 
           {/* CYBER SECURITY & THREAT MONITORING DASHBOARD */}

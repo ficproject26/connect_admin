@@ -60,6 +60,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/auth', require('./routes/auth'));
 app.use('/api/security', require('./routes/security'));
 app.use('/api/admin/security', require('./routes/security'));
+app.use('/api/admin/enterprise', require('./routes/enterpriseModules'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/agent', require('./routes/agent'));
 app.use('/api/pincodes', require('./routes/pincodes'));
