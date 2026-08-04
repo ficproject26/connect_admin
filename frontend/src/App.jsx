@@ -1516,16 +1516,20 @@ function App() {
                         {topLevelAgents.map((stAgent) => {
                           const stId = stAgent._id;
                           const isStExpanded = !!expandedAgents[stId];
+                          const stLvl = (stAgent.level || 'state').toUpperCase();
 
-                          // Find district agents under this state agent
-                          const districtAgents = filteredAgents.filter(a =>
-                            (a.level || '').toLowerCase() === 'district' && (
-                              a.parentAgentId === stId ||
-                              (a.assignedArea && stAgent.assignedArea && a.assignedArea.toLowerCase().includes(stAgent.assignedArea.toLowerCase())) ||
-                              (a.assignedState && stAgent.assignedArea && stAgent.assignedArea.toLowerCase().includes(a.assignedState.toLowerCase())) ||
-                              stateAgents.length <= 1
+                          // Find district agents under this state agent (prevent self-nesting if stAgent is district)
+                          const districtAgents = ((stAgent.level || '').toLowerCase() === 'state')
+                            ? filteredAgents.filter(a =>
+                              (a.level || '').toLowerCase() === 'district' &&
+                              a._id !== stId && (
+                                a.parentAgentId === stId ||
+                                (a.assignedArea && stAgent.assignedArea && a.assignedArea.toLowerCase().includes(stAgent.assignedArea.toLowerCase())) ||
+                                (a.assignedState && stAgent.assignedArea && stAgent.assignedArea.toLowerCase().includes(a.assignedState.toLowerCase())) ||
+                                stateAgents.length === 1
+                              )
                             )
-                          );
+                            : [];
 
                           return (
                             <div key={stId} className="bg-white dark:bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-5 shadow-sm space-y-4 transition-all">
@@ -1543,10 +1547,10 @@ function App() {
                                   <div>
                                     <div className="flex items-center gap-2 flex-wrap">
                                       <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider">
-                                        STATE AGENT
+                                        {stLvl} AGENT
                                       </span>
                                       <span className="text-xs font-mono text-slate-400 font-bold">
-                                        ID: AG-STATE-{stId.slice(-4)}
+                                        ID: AG-{stLvl.slice(0, 4)}-{stId.slice(-4)}
                                       </span>
                                       <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full capitalize ${stAgent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500'}`}>
                                         {stAgent.status || 'Approved'}

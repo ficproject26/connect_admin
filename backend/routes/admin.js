@@ -488,7 +488,13 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 for (const rAgent of rawAgents) {
                     if (rAgent.email) {
                         const email = rAgent.email.toLowerCase().trim();
-                        const territoryStr = rAgent.territory?.state || rAgent.territory?.district || rAgent.territory?.division || rAgent.territory?.pincode || rAgent.assignedArea || '';
+                        const territoryParts = [
+                            rAgent.territory?.state,
+                            rAgent.territory?.district,
+                            rAgent.territory?.division,
+                            rAgent.territory?.pincode
+                        ].filter(Boolean);
+                        const territoryStr = territoryParts.length > 0 ? territoryParts.join(' / ') : (rAgent.assignedArea || '');
                         const kycData = {
                             aadhaarNumber: rAgent.kycDocs?.aadhaarNumber || rAgent.kyc?.aadhaarNumber || '',
                             aadhaarImage: rAgent.kycDocs?.aadhaarCard || rAgent.kycDocs?.aadhaarImage || rAgent.kyc?.aadhaarImage || '',
@@ -520,6 +526,14 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                             let updated = false;
                             if (existingUser.role !== 'agent' && existingUser.role !== 'Agent') {
                                 existingUser.role = 'agent';
+                                updated = true;
+                            }
+                            if (rAgent.role && existingUser.level !== rAgent.role) {
+                                existingUser.level = rAgent.role;
+                                updated = true;
+                            }
+                            if (territoryStr && existingUser.assignedArea !== territoryStr) {
+                                existingUser.assignedArea = territoryStr;
                                 updated = true;
                             }
                             if (rStatus && existingUser.status !== rStatus) {
