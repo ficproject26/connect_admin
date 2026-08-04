@@ -89,6 +89,25 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     }
   };
 
+  const handleApproveVendor = async (vendorId) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors/approve`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ vendorId })
+      });
+      if (res.ok) {
+        fetchVendors();
+        if (showDirectModal) fetchDirectRequests();
+      }
+    } catch (err) {
+      console.error('Approve vendor error:', err);
+    }
+  };
+
   const exportCSV = () => {
     const headers = ['Business Name', 'Contact Person', 'Email', 'Phone', 'Category', 'State', 'Pincode', 'Status'];
     const rows = vendors.map(v => [
@@ -365,12 +384,20 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     <p className="text-xs text-slate-400 font-mono mt-0.5">Category: {dr.category || dr.vendorType || 'Store'}</p>
                   </div>
 
-                  <button
-                    onClick={() => handleAutoAssignPincodeAgent(dr._id)}
-                    className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-                  >
-                    <UserCheck className="w-4 h-4" /> Auto Assign Pincode Agent
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleApproveVendor(dr._id)}
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle className="w-4 h-4" /> Approve Vendor
+                    </button>
+                    <button
+                      onClick={() => handleAutoAssignPincodeAgent(dr._id)}
+                      className="px-3.5 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <UserCheck className="w-4 h-4" /> Auto Assign Agent
+                    </button>
+                  </div>
                 </div>
               ))}
 
