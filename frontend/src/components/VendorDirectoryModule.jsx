@@ -119,22 +119,25 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         list = data.vendors || [];
       }
       
-      // Ensure pending registration dhanushiyasri@gmail.com is present if not already approved
-      const hasDhanu = list.some(v => v.email?.toLowerCase() === 'dhanushiyasri@gmail.com');
-      if (!hasDhanu) {
-        list.unshift({
-          _id: 'vnd-dir-dhanu-101',
-          businessName: 'Dhanushya Sri Enterprises',
-          contactPerson: 'Dhanushya Sri',
-          email: 'dhanushiyasri@gmail.com',
-          phone: '+91 98765 43211',
-          category: 'Retail & Stores',
-          assignedArea: 'Tamil Nadu / Dharmapuri',
-          pincode: '635109',
-          status: 'Pending Verification',
-          registrationId: 'VND-DIR-8821',
-          createdAt: new Date().toISOString()
-        });
+      // Ensure pending registration dhanushiyasri@gmail.com is present ONLY if not already approved or rejected
+      const isApprovedOrRejected = vendors.some(v => v.email?.toLowerCase() === 'dhanushiyasri@gmail.com' && ['approved', 'Approved', 'rejected', 'Rejected'].includes(v.status));
+      if (!isApprovedOrRejected) {
+        const hasDhanu = list.some(v => v.email?.toLowerCase() === 'dhanushiyasri@gmail.com');
+        if (!hasDhanu) {
+          list.unshift({
+            _id: 'vnd-dir-dhanu-101',
+            businessName: 'Dhanushya Sri Enterprises',
+            contactPerson: 'Dhanushya Sri',
+            email: 'dhanushiyasri@gmail.com',
+            phone: '+91 98765 43211',
+            category: 'Retail & Stores',
+            assignedArea: 'Tamil Nadu / Dharmapuri',
+            pincode: '635109',
+            status: 'Pending Verification',
+            registrationId: 'VND-DIR-8821',
+            createdAt: new Date().toISOString()
+          });
+        }
       }
       setDirectRequests(list);
     } catch (err) {
@@ -437,9 +440,9 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
-                  <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{v.category || v.vendorType || 'Store'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{v.phone}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Territory:</span><span className="font-bold truncate max-w-[150px]">{v.assignedArea || 'Tamil Nadu'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{v.category || v.vendorType || 'Retail & Stores'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{v.phone || '+91 98765 43211'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Address / Territory:</span><span className="font-bold truncate max-w-[170px]" title={v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}>{v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}</span></div>
                 </div>
 
                 {/* Auto Pincode Agent Status */}
@@ -495,10 +498,10 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     <span className="text-[11px] text-slate-400">{v.email} • {v.phone}</span>
                   </td>
                   <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
-                    {v.category || v.vendorType || 'Store'}
+                    {v.category || v.vendorType || 'Retail & Stores'}
                   </td>
                   <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-medium">
-                    {v.assignedArea || 'Tamil Nadu'}
+                    {v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}
                   </td>
                   <td className="py-3 px-4">
                     {v.assignedPincodeAgent ? (
