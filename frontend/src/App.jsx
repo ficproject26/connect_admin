@@ -7665,9 +7665,6 @@ function App() {
           </div>
         </div>
       )}
-          </div>
-        </div>
-      )}
 
       {/* 37. EDIT CATEGORY MODAL */}
       {showModal === 'edit-category' && modalData && (
