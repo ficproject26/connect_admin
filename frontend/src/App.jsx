@@ -12,6 +12,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
+import { AgentPerformanceDashboard } from './components/AgentPerformanceDashboard';
 
 const getBackendUrl = () => {
   if (typeof window === 'undefined') return 'http://localhost:5001/api';
@@ -682,6 +683,13 @@ function App() {
               </button>
 
               <button
+                onClick={() => setActiveTab('agent-performance')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'agent-performance' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Activity className="w-4 h-4 text-emerald-400" /> Agent Performance
+              </button>
+
+              <button
                 onClick={() => setActiveTab('vendors')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'vendors' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
@@ -868,7 +876,7 @@ function App() {
             </button>
             <div>
               <h2 className="text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight">
-                {activeTab === 'agents' ? 'Agent Directory' : activeTab.replace('-', ' ')}
+                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab.replace('-', ' ')}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
                 {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -1387,6 +1395,11 @@ function App() {
                 ))}
               </div>
             </div>
+          )}
+
+          {/* AGENT PERFORMANCE MONITORING SYSTEM */}
+          {activeTab === 'agent-performance' && (
+            <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
           )}
 
           {/* 4. AGENTS DIRECTORY */}
