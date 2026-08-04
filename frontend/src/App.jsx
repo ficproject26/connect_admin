@@ -296,6 +296,7 @@ function App() {
   // Refined UX States
   const [selectedPlanTab, setSelectedPlanTab] = useState(0);
   const [kycPreviewImage, setKycPreviewImage] = useState(null);
+  const [showVendorRequestsModal, setShowVendorRequestsModal] = useState(false);
 
   // Pincode Master Lookup States
   const [lookupPincode, setLookupPincode] = useState('');
@@ -2328,6 +2329,32 @@ function App() {
           {activeTab === 'vendors' && (
             <div className="space-y-6">
 
+              {/* Vendor Registration Requests & Direct Approval Banner */}
+              <div className="bg-gradient-to-r from-emerald-500/10 via-primary-500/10 to-transparent p-4 rounded-2xl border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-emerald-600 text-white rounded-xl shadow-xs">
+                    <CheckCircle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      Vendor Registration Requests
+                      {vendors.filter(v => (v.status || '').toLowerCase() === 'pending').length > 0 && (
+                        <span className="bg-rose-500 text-white text-[10px] font-black px-2 py-0.5 rounded-full animate-pulse">
+                          {vendors.filter(v => (v.status || '').toLowerCase() === 'pending').length} Pending
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Review and directly approve vendor applications submitted on the platform</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowVendorRequestsModal(true)}
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer whitespace-nowrap flex items-center gap-1.5"
+                >
+                  <CheckCircle className="w-4 h-4" /> Vendor Requests ({vendors.filter(v => (v.status || '').toLowerCase() === 'pending').length})
+                </button>
+              </div>
+
               {/* Category Filter */}
               <div className="flex gap-2 overflow-x-auto pb-2">
                 {['All', ...new Set(categories.map(c => c.name))].map((cat) => (
@@ -2388,21 +2415,22 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="flex gap-2 justify-end">
-                        {vendor.status?.toLowerCase() !== 'rejected' && (
-                          <button
-                            onClick={() => executeAction(`/admin/vendors/${vendor._id}/reject`, 'PUT', {})}
-                            className="bg-slate-100 hover:bg-rose-500/10 dark:bg-slate-800 hover:text-rose-500 text-slate-600 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-all"
-                          >
-                            Reject
-                          </button>
-                        )}
+                      <div className="flex gap-2 justify-end flex-wrap">
                         {vendor.status?.toLowerCase() !== 'approved' && (
                           <button
                             onClick={() => executeAction(`/admin/vendors/${vendor._id}/approve`, 'PUT', {})}
-                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-all"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                            title="Direct Approval for this Vendor"
                           >
-                            Approve Vendor
+                            <CheckCircle size={14} /> Direct Approval
+                          </button>
+                        )}
+                        {vendor.status?.toLowerCase() !== 'rejected' && (
+                          <button
+                            onClick={() => executeAction(`/admin/vendors/${vendor._id}/reject`, 'PUT', {})}
+                            className="bg-slate-100 hover:bg-rose-500/10 dark:bg-slate-800 hover:text-rose-500 text-slate-600 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                          >
+                            Reject
                           </button>
                         )}
                         <button
@@ -7872,6 +7900,87 @@ function App() {
                 <div className="text-center py-12 text-slate-400">
                   <UserCheck className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
                   <p className="text-sm font-semibold">No pending agent onboarding requests at this time.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VENDOR ONBOARDING REQUESTS MODAL */}
+      {showVendorRequestsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">Vendor Registration Requests</h3>
+                <p className="text-xs text-slate-400 mt-1">Review and directly approve pending vendor registration requests</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={fetchData}
+                  className="flex items-center gap-1.5 text-xs font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 px-3 py-1.5 rounded-xl border border-primary-200 dark:border-primary-800 transition-all cursor-pointer"
+                  title="Reload vendor requests from server"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" /> Refresh List
+                </button>
+                <button 
+                  onClick={() => setShowVendorRequestsModal(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {vendors.filter(v => (v.status || '').toLowerCase() === 'pending').map((pV) => (
+                <div key={pV._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-slate-800 dark:text-slate-100 text-base">{pV.businessName}</span>
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-primary-500/10 text-primary-500">
+                        {pV.category}
+                      </span>
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 capitalize">
+                        {pV.status || 'Pending Approval'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">{pV.contactName} • {pV.phone} • {pV.email}</p>
+                  </div>
+
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => { setModalData(pV); setShowModal('vendor-details'); }}
+                      className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await executeAction(`/admin/vendors/${pV._id}/reject`, 'PUT', {});
+                      }}
+                      className="bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      onClick={async () => {
+                        await executeAction(`/admin/vendors/${pV._id}/approve`, 'PUT', {});
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" /> Direct Approval
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {vendors.filter(v => (v.status || '').toLowerCase() === 'pending').length === 0 && (
+                <div className="text-center py-12 text-slate-400">
+                  <CheckCircle className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                  <p className="text-sm font-semibold">No pending vendor registration requests at this time.</p>
                 </div>
               )}
             </div>
