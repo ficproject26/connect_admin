@@ -5,39 +5,35 @@ import {
 } from 'lucide-react';
 
 const getVendorCategory = (v) => {
-  const cat = v.category || v.vendorType || v.businessCategory || v.shopType || v.vendorCategory;
+  if (Array.isArray(v.categories) && v.categories.length > 0) return v.categories.join(', ');
+  const cat = v.categories || v.category || v.vendorType || v.businessCategory || v.shopType || v.vendorCategory;
   if (!cat) return 'Retail & Stores';
-  const lower = cat.toLowerCase();
-  if (lower.includes('store') || lower.includes('retail') || lower.includes('supermarket')) return 'Store Vendor';
-  if (lower.includes('hospital') || lower.includes('clinic') || lower.includes('health') || lower.includes('medical')) return 'Hospital Vendor';
-  if (lower.includes('hotel') || lower.includes('resort') || lower.includes('restaurant') || lower.includes('suites')) return 'Hotel Vendor';
-  if (lower.includes('service')) return 'Service Provider';
   return cat;
 };
 
 const getVendorAddress = (v) => {
   if (v.fullAddress && v.fullAddress.trim().length > 3) return v.fullAddress;
-  if (v.address && v.address.trim().length > 3) return v.address;
-  if (v.streetAddress && v.streetAddress.trim().length > 3) return v.streetAddress;
 
-  const areaParts = [];
-  if (v.city || v.district) areaParts.push(v.city || v.district);
-  if (v.state) areaParts.push(v.state);
+  const street = v.businessAddress || v.street || v.address || v.streetAddress;
+  const city = v.city || v.district;
+  const state = v.state;
+  const pin = v.postalCode || v.pincode || v.zipCode;
 
-  if (areaParts.length > 0) {
-    return `${areaParts.join(', ')} ${v.pincode ? `(${v.pincode})` : ''}`.trim();
+  if (street || city || state) {
+    const parts = [street, city, state].filter(Boolean);
+    return `${parts.join(', ')}${pin ? ` (${pin})` : ''}`;
   }
 
   if (v.assignedArea) {
-    const hasPin = v.assignedArea.includes(v.pincode);
-    return hasPin ? v.assignedArea : `${v.assignedArea} ${v.pincode ? `(${v.pincode})` : ''}`.trim();
-  }
-
-  if (v.pincode) {
-    return `Tamil Nadu (${v.pincode})`;
+    const hasPin = pin && v.assignedArea.includes(pin);
+    return hasPin ? v.assignedArea : `${v.assignedArea}${pin ? ` (${pin})` : ''}`;
   }
 
   return 'Tamil Nadu / Dharmapuri (635109)';
+};
+
+const getVendorPhone = (v) => {
+  return v.mobileContact || v.phone || v.telephone || '+91 98765 43211';
 };
 
 export const VendorDirectoryModule = ({ token, API_BASE }) => {
@@ -503,7 +499,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     )}
                   </div>
                   <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{getVendorCategory(v)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{v.phone || '+91 98765 43211'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{getVendorPhone(v)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Address / Territory:</span><span className="font-bold truncate max-w-[170px]" title={getVendorAddress(v)}>{getVendorAddress(v)}</span></div>
                 </div>
 
@@ -575,7 +571,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 <tr key={v._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40">
                   <td className="py-3 px-4">
                     <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{v.businessName || v.name}</span>
-                    <span className="text-[11px] text-slate-400">{v.email} • {v.phone}</span>
+                    <span className="text-[11px] text-slate-400">{v.email} • {getVendorPhone(v)}</span>
                   </td>
                   <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
                     {getVendorCategory(v)}

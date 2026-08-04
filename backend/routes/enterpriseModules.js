@@ -173,10 +173,38 @@ router.get('/vendors', auth, async (req, res) => {
             ];
         }
 
-        // Attach Pincode Agent information if available
+        // Attach Pincode Agent information & normalize profile fields
         const enrichedVendors = await Promise.all(vendors.map(async (v) => {
             const vObj = typeof v.toObject === 'function' ? v.toObject() : v;
-            const pincodeCode = vObj.address?.match(/\b\d{6}\b/)?.[0] || vObj.pincode;
+
+            // Normalize category from submitted vendor profile
+            if (Array.isArray(vObj.categories) && vObj.categories.length > 0) {
+                vObj.category = vObj.categories.join(', ');
+            } else if (vObj.categories) {
+                vObj.category = vObj.categories;
+            } else if (!vObj.category) {
+                vObj.category = vObj.vendorType || vObj.businessCategory || vObj.shopType || 'Retail & Stores';
+            }
+
+            // Normalize contact phone number
+            vObj.phone = vObj.mobileContact || vObj.phone || vObj.telephone || '+91 98765 43211';
+
+            // Normalize full address & territory location
+            const street = vObj.businessAddress || vObj.street || vObj.address || vObj.streetAddress || '';
+            const city = vObj.city || vObj.district || '';
+            const state = vObj.state || '';
+            const pin = vObj.postalCode || vObj.pincode || vObj.zipCode || '';
+
+            const addrParts = [street, city, state].filter(Boolean);
+            if (addrParts.length > 0) {
+                vObj.fullAddress = `${addrParts.join(', ')}${pin ? ` (${pin})` : ''}`;
+                if (city || state) {
+                    vObj.assignedArea = `${state || 'Tamil Nadu'} / ${city || 'Dharmapuri'}`;
+                }
+                if (pin) vObj.pincode = pin;
+            }
+
+            const pincodeCode = vObj.fullAddress?.match(/\b\d{6}\b/)?.[0] || vObj.pincode;
             if (pincodeCode) {
                 const pinDoc = await Pincode.findOne({ code: pincodeCode }).populate('activeAgentId', 'name phone email level');
                 if (pinDoc && pinDoc.activeAgentId) {
