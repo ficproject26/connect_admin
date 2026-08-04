@@ -1260,6 +1260,25 @@ function App() {
 
                 </div>
 
+                {/* AGENT PERFORMANCE MONITORING SYSTEM EMBEDDED IN MAIN ADMIN DASHBOARD */}
+                <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-primary-500" /> Agent Performance Monitoring System
+                      </h3>
+                      <p className="text-xs text-slate-400">Real-time performance metrics, target completions, and multi-tier agent directory</p>
+                    </div>
+                    <button
+                      onClick={() => setActiveTab('agent-performance')}
+                      className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                    >
+                      Open Full Performance Portal →
+                    </button>
+                  </div>
+                  <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
+                </div>
+
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-20 text-slate-500">
