@@ -85,6 +85,15 @@ const getFormattedTerritory = (agent) => {
   return rawArea;
 };
 
+const isPendingAgent = (agent) => {
+  if (!agent) return false;
+  const status = (agent.status || agent.kycStatus || '').toLowerCase();
+  if (status === 'approved' || status === 'rejected' || status === 'suspended') {
+    return false;
+  }
+  return status === 'pending' || status === 'pending approval' || status === 'kyc pending' || !agent.isActive;
+};
+
 // --- Error Boundary to prevent blank screens ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
