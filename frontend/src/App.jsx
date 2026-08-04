@@ -720,13 +720,6 @@ function App() {
               </button>
 
               <button
-                onClick={() => setActiveTab('cyber-security')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'cyber-security' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <ShieldAlert className="w-4 h-4 text-rose-400" /> Cyber Security
-              </button>
-
-              <button
                 onClick={() => setActiveTab('vendor-directory-enterprise')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'vendor-directory-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
@@ -762,13 +755,6 @@ function App() {
               </button>
 
               <button
-                onClick={() => setActiveTab('vendors')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'vendors' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <Layers className="w-4 h-4" /> Vendor Directory
-              </button>
-
-              <button
                 onClick={() => setActiveTab('customers')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'customers' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
@@ -787,27 +773,6 @@ function App() {
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'security' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Shield className="w-4 h-4 text-emerald-400" /> Security Dashboard
-              </button>
-
-              <button
-                onClick={() => setActiveTab('tieups')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tieups' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <Layers className="w-4 h-4" /> Business Tie-ups
-              </button>
-
-              <button
-                onClick={() => setActiveTab('tasks')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tasks' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <CheckCircle className="w-4 h-4" /> Agent Tasks
-              </button>
-
-              <button
-                onClick={() => setActiveTab('wallet')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'wallet' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <DollarSign className="w-4 h-4" /> Wallet & Withdrawals
               </button>
 
               {isSuperAdmin && (
@@ -871,13 +836,6 @@ function App() {
               </button>
 
               <button
-                onClick={() => setActiveTab('payments')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payments' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <CreditCard className="w-4 h-4" /> Payments
-              </button>
-
-              <button
                 onClick={() => setActiveTab('delivery-partners')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'delivery-partners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
@@ -896,13 +854,6 @@ function App() {
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'executives' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <UserCheck className="w-4 h-4" /> Executives
-              </button>
-
-              <button
-                onClick={() => setActiveTab('support-team')}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'support-team' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <Headphones className="w-4 h-4" /> Customer Support Team
               </button>
 
               <button
