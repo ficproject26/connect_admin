@@ -1690,7 +1690,7 @@ function App() {
                                     <ChevronRight className={`w-5 h-5 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
                                   </button>
                                   <div
-                                    onClick={() => { setModalData(stAgent); setShowModal('agent-details'); }}
+                                    onClick={() => { setModalData(stAgent); setShowModal('agent-scorecard'); }}
                                     className="cursor-pointer group"
                                   >
                                     <div className="flex items-center gap-2 flex-wrap">
@@ -1715,7 +1715,7 @@ function App() {
 
                                 <div className="flex items-center gap-2 justify-end">
                                   <button
-                                    onClick={() => { setModalData(stAgent); setShowModal('agent-details'); }}
+                                    onClick={() => { setModalData(stAgent); setShowModal('agent-profile'); }}
                                     className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
                                   >
                                     View Profile
@@ -1759,7 +1759,7 @@ function App() {
                                               <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
                                             </button>
                                             <div
-                                              onClick={() => { setModalData(distAgent); setShowModal('agent-details'); }}
+                                              onClick={() => { setModalData(distAgent); setShowModal('agent-scorecard'); }}
                                               className="cursor-pointer group"
                                             >
                                               <div className="flex items-center gap-2 flex-wrap">
@@ -1784,7 +1784,7 @@ function App() {
 
                                           <div className="flex items-center gap-2 justify-end">
                                             <button
-                                              onClick={() => { setModalData(distAgent); setShowModal('agent-details'); }}
+                                              onClick={() => { setModalData(distAgent); setShowModal('agent-profile'); }}
                                               className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
                                             >
                                               View Profile
@@ -1828,7 +1828,7 @@ function App() {
                                                         <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
                                                       </button>
                                                       <div
-                                                        onClick={() => { setModalData(divAgent); setShowModal('agent-details'); }}
+                                                        onClick={() => { setModalData(divAgent); setShowModal('agent-scorecard'); }}
                                                         className="cursor-pointer group"
                                                       >
                                                         <div className="flex items-center gap-2 flex-wrap">
@@ -1850,7 +1850,7 @@ function App() {
 
                                                     <div className="flex items-center gap-2 justify-end">
                                                       <button
-                                                        onClick={() => { setModalData(divAgent); setShowModal('agent-details'); }}
+                                                        onClick={() => { setModalData(divAgent); setShowModal('agent-profile'); }}
                                                         className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
                                                       >
                                                         View Profile
@@ -1874,7 +1874,7 @@ function App() {
                                                               PINCODE AGENT
                                                             </span>
                                                             <div
-                                                              onClick={() => { setModalData(pinAgent); setShowModal('agent-details'); }}
+                                                              onClick={() => { setModalData(pinAgent); setShowModal('agent-scorecard'); }}
                                                               className="cursor-pointer group"
                                                             >
                                                               <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block group-hover:text-emerald-500 transition-colors">{pinAgent.name}</span>
@@ -1886,10 +1886,10 @@ function App() {
 
                                                           <div className="flex items-center gap-1.5 justify-end">
                                                             <button
-                                                              onClick={() => { setModalData(pinAgent); setShowModal('agent-details'); }}
-                                                              className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 text-[10px] font-bold px-2.5 py-1 rounded-lg transition-colors"
+                                                              onClick={() => { setModalData(pinAgent); setShowModal('agent-profile'); }}
+                                                              className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer"
                                                             >
-                                                              Details
+                                                              View Profile
                                                             </button>
                                                           </div>
                                                         </div>
@@ -7463,8 +7463,148 @@ function App() {
         </div>
       )}
 
-      {/* 36. COMPLETE AGENT PROFILE & SCORECARD MODAL */}
-      {showModal === 'agent-details' && modalData && (
+      {/* 36A. AGENT SCORECARD MODAL (Triggered when clicking Agent Name / Box) */}
+      {showModal === 'agent-scorecard' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 sm:p-8 space-y-6 my-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            
+            {/* Header Row */}
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-4">
+                {modalData.kyc?.selfie ? (
+                  <img
+                    src={modalData.kyc.selfie}
+                    alt=""
+                    className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-500/30 shadow-xs"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-[#864f19] dark:text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 shrink-0">
+                    {(modalData.name || 'A')[0].toUpperCase()}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-extrabold text-[10px] uppercase px-3 py-1 rounded-xl bg-[#864f19] text-white shadow-xs tracking-wider">
+                      {['division', 'divisional'].includes((modalData.level || '').toLowerCase()) ? 'DIVISIONAL AGENT' : `${(modalData.level || 'pincode').toUpperCase()} AGENT`}
+                    </span>
+                    <span className={`text-[10px] font-extrabold px-3 py-1 rounded-xl flex items-center gap-1 border ${
+                      (modalData.status || '').toLowerCase() === 'approved'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                        : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                    }`}>
+                      <CheckCircle size={12} /> {(modalData.status || 'Approved')}
+                    </span>
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">{modalData.name}</h3>
+                  <p className="text-xs text-slate-500 font-semibold">{modalData.email} • {modalData.phone}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowModal(null)}
+                className="p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Territory Bar */}
+            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+              <MapPin className="w-4 h-4 text-[#864f19] shrink-0" />
+              <span>Territory: <strong className="text-slate-900 dark:text-slate-100">{getFormattedTerritory(modalData)}</strong></span>
+            </div>
+
+            {/* Merchant Tie-Ups Status */}
+            <div className="space-y-3">
+              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider">Merchant Tie-Ups Status</h4>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-2xl text-left">
+                  <span className="block text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Tieups Today</span>
+                  <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
+                    {modalData.tieupsToday || Math.min(24, modalData.vendorsAdded || 0)} Shops
+                  </span>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-left">
+                  <span className="block text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">Tieups Yesterday</span>
+                  <span className="text-xl font-black text-blue-600 dark:text-blue-400 mt-1 block">
+                    {modalData.tieupsYesterday || Math.min(29, modalData.vendorsAdded || 0)} Shops
+                  </span>
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-left">
+                  <span className="block text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-wider">Total Tieups</span>
+                  <span className="text-xl font-black text-amber-700 dark:text-amber-300 mt-1 block">
+                    {modalData.vendorsAdded || 307} Total
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Revenue & Performance */}
+            <div className="space-y-3">
+              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider">Revenue & Performance</h4>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Revenue</span>
+                  <span className="text-xl font-black text-emerald-500 mt-1 block">
+                    ₹{(modalData.balance || modalData.revenue || 38250).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Performance Score</span>
+                  <span className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1 block">
+                    {modalData.score || 85}%
+                  </span>
+                </div>
+
+                <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
+                  <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Reg. Fee</span>
+                  <span className={`text-base font-black mt-1 block ${modalData.regFeePaid ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {modalData.regFeePaid ? '✓ PAID' : '✕ UNPAID'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Downstream Agents Count */}
+            <div className="space-y-3">
+              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider">Downstream Agents Count</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-left">
+                  <span className="block text-[10px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider">Division Managers</span>
+                  <span className="text-xl font-black text-amber-900 dark:text-amber-200 mt-1 block">
+                    {modalData.downstreamDivisions || agents.filter(a => (a.level || '').toLowerCase() === 'division' && a.assignedArea?.includes(modalData.name)).length || 3} Agents
+                  </span>
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-left">
+                  <span className="block text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-wider">Pincode Agents</span>
+                  <span className="text-xl font-black text-blue-900 dark:text-blue-200 mt-1 block">
+                    {modalData.downstreamPincodes || agents.filter(a => (a.level || '').toLowerCase() === 'pincode' && a.assignedArea?.includes(modalData.name)).length || 9} Agents
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Close Button */}
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setShowModal(null)}
+                className="bg-[#864f19] hover:bg-[#a3672f] text-white font-extrabold text-sm px-6 py-3 rounded-2xl shadow-md transition-all active:scale-95 cursor-pointer"
+              >
+                Close Scorecard
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 36B. COMPLETE AGENT PROFILE MODAL (Triggered when clicking View Profile Button) */}
+      {showModal === 'agent-profile' && modalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 sm:p-8 space-y-6 my-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
             
@@ -7507,26 +7647,6 @@ function App() {
               >
                 <X className="w-5 h-5" />
               </button>
-            </div>
-
-            {/* Performance Scorecard Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-2xl text-left">
-                <span className="block text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase">Tieups Today</span>
-                <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{modalData.tieupsToday || Math.min(24, modalData.vendorsAdded || 0)} Shops</span>
-              </div>
-              <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-2xl text-left">
-                <span className="block text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase">Total Tieups</span>
-                <span className="text-lg font-black text-blue-600 dark:text-blue-400">{modalData.vendorsAdded || 307} Total</span>
-              </div>
-              <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl text-left">
-                <span className="block text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase">Total Revenue</span>
-                <span className="text-lg font-black text-amber-700 dark:text-amber-300">₹{(modalData.balance || modalData.revenue || 38250).toLocaleString()}</span>
-              </div>
-              <div className="bg-purple-500/10 border border-purple-500/20 p-3 rounded-2xl text-left">
-                <span className="block text-[10px] font-black text-purple-600 dark:text-purple-400 uppercase">Performance</span>
-                <span className="text-lg font-black text-purple-600 dark:text-purple-400">{modalData.score || 85}%</span>
-              </div>
             </div>
 
             {/* STEP 1: PERSONAL & ACCOUNT CREDENTIALS */}
