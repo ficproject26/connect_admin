@@ -324,6 +324,57 @@ router.post('/vendors/reject', auth, async (req, res) => {
     }
 });
 
+// DELETE Vendor by ID or Email
+router.delete('/vendors/:id', auth, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { email } = req.query;
+
+        if (id && mongoose.Types.ObjectId.isValid(id)) {
+            await User.findByIdAndDelete(id);
+            await Vendor.findByIdAndDelete(id);
+        }
+        if (email) {
+            await User.deleteMany({ email: email.toLowerCase() });
+            await Vendor.deleteMany({ email: email.toLowerCase() });
+        }
+
+        const io = getIo(req);
+        if (io) {
+            io.emit('vendor_deleted', { vendorId: id, timestamp: new Date() });
+        }
+
+        res.json({ success: true, msg: 'Vendor deleted successfully' });
+    } catch (err) {
+        console.error('Delete vendor error:', err);
+        res.status(500).send('Server error');
+    }
+});
+
+router.post('/vendors/delete', auth, async (req, res) => {
+    try {
+        const { vendorId, email } = req.body;
+        if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
+            await User.findByIdAndDelete(vendorId);
+            await Vendor.findByIdAndDelete(vendorId);
+        }
+        if (email) {
+            await User.deleteMany({ email: email.toLowerCase() });
+            await Vendor.deleteMany({ email: email.toLowerCase() });
+        }
+
+        const io = getIo(req);
+        if (io) {
+            io.emit('vendor_deleted', { vendorId, timestamp: new Date() });
+        }
+
+        res.json({ success: true, msg: 'Vendor deleted successfully' });
+    } catch (err) {
+        console.error('Delete vendor error:', err);
+        res.status(500).send('Server error');
+    }
+});
+
 
 // =========================================================
 // 2. MEMBERSHIP CARD MANAGEMENT

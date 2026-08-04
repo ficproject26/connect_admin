@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Store, LayoutGrid, List, Search, Filter, Download, ArrowUpRight, CheckCircle,
-  XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, RefreshCw, X, ChevronRight
+  XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, RefreshCw, X, ChevronRight, Trash2
 } from 'lucide-react';
 
 export const VendorDirectoryModule = ({ token, API_BASE }) => {
@@ -243,6 +243,33 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     }
   };
 
+  const handleDeleteVendor = async (vendorObj) => {
+    const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
+    const email = typeof vendorObj === 'object' ? vendorObj.email : '';
+    const name = typeof vendorObj === 'object' ? (vendorObj.businessName || vendorObj.name) : 'this vendor';
+
+    if (!window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await fetch(`${API_BASE}/admin/enterprise/vendors/delete`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ vendorId, email })
+      });
+    } catch (err) {
+      console.error('Delete vendor error:', err);
+    } finally {
+      setVendors(prev => prev.filter(v => v._id !== vendorId && v.email !== email));
+      setDirectRequests(prev => prev.filter(v => v._id !== vendorId && v.email !== email));
+      setTotal(prev => Math.max(0, prev - 1));
+    }
+  };
+
   const exportCSV = () => {
     const headers = ['Business Name', 'Contact Person', 'Email', 'Phone', 'Category', 'State', 'Pincode', 'Status'];
     const rows = vendors.map(v => [
@@ -390,13 +417,23 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       <p className="text-xs text-slate-400 font-semibold">{v.contactPerson || v.email}</p>
                     </div>
                   </div>
-                  <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-xl ${
-                    (v.status || '').toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
-                    (v.status || '').toLowerCase() === 'assigned' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
-                    'bg-amber-500/10 text-amber-700 border border-amber-500/20'
-                  }`}>
-                    {v.status || 'Pending Verification'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-xl ${
+                      (v.status || '').toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
+                      (v.status || '').toLowerCase() === 'assigned' ? 'bg-blue-500/10 text-blue-600 border border-blue-500/20' :
+                      (v.status || '').toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' :
+                      'bg-amber-500/10 text-amber-700 border border-amber-500/20'
+                    }`}>
+                      {v.status || 'Pending Verification'}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteVendor(v)}
+                      title="Delete Vendor"
+                      className="p-1.5 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer border border-rose-500/20 active:scale-95"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
@@ -422,8 +459,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 </div>
               </div>
 
-              <div className="pt-2 text-right">
+              <div className="pt-2 flex items-center justify-between">
                 <span className="text-[10px] text-slate-400 font-semibold">Reg ID: {v.registrationId || v._id}</span>
+                <button
+                  onClick={() => handleDeleteVendor(v)}
+                  className="text-[10px] font-extrabold text-rose-600 hover:text-white hover:bg-rose-600 dark:text-rose-400 flex items-center gap-1 cursor-pointer bg-rose-500/10 px-2.5 py-1 rounded-xl border border-rose-500/20 transition-all active:scale-95"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
               </div>
             </div>
           ))}
@@ -477,7 +520,16 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     </span>
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <span className="text-[11px] text-slate-400 font-mono">{v.registrationId || v._id}</span>
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="text-[11px] text-slate-400 font-mono">{v.registrationId || v._id}</span>
+                      <button
+                        onClick={() => handleDeleteVendor(v)}
+                        title="Delete Vendor"
+                        className="p-1.5 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer border border-rose-500/20 active:scale-95"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -522,21 +574,28 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                   <div className="flex items-center gap-2 shrink-0">
                     <button
                       onClick={() => handleApproveVendor(dr)}
-                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <CheckCircle className="w-4 h-4" /> Approve
                     </button>
                     <button
                       onClick={() => handleRejectVendor(dr)}
-                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <XCircle className="w-4 h-4" /> Reject
                     </button>
                     <button
                       onClick={() => handleAutoAssignPincodeAgent(dr)}
-                      className="px-3.5 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3.5 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <UserCheck className="w-4 h-4" /> Auto Assign
+                    </button>
+                    <button
+                      onClick={() => handleDeleteVendor(dr)}
+                      title="Delete Vendor Request"
+                      className="p-2 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer border border-rose-500/20 active:scale-95"
+                    >
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
