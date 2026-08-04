@@ -41,8 +41,16 @@ const UserSchema = new mongoose.Schema({
     isPaid: { type: Boolean, default: false },
     balance: { type: Number, default: 0 },
     commissionEarned: { type: Number, default: 0 },
-    vendorsAdded: { type: Number, default: 0 },
-    referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    // Security & Auth Fields
+    failedLoginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date, default: null },
+    isLocked: { type: Boolean, default: false },
+    requireCaptcha: { type: Boolean, default: false },
+    twoFactorEnabled: { type: Boolean, default: false },
+    twoFactorSecret: { type: String, default: '' },
+    passwordChangedAt: { type: Date, default: Date.now },
+    refreshToken: { type: String, default: '' },
+
     createdAt: { type: Date, default: Date.now }
 });
 

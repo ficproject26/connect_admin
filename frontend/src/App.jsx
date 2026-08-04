@@ -13,6 +13,7 @@ import {
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
 import { AgentPerformanceDashboard } from './components/AgentPerformanceDashboard';
+import { AdminSecurityDashboard } from './components/AdminSecurityDashboard';
 
 const getBackendUrl = () => {
   if (typeof window === 'undefined') return 'http://localhost:5001/api';
@@ -709,6 +710,13 @@ function App() {
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'kyc' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <FileText className="w-4 h-4" /> KYC Verification
+              </button>
+
+              <button
+                onClick={() => setActiveTab('security')}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'security' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Shield className="w-4 h-4 text-emerald-400" /> Security Dashboard
               </button>
 
               <button
@@ -1420,6 +1428,11 @@ function App() {
           {/* AGENT PERFORMANCE MONITORING SYSTEM */}
           {activeTab === 'agent-performance' && (
             <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
+          )}
+
+          {/* DEVSECOPS SECURITY DASHBOARD */}
+          {activeTab === 'security' && (
+            <AdminSecurityDashboard token={token} API_BASE={API_BASE} />
           )}
 
           {/* 4. AGENTS DIRECTORY */}

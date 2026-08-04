@@ -8,10 +8,18 @@ require('dotenv').config();
 
 const app = express();
 
-// Init Middleware
+const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./middleware/security');
+
+// Init Security Middleware
+app.use(applySecurityHeaders);
+app.use(sanitizeInput);
 app.use(express.json({ limit: '100mb', extended: true }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 app.use(cors());
+
+// Apply Auth Rate Limiter to Auth Endpoints
+app.use('/api/auth/login', authRateLimiter({ windowMs: 60 * 1000, max: 5 }));
+app.use('/api/auth/send-otp', authRateLimiter({ windowMs: 60 * 1000, max: 5 }));
 
 // Request logger
 app.use((req, res, next) => {
@@ -50,6 +58,7 @@ io.on('connection', (socket) => {
 // Define Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/auth', require('./routes/auth'));
+app.use('/api/admin/security', require('./routes/security'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/agent', require('./routes/agent'));
 app.use('/api/pincodes', require('./routes/pincodes'));

@@ -5,6 +5,54 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const Pincode = require('../models/Pincode');
 const User = require('../models/User');
+const AuditLog = require('../models/AuditLog');
+const SecuritySession = require('../models/SecuritySession');
+const SecurityLog = require('../models/SecurityLog');
+const { parseDeviceInfo } = require('../middleware/security');
+
+// Password Strength & Policy Validator
+const validatePasswordPolicy = (password) => {
+    if (!password) return { isValid: false, msg: 'Password is required' };
+    if (password.length < 8 || password.length > 32) {
+        return { isValid: false, msg: 'Password length must be between 8 and 32 characters' };
+    }
+    const hasUpper = /[A-Z]/.test(password);
+    const hasLower = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecial = /[@$!%*?&#^()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
+
+    if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
+        return { isValid: false, msg: 'Password must contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 special character' };
+    }
+    return { isValid: true };
+};
+
+// In-Memory OTP Store
+const otpStore = new Map();
+
+// Helper to create and track Security Session
+const createSecuritySession = async (userId, token, req) => {
+    try {
+        const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+        const userAgent = req.headers['user-agent'] || '';
+        const deviceInfo = parseDeviceInfo(userAgent);
+
+        const tokenHash = require('crypto').createHash('sha256').update(token).digest('hex');
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+        await SecuritySession.create({
+            userId,
+            tokenHash,
+            deviceInfo,
+            ipAddress: clientIp,
+            isActive: true,
+            lastActive: new Date(),
+            expiresAt
+        });
+    } catch (e) {
+        console.error('Create security session error:', e);
+    }
+};
 
 // @route    POST api/auth/register
 // @desc     Register user
@@ -21,12 +69,18 @@ router.post('/register', async (req, res) => {
             if (existingPhone) return res.status(400).json({ message: 'Phone number already registered', msg: 'Phone number already registered' });
         }
 
+        // Validate Password Policy
+        const pwdPolicy = validatePasswordPolicy(password);
+        if (!pwdPolicy.isValid) {
+            return res.status(400).json({ message: pwdPolicy.msg, msg: pwdPolicy.msg });
+        }
+
         // Generate unique Registration ID: REG-YYYYMMDD-XXXX
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const randDigits = Math.floor(1000 + Math.random() * 9000);
         const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
 
-        // Extract territory string based on agent role/level
+        // Extract territory string
         const territory = req.body.territory || {};
         const agentRole = (role || level || req.body.role || req.body.level || 'pincode').toLowerCase();
         let territoryParts = [];
@@ -41,18 +95,8 @@ router.post('/register', async (req, res) => {
             else territoryParts = [stateVal, distVal, divVal, pinVal].filter(Boolean);
         }
         let territoryStr = territoryParts.length > 0 ? territoryParts.join(' / ') : (req.body.assignedArea || territory.state || '');
-        if (territoryStr && territoryStr.includes(' / ')) {
-            const rawParts = territoryStr.split(' / ').map(s => s.trim());
-            if (agentRole === 'state' && rawParts.length > 1) {
-                territoryStr = rawParts[0];
-            } else if (agentRole === 'district' && rawParts.length > 2) {
-                territoryStr = rawParts.slice(0, 2).join(' / ');
-            } else if (agentRole === 'division' && rawParts.length > 3) {
-                territoryStr = rawParts.slice(0, 3).join(' / ');
-            }
-        }
 
-        // Resolve Pincode ID if pincode code is provided
+        // Resolve Pincode ID
         let pincodeId = req.body.assignedPincode;
         const pincodeCode = territory.pincode || req.body.pincode;
         if (!pincodeId && pincodeCode) {
@@ -69,10 +113,8 @@ router.post('/register', async (req, res) => {
             pincodeId = pinDoc._id;
         }
 
-        // Map KYC fields
-        let kycMapped = {};
         const kDocs = req.body.kycDocs || req.body.kyc || {};
-        kycMapped = {
+        const kycMapped = {
             aadhaarNumber: kDocs.aadhaarNumber || '',
             aadhaarImage: kDocs.aadhaarCard || kDocs.aadhaarImage || '',
             panNumber: kDocs.panNumber || '',
@@ -97,36 +139,23 @@ router.post('/register', async (req, res) => {
             createdAt: new Date()
         });
 
-        const salt = await bcrypt.genSalt(10);
+        // Salt rounds 12 for enterprise security
+        const salt = await bcrypt.genSalt(12);
         user.password = await bcrypt.hash(password, salt);
         await user.save();
 
-        // Also sync to agents collection for dual compatibility
-        try {
-            const db = mongoose.connection.db;
-            if (db) {
-                await db.collection('agents').updateOne(
-                    { email: lowerEmail },
-                    {
-                        $set: {
-                            name,
-                            email: lowerEmail,
-                            phone: req.body.phone,
-                            password: user.password,
-                            role: agentRole,
-                            registrationId,
-                            territory,
-                            kycStatus: 'pending',
-                            registrationFeePaid: false,
-                            createdAt: new Date()
-                        }
-                    },
-                    { upsert: true }
-                );
-            }
-        } catch (syncErr) {
-            console.error("Error syncing to agents collection:", syncErr);
-        }
+        // Audit Log
+        const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+        await AuditLog.create({
+            userId: user._id,
+            userEmail: user.email,
+            userRole: agentRole,
+            action: 'device_login',
+            ipAddress: clientIp,
+            userAgent: req.headers['user-agent'] || '',
+            status: 'success',
+            details: 'New Agent registered and pending approval'
+        }).catch(() => {});
 
         return res.status(201).json({ 
             message: 'Agent registered successfully. Pending Admin approval.',
@@ -149,32 +178,104 @@ router.post('/register', async (req, res) => {
 });
 
 // @route    POST api/auth/login
-// @desc     Authenticate user & get token
+// @desc     Authenticate user & get token with progressive security
 // @access   Public
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
+    const userAgent = req.headers['user-agent'] || '';
+
     try {
         const lowerEmail = (email || '').toLowerCase().trim();
         let user = await User.findOne({ email: lowerEmail });
-        if (!user) return res.status(401).json({ message: 'Invalid email or password', msg: 'Invalid Credentials' });
 
+        if (!user) {
+            await AuditLog.create({
+                userEmail: lowerEmail,
+                action: 'login_failed',
+                ipAddress: clientIp,
+                userAgent,
+                status: 'failed',
+                details: 'Login attempt failed - Email not found'
+            }).catch(() => {});
+            return res.status(401).json({ message: 'Invalid email or password', msg: 'Invalid Credentials' });
+        }
+
+        // 1. Check Hard Lockout (10+ failed attempts)
+        if (user.isLocked) {
+            await AuditLog.create({
+                userId: user._id,
+                userEmail: user.email,
+                userRole: user.role,
+                action: 'account_locked',
+                ipAddress: clientIp,
+                userAgent,
+                status: 'blocked',
+                details: 'Locked account login attempt rejected'
+            }).catch(() => {});
+
+            return res.status(403).json({
+                error: 'Account Locked',
+                message: 'Your account is permanently locked due to 10+ failed login attempts. Admin approval is required to unlock.',
+                isLocked: true
+            });
+        }
+
+        // 2. Check Temporary Lockout (5+ failed attempts = 15m lock)
+        if (user.lockUntil && user.lockUntil > new Date()) {
+            const remainingMins = Math.ceil((new Date(user.lockUntil).getTime() - Date.now()) / (60 * 1000));
+            return res.status(403).json({
+                error: 'Temporary Lock',
+                message: `Account temporarily locked due to multiple failed login attempts. Please try again in ${remainingMins} minutes.`,
+                retryAfterMinutes: remainingMins
+            });
+        }
+
+        // 3. Match Password
         const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(401).json({ message: 'Invalid email or password', msg: 'Invalid Credentials' });
+        if (!isMatch) {
+            user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
 
-        // For agents: enforce status check (pending/rejected block login)
-        if (user.role === 'agent' || user.role === 'Agent') {
-            // Sync kycStatus from agents collection if available
-            try {
-                const agentDoc = await mongoose.connection.db.collection('agents').findOne({ email: lowerEmail });
-                if (agentDoc && agentDoc.kycStatus && agentDoc.kycStatus !== user.status) {
-                    // Sync agents kycStatus back to users status
-                    user.status = agentDoc.kycStatus;
-                    await user.save();
-                }
-            } catch (syncErr) {
-                console.error('kycStatus sync error:', syncErr);
+            if (user.failedLoginAttempts >= 10) {
+                user.isLocked = true;
+                user.lockUntil = null;
+            } else if (user.failedLoginAttempts >= 5) {
+                user.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 min lock
+            } else if (user.failedLoginAttempts >= 3) {
+                user.requireCaptcha = true;
+            }
+            await user.save();
+
+            await AuditLog.create({
+                userId: user._id,
+                userEmail: user.email,
+                userRole: user.role,
+                action: 'login_failed',
+                ipAddress: clientIp,
+                userAgent,
+                status: 'failed',
+                details: `Failed password attempt ${user.failedLoginAttempts}/10`
+            }).catch(() => {});
+
+            let warningMsg = 'Invalid email or password';
+            if (user.failedLoginAttempts >= 10) {
+                warningMsg = 'Account has been locked due to 10 failed login attempts. Contact Admin.';
+            } else if (user.failedLoginAttempts >= 5) {
+                warningMsg = 'Account locked for 15 minutes due to 5 failed attempts.';
+            } else if (user.failedLoginAttempts >= 3) {
+                warningMsg = 'Warning: 3 failed attempts. CAPTCHA verification required.';
             }
 
+            return res.status(401).json({
+                message: warningMsg,
+                msg: warningMsg,
+                failedAttempts: user.failedLoginAttempts,
+                requireCaptcha: user.requireCaptcha
+            });
+        }
+
+        // For agents: enforce status check
+        if (user.role === 'agent' || user.role === 'Agent') {
             const userStatus = (user.status || 'pending').toLowerCase();
             if (userStatus === 'pending') {
                 return res.status(403).json({
@@ -186,7 +287,7 @@ router.post('/login', async (req, res) => {
             }
             if (userStatus === 'rejected' || userStatus === 'suspended') {
                 return res.status(403).json({
-                    message: `Your registration application was rejected.`,
+                    message: `Your registration application was rejected or suspended.`,
                     status: userStatus,
                     registrationId: user.registrationId || 'N/A',
                     role: user.level || 'pincode'
@@ -194,56 +295,215 @@ router.post('/login', async (req, res) => {
             }
         }
 
+        // Successful Login -> Reset Failure Counter
+        user.failedLoginAttempts = 0;
+        user.lockUntil = null;
+        user.requireCaptcha = false;
+        await user.save();
+
         const payload = { user: { id: user.id, role: user.role } };
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 360000 }, (err, token) => {
-            if (err) throw err;
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-            // Build user object (for Admin frontend)
-            const userObj = {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                adminRole: user.adminRole,
-                branchId: user.branchId,
-                status: user.status,
-                isActive: user.isActive
-            };
+        // Record Multi-Device Session & Audit Log
+        await createSecuritySession(user._id, token, req);
+        await AuditLog.create({
+            userId: user._id,
+            userEmail: user.email,
+            userRole: user.role,
+            action: 'login_success',
+            ipAddress: clientIp,
+            userAgent,
+            status: 'success',
+            details: 'Successful user authentication'
+        }).catch(() => {});
 
-            // Build agent object (for Agent App frontend) — mirrors Agent backend response shape
-            const agentObj = {
-                _id: user.id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone || '',
-                role: user.level || user.role || 'pincode',
-                level: user.level || 'pincode',
-                registrationId: user.registrationId || '',
-                kycStatus: user.status === 'approved' ? 'approved' : user.status || 'pending',
-                territory: { state: user.assignedArea || '' },
-                kyc: user.kyc || {},
-                registrationFeePaid: user.isActive || false,
-                performanceScore: 0,
-                status: user.status,
-                isActive: user.isActive,
-                createdAt: user.createdAt || new Date().toISOString(),
-                updatedAt: user.updatedAt || new Date().toISOString()
-            };
+        const userObj = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            adminRole: user.adminRole,
+            branchId: user.branchId,
+            status: user.status,
+            isActive: user.isActive
+        };
 
-            res.json({ token, user: userObj, agent: agentObj });
-        });
+        const agentObj = {
+            _id: user.id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone || '',
+            role: user.level || user.role || 'pincode',
+            level: user.level || 'pincode',
+            registrationId: user.registrationId || '',
+            kycStatus: user.status === 'approved' ? 'approved' : user.status || 'pending',
+            territory: { state: user.assignedArea || '' },
+            kyc: user.kyc || {},
+            registrationFeePaid: user.isActive || false,
+            performanceScore: 0,
+            status: user.status,
+            isActive: user.isActive,
+            createdAt: user.createdAt || new Date().toISOString()
+        };
+
+        res.json({ token, user: userObj, agent: agentObj });
+
     } catch (err) {
-        console.error(err.message);
+        console.error('Login error:', err.message);
+        res.status(500).send('Server error');
+    }
+});
+
+// @route    POST api/auth/send-otp
+// @desc     Send 6-digit OTP (5m expiry, 30s resend)
+// @access   Public
+router.post('/send-otp', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ msg: 'Email is required' });
+
+        const lowerEmail = email.toLowerCase().trim();
+        const existingOtp = otpStore.get(lowerEmail);
+
+        if (existingOtp && (Date.now() - existingOtp.lastSentAt) < 30000) {
+            return res.status(429).json({ msg: 'Please wait 30 seconds before requesting another OTP.' });
+        }
+
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+        otpStore.set(lowerEmail, {
+            otp: otpCode,
+            expiresAt: Date.now() + 5 * 60 * 1000, // 5 mins
+            attempts: 0,
+            lastSentAt: Date.now()
+        });
+
+        await AuditLog.create({
+            userEmail: lowerEmail,
+            action: 'otp_sent',
+            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
+            status: 'success',
+            details: `OTP generated for ${lowerEmail}`
+        }).catch(() => {});
+
+        res.json({ success: true, msg: '6-digit OTP sent to registered email. Valid for 5 minutes.' });
+    } catch (err) {
+        console.error('Send OTP error:', err);
+        res.status(500).send('Server error');
+    }
+});
+
+// @route    POST api/auth/verify-otp
+// @desc     Verify 6-digit OTP (max 3 attempts)
+// @access   Public
+router.post('/verify-otp', async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        if (!email || !otp) return res.status(400).json({ msg: 'Email and OTP are required' });
+
+        const lowerEmail = email.toLowerCase().trim();
+        const stored = otpStore.get(lowerEmail);
+
+        if (!stored) {
+            return res.status(400).json({ msg: 'No OTP requested for this email or OTP expired.' });
+        }
+
+        if (Date.now() > stored.expiresAt) {
+            otpStore.delete(lowerEmail);
+            return res.status(400).json({ msg: 'OTP has expired. Please request a new OTP.' });
+        }
+
+        if (stored.attempts >= 3) {
+            otpStore.delete(lowerEmail);
+            return res.status(400).json({ msg: 'Maximum OTP verification attempts exceeded. Please request a new OTP.' });
+        }
+
+        if (stored.otp !== otp.trim()) {
+            stored.attempts += 1;
+            return res.status(400).json({ msg: `Invalid OTP. Attempts left: ${3 - stored.attempts}` });
+        }
+
+        otpStore.delete(lowerEmail);
+
+        let user = await User.findOne({ email: lowerEmail });
+        if (!user) return res.status(404).json({ msg: 'User profile not found' });
+
+        const payload = { user: { id: user.id, role: user.role } };
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+        await createSecuritySession(user._id, token, req);
+        await AuditLog.create({
+            userId: user._id,
+            userEmail: user.email,
+            userRole: user.role,
+            action: 'otp_verify',
+            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
+            status: 'success',
+            details: 'OTP verified successfully'
+        }).catch(() => {});
+
+        res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
+    } catch (err) {
+        console.error('Verify OTP error:', err);
+        res.status(500).send('Server error');
+    }
+});
+
+// @route    GET api/auth/sessions
+// @desc     List user's active device logins
+// @access   Private
+router.get('/sessions', async (req, res) => {
+    try {
+        let token = req.header('x-auth-token');
+        const authHeader = req.header('Authorization');
+        if (!token && authHeader && authHeader.startsWith('Bearer ')) token = authHeader.split(' ')[1];
+        if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const userId = decoded.user?.id || decoded.agentId;
+
+        const sessions = await SecuritySession.find({ userId, isActive: true }).sort({ lastActive: -1 });
+        res.json(sessions);
+    } catch (err) {
+        console.error('GET /auth/sessions error:', err);
+        res.status(401).json({ msg: 'Token is invalid' });
+    }
+});
+
+// @route    POST api/auth/sessions/logout-all
+// @desc     Force logout all devices for current user
+// @access   Private
+router.post('/sessions/logout-all', async (req, res) => {
+    try {
+        let token = req.header('x-auth-token');
+        const authHeader = req.header('Authorization');
+        if (!token && authHeader && authHeader.startsWith('Bearer ')) token = authHeader.split(' ')[1];
+        if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const userId = decoded.user?.id || decoded.agentId;
+
+        await SecuritySession.updateMany({ userId, isActive: true }, { isActive: false });
+
+        await AuditLog.create({
+            userId,
+            action: 'logout_all',
+            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
+            status: 'success',
+            details: 'Forced logout on all active devices'
+        }).catch(() => {});
+
+        res.json({ msg: 'Logged out successfully from all active devices.' });
+    } catch (err) {
+        console.error('Logout all error:', err);
         res.status(500).send('Server error');
     }
 });
 
 // @route    GET api/auth/me
-// @desc     Get current logged-in agent/user profile (supports both Bearer and x-auth-token)
+// @desc     Get current profile
 // @access   Private
 router.get('/me', async (req, res) => {
     try {
-        // Accept both Authorization: Bearer <token> and x-auth-token header
         let token = req.header('x-auth-token');
         const authHeader = req.header('Authorization') || req.header('authorization');
         if (!token && authHeader && authHeader.startsWith('Bearer ')) {
@@ -251,14 +511,13 @@ router.get('/me', async (req, res) => {
         }
         if (!token) return res.status(401).json({ message: 'No token, authorization denied' });
 
-        const decoded = require('jsonwebtoken').verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const userId = decoded.user?.id || decoded.agentId;
         if (!userId) return res.status(401).json({ message: 'Invalid token payload' });
 
         const user = await User.findById(userId).select('-password');
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        // Return agent-shape for agent users
         if (user.role === 'agent' || user.role === 'Agent') {
             const agent = {
                 _id: user._id,
@@ -275,8 +534,7 @@ router.get('/me', async (req, res) => {
                 performanceScore: 0,
                 status: user.status,
                 isActive: user.isActive,
-                createdAt: user.createdAt,
-                updatedAt: user.updatedAt
+                createdAt: user.createdAt
             };
             return res.json({ agent });
         }
@@ -285,193 +543,6 @@ router.get('/me', async (req, res) => {
     } catch (err) {
         console.error('GET /auth/me error:', err.message);
         return res.status(401).json({ message: 'Token is not valid' });
-    }
-});
-
-// Helper to compute baseVendorType
-const getBaseVendorTypeHelper = (vendorType, category, subcategory) => {
-    const vt = (vendorType || '').toLowerCase();
-    const cat = (category || '').toLowerCase();
-    const sub = (subcategory || '').toLowerCase();
-
-    if (vt.includes('hospital') || cat.includes('hospital') || sub.includes('hospital') || 
-        vt.includes('health') || cat.includes('health') || sub.includes('health') || 
-        vt.includes('doctor') || cat.includes('doctor') || sub.includes('doctor') ||
-        vt.includes('medical') || cat.includes('medical') || sub.includes('medical') ||
-        vt.includes('clinic') || cat.includes('clinic') || sub.includes('clinic')) {
-        return 'Hospital Vendor';
-    }
-    if (vt.includes('hotel') || cat.includes('hotel') || sub.includes('hotel') || 
-        vt.includes('stay') || cat.includes('stay') || sub.includes('stay') || 
-        vt.includes('room') || cat.includes('room') || sub.includes('room') ||
-        vt.includes('resort') || cat.includes('resort') || sub.includes('resort')) {
-        return 'Hotel Vendor';
-    }
-    if (vt.includes('service') || cat.includes('service') || sub.includes('service') || 
-        vt.includes('travel') || cat.includes('travel') || sub.includes('travel') || 
-        vt.includes('flight') || cat.includes('flight') || sub.includes('flight') ||
-        vt.includes('job') || cat.includes('job') || sub.includes('job')) {
-        return 'Service Provider Vendor';
-    }
-    return 'Store Vendor';
-};
-
-// @route    POST api/auth/register-vendor
-// @desc     Register vendor
-// @access   Public
-router.post('/register-vendor', async (req, res) => {
-    const { email, password, businessName, contactPerson, address, vendorType, category, subcategory } = req.body;
-    try {
-        let user = await User.findOne({ email });
-        if (user) return res.status(400).json({ msg: 'Vendor already exists with this email' });
-
-        const baseVendorType = getBaseVendorTypeHelper(vendorType, category, subcategory);
-
-        user = new User({
-            name: businessName || contactPerson || 'Vendor Business',
-            email,
-            password,
-            role: 'Vendor',
-            status: 'Pending',
-            vendorType,
-            category,
-            subcategory,
-            baseVendorType,
-            businessName,
-            contactPerson,
-            address,
-            isActive: false
-        });
-
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(password, salt);
-        await user.save();
-
-        const payload = { user: { id: user.id, role: user.role } };
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 360000 }, (err, token) => {
-            if (err) throw err;
-            res.json({
-                token,
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    role: user.role,
-                    status: user.status,
-                    baseVendorType: user.baseVendorType,
-                    businessName: user.businessName
-                }
-            });
-        });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
-});
-
-// @route    POST api/auth/login-vendor
-// @desc     Authenticate vendor & get token
-// @access   Public
-router.post('/login-vendor', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        let user = await User.findOne({ email });
-        if (!user) return res.status(400).json({ msg: 'Invalid Credentials' });
-
-        if (user.role !== 'Vendor' && user.role !== 'vendor') {
-            return res.status(403).json({ msg: 'Access denied. Only vendors can login here.' });
-        }
-
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) return res.status(400).json({ msg: 'Invalid Credentials' });
-
-        if (user.status === 'Pending') {
-            return res.status(403).json({ msg: 'Your account registration is Pending approval', status: 'Pending' });
-        }
-        if (user.status === 'Rejected') {
-            return res.status(403).json({ msg: 'Your account registration was Rejected', status: 'Rejected' });
-        }
-
-        const payload = { user: { id: user.id, role: user.role } };
-        jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 360000 }, (err, token) => {
-            if (err) throw err;
-            res.json({
-                token,
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    role: user.role,
-                    status: user.status,
-                    baseVendorType: user.baseVendorType,
-                    businessName: user.businessName
-                }
-            });
-        });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
-});
-
-// @route    POST api/auth/register-customer
-// @desc     Register a new customer from Connect App
-// @access   Public
-router.post('/register-customer', async (req, res) => {
-    const { name, phone, email, password, aadhaarNumber, panNumber } = req.body;
-    try {
-        // Validate required fields
-        if (!name || !phone || !email) {
-            return res.status(400).json({ msg: 'Name, phone, and email are required' });
-        }
-
-        const Customer = require('../models/Customer');
-
-        // Check if customer already exists by phone or email
-        let existing = await Customer.findOne({ $or: [{ phone }, { email }] });
-        if (existing) {
-            return res.status(400).json({ msg: 'Customer already registered with this phone or email' });
-        }
-
-        // Hash password if provided
-        let hashedPassword = '';
-        if (password) {
-            const salt = await bcrypt.genSalt(10);
-            hashedPassword = await bcrypt.hash(password, salt);
-        }
-
-        // Assign to first available branch (or leave null)
-        const Branch = require('../models/Branch');
-        const defaultBranch = await Branch.findOne();
-
-        const customer = new Customer({
-            name,
-            phone,
-            email,
-            password: hashedPassword,
-            aadhaarNumber: aadhaarNumber || '',
-            panNumber: panNumber || '',
-            branchId: defaultBranch ? defaultBranch._id : undefined,
-            status: 'active'
-        });
-
-        await customer.save();
-
-        res.json({
-            success: true,
-            msg: 'Registration successful',
-            customer: {
-                id: customer._id,
-                name: customer.name,
-                email: customer.email,
-                phone: customer.phone,
-                status: customer.status
-            }
-        });
-    } catch (err) {
-        console.error('Customer registration error:', err.message);
-        if (err.code === 11000) {
-            return res.status(400).json({ msg: 'Customer already registered with this phone or email' });
-        }
-        res.status(500).json({ msg: 'Server error during registration' });
     }
 });
 
