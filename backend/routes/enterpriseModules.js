@@ -118,6 +118,7 @@ router.get('/vendors', auth, async (req, res) => {
                     assignedArea: 'Tamil Nadu / Dharmapuri',
                     pincode: '635109',
                     status: 'Approved',
+                    joiningType: 'direct',
                     registrationId: 'VND-DIR-8821'
                 },
                 {
@@ -130,6 +131,12 @@ router.get('/vendors', auth, async (req, res) => {
                     assignedArea: 'Tamil Nadu / Chennai',
                     pincode: '600001',
                     status: 'Approved',
+                    joiningType: 'agent',
+                    onboardedByAgent: {
+                        name: 'Karthik Raja',
+                        registrationId: 'AG-PIN-1042',
+                        pincode: '600001'
+                    },
                     registrationId: 'VND-STORE-4412'
                 },
                 {
@@ -142,6 +149,12 @@ router.get('/vendors', auth, async (req, res) => {
                     assignedArea: 'Tamil Nadu / Salem',
                     pincode: '636001',
                     status: 'Approved',
+                    joiningType: 'agent',
+                    onboardedByAgent: {
+                        name: 'Suresh Kumar',
+                        registrationId: 'AG-PIN-3091',
+                        pincode: '636001'
+                    },
                     registrationId: 'VND-[#3619]'
                 },
                 {
@@ -154,6 +167,7 @@ router.get('/vendors', auth, async (req, res) => {
                     assignedArea: 'Tamil Nadu / Coimbatore',
                     pincode: '641001',
                     status: 'Approved',
+                    joiningType: 'direct',
                     registrationId: 'VND-[#9923]'
                 }
             ];

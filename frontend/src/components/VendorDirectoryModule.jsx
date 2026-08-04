@@ -440,26 +440,55 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Joining Type:</span>
+                    {v.joiningType === 'agent' || v.onboardedByAgent ? (
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                        👤 Agent Onboarded
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                        🌐 Direct Website
+                      </span>
+                    )}
+                  </div>
                   <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{v.category || v.vendorType || 'Retail & Stores'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{v.phone || '+91 98765 43211'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Address / Territory:</span><span className="font-bold truncate max-w-[170px]" title={v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}>{v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}</span></div>
                 </div>
 
-                {/* Auto Pincode Agent Status */}
-                <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
-                    <UserCheck className="w-4 h-4" />
-                    <span>Agent: <strong>{v.assignedPincodeAgent?.name || 'Unassigned'}</strong></span>
+                {/* Agent Onboarded or Pincode Agent Status */}
+                {v.joiningType === 'agent' || v.onboardedByAgent ? (
+                  <div className="p-3 bg-purple-500/5 border border-purple-500/15 rounded-2xl space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-purple-700 dark:text-purple-300 font-extrabold flex items-center gap-1">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        Agent: {v.onboardedByAgent?.name || v.assignedPincodeAgent?.name || 'Karthik Raja'}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400 font-mono">
+                        Pin: {v.onboardedByAgent?.pincode || v.pincode || '635109'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-400 font-mono font-medium">
+                      Agent ID: <strong className="text-slate-700 dark:text-slate-300">{v.onboardedByAgent?.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1042'}</strong>
+                    </div>
                   </div>
-                  {!v.assignedPincodeAgent && (
-                    <button
-                      onClick={() => handleAutoAssignPincodeAgent(v._id)}
-                      className="text-[10px] font-black uppercase px-2 py-1 rounded-lg bg-blue-600 text-white shadow-xs hover:bg-blue-700 transition-all cursor-pointer"
-                    >
-                      Auto Assign
-                    </button>
-                  )}
-                </div>
+                ) : (
+                  <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
+                      <UserCheck className="w-4 h-4" />
+                      <span>Agent: <strong>{v.assignedPincodeAgent?.name || 'Unassigned'}</strong></span>
+                    </div>
+                    {!v.assignedPincodeAgent && (
+                      <button
+                        onClick={() => handleAutoAssignPincodeAgent(v._id)}
+                        className="text-[10px] font-black uppercase px-2 py-1 rounded-lg bg-blue-600 text-white shadow-xs hover:bg-blue-700 transition-all cursor-pointer"
+                      >
+                        Auto Assign
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="pt-2 flex items-center justify-between">
@@ -485,7 +514,8 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 <th className="py-3 px-4">Business & Contact</th>
                 <th className="py-3 px-4">Category</th>
                 <th className="py-3 px-4">Territory / Area</th>
-                <th className="py-3 px-4">Pincode Agent</th>
+                <th className="py-3 px-4">Joining Type</th>
+                <th className="py-3 px-4">Pincode Agent / Details</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4 text-right">Action</th>
               </tr>
@@ -504,14 +534,41 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     {v.fullAddress || v.address || (v.assignedArea ? `${v.assignedArea} (${v.pincode || '635109'})` : 'Tamil Nadu / Dharmapuri - 635109')}
                   </td>
                   <td className="py-3 px-4">
-                    {v.assignedPincodeAgent ? (
-                      <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                        <UserCheck className="w-3.5 h-3.5" /> {v.assignedPincodeAgent.name}
+                    {v.joiningType === 'agent' || v.onboardedByAgent ? (
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1 w-fit">
+                        👤 Agent Onboarded
                       </span>
+                    ) : (
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center gap-1 w-fit">
+                        🌐 Direct Website
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3 px-4">
+                    {v.joiningType === 'agent' || v.onboardedByAgent ? (
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-extrabold text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                          <UserCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                          {v.onboardedByAgent?.name || v.assignedPincodeAgent?.name || 'Karthik Raja'}
+                        </span>
+                        <div className="text-[11px] text-slate-500 font-mono font-medium">
+                          ID: <strong className="text-slate-700 dark:text-slate-300">{v.onboardedByAgent?.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1042'}</strong> • Pin: <strong className="text-slate-700 dark:text-slate-300">{v.onboardedByAgent?.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '635109'}</strong>
+                        </div>
+                      </div>
+                    ) : v.assignedPincodeAgent ? (
+                      <div className="space-y-0.5">
+                        <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                          <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                          {v.assignedPincodeAgent.name}
+                        </span>
+                        <div className="text-[11px] text-slate-500 font-mono">
+                          ID: {v.assignedPincodeAgent.registrationId || 'AG-PIN-2088'} • Pin: {v.pincode || '635109'}
+                        </div>
+                      </div>
                     ) : (
                       <button
                         onClick={() => handleAutoAssignPincodeAgent(v._id)}
-                        className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
+                        className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs transition-all active:scale-95"
                       >
                         Auto Assign Agent
                       </button>
