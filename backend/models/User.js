@@ -47,7 +47,10 @@ const UserSchema = new mongoose.Schema({
 });
 
 const castIdToObjectId = (val) => {
-    if (val && typeof val === 'object' && (val.$in || val.$eq || val.$nin)) {
+    if (val && typeof val === 'object' && (val.$in || val.$eq || val.$nin || val.$ne)) {
+        if (val.$ne && typeof val.$ne === 'string' && mongoose.Types.ObjectId.isValid(val.$ne)) {
+            return { $nin: [val.$ne, new mongoose.Types.ObjectId(val.$ne)] };
+        }
         return val;
     }
     if (typeof val === 'string' && mongoose.Types.ObjectId.isValid(val)) {

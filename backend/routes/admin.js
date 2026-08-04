@@ -1579,34 +1579,54 @@ router.post('/save-pincode', [auth, adminAuth], async (req, res) => {
 
 // Helper to verify agent limitations (one per area for state, district, division, and pincode agents)
 const checkAgentLimitation = async (level, assignedArea, pincode, excludeUserId = null) => {
-    // If the level is state, district, or division:
-    if (['state', 'district', 'division'].includes(level)) {
-        if (!assignedArea) return { allowed: true };
+    const lvl = (level || '').toLowerCase();
+    
+    // Normalize area string according to level
+    let cleanArea = (assignedArea || '').trim();
+    if (cleanArea && cleanArea.includes(' / ')) {
+        const parts = cleanArea.split(' / ').map(s => s.trim());
+        if (lvl === 'state') cleanArea = parts[0];
+        else if (lvl === 'district') cleanArea = parts.slice(0, 2).join(' / ');
+        else if (lvl === 'division') cleanArea = parts.slice(0, 3).join(' / ');
+    }
+
+    const excludeList = [];
+    if (excludeUserId) {
+        const strId = excludeUserId.toString();
+        excludeList.push(strId);
+        if (mongoose.Types.ObjectId.isValid(strId)) {
+            excludeList.push(new mongoose.Types.ObjectId(strId));
+        }
+    }
+
+    if (['state', 'district', 'division'].includes(lvl)) {
+        if (!cleanArea) return { allowed: true };
+
         const query = {
-            role: 'agent',
-            level: level,
-            assignedArea: { $regex: new RegExp('^' + assignedArea.trim() + '$', 'i') },
-            status: { $in: ['approved', 'pending'] }
+            role: { $in: ['agent', 'Agent'] },
+            level: lvl,
+            assignedArea: { $regex: new RegExp('^' + cleanArea.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
+            status: { $in: ['approved', 'pending', 'Approved', 'Pending'] }
         };
-        if (excludeUserId) {
-            query._id = { $ne: excludeUserId };
+        if (excludeList.length > 0) {
+            query._id = { $nin: excludeList };
         }
         const existing = await User.findOne(query);
         if (existing) {
             return {
                 allowed: false,
-                msg: `An agent of level '${level}' is already assigned/pending for area '${assignedArea}'`
+                msg: `An agent of level '${lvl}' is already assigned/pending for area '${cleanArea}'`
             };
         }
     }
     
     // If the level is pincode:
-    if (level === 'pincode') {
+    if (lvl === 'pincode') {
         if (!pincode) return { allowed: true };
-        // Find if the pincode document exists and check if activeAgentId is set
+        
         let pinDoc = await Pincode.findOne({ code: pincode });
         if (pinDoc && pinDoc.activeAgentId) {
-            if (excludeUserId && pinDoc.activeAgentId.toString() === excludeUserId.toString()) {
+            if (excludeList.some(ex => ex.toString() === pinDoc.activeAgentId.toString())) {
                 return { allowed: true };
             }
             return {
@@ -1615,16 +1635,15 @@ const checkAgentLimitation = async (level, assignedArea, pincode, excludeUserId 
             };
         }
         
-        // Also check the User model for any pending/approved pincode agent with this assignedPincode code
         if (pinDoc) {
             const query = {
-                role: 'agent',
+                role: { $in: ['agent', 'Agent'] },
                 level: 'pincode',
                 assignedPincode: pinDoc._id,
-                status: { $in: ['approved', 'pending'] }
+                status: { $in: ['approved', 'pending', 'Approved', 'Pending'] }
             };
-            if (excludeUserId) {
-                query._id = { $ne: excludeUserId };
+            if (excludeList.length > 0) {
+                query._id = { $nin: excludeList };
             }
             const existing = await User.findOne(query);
             if (existing) {
