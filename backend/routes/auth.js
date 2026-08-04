@@ -26,9 +26,31 @@ router.post('/register', async (req, res) => {
         const randDigits = Math.floor(1000 + Math.random() * 9000);
         const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
 
-        // Extract territory string
+        // Extract territory string based on agent role/level
         const territory = req.body.territory || {};
-        const territoryStr = territory.state || territory.district || territory.division || territory.pincode || req.body.assignedArea || '';
+        const agentRole = (role || level || req.body.role || req.body.level || 'pincode').toLowerCase();
+        let territoryParts = [];
+        if (territory.state || territory.district || territory.division || territory.pincode) {
+            const stateVal = territory.state || '';
+            const distVal = territory.district || '';
+            const divVal = territory.division || '';
+            const pinVal = territory.pincode || '';
+            if (agentRole === 'state') territoryParts = [stateVal].filter(Boolean);
+            else if (agentRole === 'district') territoryParts = [stateVal, distVal].filter(Boolean);
+            else if (agentRole === 'division') territoryParts = [stateVal, distVal, divVal].filter(Boolean);
+            else territoryParts = [stateVal, distVal, divVal, pinVal].filter(Boolean);
+        }
+        let territoryStr = territoryParts.length > 0 ? territoryParts.join(' / ') : (req.body.assignedArea || territory.state || '');
+        if (territoryStr && territoryStr.includes(' / ')) {
+            const rawParts = territoryStr.split(' / ').map(s => s.trim());
+            if (agentRole === 'state' && rawParts.length > 1) {
+                territoryStr = rawParts[0];
+            } else if (agentRole === 'district' && rawParts.length > 2) {
+                territoryStr = rawParts.slice(0, 2).join(' / ');
+            } else if (agentRole === 'division' && rawParts.length > 3) {
+                territoryStr = rawParts.slice(0, 3).join(' / ');
+            }
+        }
 
         // Resolve Pincode ID if pincode code is provided
         let pincodeId = req.body.assignedPincode;
@@ -58,8 +80,6 @@ router.post('/register', async (req, res) => {
             selfie: kDocs.passportPhoto || kDocs.selfie || '',
             businessProofImage: kDocs.signature || kDocs.businessProofImage || ''
         };
-
-        const agentRole = role || level || 'pincode';
 
         user = new User({ 
             name, 

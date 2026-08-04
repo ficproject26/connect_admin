@@ -488,13 +488,31 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 for (const rAgent of rawAgents) {
                     if (rAgent.email) {
                         const email = rAgent.email.toLowerCase().trim();
-                        const territoryParts = [
-                            rAgent.territory?.state,
-                            rAgent.territory?.district,
-                            rAgent.territory?.division,
-                            rAgent.territory?.pincode
-                        ].filter(Boolean);
-                        const territoryStr = territoryParts.length > 0 ? territoryParts.join(' / ') : (rAgent.assignedArea || '');
+                        const agentLvl = (rAgent.role || rAgent.level || 'pincode').toLowerCase();
+                        let territoryParts = [];
+                        if (rAgent.territory) {
+                            const stateVal = rAgent.territory.state || '';
+                            const distVal = rAgent.territory.district || '';
+                            const divVal = rAgent.territory.division || '';
+                            const pinVal = rAgent.territory.pincode || '';
+                            if (agentLvl === 'state') territoryParts = [stateVal].filter(Boolean);
+                            else if (agentLvl === 'district') territoryParts = [stateVal, distVal].filter(Boolean);
+                            else if (agentLvl === 'division') territoryParts = [stateVal, distVal, divVal].filter(Boolean);
+                            else territoryParts = [stateVal, distVal, divVal, pinVal].filter(Boolean);
+                        }
+
+                        let territoryStr = territoryParts.length > 0 ? territoryParts.join(' / ') : (rAgent.assignedArea || '');
+                        if (territoryStr && territoryStr.includes(' / ')) {
+                            const rawParts = territoryStr.split(' / ').map(s => s.trim());
+                            if (agentLvl === 'state' && rawParts.length > 1) {
+                                territoryStr = rawParts[0];
+                            } else if (agentLvl === 'district' && rawParts.length > 2) {
+                                territoryStr = rawParts.slice(0, 2).join(' / ');
+                            } else if (agentLvl === 'division' && rawParts.length > 3) {
+                                territoryStr = rawParts.slice(0, 3).join(' / ');
+                            }
+                        }
+
                         const kycData = {
                             aadhaarNumber: rAgent.kycDocs?.aadhaarNumber || rAgent.kyc?.aadhaarNumber || '',
                             aadhaarImage: rAgent.kycDocs?.aadhaarCard || rAgent.kycDocs?.aadhaarImage || rAgent.kyc?.aadhaarImage || '',
@@ -555,6 +573,27 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                             if (updated) {
                                 await existingUser.save();
                             }
+                        }
+                    }
+                }
+
+                // Cleanup pass for existing agent users to ensure assignedArea matches level
+                const allAgentUsers = await User.find({ role: { $in: ['agent', 'Agent'] } });
+                for (const u of allAgentUsers) {
+                    const uLvl = (u.level || 'pincode').toLowerCase();
+                    if (u.assignedArea && u.assignedArea.includes(' / ')) {
+                        const parts = u.assignedArea.split(' / ').map(s => s.trim());
+                        let cleanedArea = u.assignedArea;
+                        if (uLvl === 'state' && parts.length > 1) {
+                            cleanedArea = parts[0];
+                        } else if (uLvl === 'district' && parts.length > 2) {
+                            cleanedArea = parts.slice(0, 2).join(' / ');
+                        } else if (uLvl === 'division' && parts.length > 3) {
+                            cleanedArea = parts.slice(0, 3).join(' / ');
+                        }
+                        if (cleanedArea !== u.assignedArea) {
+                            u.assignedArea = cleanedArea;
+                            await u.save();
                         }
                     }
                 }

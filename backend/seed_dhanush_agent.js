@@ -25,9 +25,9 @@ async function seedDhanush() {
 
     const territory = {
       state: 'Tamil Nadu',
-      district: 'Krishnagiri District',
-      division: 'Hosur Division',
-      pincode: '635109'
+      district: '',
+      division: '',
+      pincode: ''
     };
 
     // Ensure Pincode document exists for 635109
@@ -79,8 +79,8 @@ async function seedDhanush() {
           password: hashedPassword,
           role: 'agent',
           level: 'state',
-          assignedArea: 'Tamil Nadu / Krishnagiri District',
-          assignedPincode: pinDoc._id,
+          assignedArea: 'Tamil Nadu',
+          assignedPincode: null,
           registrationId: registrationId,
           status: 'pending',
           isActive: false,
