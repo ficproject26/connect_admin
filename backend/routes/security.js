@@ -1,149 +1,170 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
-const User = require('../models/User');
-const AuditLog = require('../models/AuditLog');
+const adminAuth = require('../middleware/adminAuth');
+const SecurityLog = require('../models/SecurityLog');
 const SecuritySession = require('../models/SecuritySession');
+const User = require('../models/User');
 
-// GET Security Overview Metrics
-router.get('/overview', auth, async (req, res) => {
-    try {
-        const totalActiveSessions = await SecuritySession.countDocuments({ isActive: true });
-        
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
+// @route   GET /api/security/dashboard-stats
+// @desc    Get real-time security dashboard metrics
+// @access  Private (Admin)
+router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-        const failedLoginsToday = await AuditLog.countDocuments({
-            action: 'login_failed',
-            timestamp: { $gte: todayStart }
-        });
+    const activeSessionsCount = await SecuritySession.countDocuments({ isActive: true });
+    const failedLogins24h = await SecurityLog.countDocuments({
+      eventType: 'FAILED_LOGIN',
+      timestamp: { $gte: twentyFourHoursAgo }
+    });
+    const lockedAccountsCount = await User.countDocuments({ isLocked: true });
+    const tempLockedCount = await User.countDocuments({ lockUntil: { $gt: new Date() } });
+    const rateLimitEvents24h = await SecurityLog.countDocuments({
+      eventType: 'RATE_LIMIT_EXCEEDED',
+      timestamp: { $gte: twentyFourHoursAgo }
+    });
 
-        const lockedAccountsCount = await User.countDocuments({
-            $or: [
-                { isLocked: true },
-                { lockUntil: { $gt: new Date() } }
-            ]
-        });
+    const recentCriticalLogs = await SecurityLog.find({
+      threatLevel: { $in: ['warning', 'danger', 'critical'] }
+    })
+      .sort({ timestamp: -1 })
+      .limit(10);
 
-        const suspiciousActivityCount = await AuditLog.countDocuments({
-            status: { $in: ['warning', 'blocked'] },
-            timestamp: { $gte: todayStart }
-        });
-
-        const lockedUsers = await User.find({
-            $or: [
-                { isLocked: true },
-                { lockUntil: { $gt: new Date() } }
-            ]
-        }).select('name email role failedLoginAttempts lockUntil isLocked');
-
-        res.json({
-            activeSessions: totalActiveSessions,
-            failedLoginsToday,
-            lockedAccountsCount,
-            suspiciousActivityCount,
-            lockedUsers
-        });
-    } catch (err) {
-        console.error('Security overview error:', err);
-        res.status(500).send('Server error');
-    }
+    res.json({
+      activeSessionsCount,
+      failedLogins24h,
+      lockedAccountsCount,
+      tempLockedCount,
+      rateLimitEvents24h,
+      recentCriticalLogs
+    });
+  } catch (err) {
+    console.error('Security dashboard stats error:', err);
+    res.status(500).send('Server error');
+  }
 });
 
-// GET Filterable Security Audit Logs Stream
-router.get('/logs', auth, async (req, res) => {
-    try {
-        const { action, status, search, limit = 50 } = req.query;
-        const filter = {};
+// @route   GET /api/security/audit-logs
+// @desc    Get paginated security logs with filtering
+// @access  Private (Admin)
+router.get('/audit-logs', [auth, adminAuth], async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+    const { eventType, threatLevel, search } = req.query;
 
-        if (action && action !== 'all') filter.action = action;
-        if (status && status !== 'all') filter.status = status;
-        if (search) {
-            filter.$or = [
-                { userEmail: { $regex: new RegExp(search, 'i') } },
-                { ipAddress: { $regex: new RegExp(search, 'i') } },
-                { details: { $regex: new RegExp(search, 'i') } }
-            ];
-        }
-
-        const logs = await AuditLog.find(filter)
-            .sort({ timestamp: -1 })
-            .limit(Number(limit))
-            .populate('userId', 'name email role');
-
-        res.json(logs);
-    } catch (err) {
-        console.error('Security logs error:', err);
-        res.status(500).send('Server error');
+    const filter = {};
+    if (eventType && eventType !== 'all') filter.eventType = eventType;
+    if (threatLevel && threatLevel !== 'all') filter.threatLevel = threatLevel;
+    if (search) {
+      filter.$or = [
+        { email: { $regex: new RegExp(search, 'i') } },
+        { ipAddress: { $regex: new RegExp(search, 'i') } },
+        { details: { $regex: new RegExp(search, 'i') } }
+      ];
     }
+
+    const logs = await SecurityLog.find(filter)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await SecurityLog.countDocuments(filter);
+
+    res.json({
+      logs,
+      total,
+      page,
+      pages: Math.ceil(total / limit)
+    });
+  } catch (err) {
+    console.error('Fetch security logs error:', err);
+    res.status(500).send('Server error');
+  }
 });
 
-// GET Active Multi-Device Sessions
-router.get('/sessions', auth, async (req, res) => {
-    try {
-        const sessions = await SecuritySession.find({ isActive: true })
-            .sort({ lastActive: -1 })
-            .populate('userId', 'name email role level');
-        res.json(sessions);
-    } catch (err) {
-        console.error('Fetch security sessions error:', err);
-        res.status(500).send('Server error');
-    }
+// @route   GET /api/security/active-sessions
+// @desc    List all active user/device sessions across platform
+// @access  Private (Admin)
+router.get('/active-sessions', [auth, adminAuth], async (req, res) => {
+  try {
+    const sessions = await SecuritySession.find({ isActive: true })
+      .populate('userId', 'name email role level status')
+      .sort({ lastActive: -1 })
+      .limit(50);
+
+    res.json(sessions);
+  } catch (err) {
+    console.error('Fetch active sessions error:', err);
+    res.status(500).send('Server error');
+  }
 });
 
-// POST Unlock Account
-router.post('/unlock-account', auth, async (req, res) => {
-    try {
-        const { userId } = req.body;
-        const user = await User.findById(userId);
-        if (!user) return res.status(404).json({ msg: 'User not found' });
+// @route   POST /api/security/revoke-session
+// @desc    Force revoke an active session
+// @access  Private (Admin)
+router.post('/revoke-session', [auth, adminAuth], async (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (!sessionId) return res.status(400).json({ msg: 'sessionId is required' });
 
-        user.isLocked = false;
-        user.lockUntil = null;
-        user.failedLoginAttempts = 0;
-        user.requireCaptcha = false;
-        await user.save();
+    const session = await SecuritySession.findById(sessionId);
+    if (!session) return res.status(404).json({ msg: 'Session not found' });
 
-        await AuditLog.create({
-            userId: user._id,
-            userEmail: user.email,
-            userRole: user.role,
-            action: 'account_unlocked',
-            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
-            status: 'success',
-            details: `Account unlocked by Admin (${req.user.id})`
-        });
+    session.isActive = false;
+    await session.save();
 
-        res.json({ msg: 'Account unlocked successfully', user });
-    } catch (err) {
-        console.error('Unlock account error:', err);
-        res.status(500).send('Server error');
-    }
+    await SecurityLog.create({
+      eventType: 'SESSION_REVOKED',
+      userId: session.userId,
+      email: session.email || 'User',
+      ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || '',
+      threatLevel: 'info',
+      details: `Session ${sessionId} revoked by Admin`
+    });
+
+    res.json({ success: true, msg: 'Session revoked successfully' });
+  } catch (err) {
+    console.error('Revoke session error:', err);
+    res.status(500).send('Server error');
+  }
 });
 
-// POST Terminate Active Session
-router.post('/terminate-session', auth, async (req, res) => {
-    try {
-        const { sessionId } = req.body;
-        const session = await SecuritySession.findById(sessionId);
-        if (!session) return res.status(404).json({ msg: 'Session not found' });
+// @route   POST /api/security/unlock-account
+// @desc    Admin action to unlock a locked user/agent account
+// @access  Private (Admin)
+router.post('/unlock-account', [auth, adminAuth], async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) return res.status(400).json({ msg: 'userId is required' });
 
-        session.isActive = false;
-        await session.save();
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ msg: 'User profile not found' });
 
-        await AuditLog.create({
-            userId: session.userId,
-            action: 'session_terminated',
-            ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
-            status: 'warning',
-            details: `Session terminated forcibly by Admin (${req.user.id})`
-        });
+    user.isLocked = false;
+    user.lockUntil = null;
+    user.failedLoginAttempts = 0;
+    user.requireCaptcha = false;
+    await user.save();
 
-        res.json({ msg: 'Session terminated successfully' });
-    } catch (err) {
-        console.error('Terminate session error:', err);
-        res.status(500).send('Server error');
-    }
+    await SecurityLog.create({
+      eventType: 'ACCOUNT_UNLOCKED',
+      userId: user._id,
+      email: user.email,
+      ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || '',
+      threatLevel: 'info',
+      details: `Account ${user.email} unlocked by Admin`
+    });
+
+    res.json({ success: true, msg: `Account for ${user.name} (${user.email}) unlocked successfully.` });
+  } catch (err) {
+    console.error('Unlock account error:', err);
+    res.status(500).send('Server error');
+  }
 });
 
 module.exports = router;
