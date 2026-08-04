@@ -6465,7 +6465,7 @@ function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone</label>
-                  <input name="phone" required defaultValue={modalData.phone || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input name="phone" required defaultValue={modalData.phone || ''} type="text" maxLength={10} inputMode="numeric" pattern="[6-9][0-9]{9}" onInput={handlePhoneInput} title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -6628,7 +6628,7 @@ function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
-                  <input name="phone" required type="text" placeholder="9876543210" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input name="phone" required type="text" maxLength={10} inputMode="numeric" pattern="[6-9][0-9]{9}" onInput={handlePhoneInput} title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9" placeholder="9876543210" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
 
@@ -6768,7 +6768,7 @@ function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
-                  <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input name="phone" required type="text" maxLength={10} inputMode="numeric" pattern="[6-9][0-9]{9}" onInput={handlePhoneInput} title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
               <div>
@@ -6934,7 +6934,7 @@ function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
-                  <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input name="phone" required type="text" maxLength={10} inputMode="numeric" pattern="[6-9][0-9]{9}" onInput={handlePhoneInput} title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
