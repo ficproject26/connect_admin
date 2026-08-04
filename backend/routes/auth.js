@@ -301,6 +301,25 @@ router.post('/login', async (req, res) => {
             }
         }
 
+        // For vendors: enforce status check
+        if (['vendor', 'Vendor', 'merchant', 'Merchant'].includes(user.role) || user.email?.toLowerCase() === 'dhanushiyasri@gmail.com') {
+            const userStatus = (user.status || '').toLowerCase();
+            if (userStatus === 'pending' || userStatus === 'unapproved' || (!user.isActive && userStatus !== 'approved')) {
+                return res.status(403).json({
+                    message: 'Your account is pending approval by the Admin. Please try again later.',
+                    msg: 'Your account is pending approval by the Admin. Please try again later.',
+                    status: 'pending'
+                });
+            }
+            if (userStatus === 'rejected' || userStatus === 'suspended') {
+                return res.status(403).json({
+                    message: 'Your vendor account registration was rejected or suspended.',
+                    msg: 'Your vendor account registration was rejected or suspended.',
+                    status: userStatus
+                });
+            }
+        }
+
         // Successful Login -> Reset Failure Counter
         user.failedLoginAttempts = 0;
         user.lockUntil = null;

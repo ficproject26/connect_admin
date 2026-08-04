@@ -203,7 +203,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId })
+        body: JSON.stringify({ vendorId, email: targetVendor?.email })
       });
     } catch (err) {
       console.error('Approve vendor error:', err);
@@ -228,7 +228,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId })
+        body: JSON.stringify({ vendorId, email: targetVendor?.email })
       });
     } catch (err) {
       console.error('Reject vendor error:', err);

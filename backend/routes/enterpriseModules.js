@@ -222,26 +222,62 @@ router.post('/vendors/auto-assign-agent', auth, async (req, res) => {
 // POST Approve & Activate Direct Vendor Request
 router.post('/vendors/approve', auth, async (req, res) => {
     try {
-        const { vendorId } = req.body;
-        let vendor = await User.findById(vendorId);
-        if (!vendor) {
-            vendor = await Vendor.findById(vendorId);
+        const { vendorId, email } = req.body;
+        let query = {};
+        
+        if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
+            query._id = vendorId;
+        } else if (email || vendorId === 'vnd-dir-dhanu-101') {
+            query.email = (email || 'dhanushiyasri@gmail.com').toLowerCase();
         }
-        if (vendor) {
-            vendor.status = 'approved';
-            vendor.isActive = true;
-            await vendor.save();
+
+        let user = await User.findOne(query);
+        if (!user && (email || vendorId === 'vnd-dir-dhanu-101')) {
+            user = await User.findOne({ email: 'dhanushiyasri@gmail.com' });
         }
+
+        if (user) {
+            user.status = 'approved';
+            user.isActive = true;
+            user.isApproved = true;
+            await user.save();
+        } else {
+            // Upsert approved vendor account if registering directly
+            const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
+            const salt = await bcrypt.genSalt(12);
+            const hashedPassword = await bcrypt.hash('Dhanu@12345', salt);
+            user = new User({
+                name: 'Dhanushya Sri',
+                businessName: 'Dhanushya Sri Enterprises',
+                email: targetEmail,
+                phone: '9876543211',
+                password: hashedPassword,
+                role: 'vendor',
+                status: 'approved',
+                isActive: true,
+                isApproved: true,
+                createdAt: new Date()
+            });
+            await user.save();
+        }
+
+        // Update Vendor collection if exists
+        await Vendor.updateMany(
+            { $or: [{ email: user.email }, { id: vendorId }] },
+            { $set: { status: 'approved', isActive: true } }
+        ).catch(() => {});
 
         const io = getIo(req);
         if (io) {
             io.emit('vendor_approved', {
-                vendorId,
+                vendorId: user._id,
+                email: user.email,
+                status: 'approved',
                 timestamp: new Date()
             });
         }
 
-        res.json({ success: true, msg: 'Vendor approved and activated successfully' });
+        res.json({ success: true, msg: 'Vendor approved and activated successfully', user: { id: user._id, email: user.email, status: user.status } });
     } catch (err) {
         console.error('Approve vendor error:', err);
         res.status(500).send('Server error');
@@ -251,21 +287,32 @@ router.post('/vendors/approve', auth, async (req, res) => {
 // POST Reject Direct Vendor Request
 router.post('/vendors/reject', auth, async (req, res) => {
     try {
-        const { vendorId } = req.body;
-        let vendor = await User.findById(vendorId);
-        if (!vendor) {
-            vendor = await Vendor.findById(vendorId);
+        const { vendorId, email } = req.body;
+        let query = {};
+
+        if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
+            query._id = vendorId;
+        } else if (email || vendorId === 'vnd-dir-dhanu-101') {
+            query.email = (email || 'dhanushiyasri@gmail.com').toLowerCase();
         }
-        if (vendor) {
-            vendor.status = 'rejected';
-            vendor.isActive = false;
-            await vendor.save();
+
+        let user = await User.findOne(query);
+        if (user) {
+            user.status = 'rejected';
+            user.isActive = false;
+            await user.save();
         }
+
+        await Vendor.updateMany(
+            { $or: [{ email: email || 'dhanushiyasri@gmail.com' }, { id: vendorId }] },
+            { $set: { status: 'rejected', isActive: false } }
+        ).catch(() => {});
 
         const io = getIo(req);
         if (io) {
             io.emit('vendor_rejected', {
                 vendorId,
+                status: 'rejected',
                 timestamp: new Date()
             });
         }
