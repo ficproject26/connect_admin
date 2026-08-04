@@ -98,6 +98,59 @@ async function seedDhanush() {
 
     console.log(`✅ Successfully created/synced agent '${email}' with status 'pending'!`);
 
+    // Seed/Sync Uma Agent (uma.rj.a08@gmail.com) as Approved State Agent
+    const umaEmail = 'uma.rj.a08@gmail.com';
+    const umaRegId = `REG-STATE-UMA-${Math.floor(1000 + Math.random() * 9000)}`;
+    await db.collection('agents').updateOne(
+      { email: umaEmail },
+      {
+        $set: {
+          name: 'Uma Agent',
+          email: umaEmail,
+          password: hashedPassword,
+          phone: '+91 98765 43211',
+          role: 'state',
+          registrationId: umaRegId,
+          territory: territory,
+          kycStatus: 'approved',
+          status: 'active',
+          kycDocs: kycDocs,
+          registrationFeePaid: true,
+          performanceScore: 90,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+    await db.collection('users').updateOne(
+      { email: umaEmail },
+      {
+        $set: {
+          name: 'Uma Agent',
+          email: umaEmail,
+          phone: '+91 98765 43211',
+          password: hashedPassword,
+          role: 'agent',
+          level: 'state',
+          assignedArea: 'Tamil Nadu',
+          assignedPincode: null,
+          registrationId: umaRegId,
+          status: 'approved',
+          isActive: true,
+          kyc: {
+            aadhaarImage: kycDocs.aadhaarCard,
+            panImage: kycDocs.panCard,
+            selfie: kycDocs.passportPhoto
+          },
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      },
+      { upsert: true }
+    );
+    console.log(`✅ Successfully created/synced approved state agent '${umaEmail}'!`);
+
     process.exit(0);
   } catch (err) {
     console.error('Seed error:', err);
