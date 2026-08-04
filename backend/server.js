@@ -49,6 +49,7 @@ io.on('connection', (socket) => {
 
 // Define Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/auth', require('./routes/auth'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/agent', require('./routes/agent'));
 app.use('/api/pincodes', require('./routes/pincodes'));
