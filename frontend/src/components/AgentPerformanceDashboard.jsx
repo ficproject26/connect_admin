@@ -3,7 +3,8 @@ import {
   Users, UserCheck, UserX, TrendingUp, DollarSign, Award, Target, Calendar,
   BarChart3, PieChart as PieChartIcon, Activity, Clock, FileText, Download,
   Printer, Filter, Search, ChevronRight, CheckCircle, AlertTriangle, X, RefreshCw,
-  PhoneCall, Video, CheckSquare, Layers, MapPin, ArrowUpRight, ArrowDownRight
+  PhoneCall, Video, CheckSquare, Layers, MapPin, ArrowUpRight, ArrowDownRight,
+  List, LayoutGrid
 } from 'lucide-react';
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, AreaChart, Area, Cell,
@@ -22,6 +23,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
   const [pincodeFilter, setPincodeFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
 
   // Loading & Data States
   const [loading, setLoading] = useState(true);
@@ -145,8 +147,8 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
       red: 'bg-rose-500/10 text-rose-500 border-rose-500/30'
     };
     return (
-      <span className={`px-2.5 py-1 rounded-xl text-xs font-black border flex items-center gap-1.5 ${bgMap[colorClass] || bgMap.orange}`}>
-        <span className="w-2 h-2 rounded-full bg-current animate-pulse"></span>
+      <span className={`px-2.5 py-1 rounded-xl text-xs font-black border whitespace-nowrap inline-flex items-center gap-1.5 ${bgMap[colorClass] || bgMap.orange}`}>
+        <span className="w-2 h-2 rounded-full bg-current animate-pulse shrink-0"></span>
         {score} / 100 ({rating})
       </span>
     );
@@ -156,138 +158,67 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
 
   return (
     <div className="space-y-8 pb-16">
-      
-      {/* 1. TOP HEADER & EXPORT ACTIONS */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-2xl bg-primary-500/10 text-primary-600 dark:text-primary-400">
-              <Activity className="w-6 h-6" />
+
+      {/* 1. PERFORMANCE PERIOD SWITCHER + ACTIONS INCLUDED */}
+      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm">
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 flex items-center gap-1.5">
+            <Calendar className="w-3.5 h-3.5 text-primary-500" /> Period:
+          </span>
+          {[
+            { id: 'today', label: "Today's" },
+            { id: 'weekly', label: 'Weekly' },
+            { id: 'monthly', label: 'Monthly' },
+            { id: 'quarterly', label: 'Quarterly' },
+            { id: 'half-yearly', label: 'Half-Yearly' },
+            { id: 'yearly', label: 'Yearly' },
+            { id: 'custom', label: 'Custom Range' }
+          ].map(p => (
+            <button
+              key={p.id}
+              onClick={() => setPeriod(p.id)}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${period === p.id ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+            >
+              {p.label}
+            </button>
+          ))}
+
+          {period === 'custom' && (
+            <div className="flex items-center gap-2 p-1 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 ml-2">
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-xs p-1 focus:outline-none" />
+              <span className="text-slate-400 text-xs">to</span>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-xs p-1 focus:outline-none" />
             </div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Agent Performance Monitoring</h2>
-              <p className="text-xs text-slate-400 font-medium">Real-time performance analytics, target tracking & multi-tier leaderboards</p>
-            </div>
-          </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        {/* Action buttons embedded in Period Card */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={fetchOverview}
-            className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-all text-xs font-bold flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer"
             title="Reload Data"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} /> Refresh
           </button>
           
           <button
             onClick={exportCSV}
-            className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-2 transition-all"
+            className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
           >
-            <Download className="w-4 h-4 text-emerald-500" /> Export CSV
+            <Download className="w-3.5 h-3.5 text-emerald-500" /> Export CSV
           </button>
 
           <button
             onClick={handlePrint}
-            className="px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md active:scale-95"
+            className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
           >
-            <Printer className="w-4 h-4" /> Print Report
+            <Printer className="w-3.5 h-3.5" /> Print Report
           </button>
         </div>
       </div>
 
-      {/* 2. PERFORMANCE PERIOD SWITCHER */}
-      <div className="bg-slate-50 dark:bg-slate-950 p-2 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex flex-wrap gap-1.5 items-center">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-3 flex items-center gap-1.5">
-          <Calendar className="w-3.5 h-3.5" /> Period:
-        </span>
-        {[
-          { id: 'today', label: "Today's" },
-          { id: 'weekly', label: 'Weekly' },
-          { id: 'monthly', label: 'Monthly' },
-          { id: 'quarterly', label: 'Quarterly' },
-          { id: 'half-yearly', label: 'Half-Yearly' },
-          { id: 'yearly', label: 'Yearly' },
-          { id: 'custom', label: 'Custom Range' }
-        ].map(p => (
-          <button
-            key={p.id}
-            onClick={() => setPeriod(p.id)}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${period === p.id ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-900'}`}
-          >
-            {p.label}
-          </button>
-        ))}
-
-        {period === 'custom' && (
-          <div className="flex items-center gap-2 ml-auto p-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent text-xs p-1 focus:outline-none" />
-            <span className="text-slate-400 text-xs">to</span>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent text-xs p-1 focus:outline-none" />
-          </div>
-        )}
-      </div>
-
-      {/* 3. FILTERS BAR */}
-      <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
-            <Filter className="w-4 h-4 text-primary-500" /> Advanced Performance Filters
-          </span>
-          <button onClick={() => { setAgentType('all'); setStatusFilter('all'); setSearchQuery(''); setStateFilter(''); setDistrictFilter(''); setDivisionFilter(''); setPincodeFilter(''); }} className="text-xs font-bold text-slate-400 hover:text-rose-500">
-            Reset Filters
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {/* Agent Type */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Agent Level</label>
-            <select value={agentType} onChange={e => setAgentType(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs p-2.5 font-semibold focus:outline-none">
-              <option value="all">All Levels</option>
-              <option value="state">State Agent</option>
-              <option value="district">District Agent</option>
-              <option value="division">Divisional Agent</option>
-              <option value="pincode">Pincode Agent</option>
-            </select>
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status</label>
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs p-2.5 font-semibold focus:outline-none">
-              <option value="all">All Status</option>
-              <option value="approved">Approved</option>
-              <option value="pending">Pending</option>
-              <option value="rejected">Rejected</option>
-              <option value="suspended">Suspended</option>
-            </select>
-          </div>
-
-          {/* State Filter */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">State</label>
-            <input type="text" placeholder="e.g. Tamil Nadu" value={stateFilter} onChange={e => setStateFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs p-2.5 font-semibold focus:outline-none" />
-          </div>
-
-          {/* District Filter */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">District</label>
-            <input type="text" placeholder="e.g. Krishnagiri" value={districtFilter} onChange={e => setDistrictFilter(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs p-2.5 font-semibold focus:outline-none" />
-          </div>
-
-          {/* Search */}
-          <div className="lg:col-span-2">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Search Agent Name / ID</label>
-            <div className="flex items-center bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5">
-              <Search className="w-4 h-4 text-slate-400 mr-2" />
-              <input type="text" placeholder="Type Agent Name, Email, or Reg ID..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-transparent text-xs w-full focus:outline-none" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. DASHBOARD KPI CARDS (13 CARDS) */}
+      {/* 2. DASHBOARD KPI CARDS (13 CARDS) */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
         {/* Card 1: Total Agents */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
@@ -325,7 +256,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             <TrendingUp className="w-5 h-5" />
             <span className="text-[10px] font-black uppercase tracking-wider bg-blue-500/10 px-2 py-0.5 rounded-full">Today</span>
           </div>
-          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">{cardsData?.todaysPerformance || '89%'}</span>
+          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">{cardsData?.todaysPerformance || '0%'}</span>
           <span className="block text-[11px] text-slate-400 font-semibold">Daily Target Progress</span>
         </div>
 
@@ -335,7 +266,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             <Activity className="w-5 h-5" />
             <span className="text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 px-2 py-0.5 rounded-full">Weekly</span>
           </div>
-          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">{cardsData?.weeklyPerformance || '94%'}</span>
+          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">{cardsData?.weeklyPerformance || '0%'}</span>
           <span className="block text-[11px] text-slate-400 font-semibold">Weekly Target Progress</span>
         </div>
 
@@ -345,7 +276,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             <Target className="w-5 h-5" />
             <span className="text-[10px] font-black uppercase tracking-wider bg-amber-500/10 px-2 py-0.5 rounded-full">Monthly</span>
           </div>
-          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">{cardsData?.monthlyPerformance || '88%'}</span>
+          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">{cardsData?.monthlyPerformance || '0%'}</span>
           <span className="block text-[11px] text-slate-400 font-semibold">Monthly Target Progress</span>
         </div>
 
@@ -355,7 +286,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             <Award className="w-5 h-5" />
             <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 px-2 py-0.5 rounded-full">Yearly</span>
           </div>
-          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">{cardsData?.yearlyPerformance || '91%'}</span>
+          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">{cardsData?.yearlyPerformance || '0%'}</span>
           <span className="block text-[11px] text-slate-400 font-semibold">Annual Target Progress</span>
         </div>
 
@@ -410,7 +341,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
         </div>
       </div>
 
-      {/* 5. MULTI-TIER LEADERBOARDS */}
+      {/* 3. MULTI-TIER LEADERBOARDS */}
       <div className="space-y-4">
         <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider flex items-center gap-2">
           <Award className="w-5 h-5 text-amber-500" /> Multi-Tier Performance Leaderboards
@@ -473,7 +404,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             </div>
             <div className="space-y-1">
               <span className="block font-extrabold text-base text-slate-800 dark:text-slate-100 truncate">{leaderboards?.topPincodeAgent?.agent?.name || 'N/A'}</span>
-              <span className="block text-xs text-slate-400">Pincode: {leaderboards?.topPincodeAgent?.agent?.assignedPincode?.code || '635109'}</span>
+              <span className="block text-xs text-slate-400">Pincode: {leaderboards?.topPincodeAgent?.agent?.assignedPincode?.code || 'N/A'}</span>
             </div>
             <div className="flex justify-between items-center pt-2 border-t border-emerald-500/10">
               <span className="text-xs font-bold text-slate-500">Score: {leaderboards?.topPincodeAgent?.score || 0}/100</span>
@@ -483,7 +414,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
         </div>
       </div>
 
-      {/* 6. CHARTS & GRAPH ANALYTICS */}
+      {/* 4. CHARTS & GRAPH ANALYTICS */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Line Chart: Performance Trend */}
         <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
@@ -570,8 +501,10 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
         </div>
       </div>
 
-      {/* 7. AGENT PERFORMANCE LIST & MONITORING TABLE */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden space-y-4 p-6">
+      {/* 5. INDIVIDUAL AGENT MONITORING DIRECTORY WITH INTEGRATED FILTER CARD & VIEW SWITCHER */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden p-6 space-y-6">
+        
+        {/* Section Header with List / Grid Switcher */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
           <div>
             <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider flex items-center gap-2">
@@ -579,93 +512,245 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             </h3>
             <p className="text-xs text-slate-400 mt-1">Review agent performance scores, target completions & active status</p>
           </div>
+
+          {/* List / Grid Toggle Switcher */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl shrink-0">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'list' ? 'bg-white dark:bg-slate-900 text-primary-600 shadow-xs' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+              title="List Table View"
+            >
+              <List className="w-4 h-4" /> List
+            </button>
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'grid' ? 'bg-white dark:bg-slate-900 text-primary-600 shadow-xs' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
+              title="Grid Card View"
+            >
+              <LayoutGrid className="w-4 h-4" /> Grid
+            </button>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-400 tracking-wider">
-                <th className="py-3 px-4">Agent Profile</th>
-                <th className="py-3 px-4">Role / Level</th>
-                <th className="py-3 px-4">Territory</th>
-                <th className="py-3 px-4">Score (0–100)</th>
-                <th className="py-3 px-4">Registrations</th>
-                <th className="py-3 px-4">Vendors</th>
-                <th className="py-3 px-4">Revenue</th>
-                <th className="py-3 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-850 text-xs">
-              {agentsList.map((item) => {
-                const ag = item.agent;
-                return (
-                  <tr key={ag._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40 transition-colors">
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={ag.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                          alt=""
-                          className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-800"
-                        />
-                        <div>
-                          <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{ag.name}</span>
-                          <span className="text-[11px] text-slate-400 font-mono">{ag.email}</span>
+        {/* ADVANCED FILTERS CARD EMBEDDED INSIDE INDIVIDUAL AGENT MONITORING DIRECTORY */}
+        <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-850 space-y-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
+              <Filter className="w-4 h-4 text-primary-500" /> Advanced Performance Filters
+            </span>
+            <button onClick={() => { setAgentType('all'); setStatusFilter('all'); setSearchQuery(''); setStateFilter(''); setDistrictFilter(''); setDivisionFilter(''); setPincodeFilter(''); }} className="text-xs font-bold text-slate-400 hover:text-rose-500 cursor-pointer">
+              Reset Filters
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {/* Agent Type */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Agent Level</label>
+              <select value={agentType} onChange={e => setAgentType(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs p-2.5 font-semibold focus:outline-none">
+                <option value="all">All Levels</option>
+                <option value="state">State Agent</option>
+                <option value="district">District Agent</option>
+                <option value="division">Divisional Agent</option>
+                <option value="pincode">Pincode Agent</option>
+              </select>
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Status</label>
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs p-2.5 font-semibold focus:outline-none">
+                <option value="all">All Status</option>
+                <option value="approved">Approved</option>
+                <option value="pending">Pending</option>
+                <option value="rejected">Rejected</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+
+            {/* State Filter */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">State</label>
+              <input type="text" placeholder="e.g. Tamil Nadu" value={stateFilter} onChange={e => setStateFilter(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs p-2.5 font-semibold focus:outline-none" />
+            </div>
+
+            {/* District Filter */}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">District</label>
+              <input type="text" placeholder="e.g. Krishnagiri" value={districtFilter} onChange={e => setDistrictFilter(e.target.value)} className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs p-2.5 font-semibold focus:outline-none" />
+            </div>
+
+            {/* Search */}
+            <div className="lg:col-span-2">
+              <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Search Agent Name / ID</label>
+              <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5">
+                <Search className="w-4 h-4 text-slate-400 mr-2" />
+                <input type="text" placeholder="Type Agent Name, Email, or Reg ID..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-transparent text-xs w-full focus:outline-none" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* LIST VIEW TABLE */}
+        {viewMode === 'list' && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                  <th className="py-3 px-4">Agent Profile</th>
+                  <th className="py-3 px-4">Role / Level</th>
+                  <th className="py-3 px-4">Territory</th>
+                  <th className="py-3 px-4">Score (0–100)</th>
+                  <th className="py-3 px-4">Registrations</th>
+                  <th className="py-3 px-4">Vendors</th>
+                  <th className="py-3 px-4">Revenue</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-850 text-xs">
+                {agentsList.map((item) => {
+                  const ag = item.agent;
+                  return (
+                    <tr key={ag._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={ag.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                            alt=""
+                            className="w-10 h-10 rounded-xl object-cover border border-slate-200 dark:border-slate-800"
+                          />
+                          <div>
+                            <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{ag.name}</span>
+                            <span className="text-[11px] text-slate-400 font-mono">{ag.email}</span>
+                          </div>
                         </div>
+                      </td>
+
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className="capitalize font-extrabold text-xs px-2.5 py-1 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 whitespace-nowrap inline-flex items-center justify-center">
+                          {(ag.level || 'pincode').toLowerCase()} Agent
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-4 font-semibold text-slate-600 dark:text-slate-300">
+                        {ag.assignedArea || 'Tamil Nadu'}
+                      </td>
+
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {renderScoreBadge(item.score, item.rating, item.colorClass)}
+                      </td>
+
+                      <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
+                        {item.metrics.registrations}
+                      </td>
+
+                      <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
+                        {item.metrics.vendorOnboarding}
+                      </td>
+
+                      <td className="py-3.5 px-4 font-extrabold text-emerald-500 whitespace-nowrap">
+                        ₹{(item.metrics.revenue || 0).toLocaleString()}
+                      </td>
+
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => { setTargetAgent(item); setShowTargetModal(true); }}
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all cursor-pointer"
+                          >
+                            Set Targets
+                          </button>
+
+                          <button
+                            onClick={() => { setSelectedAgentProfile(item); setProfileTab('overview'); }}
+                            className="px-3 py-1.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                          >
+                            View Profile
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* GRID VIEW CARDS */}
+        {viewMode === 'grid' && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {agentsList.map((item) => {
+              const ag = item.agent;
+              return (
+                <div key={ag._id} className="bg-slate-50 dark:bg-slate-950 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-850 hover:shadow-md transition-all space-y-4">
+                  {/* Card Header */}
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={ag.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                        alt=""
+                        className="w-12 h-12 rounded-2xl object-cover border-2 border-primary-500/40"
+                      />
+                      <div>
+                        <h4 className="font-extrabold text-sm text-slate-800 dark:text-slate-100">{ag.name}</h4>
+                        <span className="text-[11px] text-slate-400 block font-mono">{ag.email}</span>
                       </div>
-                    </td>
+                    </div>
+                    
+                    <span className="capitalize font-extrabold text-[11px] px-2.5 py-1 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 whitespace-nowrap inline-flex items-center justify-center shrink-0">
+                      {(ag.level || 'pincode').toLowerCase()} Agent
+                    </span>
+                  </div>
 
-                    <td className="py-3.5 px-4">
-                      <span className="capitalize font-extrabold text-xs px-2.5 py-1 rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/20">
-                        {ag.level || 'pincode'} Agent
-                      </span>
-                    </td>
+                  {/* Territory & Status Row */}
+                  <div className="flex items-center justify-between border-t border-b border-slate-200/60 dark:border-slate-800/60 py-2 text-xs">
+                    <span className="text-slate-500 font-medium">Territory: <strong className="text-slate-800 dark:text-slate-200 font-bold">{ag.assignedArea || 'Tamil Nadu'}</strong></span>
+                    {renderScoreBadge(item.score, item.rating, item.colorClass)}
+                  </div>
 
-                    <td className="py-3.5 px-4 font-semibold text-slate-600 dark:text-slate-300">
-                      {ag.assignedArea || 'Tamil Nadu'}
-                    </td>
+                  {/* KPI Metrics */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Registrations</span>
+                      <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{item.metrics.registrations}</span>
+                    </div>
 
-                    <td className="py-3.5 px-4">
-                      {renderScoreBadge(item.score, item.rating, item.colorClass)}
-                    </td>
+                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">Vendors Added</span>
+                      <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{item.metrics.vendorOnboarding}</span>
+                    </div>
 
-                    <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
-                      {item.metrics.registrations}
-                    </td>
+                    <div className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800 col-span-2 flex justify-between items-center">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase">Total Revenue</span>
+                      <span className="font-black text-emerald-500 text-sm">₹{(item.metrics.revenue || 0).toLocaleString()}</span>
+                    </div>
+                  </div>
 
-                    <td className="py-3.5 px-4 font-bold text-slate-700 dark:text-slate-200">
-                      {item.metrics.vendorOnboarding}
-                    </td>
+                  {/* Actions */}
+                  <div className="flex gap-2 justify-end pt-2">
+                    <button
+                      onClick={() => { setTargetAgent(item); setShowTargetModal(true); }}
+                      className="px-3 py-2 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all w-1/2 cursor-pointer"
+                    >
+                      Set Targets
+                    </button>
+                    <button
+                      onClick={() => { setSelectedAgentProfile(item); setProfileTab('overview'); }}
+                      className="px-3 py-2 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold transition-all shadow-xs w-1/2 cursor-pointer"
+                    >
+                      View Profile
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-                    <td className="py-3.5 px-4 font-extrabold text-emerald-500">
-                      ₹{(item.metrics.revenue || 0).toLocaleString()}
-                    </td>
-
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => { setTargetAgent(item); setShowTargetModal(true); }}
-                          className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all"
-                        >
-                          Set Targets
-                        </button>
-
-                        <button
-                          onClick={() => { setSelectedAgentProfile(item); setProfileTab('overview'); }}
-                          className="px-3 py-1.5 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold transition-all shadow-xs"
-                        >
-                          View Profile
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
       </div>
 
-      {/* 8. TARGET MANAGEMENT MODAL */}
+      {/* 6. TARGET MANAGEMENT MODAL */}
       {showTargetModal && targetAgent && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl">
@@ -674,7 +759,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
                 <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">Assign Agent Targets</h3>
                 <p className="text-xs text-slate-400 mt-1">Set monthly performance targets for {targetAgent.agent.name}</p>
               </div>
-              <button onClick={() => setShowTargetModal(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+              <button onClick={() => setShowTargetModal(false)} className="text-slate-400 hover:text-slate-600 text-lg font-bold cursor-pointer">✕</button>
             </div>
 
             <form onSubmit={handleSaveTarget} className="space-y-4">
@@ -729,15 +814,15 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
-                <button type="button" onClick={() => setShowTargetModal(false)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold shadow-md">Save Targets</button>
+                <button type="button" onClick={() => setShowTargetModal(false)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold shadow-md cursor-pointer">Save Targets</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* 9. AGENT PROFILE DRILLDOWN DRAWER / MODAL (11 TABS) */}
+      {/* 7. AGENT PROFILE DRILLDOWN DRAWER / MODAL (11 TABS) */}
       {selectedAgentProfile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 space-y-6 my-8 max-h-[90vh] overflow-y-auto shadow-2xl">
@@ -752,14 +837,14 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{selectedAgentProfile.agent.name}</h3>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="capitalize text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                    <span className="capitalize text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 whitespace-nowrap">
                       {selectedAgentProfile.agent.level} Agent
                     </span>
                     <span className="text-xs text-slate-400">{selectedAgentProfile.agent.email} • {selectedAgentProfile.agent.phone}</span>
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelectedAgentProfile(null)} className="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+              <button onClick={() => setSelectedAgentProfile(null)} className="text-slate-400 hover:text-slate-600 text-lg font-bold cursor-pointer">✕</button>
             </div>
 
             {/* 11 Tabs Switcher */}
@@ -771,7 +856,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
                 <button
                   key={tab}
                   onClick={() => setProfileTab(tab)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold capitalize whitespace-nowrap transition-all ${profileTab === tab ? 'bg-primary-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}`}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-extrabold capitalize whitespace-nowrap transition-all cursor-pointer ${profileTab === tab ? 'bg-primary-600 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}`}
                 >
                   {tab}
                 </button>
