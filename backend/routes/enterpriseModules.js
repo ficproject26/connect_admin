@@ -110,8 +110,44 @@ router.get('/vendors', auth, async (req, res) => {
                     category: 'Retail & Stores',
                     assignedArea: 'Tamil Nadu / Dharmapuri',
                     pincode: '635109',
-                    status: 'Pending Verification',
+                    status: 'Approved',
                     registrationId: 'VND-DIR-8821'
+                },
+                {
+                    _id: 'vnd-201',
+                    businessName: 'Global Supermarket & Fresh Supplies',
+                    contactPerson: 'Ramesh Kumar',
+                    email: 'ramesh@globalsupermarket.com',
+                    phone: '+91 98421 88990',
+                    category: 'Store Vendor',
+                    assignedArea: 'Tamil Nadu / Chennai',
+                    pincode: '600001',
+                    status: 'Approved',
+                    registrationId: 'VND-STORE-4412'
+                },
+                {
+                    _id: 'vnd-202',
+                    businessName: 'Apollo Care Multi-Specialty Clinic',
+                    contactPerson: 'Dr. S. K. Sundaram',
+                    email: 'admin@apollocare.org',
+                    phone: '+91 97890 12345',
+                    category: 'Hospital Vendor',
+                    assignedArea: 'Tamil Nadu / Salem',
+                    pincode: '636001',
+                    status: 'Approved',
+                    registrationId: 'VND-[#3619]'
+                },
+                {
+                    _id: 'vnd-203',
+                    businessName: 'Grand Palace Hotel & Suites',
+                    contactPerson: 'K. Venkatesh',
+                    email: 'contact@grandpalace.in',
+                    phone: '+91 94432 55667',
+                    category: 'Hotel Vendor',
+                    assignedArea: 'Tamil Nadu / Coimbatore',
+                    pincode: '641001',
+                    status: 'Approved',
+                    registrationId: 'VND-[#9923]'
                 }
             ];
         }
@@ -208,6 +244,35 @@ router.post('/vendors/approve', auth, async (req, res) => {
         res.json({ success: true, msg: 'Vendor approved and activated successfully' });
     } catch (err) {
         console.error('Approve vendor error:', err);
+        res.status(500).send('Server error');
+    }
+});
+
+// POST Reject Direct Vendor Request
+router.post('/vendors/reject', auth, async (req, res) => {
+    try {
+        const { vendorId } = req.body;
+        let vendor = await User.findById(vendorId);
+        if (!vendor) {
+            vendor = await Vendor.findById(vendorId);
+        }
+        if (vendor) {
+            vendor.status = 'rejected';
+            vendor.isActive = false;
+            await vendor.save();
+        }
+
+        const io = getIo(req);
+        if (io) {
+            io.emit('vendor_rejected', {
+                vendorId,
+                timestamp: new Date()
+            });
+        }
+
+        res.json({ success: true, msg: 'Vendor rejected successfully' });
+    } catch (err) {
+        console.error('Reject vendor error:', err);
         res.status(500).send('Server error');
     }
 });
