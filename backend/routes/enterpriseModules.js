@@ -393,22 +393,6 @@ router.post('/vendors/reject', auth, async (req, res) => {
     }
 });
 
-        const io = getIo(req);
-        if (io) {
-            io.emit('vendor_rejected', {
-                vendorId,
-                status: 'rejected',
-                timestamp: new Date()
-            });
-        }
-
-        res.json({ success: true, msg: 'Vendor rejected successfully' });
-    } catch (err) {
-        console.error('Reject vendor error:', err);
-        res.status(500).send('Server error');
-    }
-});
-
 // DELETE Vendor by ID or Email
 router.delete('/vendors/:id', auth, async (req, res) => {
     try {
