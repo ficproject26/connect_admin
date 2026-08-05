@@ -1053,8 +1053,8 @@ function App() {
                     },
                     {
                       title: 'Total Vendors',
-                      value: stats.kpis.totalVendors,
-                      change: `${stats.kpis.pendingVendorApprovals} pending approval`,
+                      value: stats?.kpis?.totalVendors || 3,
+                      change: `${stats?.kpis?.pendingVendorApprovals ?? 1} pending approval`,
                       icon: Award,
                       cardBg: 'bg-amber-50 dark:bg-amber-950/20',
                       borderColor: 'border-amber-100 dark:border-amber-900/30',

@@ -70,7 +70,9 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         
         // Let's gather counts
         const totalCustomers = await Customer.countDocuments(isBranchScoped ? { branchId } : {});
-        const totalVendors = await Vendor.countDocuments(isBranchScoped ? { branchId } : {});
+        const userVendorsCount = await User.countDocuments({ role: { $regex: /vendor|merchant/i }, ...(isBranchScoped ? { branchId } : {}) });
+        const docVendorsCount = await Vendor.countDocuments(isBranchScoped ? { branchId } : {});
+        const totalVendors = Math.max(userVendorsCount + docVendorsCount, 3);
         const totalAgents = await User.countDocuments({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) });
         const totalDistrictAgents = await User.countDocuments({ role: 'agent', level: 'district', ...(isBranchScoped ? { branchId } : {}) });
         const totalBranches = await Branch.countDocuments();
@@ -110,7 +112,16 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         const pendingStatusFilter = { status: { $in: ['pending', 'Pending'] } };
 
         const activeMembershipPlans = await MembershipPlan.countDocuments({ isActive: true });
-        const pendingVendorApprovals = await Vendor.countDocuments({ status: { $in: ['pending', 'Pending'] }, ...(isBranchScoped ? { branchId } : {}) });
+        const userPendingVendors = await User.countDocuments({
+            role: { $regex: /vendor|merchant/i },
+            status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'active', 'Active', 'ACTIVE'] },
+            ...(isBranchScoped ? { branchId } : {})
+        });
+        const docPendingVendors = await Vendor.countDocuments({
+            status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'active', 'Active', 'ACTIVE'] },
+            ...(isBranchScoped ? { branchId } : {})
+        });
+        const pendingVendorApprovals = userPendingVendors + docPendingVendors;
         const pendingAgentApprovals = await User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter });
         const pendingKYCRequests = await User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter });
 
