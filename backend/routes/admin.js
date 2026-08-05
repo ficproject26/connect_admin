@@ -1992,23 +1992,33 @@ router.get('/bookings', [auth, adminAuth], async (req, res) => {
             .populate('customerId', 'name email phone')
             .sort({ createdAt: -1 });
 
-        const customBookings = await Order.find({ type: { $in: ['Booking', 'Stay', 'Travel'] } })
+        const customBookings = await Order.find({ type: { $in: ['Booking', 'Stay', 'Travel', 'Service', 'Services'] } })
             .sort({ createdAt: -1 });
 
         const defaultSlots = ['10:00 AM - 11:00 AM', '11:30 AM - 12:30 PM', '02:00 PM - 03:00 PM', '04:30 PM - 05:30 PM', '06:00 PM - 07:00 PM'];
+        
+        const isBookingItem = (item) => {
+            const name = String(item.serviceName || item.service || item.serviceType || item.product_details || item.productDetails || item.title || '').toLowerCase();
+            const productNamesToExclude = ['urad dal', 'spring onions', 'phone', 'headphone', 'salad', 'chicken biriyani', 'biriyani'];
+            return !productNamesToExclude.some(p => name.includes(p));
+        };
+
         const resolvedDbBookings = dbBookings.map((b, idx) => {
             const obj = b.toObject ? b.toObject() : b;
             const slot = (!obj.appointmentTimeSlot || String(obj.appointmentTimeSlot).toLowerCase().includes('standard')) ? defaultSlots[idx % defaultSlots.length] : obj.appointmentTimeSlot;
             return { ...obj, appointmentTimeSlot: slot };
         });
+
         const resolvedCustomBookings = (await resolveVendorAndCustomer(customBookings)).map((b, idx) => {
             const slot = (!b.appointmentTimeSlot || String(b.appointmentTimeSlot).toLowerCase().includes('standard')) ? defaultSlots[idx % defaultSlots.length] : b.appointmentTimeSlot;
             return { ...b, appointmentTimeSlot: slot };
         });
 
-        const allBookings = [...resolvedDbBookings, ...resolvedCustomBookings].sort((a, b) => {
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        });
+        const allBookings = [...resolvedDbBookings, ...resolvedCustomBookings]
+            .filter(isBookingItem)
+            .sort((a, b) => {
+                return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            });
 
         res.json(allBookings);
     } catch (err) {

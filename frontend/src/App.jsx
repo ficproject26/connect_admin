@@ -3812,9 +3812,14 @@ function App() {
               const vName = b.vendorId?.businessName || b.vendorName || b.vendorId?.name || '';
               const cName = b.customerId?.name || b.customer_name || '';
 
+              const sName = String(b.serviceName || b.service || b.serviceType || b.product_details || b.productDetails || b.category || '').toLowerCase();
+              const productExclusions = ['urad dal', 'spring onions', 'phone', 'headphone', 'salad', 'biriyani'];
+              const isServiceOrBooking = !productExclusions.some(p => sName.includes(p));
+
               const matchesSearch = !bookingSearchTerm ||
                 vName.toLowerCase().includes(bookingSearchTerm.toLowerCase()) ||
-                cName.toLowerCase().includes(bookingSearchTerm.toLowerCase());
+                cName.toLowerCase().includes(bookingSearchTerm.toLowerCase()) ||
+                sName.includes(bookingSearchTerm.toLowerCase());
 
               const matchesStatus = bookingStatusFilter === 'All' || (b.status || '').toLowerCase() === bookingStatusFilter.toLowerCase();
 
@@ -3833,7 +3838,7 @@ function App() {
                 }
               }
 
-              return matchesSearch && matchesStatus && matchesDate;
+              return isServiceOrBooking && matchesSearch && matchesStatus && matchesDate;
             });
 
             return (
