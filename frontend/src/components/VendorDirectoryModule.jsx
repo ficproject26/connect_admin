@@ -175,7 +175,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       console.error('Fetch direct requests error:', err);
       setDirectRequests([]);
     }
-    }
   };
 
   useEffect(() => {

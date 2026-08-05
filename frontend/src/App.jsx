@@ -2396,123 +2396,6 @@ function App() {
                         );
                       })}
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6 bg-slate-50/50 dark:bg-slate-950/10">
-                      {filteredAgents.map((agent) => {
-                        const agentLvl = (agent.level || 'pincode').toLowerCase();
-                        const isRejected = agent.status?.toLowerCase() === 'rejected';
-                        return (
-                          <div key={agent._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
-                            <div
-                              onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
-                              className="cursor-pointer space-y-4"
-                            >
-                              <div className="flex gap-3.5 items-center">
-                                <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors truncate">{agent.name}</span>
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
-                                        agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
-                                          ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
-                                            'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                                      }`}>
-                                      {agent.level || 'pincode'} Agent
-                                    </span>
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : isRejected ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                      {agent.status}
-                                    </span>
-                                  </div>
-                                  <span className="block text-xs text-slate-400 mt-1 truncate">{agent.email}</span>
-                                  <span className="block text-xs text-slate-400 truncate">{agent.phone}</span>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2.5 text-center text-xs">
-                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{agent.level || 'pincode'}</span>
-                                  <span className="font-bold text-slate-700 dark:text-slate-300">
-                                    {agent.level === 'pincode' || !agent.level
-                                      ? (agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : null) || agent.pincode || (/^\d{6}$/.test(agent.assignedArea) ? agent.assignedArea : 'None'))
-                                      : (agent.assignedArea || 'None')}
-                                  </span>
-                                </div>
-                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Wallet</span>
-                                  <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
-                                </div>
-                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Vendors</span>
-                                  <span className="font-bold text-slate-700 dark:text-slate-300">{agent.vendorsAdded || 0}</span>
-                                </div>
-                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5">Comm.</span>
-                                  <span className="font-bold text-slate-700 dark:text-slate-300">₹{agent.commissionEarned || 0}</span>
-                                </div>
-                              </div>
-                              {isRejected && (
-                                <div className="text-xs text-rose-600 dark:text-rose-400 font-medium bg-rose-50 dark:bg-rose-950/40 p-2.5 rounded-xl border border-rose-200 dark:border-rose-900/40 mt-2">
-                                  <strong className="block text-[10px] uppercase font-bold text-rose-700 dark:text-rose-300 mb-0.5">Rejection Reason:</strong>
-                                  {agent.rejectionReason || 'Application details did not meet requirement criteria.'}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap gap-2 justify-end pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                              <button
-                                onClick={() => { setModalData({ agentId: agent._id }); setShowModal('assign-task'); }}
-                                className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                              >
-                                Assign Task
-                              </button>
-                              <button
-                                onClick={() => { setModalData(agent); setShowModal('edit-agent'); }}
-                                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                              >
-                                Edit
-                              </button>
-                              {agent.status === 'approved' ? (
-                                <button
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
-                                  className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                                >
-                                  Suspend
-                                </button>
-                              ) : (
-                                <>
-                                  {!isRejected && (
-                                    <button
-                                      onClick={() => {
-                                        const reason = window.prompt(`Enter rejection reason for agent "${agent.name}":`);
-                                        if (reason === null) return;
-                                        if (!reason.trim()) { alert("Rejection reason is required."); return; }
-                                        executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected', rejectionReason: reason.trim() });
-                                      }}
-                                      className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                                    >
-                                      Reject
-                                    </button>
-                                  )}
-                                  <button
-                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                                  >
-                                    Approve
-                                  </button>
-                                </>
-                              )}
-                              <button
-                                onClick={() => { if (window.confirm(`Are you sure you want to permanently delete agent "${agent.name}"? This action cannot be undone.`)) { executeAction(`/admin/agent/${agent._id}`, 'DELETE'); } }}
-                                className="bg-red-600 hover:bg-red-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl transition-colors"
-                                title="Permanently delete this agent"
-                              >
-                                <Trash2 className="w-3.5 h-3.5 inline-block mr-1" />Delete
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
                   );
                 })()}
               </div>
@@ -4422,7 +4305,8 @@ function App() {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      );
+                    })}
                     </tbody>
                   </table>
                 </div>
