@@ -37,6 +37,7 @@ const UserSchema = new mongoose.Schema({
     },
 
     status: { type: String, default: 'pending' }, // 'pending', 'approved', 'rejected', 'Pending', 'Approved', 'Rejected'
+    rejectionReason: { type: String, default: '' },
     isActive: { type: Boolean, default: false },
     isPaid: { type: Boolean, default: false },
     balance: { type: Number, default: 0 },

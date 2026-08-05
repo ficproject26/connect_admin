@@ -292,8 +292,10 @@ router.post('/login', async (req, res) => {
                 });
             }
             if (userStatus === 'rejected' || userStatus === 'suspended') {
+                const reasonText = user.rejectionReason ? ` Reason: ${user.rejectionReason}` : '';
                 return res.status(403).json({
-                    message: `Your registration application was rejected or suspended.`,
+                    message: `Your registration application was rejected or suspended.${reasonText}`,
+                    rejectionReason: user.rejectionReason || '',
                     status: userStatus,
                     registrationId: user.registrationId || 'N/A',
                     role: user.level || 'pincode'

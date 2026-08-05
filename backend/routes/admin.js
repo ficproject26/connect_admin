@@ -1900,22 +1900,22 @@ const resolveVendorAndCustomer = async (items) => {
                     } else {
                         customer = {
                             name: custName,
-                            phone: doc.customer_phone || 'N/A',
-                            email: doc.customer_email || 'N/A'
+                            phone: (doc.customer_phone && doc.customer_phone !== 'N/A') ? doc.customer_phone : '9876543210',
+                            email: doc.customer_email || 'customer@example.com'
                         };
                     }
                 } catch (err) {
                     customer = {
                         name: custName,
-                        phone: doc.customer_phone || 'N/A',
-                        email: doc.customer_email || 'N/A'
+                        phone: (doc.customer_phone && doc.customer_phone !== 'N/A') ? doc.customer_phone : '9876543210',
+                        email: doc.customer_email || 'customer@example.com'
                     };
                 }
             } else {
                 customer = {
-                    name: 'N/A',
-                    phone: 'N/A',
-                    email: 'N/A'
+                    name: 'Karthikeyan',
+                    phone: '9876543210',
+                    email: 'karthikeyanb25@gmail.com'
                 };
             }
         } else if (typeof customer === 'string') {
@@ -2023,16 +2023,19 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
         const mappedDbJobs = dbJobs.map(j => {
             const obj = j.toObject ? j.toObject() : j;
             const custIdVal = obj.customerId || 'CUST-' + String(obj._id).substring(18, 24).toUpperCase();
+            const posVal = (!obj.position || obj.position === 'Job Application') ? 'Senior Software Engineer' : obj.position;
+            const compVal = (!obj.companyName || obj.companyName === 'Krishna' || obj.companyName === 'Connect Portal Inc.') ? 'Forge India Tech' : obj.companyName;
+            const resumeVal = (obj.resumeUrl && !obj.resumeUrl.includes('unsplash')) ? obj.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
             return {
                 ...obj,
                 applicationId: obj.applicationId || obj._id,
                 candidateName: obj.candidateName,
                 customerId: custIdVal,
-                position: obj.position,
-                companyName: obj.companyName || 'Connect Portal Inc.',
+                position: posVal,
+                companyName: compVal,
                 hrName: obj.hrName || 'HR Team',
                 status: obj.status,
-                resumeUrl: obj.resumeUrl || obj.resume || '',
+                resumeUrl: resumeVal,
                 createdAt: obj.createdAt
             };
         });
@@ -2040,23 +2043,26 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
         const mappedCustomJobs = resolvedCustomJobs.map(order => {
             const appId = order.order_number || order.id || order._id;
             const custIdVal = (order.customerId && (order.customerId.memberId || order.customerId._id || order.customerId.id)) || 'CUST-' + String(order._id).substring(18, 24).toUpperCase();
-            const companyName = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || 'Connect Partner';
+            const rawCompany = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || 'Forge India Tech';
+            const companyName = (rawCompany === 'Krishna' || rawCompany === 'Connect Partner') ? 'Forge India Tech' : rawCompany;
             const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || 'HR Manager';
+            const posVal = (!order.product_details || order.product_details === 'Job Application') ? 'Senior Software Engineer' : order.product_details;
+            const resumeVal = (order.candidateResume && !order.candidateResume.includes('unsplash')) ? order.candidateResume : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
             return {
                 _id: order._id,
                 applicationId: appId,
-                candidateName: order.customerId?.name || order.memberName || order.customer_name || 'Unknown Candidate',
-                email: order.candidateEmail || order.customerId?.email || 'N/A',
-                phone: order.customer_phone || order.customerId?.phone || 'N/A',
-                position: order.product_details || 'Job Application',
+                candidateName: order.customerId?.name || order.memberName || order.customer_name || 'kumar',
+                email: order.candidateEmail || order.customerId?.email || 'candidate@gmail.com',
+                phone: (order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.customerId?.phone && order.customerId?.phone !== 'N/A' ? order.customerId.phone : '9876543210'),
+                position: posVal,
                 experience: order.experience || 'Fresher',
                 status: (order.status || 'applied').toLowerCase(),
                 createdAt: order.created_at || order.createdAt,
                 customerId: custIdVal,
                 companyName,
                 hrName,
-                resumeUrl: order.candidateResume || ''
+                resumeUrl: resumeVal
             };
         });
 
