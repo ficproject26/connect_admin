@@ -746,54 +746,71 @@ router.get('/vendors', [auth, adminAuth], async (req, res) => {
         const usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).populate('branchId', 'name').populate('referredBy', 'name');
         const legacyVendors = await Vendor.find(filter).populate('branchId', 'name').populate('agentId', 'name');
         
-        const formattedUserVendors = usersVendors.map(v => ({
-            _id: v._id,
-            businessName: v.businessName || v.name,
-            category: v.category || 'Store Vendor',
-            subcategory: v.subcategory || '',
-            vendorType: v.vendorType || '',
-            baseVendorType: v.baseVendorType || '',
-            contactName: v.contactPerson || v.name,
-            phone: v.phone || '',
-            email: v.email,
-            status: v.status || 'Pending',
-            agentId: v.referredBy || null,
-            membership: { status: v.isPaid ? 'active' : 'none' },
-            createdAt: v.createdAt,
-            kycStatus: v.status || 'Pending',
-            kycDocs: {
-                aadhaarNumber: v.kyc?.aadhaarNumber || '',
-                aadhaarImage: v.kyc?.aadhaarImage || '',
-                panNumber: v.kyc?.panNumber || '',
-                panImage: v.kyc?.panImage || '',
-                selfie: v.kyc?.selfie || '',
-                businessProofImage: v.kyc?.businessProofImage || ''
-            },
-            address: v.address || '',
-            bankDetails: v.bankDetails || null,
-            paymentOptions: v.paymentOptions || null,
-            isUserCollection: true
-        }));
+        const formatVId = (v, index) => {
+            if (v.registrationId && /^ven-fic-/i.test(v.registrationId)) return v.registrationId.toLowerCase();
+            if (v.vendorId && /^ven-fic-/i.test(v.vendorId)) return v.vendorId.toLowerCase();
+            const seq = String(index + 1).padStart(3, '0');
+            return `ven-fic-2026-v${seq}`;
+        };
 
-        const formattedLegacy = legacyVendors.map(v => ({
-            _id: v._id,
-            businessName: v.businessName,
-            category: v.category,
-            subcategory: '',
-            vendorType: '',
-            baseVendorType: '',
-            contactName: v.contactName,
-            phone: v.phone,
-            email: v.email,
-            status: v.status,
-            agentId: v.agentId,
-            membership: v.membership,
-            createdAt: v.createdAt,
-            kycStatus: v.kycStatus || 'pending',
-            kycDocs: v.kycDocs || null,
-            address: v.address || '',
-            isUserCollection: false
-        }));
+        const formattedUserVendors = usersVendors.map((v, idx) => {
+            const vId = formatVId(v, idx);
+            return {
+                _id: v._id,
+                registrationId: vId,
+                vendorId: vId,
+                businessName: v.businessName || v.name,
+                category: v.category || 'Store Vendor',
+                subcategory: v.subcategory || '',
+                vendorType: v.vendorType || '',
+                baseVendorType: v.baseVendorType || '',
+                contactName: v.contactPerson || v.name,
+                phone: v.phone || '',
+                email: v.email,
+                status: v.status || 'Pending',
+                agentId: v.referredBy || null,
+                membership: { status: v.isPaid ? 'active' : 'none' },
+                createdAt: v.createdAt,
+                kycStatus: v.status || 'Pending',
+                kycDocs: {
+                    aadhaarNumber: v.kyc?.aadhaarNumber || '',
+                    aadhaarImage: v.kyc?.aadhaarImage || '',
+                    panNumber: v.kyc?.panNumber || '',
+                    panImage: v.kyc?.panImage || '',
+                    selfie: v.kyc?.selfie || '',
+                    businessProofImage: v.kyc?.businessProofImage || ''
+                },
+                address: v.address || '',
+                bankDetails: v.bankDetails || null,
+                paymentOptions: v.paymentOptions || null,
+                isUserCollection: true
+            };
+        });
+
+        const formattedLegacy = legacyVendors.map((v, idx) => {
+            const vId = formatVId(v, usersVendors.length + idx);
+            return {
+                _id: v._id,
+                registrationId: vId,
+                vendorId: vId,
+                businessName: v.businessName,
+                category: v.category,
+                subcategory: '',
+                vendorType: '',
+                baseVendorType: '',
+                contactName: v.contactName,
+                phone: v.phone,
+                email: v.email,
+                status: v.status,
+                agentId: v.agentId,
+                membership: v.membership,
+                createdAt: v.createdAt,
+                kycStatus: v.kycStatus || 'pending',
+                kycDocs: v.kycDocs || null,
+                address: v.address || '',
+                isUserCollection: false
+            };
+        });
 
         res.json([...formattedUserVendors, ...formattedLegacy]);
     } catch (err) {
@@ -808,39 +825,56 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
         const pendingUserVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] }, status: { $in: ['Pending', 'pending'] } }).populate('branchId', 'name').populate('referredBy', 'name');
         const pendingLegacy = await Vendor.find({ ...filter, status: { $in: ['Pending', 'pending'] } }).populate('branchId', 'name').populate('agentId', 'name');
 
-        const formattedUser = pendingUserVendors.map(v => ({
-            _id: v._id,
-            businessName: v.businessName || v.name,
-            category: v.category || 'Store Vendor',
-            subcategory: v.subcategory || '',
-            vendorType: v.vendorType || '',
-            baseVendorType: v.baseVendorType || '',
-            contactName: v.contactPerson || v.name,
-            phone: v.phone || '',
-            email: v.email,
-            status: v.status || 'Pending',
-            agentId: v.referredBy || null,
-            membership: { status: v.isPaid ? 'active' : 'none' },
-            createdAt: v.createdAt,
-            isUserCollection: true
-        }));
+        const formatVId = (v, index) => {
+            if (v.registrationId && /^ven-fic-/i.test(v.registrationId)) return v.registrationId.toLowerCase();
+            if (v.vendorId && /^ven-fic-/i.test(v.vendorId)) return v.vendorId.toLowerCase();
+            const seq = String(index + 1).padStart(3, '0');
+            return `ven-fic-2026-v${seq}`;
+        };
 
-        const formattedLegacy = pendingLegacy.map(v => ({
-            _id: v._id,
-            businessName: v.businessName,
-            category: v.category,
-            subcategory: '',
-            vendorType: '',
-            baseVendorType: '',
-            contactName: v.contactName,
-            phone: v.phone,
-            email: v.email,
-            status: v.status,
-            agentId: v.agentId,
-            membership: v.membership,
-            createdAt: v.createdAt,
-            isUserCollection: false
-        }));
+        const formattedUser = pendingUserVendors.map((v, idx) => {
+            const vId = formatVId(v, idx);
+            return {
+                _id: v._id,
+                registrationId: vId,
+                vendorId: vId,
+                businessName: v.businessName || v.name,
+                category: v.category || 'Store Vendor',
+                subcategory: v.subcategory || '',
+                vendorType: v.vendorType || '',
+                baseVendorType: v.baseVendorType || '',
+                contactName: v.contactPerson || v.name,
+                phone: v.phone || '',
+                email: v.email,
+                status: v.status || 'Pending',
+                agentId: v.referredBy || null,
+                membership: { status: v.isPaid ? 'active' : 'none' },
+                createdAt: v.createdAt,
+                isUserCollection: true
+            };
+        });
+
+        const formattedLegacy = pendingLegacy.map((v, idx) => {
+            const vId = formatVId(v, pendingUserVendors.length + idx);
+            return {
+                _id: v._id,
+                registrationId: vId,
+                vendorId: vId,
+                businessName: v.businessName,
+                category: v.category,
+                subcategory: '',
+                vendorType: '',
+                baseVendorType: '',
+                contactName: v.contactName,
+                phone: v.phone,
+                email: v.email,
+                status: v.status,
+                agentId: v.agentId,
+                membership: v.membership,
+                createdAt: v.createdAt,
+                isUserCollection: false
+            };
+        });
 
         res.json([...formattedUser, ...formattedLegacy]);
     } catch (err) {

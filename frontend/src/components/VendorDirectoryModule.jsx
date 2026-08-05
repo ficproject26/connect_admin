@@ -4,6 +4,14 @@ import {
   XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, RefreshCw, X, ChevronRight, Trash2
 } from 'lucide-react';
 
+const formatVendorId = (rawId, index = 0) => {
+  if (!rawId) return `ven-fic-2026-v${String(index + 1).padStart(3, '0')}`;
+  const str = String(rawId).trim();
+  if (/^ven-fic-2026-v\d+$/i.test(str)) return str.toLowerCase();
+  const seq = String(index + 1).padStart(3, '0');
+  return `ven-fic-2026-v${seq}`;
+};
+
 const getVendorCategory = (v) => {
   if (Array.isArray(v.categories) && v.categories.length > 0) return v.categories.join(', ');
   const cat = v.categories || v.category || v.vendorType || v.businessCategory || v.shopType || v.vendorCategory;
@@ -545,7 +553,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       {/* 3. VENDORS GRID VIEW */}
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {vendors.map(v => (
+          {vendors.map((v, idx) => (
             <div key={v._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary-500/30 transition-all flex flex-col justify-between">
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
@@ -634,7 +642,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
               </div>
 
               <div className="pt-2 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-semibold">Reg ID: {v.registrationId || v._id}</span>
+                <span className="text-[10px] text-slate-400 font-semibold">Reg ID: {formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
                 <button
                   onClick={() => handleDeleteVendor(v)}
                   className="text-[10px] font-extrabold text-rose-600 hover:text-white hover:bg-rose-600 dark:text-rose-400 flex items-center gap-1 cursor-pointer bg-rose-500/10 px-2.5 py-1 rounded-xl border border-rose-500/20 transition-all active:scale-95"
@@ -663,7 +671,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-850 text-xs">
-              {vendors.map(v => (
+              {vendors.map((v, idx) => (
                 <tr key={v._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40">
                   <td className="py-3 px-4">
                     <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{v.businessName || v.name}</span>
@@ -734,7 +742,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <span className="text-[11px] text-slate-400 font-mono">{v.registrationId || v._id}</span>
+                      <span className="text-[11px] text-slate-400 font-mono">{formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
                       <button
                         onClick={() => handleDeleteVendor(v)}
                         title="Delete Vendor"
