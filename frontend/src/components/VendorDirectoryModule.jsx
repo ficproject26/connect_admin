@@ -340,9 +340,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       });
     } catch (err) {
       console.error('Update status error:', err);
-    } finally {
-      fetchVendors();
-      fetchDirectRequests();
     }
   };
 

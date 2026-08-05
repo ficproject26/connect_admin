@@ -330,10 +330,20 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         const existingVendor = await User.findOne(updateFilter);
         const oldStatus = existingVendor ? (existingVendor.status || 'Pending') : 'Pending';
 
+        await User.collection.updateMany(
+            updateFilter,
+            { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive } }
+        ).catch(() => {});
+
         await User.updateMany(
             updateFilter,
             { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive } }
-        );
+        ).catch(() => {});
+
+        await Vendor.collection.updateMany(
+            updateFilter,
+            { $set: { status: formattedStatus, isActive: isCurrentlyActive } }
+        ).catch(() => {});
 
         await Vendor.updateMany(
             updateFilter,
@@ -420,10 +430,20 @@ router.post('/vendors/approve', auth, async (req, res) => {
         const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
         const updateFilter = buildVendorQuery(vendorId, targetEmail);
 
+        await User.collection.updateMany(
+            updateFilter,
+            { $set: { status: 'Approved', isActive: true, isApproved: true } }
+        ).catch(() => {});
+
         await User.updateMany(
             updateFilter,
             { $set: { status: 'Approved', isActive: true, isApproved: true } }
-        );
+        ).catch(() => {});
+
+        await Vendor.collection.updateMany(
+            updateFilter,
+            { $set: { status: 'Approved', isActive: true } }
+        ).catch(() => {});
 
         await Vendor.updateMany(
             updateFilter,
@@ -497,10 +517,20 @@ router.post('/vendors/reject', auth, async (req, res) => {
         const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
         const updateFilter = buildVendorQuery(vendorId, targetEmail);
 
+        await User.collection.updateMany(
+            updateFilter,
+            { $set: { status: 'Rejected', isActive: false, rejectionReason: reason } }
+        ).catch(() => {});
+
         await User.updateMany(
             updateFilter,
             { $set: { status: 'Rejected', isActive: false, rejectionReason: reason } }
-        );
+        ).catch(() => {});
+
+        await Vendor.collection.updateMany(
+            updateFilter,
+            { $set: { status: 'Rejected', isActive: false } }
+        ).catch(() => {});
 
         await Vendor.updateMany(
             updateFilter,
@@ -567,8 +597,10 @@ router.delete('/vendors/:id', auth, async (req, res) => {
         const { email } = req.query;
         const deleteFilter = buildVendorQuery(id, email);
 
-        await User.deleteMany(deleteFilter);
-        await Vendor.deleteMany(deleteFilter);
+        await User.collection.deleteMany(deleteFilter).catch(() => {});
+        await User.deleteMany(deleteFilter).catch(() => {});
+        await Vendor.collection.deleteMany(deleteFilter).catch(() => {});
+        await Vendor.deleteMany(deleteFilter).catch(() => {});
 
         const io = getIo(req);
         if (io) {
@@ -587,8 +619,10 @@ router.post('/vendors/delete', auth, async (req, res) => {
         const { vendorId, email } = req.body;
         const deleteFilter = buildVendorQuery(vendorId, email);
 
-        await User.deleteMany(deleteFilter);
-        await Vendor.deleteMany(deleteFilter);
+        await User.collection.deleteMany(deleteFilter).catch(() => {});
+        await User.deleteMany(deleteFilter).catch(() => {});
+        await Vendor.collection.deleteMany(deleteFilter).catch(() => {});
+        await Vendor.deleteMany(deleteFilter).catch(() => {});
 
         const io = getIo(req);
         if (io) {
