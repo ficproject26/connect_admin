@@ -31,11 +31,11 @@ router.get('/vendors', auth, async (req, res) => {
                     { userType: { $regex: /vendor|merchant/i } },
                     { isDirectRequest: true }
                 ],
-                status: { $ne: 'approved' }
+                status: { $not: /^(approved|rejected|assigned|active)$/i }
             }).sort({ createdAt: -1 });
 
             let directVendorDocs = await Vendor.find({
-                status: { $ne: 'approved' }
+                status: { $not: /^(approved|rejected|assigned|active)$/i }
             }).sort({ createdAt: -1 });
 
             let allDirect = [...directVendors.map(v => v.toObject()), ...directVendorDocs.map(v => v.toObject())];

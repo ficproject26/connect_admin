@@ -185,7 +185,12 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           });
         }
       }
-      setDirectRequests(list);
+      // Filter out already approved/rejected/assigned vendors — only show pending requests
+      const pendingOnly = list.filter(v => {
+        const s = (v.status || '').toLowerCase();
+        return s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active';
+      });
+      setDirectRequests(pendingOnly);
     } catch (err) {
       console.error('Fetch direct requests error:', err);
       setDirectRequests([
@@ -664,7 +669,10 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             </div>
 
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
-              {directRequests.map(dr => (
+              {directRequests.filter(dr => {
+                const s = (dr.status || '').toLowerCase();
+                return s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active';
+              }).map(dr => (
                 <div key={dr._id} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
