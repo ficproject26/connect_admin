@@ -223,6 +223,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
   const handleAutoAssignPincodeAgent = async (vendorObj) => {
     const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : directRequests.find(v => v._id === vendorId);
+    const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/auto-assign-agent`, {
         method: 'POST',
@@ -230,15 +231,15 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId })
+        body: JSON.stringify({ vendorId, email })
       });
     } catch (err) {
       console.error('Auto assign error:', err);
     } finally {
-      setDirectRequests(prev => prev.filter(v => v._id !== vendorId));
+      setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
       if (targetVendor) {
         const updated = { ...targetVendor, status: 'Assigned' };
-        setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId)]);
+        setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email))]);
         setTotal(prev => prev + 1);
       }
       fetchVendors();
@@ -248,6 +249,11 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
   const handleApproveVendor = async (vendorObj) => {
     const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : directRequests.find(v => v._id === vendorId);
+    const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
+    
+    // Instantly remove approved vendor from direct requests list
+    setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
+
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/approve`, {
         method: 'POST',
@@ -255,15 +261,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId, email: targetVendor?.email })
+        body: JSON.stringify({ vendorId, email })
       });
     } catch (err) {
       console.error('Approve vendor error:', err);
     } finally {
-      setDirectRequests(prev => prev.filter(v => v._id !== vendorId));
       if (targetVendor) {
         const updated = { ...targetVendor, status: 'Approved' };
-        setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId)]);
+        setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email))]);
         setTotal(prev => prev + 1);
       }
       fetchVendors();
@@ -273,6 +278,11 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
   const handleRejectVendor = async (vendorObj) => {
     const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : directRequests.find(v => v._id === vendorId);
+    const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
+
+    // Instantly remove rejected vendor from direct requests list
+    setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
+
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/reject`, {
         method: 'POST',
@@ -280,15 +290,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId, email: targetVendor?.email })
+        body: JSON.stringify({ vendorId, email })
       });
     } catch (err) {
       console.error('Reject vendor error:', err);
     } finally {
-      setDirectRequests(prev => prev.filter(v => v._id !== vendorId));
       if (targetVendor) {
         const updated = { ...targetVendor, status: 'Rejected' };
-        setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId)]);
+        setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email))]);
         setTotal(prev => prev + 1);
       }
       fetchVendors();

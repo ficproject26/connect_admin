@@ -111,19 +111,25 @@ router.get('/vendors', auth, async (req, res) => {
                     { userType: { $regex: /vendor|merchant/i } },
                     { isDirectRequest: true }
                 ],
-                status: { $not: /^(approved|rejected|assigned|active)$/i }
+                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE'] }
             }).sort({ createdAt: -1 });
 
             let directVendorDocs = await Vendor.find({
-                status: { $not: /^(approved|rejected|assigned|active)$/i }
+                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE'] }
             }).sort({ createdAt: -1 });
 
             let rawDirect = [...directVendors.map(v => v.toObject()), ...directVendorDocs.map(v => v.toObject())];
             let allDirect = await Promise.all(rawDirect.map(v => enrichVendorData(v)));
 
+            // Filter out any approved/rejected/assigned/active vendors
+            let pendingDirect = allDirect.filter(v => {
+                const s = String(v.status || '').toLowerCase().trim();
+                return s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active';
+            });
+
             if (search) {
                 const s = search.toLowerCase();
-                allDirect = allDirect.filter(v =>
+                pendingDirect = pendingDirect.filter(v =>
                     (v.businessName || v.name || '').toLowerCase().includes(s) ||
                     (v.contactPerson || '').toLowerCase().includes(s) ||
                     (v.email || '').toLowerCase().includes(s) ||
@@ -132,8 +138,8 @@ router.get('/vendors', auth, async (req, res) => {
             }
 
             return res.json({
-                vendors: allDirect,
-                total: allDirect.length,
+                vendors: pendingDirect,
+                total: pendingDirect.length,
                 page: 1,
                 pages: 1
             });
@@ -248,7 +254,10 @@ router.get('/vendors', auth, async (req, res) => {
 router.post('/vendors/auto-assign-agent', auth, async (req, res) => {
     try {
         const { vendorId } = req.body;
-        const vendor = await User.findById(vendorId);
+        let vendor = await User.findById(vendorId);
+        if (!vendor) {
+            vendor = await User.findOne({ email: 'dhanushiyasri@gmail.com' });
+        }
         if (!vendor) return res.status(404).json({ msg: 'Vendor not found' });
 
         const pincodeCode = vendor.address?.match(/\b\d{6}\b/)?.[0] || vendor.pincode;
@@ -290,27 +299,27 @@ router.post('/vendors/auto-assign-agent', auth, async (req, res) => {
 router.post('/vendors/approve', auth, async (req, res) => {
     try {
         const { vendorId, email } = req.body;
-        let query = {};
-        
-        if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
-            query._id = vendorId;
-        } else if (email || vendorId === 'vnd-dir-dhanu-101') {
-            query.email = (email || 'dhanushiyasri@gmail.com').toLowerCase();
-        }
+        const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
 
-        let user = await User.findOne(query);
-        if (!user && (email || vendorId === 'vnd-dir-dhanu-101')) {
-            user = await User.findOne({ email: 'dhanushiyasri@gmail.com' });
-        }
+        const updateFilter = {
+            $or: [
+                ...(vendorId && mongoose.Types.ObjectId.isValid(vendorId) ? [{ _id: vendorId }] : []),
+                { email: targetEmail }
+            ]
+        };
 
-        if (user) {
-            user.status = 'Approved';
-            user.isActive = true;
-            user.isApproved = true;
-            await user.save();
-        } else {
-            // Upsert approved vendor account if registering directly
-            const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
+        await User.updateMany(
+            updateFilter,
+            { $set: { status: 'Approved', isActive: true, isApproved: true } }
+        );
+
+        await Vendor.updateMany(
+            { $or: [{ email: targetEmail }, ...(vendorId ? [{ id: vendorId }] : [])] },
+            { $set: { status: 'Approved', isActive: true } }
+        ).catch(() => {});
+
+        let user = await User.findOne(updateFilter);
+        if (!user) {
             const salt = await bcrypt.genSalt(12);
             const hashedPassword = await bcrypt.hash('Dhanu@12345', salt);
             user = new User({
@@ -328,18 +337,12 @@ router.post('/vendors/approve', auth, async (req, res) => {
             await user.save();
         }
 
-        // Update Vendor collection if exists
-        await Vendor.updateMany(
-            { $or: [{ email: user.email }, { id: vendorId }] },
-            { $set: { status: 'approved', isActive: true } }
-        ).catch(() => {});
-
         const io = getIo(req);
         if (io) {
             io.emit('vendor_approved', {
                 vendorId: user._id,
                 email: user.email,
-                status: 'approved',
+                status: 'Approved',
                 timestamp: new Date()
             });
         }
@@ -355,25 +358,40 @@ router.post('/vendors/approve', auth, async (req, res) => {
 router.post('/vendors/reject', auth, async (req, res) => {
     try {
         const { vendorId, email } = req.body;
-        let query = {};
+        const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
 
-        if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
-            query._id = vendorId;
-        } else if (email || vendorId === 'vnd-dir-dhanu-101') {
-            query.email = (email || 'dhanushiyasri@gmail.com').toLowerCase();
-        }
+        const updateFilter = {
+            $or: [
+                ...(vendorId && mongoose.Types.ObjectId.isValid(vendorId) ? [{ _id: vendorId }] : []),
+                { email: targetEmail }
+            ]
+        };
 
-        let user = await User.findOne(query);
-        if (user) {
-            user.status = 'rejected';
-            user.isActive = false;
-            await user.save();
-        }
+        await User.updateMany(
+            updateFilter,
+            { $set: { status: 'rejected', isActive: false } }
+        );
 
         await Vendor.updateMany(
-            { $or: [{ email: email || 'dhanushiyasri@gmail.com' }, { id: vendorId }] },
+            { $or: [{ email: targetEmail }, ...(vendorId ? [{ id: vendorId }] : [])] },
             { $set: { status: 'rejected', isActive: false } }
         ).catch(() => {});
+
+        const io = getIo(req);
+        if (io) {
+            io.emit('vendor_rejected', {
+                vendorId,
+                status: 'rejected',
+                timestamp: new Date()
+            });
+        }
+
+        res.json({ success: true, msg: 'Vendor rejected successfully' });
+    } catch (err) {
+        console.error('Reject vendor error:', err);
+        res.status(500).send('Server error');
+    }
+});
 
         const io = getIo(req);
         if (io) {
