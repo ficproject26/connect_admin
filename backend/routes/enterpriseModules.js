@@ -358,10 +358,23 @@ router.post('/vendors/update-status', auth, async (req, res) => {
             { $set: { status: formattedStatus, isActive: isCurrentlyActive } }
         ).catch(() => {});
 
-        // 1. BLOCK LOGIN & TERMINATE ACTIVE SESSIONS IF INACTIVE OR SUSPENDED
-        if (['Inactive', 'Suspended', 'Rejected'].includes(formattedStatus) && existingVendor) {
-            await SecuritySession.deleteMany({ userId: existingVendor._id }).catch(() => {});
-            await UserSession.deleteMany({ userId: existingVendor._id }).catch(() => {});
+        // 1. BLOCK LOGIN & TERMINATE ACTIVE SESSIONS IF INACTIVE, SUSPENDED, OR REJECTED
+        if (['Inactive', 'Suspended', 'Rejected'].includes(formattedStatus)) {
+            const vendorUsers = await User.find(updateFilter).catch(() => []);
+            for (const vUser of vendorUsers) {
+                vUser.isActive = false;
+                vUser.status = formattedStatus;
+                vUser.isLocked = true;
+                vUser.rejectionReason = reason || `Account ${formattedStatus} by Administrator`;
+                await vUser.save().catch(() => {});
+
+                await SecuritySession.deleteMany({ userId: vUser._id }).catch(() => {});
+                await UserSession.deleteMany({ userId: vUser._id }).catch(() => {});
+                try {
+                    securityManager.revokeAllUserSessions(vUser._id.toString());
+                    if (vUser.email) securityManager.revokeAllUserSessions(vUser.email.toLowerCase());
+                } catch (e) {}
+            }
         }
 
         // 2. RECORD ENTERPRISE AUDIT LOG
