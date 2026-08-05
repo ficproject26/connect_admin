@@ -3997,9 +3997,14 @@ function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {jobs.map((job) => {
-                        const posVal = (!job.position || job.position === 'Job Application') ? 'Senior Software Engineer' : job.position;
-                        const compVal = (!job.companyName || job.companyName === 'Krishna' || job.companyName === 'Connect Portal Inc.') ? 'Forge India Tech' : job.companyName;
+                      {jobs.map((job, idx) => {
+                        const samplePositions = ['Senior Software Engineer', 'Full Stack Developer', 'UI/UX Designer', 'Product Manager', 'HR Executive', 'Marketing Lead', 'Data Analyst'];
+                        const sampleCompanies = ['Forge India Tech', 'Global Systems Inc.', 'Apex Digital Solutions', 'Innovate Soft', 'Connect Enterprises'];
+                        const sampleHRs = ['Rajesh Kumar', 'Ananya Sharma', 'Priya Nair', 'Suresh V', 'Talent Team'];
+
+                        const posVal = (!job.position || job.position === 'Job Application') ? samplePositions[idx % samplePositions.length] : job.position;
+                        const compVal = (!job.companyName || job.companyName === 'Krishna' || job.companyName === 'Connect Portal Inc.') ? sampleCompanies[idx % sampleCompanies.length] : job.companyName;
+                        const hrVal = (!job.hrName || job.hrName === 'Krishna' || job.hrName.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : job.hrName;
                         const candPhone = (!job.phone || job.phone === 'N/A') ? '9876543210' : job.phone;
                         const resumeVal = (job.resumeUrl && !job.resumeUrl.includes('unsplash')) ? job.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
@@ -4016,7 +4021,7 @@ function App() {
                             <td className="px-6 py-4">
                               <span className="block font-bold text-primary-500">{posVal}</span>
                               <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mt-0.5">{compVal}</span>
-                              <span className="block text-[10px] text-slate-400 mt-0.5">HR: {job.hrName || 'HR Team'}</span>
+                              <span className="block text-[10px] text-slate-400 mt-0.5">HR: {hrVal}</span>
                             </td>
                             <td className="px-6 py-4">
                               <select

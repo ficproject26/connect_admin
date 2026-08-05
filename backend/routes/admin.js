@@ -2038,11 +2038,16 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
         // Resolve vendor and customer for custom jobs
         const resolvedCustomJobs = await resolveVendorAndCustomer(customJobs);
 
-        const mappedDbJobs = dbJobs.map(j => {
+        const samplePositions = ['Senior Software Engineer', 'Full Stack Developer', 'UI/UX Designer', 'Product Manager', 'HR Executive', 'Marketing Lead', 'Data Analyst'];
+        const sampleCompanies = ['Forge India Tech', 'Global Systems Inc.', 'Apex Digital Solutions', 'Innovate Soft', 'Connect Enterprises'];
+        const sampleHRs = ['Rajesh Kumar', 'Ananya Sharma', 'Priya Nair', 'Suresh V', 'Talent Team'];
+
+        const mappedDbJobs = dbJobs.map((j, idx) => {
             const obj = j.toObject ? j.toObject() : j;
             const custIdVal = obj.customerId || 'CUST-' + String(obj._id).substring(18, 24).toUpperCase();
-            const posVal = (!obj.position || obj.position === 'Job Application') ? 'Senior Software Engineer' : obj.position;
-            const compVal = (!obj.companyName || obj.companyName === 'Krishna' || obj.companyName === 'Connect Portal Inc.') ? 'Forge India Tech' : obj.companyName;
+            const posVal = (!obj.position || obj.position === 'Job Application') ? samplePositions[idx % samplePositions.length] : obj.position;
+            const compVal = (!obj.companyName || obj.companyName === 'Krishna' || obj.companyName === 'Connect Portal Inc.') ? sampleCompanies[idx % sampleCompanies.length] : obj.companyName;
+            const hrVal = (!obj.hrName || obj.hrName === 'Krishna' || obj.hrName.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : obj.hrName;
             const resumeVal = (obj.resumeUrl && !obj.resumeUrl.includes('unsplash')) ? obj.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
             return {
                 ...obj,
@@ -2051,20 +2056,21 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
                 customerId: custIdVal,
                 position: posVal,
                 companyName: compVal,
-                hrName: obj.hrName || 'HR Team',
+                hrName: hrVal,
                 status: obj.status,
                 resumeUrl: resumeVal,
                 createdAt: obj.createdAt
             };
         });
 
-        const mappedCustomJobs = resolvedCustomJobs.map(order => {
+        const mappedCustomJobs = resolvedCustomJobs.map((order, idx) => {
             const appId = order.order_number || order.id || order._id;
             const custIdVal = (order.customerId && (order.customerId.memberId || order.customerId._id || order.customerId.id)) || 'CUST-' + String(order._id).substring(18, 24).toUpperCase();
-            const rawCompany = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || 'Forge India Tech';
-            const companyName = (rawCompany === 'Krishna' || rawCompany === 'Connect Partner') ? 'Forge India Tech' : rawCompany;
-            const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || 'HR Manager';
-            const posVal = (!order.product_details || order.product_details === 'Job Application') ? 'Senior Software Engineer' : order.product_details;
+            const rawCompany = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || '';
+            const companyName = (!rawCompany || rawCompany === 'Krishna' || rawCompany === 'Connect Partner') ? sampleCompanies[idx % sampleCompanies.length] : rawCompany;
+            const rawHr = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || '';
+            const hrName = (!rawHr || rawHr === 'Krishna' || rawHr.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : rawHr;
+            const posVal = (!order.product_details || order.product_details === 'Job Application') ? samplePositions[idx % samplePositions.length] : order.product_details;
             const resumeVal = (order.candidateResume && !order.candidateResume.includes('unsplash')) ? order.candidateResume : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
             return {
