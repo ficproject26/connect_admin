@@ -304,29 +304,40 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     }
   };
 
-  const handleUpdateVendorStatus = async (vendorObj, newStatus) => {
-    const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
-    const targetVendor = typeof vendorObj === 'object' ? vendorObj : vendors.find(v => v._id === vendorId);
-    const email = targetVendor?.email || '';
+  const normalizeStatusValue = (status) => {
+    const s = String(status || '').toLowerCase().trim();
+    if (s === 'approved' || s === 'active') return 'Active';
+    if (s === 'inactive') return 'Inactive';
+    if (s === 'suspended') return 'Suspended';
+    if (s === 'rejected') return 'Rejected';
+    return 'Pending';
+  };
 
-    let reason = '';
+  const handleUpdateVendorStatus = async (vendorObj, newStatus) => {
+    const vendorId = typeof vendorObj === 'object' ? (vendorObj._id || vendorObj.registrationId) : vendorObj;
+    const targetVendor = typeof vendorObj === 'object' ? vendorObj : vendors.find(v => v._id === vendorId);
+    const email = targetVendor?.email || (typeof vendorObj === 'object' ? vendorObj.email : '');
+
+    let reason = 'Admin status update';
     if (newStatus === 'Inactive' || newStatus === 'Suspended' || newStatus === 'Rejected') {
-      reason = window.prompt(`Enter reason for marking "${targetVendor?.businessName || targetVendor?.name || 'Vendor'}" as ${newStatus}:`, `Account marked as ${newStatus} by Administrator`);
-      if (reason === null) return; // User cancelled prompt
+      const userPrompt = window.prompt(`Enter reason for marking "${targetVendor?.businessName || targetVendor?.name || 'Vendor'}" as ${newStatus}:`, `Account marked as ${newStatus} by Administrator`);
+      if (userPrompt === null) return; // User pressed Cancel
+      reason = userPrompt || `Account marked as ${newStatus}`;
     }
 
+    // Immediately update local state so UI responds instantly
+    setVendors(prev => prev.map(v => (v._id === vendorId || (email && v.email === email)) ? { ...v, status: newStatus, isActive: ['Active', 'Approved'].includes(newStatus) } : v));
+    setDirectRequests(prev => prev.map(v => (v._id === vendorId || (email && v.email === email)) ? { ...v, status: newStatus } : v));
+
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/vendors/update-status`, {
+      await fetch(`${API_BASE}/admin/enterprise/vendors/update-status`, {
         method: 'POST',
         headers: {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId, email, status: newStatus, reason: reason || `Status set to ${newStatus}` })
+        body: JSON.stringify({ vendorId, email, status: newStatus, reason })
       });
-      if (res.ok) {
-        setVendors(prev => prev.map(v => (v._id === vendorId || (email && v.email === email)) ? { ...v, status: newStatus, isActive: ['Active', 'Approved'].includes(newStatus) } : v));
-      }
     } catch (err) {
       console.error('Update status error:', err);
     } finally {
@@ -373,13 +384,19 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
   };
 
   const handleDeleteVendor = async (vendorObj) => {
-    const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
-    const email = typeof vendorObj === 'object' ? vendorObj.email : '';
-    const name = typeof vendorObj === 'object' ? (vendorObj.businessName || vendorObj.name) : 'this vendor';
+    const vendorId = typeof vendorObj === 'object' ? (vendorObj._id || vendorObj.registrationId) : vendorObj;
+    const targetVendor = typeof vendorObj === 'object' ? vendorObj : vendors.find(v => v._id === vendorId);
+    const email = targetVendor?.email || (typeof vendorObj === 'object' ? vendorObj.email : '');
+    const name = targetVendor?.businessName || targetVendor?.name || 'this vendor';
 
     if (!window.confirm(`Are you sure you want to delete "${name}"? This action cannot be undone.`)) {
       return;
     }
+
+    // Immediately remove from UI state
+    setVendors(prev => prev.filter(v => v._id !== vendorId && (!email || v.email !== email)));
+    setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || v.email !== email)));
+    setTotal(prev => Math.max(0, prev - 1));
 
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/delete`, {
@@ -393,9 +410,8 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     } catch (err) {
       console.error('Delete vendor error:', err);
     } finally {
-      setVendors(prev => prev.filter(v => v._id !== vendorId && v.email !== email));
-      setDirectRequests(prev => prev.filter(v => v._id !== vendorId && v.email !== email));
-      setTotal(prev => Math.max(0, prev - 1));
+      fetchVendors();
+      fetchDirectRequests();
     }
   };
 
@@ -548,7 +564,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                   <div className="flex items-center gap-1.5">
                     {renderStatusBadge(v.status)}
                     <select
-                      value={v.status || 'Pending'}
+                      value={normalizeStatusValue(v.status)}
                       onChange={e => handleUpdateVendorStatus(v, e.target.value)}
                       className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
                     >
@@ -704,9 +720,20 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     )}
                   </td>
                   <td className="py-3 px-4">
-                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 border border-amber-500/20">
-                      {v.status || 'Pending Verification'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {renderStatusBadge(v.status)}
+                      <select
+                        value={normalizeStatusValue(v.status)}
+                        onChange={e => handleUpdateVendorStatus(v, e.target.value)}
+                        className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                        <option value="Suspended">Suspended</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-2">

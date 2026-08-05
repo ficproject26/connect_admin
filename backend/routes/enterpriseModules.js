@@ -298,6 +298,23 @@ router.post('/vendors/auto-assign-agent', auth, async (req, res) => {
     }
 });
 
+// Helper to construct robust query filters matching String _id, ObjectId _id, registrationId, or email
+const buildVendorQuery = (vId, em) => {
+    const orList = [];
+    if (vId) {
+        orList.push({ _id: String(vId) });
+        orList.push({ registrationId: String(vId) });
+        orList.push({ id: String(vId) });
+        if (mongoose.Types.ObjectId.isValid(vId)) {
+            orList.push({ _id: new mongoose.Types.ObjectId(vId) });
+        }
+    }
+    if (em) {
+        orList.push({ email: String(em).toLowerCase() });
+    }
+    return { $or: orList.length > 0 ? orList : [{ _id: null }] };
+};
+
 // POST Update Vendor Status (Active, Inactive, Suspended, Pending, Rejected)
 router.post('/vendors/update-status', auth, async (req, res) => {
     try {
@@ -308,13 +325,7 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         const formattedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
         const isCurrentlyActive = ['Active', 'Approved'].includes(formattedStatus);
 
-        const targetEmail = (email || '').toLowerCase();
-        const updateFilter = {
-            $or: [
-                ...(vendorId && mongoose.Types.ObjectId.isValid(vendorId) ? [{ _id: vendorId }] : []),
-                ...(targetEmail ? [{ email: targetEmail }] : [])
-            ]
-        };
+        const updateFilter = buildVendorQuery(vendorId, email);
 
         const existingVendor = await User.findOne(updateFilter);
         const oldStatus = existingVendor ? (existingVendor.status || 'Pending') : 'Pending';
@@ -325,7 +336,7 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         );
 
         await Vendor.updateMany(
-            { $or: [...(targetEmail ? [{ email: targetEmail }] : []), ...(vendorId ? [{ id: vendorId }] : [])] },
+            updateFilter,
             { $set: { status: formattedStatus, isActive: isCurrentlyActive } }
         ).catch(() => {});
 
@@ -371,7 +382,7 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         if (io) {
             io.emit('vendor_status_changed', {
                 vendorId: existingVendor?._id || vendorId,
-                email: existingVendor?.email || targetEmail,
+                email: existingVendor?.email || email,
                 status: formattedStatus,
                 isActive: isCurrentlyActive,
                 reason,
@@ -407,13 +418,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
     try {
         const { vendorId, email } = req.body;
         const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
-
-        const updateFilter = {
-            $or: [
-                ...(vendorId && mongoose.Types.ObjectId.isValid(vendorId) ? [{ _id: vendorId }] : []),
-                { email: targetEmail }
-            ]
-        };
+        const updateFilter = buildVendorQuery(vendorId, targetEmail);
 
         await User.updateMany(
             updateFilter,
@@ -421,7 +426,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
         );
 
         await Vendor.updateMany(
-            { $or: [{ email: targetEmail }, ...(vendorId ? [{ id: vendorId }] : [])] },
+            updateFilter,
             { $set: { status: 'Approved', isActive: true } }
         ).catch(() => {});
 
@@ -490,13 +495,7 @@ router.post('/vendors/reject', auth, async (req, res) => {
     try {
         const { vendorId, email, reason = 'Registration application rejected' } = req.body;
         const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
-
-        const updateFilter = {
-            $or: [
-                ...(vendorId && mongoose.Types.ObjectId.isValid(vendorId) ? [{ _id: vendorId }] : []),
-                { email: targetEmail }
-            ]
-        };
+        const updateFilter = buildVendorQuery(vendorId, targetEmail);
 
         await User.updateMany(
             updateFilter,
@@ -504,7 +503,7 @@ router.post('/vendors/reject', auth, async (req, res) => {
         );
 
         await Vendor.updateMany(
-            { $or: [{ email: targetEmail }, ...(vendorId ? [{ id: vendorId }] : [])] },
+            updateFilter,
             { $set: { status: 'Rejected', isActive: false } }
         ).catch(() => {});
 
@@ -566,19 +565,14 @@ router.delete('/vendors/:id', auth, async (req, res) => {
     try {
         const { id } = req.params;
         const { email } = req.query;
+        const deleteFilter = buildVendorQuery(id, email);
 
-        if (id && mongoose.Types.ObjectId.isValid(id)) {
-            await User.findByIdAndDelete(id);
-            await Vendor.findByIdAndDelete(id);
-        }
-        if (email) {
-            await User.deleteMany({ email: email.toLowerCase() });
-            await Vendor.deleteMany({ email: email.toLowerCase() });
-        }
+        await User.deleteMany(deleteFilter);
+        await Vendor.deleteMany(deleteFilter);
 
         const io = getIo(req);
         if (io) {
-            io.emit('vendor_deleted', { vendorId: id, timestamp: new Date() });
+            io.emit('vendor_deleted', { vendorId: id, email, timestamp: new Date() });
         }
 
         res.json({ success: true, msg: 'Vendor deleted successfully' });
@@ -591,18 +585,14 @@ router.delete('/vendors/:id', auth, async (req, res) => {
 router.post('/vendors/delete', auth, async (req, res) => {
     try {
         const { vendorId, email } = req.body;
-        if (vendorId && mongoose.Types.ObjectId.isValid(vendorId)) {
-            await User.findByIdAndDelete(vendorId);
-            await Vendor.findByIdAndDelete(vendorId);
-        }
-        if (email) {
-            await User.deleteMany({ email: email.toLowerCase() });
-            await Vendor.deleteMany({ email: email.toLowerCase() });
-        }
+        const deleteFilter = buildVendorQuery(vendorId, email);
+
+        await User.deleteMany(deleteFilter);
+        await Vendor.deleteMany(deleteFilter);
 
         const io = getIo(req);
         if (io) {
-            io.emit('vendor_deleted', { vendorId, timestamp: new Date() });
+            io.emit('vendor_deleted', { vendorId, email, timestamp: new Date() });
         }
 
         res.json({ success: true, msg: 'Vendor deleted successfully' });
