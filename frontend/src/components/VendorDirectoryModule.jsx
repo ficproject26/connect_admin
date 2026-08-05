@@ -12,24 +12,56 @@ const getVendorCategory = (v) => {
 };
 
 const getVendorAddress = (v) => {
-  if (v.fullAddress && v.fullAddress.trim().length > 3) return v.fullAddress;
+  const isPlaceholder = (val) => {
+    if (!val || typeof val !== 'string') return true;
+    const clean = val.trim().toLowerCase();
+    return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty'].includes(clean) || /^(.)\1+$/.test(clean);
+  };
 
-  const street = v.businessAddress || v.street || v.address || v.streetAddress;
-  const city = v.city || v.district;
-  const state = v.state;
-  const pin = v.postalCode || v.pincode || v.zipCode;
-
-  if (street || city || state) {
-    const parts = [street, city, state].filter(Boolean);
-    return `${parts.join(', ')}${pin ? ` (${pin})` : ''}`;
+  if (v.fullAddress && !v.fullAddress.toLowerCase().includes('city, state') && !v.fullAddress.includes('111111') && !v.fullAddress.toLowerCase().includes('dfghjkhj')) {
+    return v.fullAddress;
   }
 
-  if (v.assignedArea) {
-    const hasPin = pin && v.assignedArea.includes(pin);
-    return hasPin ? v.assignedArea : `${v.assignedArea}${pin ? ` (${pin})` : ''}`;
+  let street = (v.businessAddress || v.street || v.address || v.streetAddress || '').trim();
+  let city = (v.city || v.district || '').trim();
+  let state = (v.state || '').trim();
+  let pin = (v.postalCode || v.pincode || v.zipCode || '').trim();
+  let area = (v.assignedArea || '').trim();
+
+  if (isPlaceholder(street)) street = '';
+  if (isPlaceholder(city)) city = '';
+  if (isPlaceholder(state)) state = '';
+  if (isPlaceholder(pin)) pin = '';
+
+  if (area && area.includes('/')) {
+    const parts = area.split('/').map(p => p.trim());
+    if (!state && parts[0] && !isPlaceholder(parts[0])) state = parts[0];
+    if (!city && parts[1] && !isPlaceholder(parts[1])) city = parts[1];
   }
 
-  return 'Tamil Nadu / Dharmapuri (635109)';
+  if (street) {
+    const sLower = street.toLowerCase();
+    if (sLower.includes('thalaivasal')) {
+      if (!city) city = 'Salem';
+      if (!state) state = 'Tamil Nadu';
+      if (!pin) pin = '636112';
+    } else if (sLower.includes('sivasankarapuram')) {
+      if (!city) city = 'Kallakurichi';
+      if (!state) state = 'Tamil Nadu';
+      if (!pin) pin = '606202';
+    }
+  }
+
+  if (!state) state = 'Tamil Nadu';
+  if (!city) city = 'Dharmapuri';
+  if (!pin) pin = '635109';
+
+  const addressParts = [];
+  if (street) addressParts.push(street);
+  if (city && city.toLowerCase() !== street.toLowerCase()) addressParts.push(city);
+  if (state && state.toLowerCase() !== city.toLowerCase()) addressParts.push(state);
+
+  return `${addressParts.join(', ')} (${pin})`;
 };
 
 const getVendorPhone = (v) => {
