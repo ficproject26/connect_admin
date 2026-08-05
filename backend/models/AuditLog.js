@@ -19,7 +19,11 @@ const AuditLogSchema = new mongoose.Schema({
             'session_terminated',
             'logout_all',
             'suspicious_activity',
-            'ip_blocked'
+            'ip_blocked',
+            'vendor_status_changed',
+            'vendor_deactivated',
+            'vendor_activated',
+            'vendor_suspended'
         ]
     },
     ipAddress: { type: String, default: '127.0.0.1' },

@@ -10,6 +10,9 @@ const SupportTeam = require('../models/SupportTeam');
 const Transaction = require('../models/Transaction');
 const DeliveryPartner = require('../models/DeliveryPartner');
 const CardHolder = require('../models/CardHolder');
+const SecuritySession = require('../models/SecuritySession');
+const UserSession = require('../models/UserSession');
+const AuditLog = require('../models/AuditLog');
 
 // Helper to get Socket.IO instance
 const getIo = (req) => req.app.get('io');
@@ -295,6 +298,110 @@ router.post('/vendors/auto-assign-agent', auth, async (req, res) => {
     }
 });
 
+// POST Update Vendor Status (Active, Inactive, Suspended, Pending, Rejected)
+router.post('/vendors/update-status', auth, async (req, res) => {
+    try {
+        const { vendorId, email, status, reason = '' } = req.body;
+        if (!status) return res.status(400).json({ msg: 'Status is required' });
+
+        const rawStatus = status.trim();
+        const formattedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
+        const isCurrentlyActive = ['Active', 'Approved'].includes(formattedStatus);
+
+        const targetEmail = (email || '').toLowerCase();
+        const updateFilter = {
+            $or: [
+                ...(vendorId && mongoose.Types.ObjectId.isValid(vendorId) ? [{ _id: vendorId }] : []),
+                ...(targetEmail ? [{ email: targetEmail }] : [])
+            ]
+        };
+
+        const existingVendor = await User.findOne(updateFilter);
+        const oldStatus = existingVendor ? (existingVendor.status || 'Pending') : 'Pending';
+
+        await User.updateMany(
+            updateFilter,
+            { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive } }
+        );
+
+        await Vendor.updateMany(
+            { $or: [...(targetEmail ? [{ email: targetEmail }] : []), ...(vendorId ? [{ id: vendorId }] : [])] },
+            { $set: { status: formattedStatus, isActive: isCurrentlyActive } }
+        ).catch(() => {});
+
+        // 1. BLOCK LOGIN & TERMINATE ACTIVE SESSIONS IF INACTIVE OR SUSPENDED
+        if (['Inactive', 'Suspended', 'Rejected'].includes(formattedStatus) && existingVendor) {
+            await SecuritySession.deleteMany({ userId: existingVendor._id }).catch(() => {});
+            await UserSession.deleteMany({ userId: existingVendor._id }).catch(() => {});
+        }
+
+        // 2. RECORD ENTERPRISE AUDIT LOG
+        try {
+            const adminUser = req.user ? await User.findById(req.user.id) : null;
+            let actionType = 'vendor_status_changed';
+            if (formattedStatus === 'Inactive') actionType = 'vendor_deactivated';
+            else if (formattedStatus === 'Active' || formattedStatus === 'Approved') actionType = 'vendor_activated';
+            else if (formattedStatus === 'Suspended') actionType = 'vendor_suspended';
+
+            await AuditLog.create({
+                userId: req.user ? req.user.id : null,
+                userEmail: adminUser?.email || 'admin@connect.com',
+                userRole: adminUser?.role || 'admin',
+                action: actionType,
+                ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+                status: 'success',
+                details: `Admin changed status for vendor "${existingVendor?.businessName || existingVendor?.name || vendorId}" from "${oldStatus}" to "${formattedStatus}". Reason: ${reason || 'Status updated by Administrator'}`,
+                metadata: {
+                    adminId: req.user ? req.user.id : null,
+                    adminName: adminUser?.name || 'Admin',
+                    vendorId: existingVendor?._id || vendorId,
+                    vendorName: existingVendor?.businessName || existingVendor?.name || 'Vendor',
+                    oldStatus,
+                    newStatus: formattedStatus,
+                    reason: reason || 'Status updated by Administrator',
+                    timestamp: new Date()
+                }
+            });
+        } catch (auditErr) {
+            console.error('Audit log creation error:', auditErr);
+        }
+
+        // 3. EMIT REAL-TIME SOCKET.IO NOTIFICATIONS
+        const io = getIo(req);
+        if (io) {
+            io.emit('vendor_status_changed', {
+                vendorId: existingVendor?._id || vendorId,
+                email: existingVendor?.email || targetEmail,
+                status: formattedStatus,
+                isActive: isCurrentlyActive,
+                reason,
+                timestamp: new Date()
+            });
+
+            if (['Inactive', 'Suspended'].includes(formattedStatus)) {
+                io.emit('session_terminated', {
+                    userId: existingVendor?._id || vendorId,
+                    reason: `Your vendor account has been marked as ${formattedStatus} by the administrator.`,
+                    timestamp: new Date()
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            msg: `Vendor status updated to ${formattedStatus} successfully`,
+            vendor: {
+                id: existingVendor?._id || vendorId,
+                status: formattedStatus,
+                isActive: isCurrentlyActive
+            }
+        });
+    } catch (err) {
+        console.error('Vendor update status error:', err);
+        res.status(500).send('Server error');
+    }
+});
+
 // POST Approve & Activate Direct Vendor Request
 router.post('/vendors/approve', auth, async (req, res) => {
     try {
@@ -337,6 +444,30 @@ router.post('/vendors/approve', auth, async (req, res) => {
             await user.save();
         }
 
+        // Record Audit Log
+        try {
+            const adminUser = req.user ? await User.findById(req.user.id) : null;
+            await AuditLog.create({
+                userId: req.user ? req.user.id : null,
+                userEmail: adminUser?.email || 'admin@connect.com',
+                userRole: adminUser?.role || 'admin',
+                action: 'vendor_activated',
+                ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+                status: 'success',
+                details: `Admin approved vendor "${user.businessName || user.name}" (${user.email})`,
+                metadata: {
+                    adminId: req.user ? req.user.id : null,
+                    adminName: adminUser?.name || 'Admin',
+                    vendorId: user._id,
+                    vendorName: user.businessName || user.name,
+                    oldStatus: 'Pending',
+                    newStatus: 'Approved',
+                    reason: 'Direct registration approved',
+                    timestamp: new Date()
+                }
+            });
+        } catch (e) {}
+
         const io = getIo(req);
         if (io) {
             io.emit('vendor_approved', {
@@ -357,7 +488,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
 // POST Reject Direct Vendor Request
 router.post('/vendors/reject', auth, async (req, res) => {
     try {
-        const { vendorId, email } = req.body;
+        const { vendorId, email, reason = 'Registration application rejected' } = req.body;
         const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
 
         const updateFilter = {
@@ -369,21 +500,58 @@ router.post('/vendors/reject', auth, async (req, res) => {
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: 'rejected', isActive: false } }
+            { $set: { status: 'Rejected', isActive: false, rejectionReason: reason } }
         );
 
         await Vendor.updateMany(
             { $or: [{ email: targetEmail }, ...(vendorId ? [{ id: vendorId }] : [])] },
-            { $set: { status: 'rejected', isActive: false } }
+            { $set: { status: 'Rejected', isActive: false } }
         ).catch(() => {});
+
+        let existingVendor = await User.findOne(updateFilter);
+        if (existingVendor) {
+            await SecuritySession.deleteMany({ userId: existingVendor._id }).catch(() => {});
+            await UserSession.deleteMany({ userId: existingVendor._id }).catch(() => {});
+        }
+
+        // Record Audit Log
+        try {
+            const adminUser = req.user ? await User.findById(req.user.id) : null;
+            await AuditLog.create({
+                userId: req.user ? req.user.id : null,
+                userEmail: adminUser?.email || 'admin@connect.com',
+                userRole: adminUser?.role || 'admin',
+                action: 'vendor_status_changed',
+                ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+                status: 'success',
+                details: `Admin rejected vendor "${existingVendor?.businessName || existingVendor?.name || vendorId}". Reason: ${reason}`,
+                metadata: {
+                    adminId: req.user ? req.user.id : null,
+                    adminName: adminUser?.name || 'Admin',
+                    vendorId: existingVendor?._id || vendorId,
+                    vendorName: existingVendor?.businessName || existingVendor?.name || 'Vendor',
+                    oldStatus: 'Pending',
+                    newStatus: 'Rejected',
+                    reason,
+                    timestamp: new Date()
+                }
+            });
+        } catch (e) {}
 
         const io = getIo(req);
         if (io) {
             io.emit('vendor_rejected', {
                 vendorId,
-                status: 'rejected',
+                status: 'Rejected',
                 timestamp: new Date()
             });
+            if (existingVendor) {
+                io.emit('session_terminated', {
+                    userId: existingVendor._id,
+                    reason: 'Your vendor account registration was rejected by the administrator.',
+                    timestamp: new Date()
+                });
+            }
         }
 
         res.json({ success: true, msg: 'Vendor rejected successfully' });

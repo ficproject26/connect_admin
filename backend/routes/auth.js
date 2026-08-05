@@ -305,19 +305,33 @@ router.post('/login', async (req, res) => {
 
         // For vendors: enforce status check
         if (['vendor', 'Vendor', 'merchant', 'Merchant'].includes(user.role) || user.email?.toLowerCase() === 'dhanushiyasri@gmail.com') {
-            const userStatus = (user.status || '').toLowerCase();
-            if (userStatus === 'pending' || userStatus === 'unapproved' || (!user.isActive && userStatus !== 'approved')) {
+            const userStatus = (user.status || '').toLowerCase().trim();
+            if (userStatus === 'inactive') {
+                return res.status(403).json({
+                    message: 'Your account has been deactivated. Please contact the administrator.',
+                    msg: 'Your account has been deactivated. Please contact the administrator.',
+                    status: 'inactive'
+                });
+            }
+            if (userStatus === 'suspended') {
+                return res.status(403).json({
+                    message: 'Your account has been suspended. Please contact the administrator.',
+                    msg: 'Your account has been suspended. Please contact the administrator.',
+                    status: 'suspended'
+                });
+            }
+            if (userStatus === 'pending' || userStatus === 'unapproved' || (!user.isActive && userStatus !== 'approved' && userStatus !== 'active')) {
                 return res.status(403).json({
                     message: 'Your account is pending approval by the Admin. Please try again later.',
                     msg: 'Your account is pending approval by the Admin. Please try again later.',
                     status: 'pending'
                 });
             }
-            if (userStatus === 'rejected' || userStatus === 'suspended') {
+            if (userStatus === 'rejected') {
                 return res.status(403).json({
-                    message: 'Your vendor account registration was rejected or suspended.',
-                    msg: 'Your vendor account registration was rejected or suspended.',
-                    status: userStatus
+                    message: 'Your vendor account registration was rejected.',
+                    msg: 'Your vendor account registration was rejected.',
+                    status: 'rejected'
                 });
             }
         }
