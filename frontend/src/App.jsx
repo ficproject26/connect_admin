@@ -3923,7 +3923,8 @@ function App() {
                             : ((booking.customer_phone && booking.customer_phone !== 'N/A') ? booking.customer_phone : (booking.phone && booking.phone !== 'N/A' ? booking.phone : '9876543210'));
                           const serviceVal = booking.serviceName || booking.service || booking.serviceType || booking.product_details || booking.productDetails || booking.category || 'AC Repair & Maintenance Service';
                           const defaultSlots = ['10:00 AM - 11:00 AM', '11:30 AM - 12:30 PM', '02:00 PM - 03:00 PM', '04:30 PM - 05:30 PM', '06:00 PM - 07:00 PM'];
-                          const slotVal = (booking.appointmentTimeSlot && booking.appointmentTimeSlot !== 'Standard Slot') ? booking.appointmentTimeSlot : defaultSlots[idx % defaultSlots.length];
+                          const rawSlot = String(booking.appointmentTimeSlot || '').toLowerCase();
+                          const slotVal = (!booking.appointmentTimeSlot || rawSlot.includes('standard')) ? defaultSlots[idx % defaultSlots.length] : booking.appointmentTimeSlot;
                           return (
                             <tr key={booking._id}>
                               <td className="px-6 py-4">
