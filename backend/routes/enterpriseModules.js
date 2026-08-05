@@ -40,31 +40,6 @@ router.get('/vendors', auth, async (req, res) => {
 
             let allDirect = [...directVendors.map(v => v.toObject()), ...directVendorDocs.map(v => v.toObject())];
 
-            // Ensure dhanushiyasri@gmail.com (Dhanushya Sri Enterprises) is present ONLY if not already approved in DB
-            const isApprovedInDb = await User.findOne({
-                email: 'dhanushiyasri@gmail.com',
-                $or: [{ status: 'approved' }, { status: 'Approved' }, { isApproved: true }]
-            });
-
-            if (!isApprovedInDb) {
-                const hasDhanu = allDirect.some(v => v.email?.toLowerCase() === 'dhanushiyasri@gmail.com');
-                if (!hasDhanu) {
-                    allDirect.unshift({
-                        _id: 'vnd-dir-dhanu-101',
-                        businessName: 'Dhanushya Sri Enterprises',
-                        contactPerson: 'Dhanushya Sri',
-                        email: 'dhanushiyasri@gmail.com',
-                        phone: '+91 98765 43211',
-                        category: 'Retail & Stores',
-                        assignedArea: 'Tamil Nadu / Dharmapuri',
-                        pincode: '635109',
-                        status: 'Pending Verification',
-                        registrationId: 'VND-DIR-8821',
-                        createdAt: new Date()
-                    });
-                }
-            }
-
             if (search) {
                 const s = search.toLowerCase();
                 allDirect = allDirect.filter(v =>

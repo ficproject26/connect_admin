@@ -165,26 +165,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         list = data.vendors || [];
       }
       
-      // Ensure pending registration dhanushiyasri@gmail.com is present ONLY if not already approved or rejected
-      const isApprovedOrRejected = vendors.some(v => v.email?.toLowerCase() === 'dhanushiyasri@gmail.com' && ['approved', 'Approved', 'rejected', 'Rejected'].includes(v.status));
-      if (!isApprovedOrRejected) {
-        const hasDhanu = list.some(v => v.email?.toLowerCase() === 'dhanushiyasri@gmail.com');
-        if (!hasDhanu) {
-          list.unshift({
-            _id: 'vnd-dir-dhanu-101',
-            businessName: 'Dhanushya Sri Enterprises',
-            contactPerson: 'Dhanushya Sri',
-            email: 'dhanushiyasri@gmail.com',
-            phone: '+91 98765 43211',
-            category: 'Retail & Stores',
-            assignedArea: 'Tamil Nadu / Dharmapuri',
-            pincode: '635109',
-            status: 'Pending Verification',
-            registrationId: 'VND-DIR-8821',
-            createdAt: new Date().toISOString()
-          });
-        }
-      }
       // Filter out already approved/rejected/assigned vendors — only show pending requests
       const pendingOnly = list.filter(v => {
         const s = (v.status || '').toLowerCase();
@@ -193,21 +173,8 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       setDirectRequests(pendingOnly);
     } catch (err) {
       console.error('Fetch direct requests error:', err);
-      setDirectRequests([
-        {
-          _id: 'vnd-dir-dhanu-101',
-          businessName: 'Dhanushya Sri Enterprises',
-          contactPerson: 'Dhanushya Sri',
-          email: 'dhanushiyasri@gmail.com',
-          phone: '+91 98765 43211',
-          category: 'Retail & Stores',
-          assignedArea: 'Tamil Nadu / Dharmapuri',
-          pincode: '635109',
-          status: 'Pending Verification',
-          registrationId: 'VND-DIR-8821',
-          createdAt: new Date().toISOString()
-        }
-      ]);
+      setDirectRequests([]);
+    }
     }
   };
 

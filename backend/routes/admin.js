@@ -3056,9 +3056,10 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         };
 
         // Aggregated Card Metrics strictly from DB
-        const totalAgents = allAgents.length;
-        const activeAgents = allAgents.filter(a => a.isActive !== false && (a.status || '').toLowerCase() === 'approved').length;
-        const inactiveAgents = totalAgents - activeAgents;
+        const nonRejectedAgents = allAgents.filter(a => (a.status || '').toLowerCase() !== 'rejected');
+        const totalAgents = nonRejectedAgents.length;
+        const activeAgents = nonRejectedAgents.filter(a => a.isActive !== false && ((a.status || '').toLowerCase() === 'approved' || !a.status)).length;
+        const inactiveAgents = nonRejectedAgents.filter(a => ['pending', 'suspended', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length;
         const totalRevenue = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.revenue, 0);
         const totalLeads = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.callsMade + curr.metrics.meetingsConducted, 0);
         const totalRegistrations = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.registrations, 0);
