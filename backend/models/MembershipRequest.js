@@ -18,7 +18,6 @@ const MembershipRequestSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 });
 
-MembershipRequestSchema.index({ membershipId: 1 });
 MembershipRequestSchema.index({ status: 1 });
 
 module.exports = mongoose.model('MembershipRequest', MembershipRequestSchema);
