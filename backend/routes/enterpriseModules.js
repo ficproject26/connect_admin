@@ -298,19 +298,26 @@ router.post('/vendors/auto-assign-agent', auth, async (req, res) => {
     }
 });
 
-// Helper to construct robust query filters matching String _id, ObjectId _id, registrationId, or email
-const buildVendorQuery = (vId, em) => {
+// Helper to construct robust query filters matching String _id, ObjectId _id, registrationId, vendorId, or email
+const buildVendorQuery = (vId, em, regId) => {
     const orList = [];
     if (vId) {
         orList.push({ _id: String(vId) });
         orList.push({ registrationId: String(vId) });
+        orList.push({ vendorId: String(vId) });
         orList.push({ id: String(vId) });
         if (mongoose.Types.ObjectId.isValid(vId)) {
             orList.push({ _id: new mongoose.Types.ObjectId(vId) });
         }
     }
+    if (regId) {
+        orList.push({ registrationId: String(regId) });
+        orList.push({ vendorId: String(regId) });
+    }
     if (em) {
-        orList.push({ email: String(em).toLowerCase() });
+        const cleanEmail = String(em).toLowerCase().trim();
+        orList.push({ email: cleanEmail });
+        orList.push({ email: { $regex: new RegExp(`^${cleanEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
     }
     return { $or: orList.length > 0 ? orList : [{ _id: null }] };
 };
@@ -318,16 +325,17 @@ const buildVendorQuery = (vId, em) => {
 // POST Update Vendor Status (Active, Inactive, Suspended, Pending, Rejected)
 router.post('/vendors/update-status', auth, async (req, res) => {
     try {
-        const { vendorId, email, status, reason = '' } = req.body;
+        const { vendorId, registrationId, _id, email, status, reason = '' } = req.body;
         if (!status) return res.status(400).json({ msg: 'Status is required' });
 
         const rawStatus = status.trim();
         const formattedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
         const isCurrentlyActive = ['Active', 'Approved'].includes(formattedStatus);
 
-        const updateFilter = buildVendorQuery(vendorId, email);
+        const targetId = _id || vendorId;
+        const updateFilter = buildVendorQuery(targetId, email, registrationId);
 
-        const existingVendor = await User.findOne(updateFilter);
+        const existingVendor = await User.findOne(updateFilter) || await Vendor.findOne(updateFilter);
         const oldStatus = existingVendor ? (existingVendor.status || 'Pending') : 'Pending';
 
         await User.collection.updateMany(

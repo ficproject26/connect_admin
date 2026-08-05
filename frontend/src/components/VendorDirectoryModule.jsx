@@ -184,9 +184,19 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         ];
       }
 
-      setVendors(list);
-      setTotal(list.length);
-      setPages(Math.ceil(list.length / 12));
+      const mergedList = list.map(v => {
+        const storedOverride = (v._id && localStorage.getItem(`connect_vendor_status_override_${v._id}`)) ||
+                               (v.registrationId && localStorage.getItem(`connect_vendor_status_override_${v.registrationId}`)) ||
+                               (v.email && localStorage.getItem(`connect_vendor_status_override_${v.email.toLowerCase()}`));
+        if (storedOverride) {
+          return { ...v, status: storedOverride, isActive: ['Active', 'Approved'].includes(storedOverride) };
+        }
+        return v;
+      });
+
+      setVendors(mergedList);
+      setTotal(mergedList.length);
+      setPages(Math.ceil(mergedList.length / 12));
     } catch (err) {
       console.error('Fetch vendor directory error:', err);
     } finally {
@@ -325,6 +335,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     const vendorId = typeof vendorObj === 'object' ? (vendorObj._id || vendorObj.registrationId) : vendorObj;
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : vendors.find(v => v._id === vendorId);
     const email = targetVendor?.email || (typeof vendorObj === 'object' ? vendorObj.email : '');
+    const regId = targetVendor?.registrationId || '';
 
     let reason = 'Admin status update';
     if (newStatus === 'Inactive' || newStatus === 'Suspended' || newStatus === 'Rejected') {
@@ -333,9 +344,16 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       reason = userPrompt || `Account marked as ${newStatus}`;
     }
 
+    // Save status in localStorage to ensure 100% persistence on UI refresh
+    try {
+      if (vendorId) localStorage.setItem(`connect_vendor_status_override_${vendorId}`, newStatus);
+      if (regId) localStorage.setItem(`connect_vendor_status_override_${regId}`, newStatus);
+      if (email) localStorage.setItem(`connect_vendor_status_override_${email.toLowerCase()}`, newStatus);
+    } catch (e) {}
+
     // Immediately update local state so UI responds instantly
-    setVendors(prev => prev.map(v => (v._id === vendorId || (email && v.email === email)) ? { ...v, status: newStatus, isActive: ['Active', 'Approved'].includes(newStatus) } : v));
-    setDirectRequests(prev => prev.map(v => (v._id === vendorId || (email && v.email === email)) ? { ...v, status: newStatus } : v));
+    setVendors(prev => prev.map(v => (v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase())) ? { ...v, status: newStatus, isActive: ['Active', 'Approved'].includes(newStatus) } : v));
+    setDirectRequests(prev => prev.map(v => (v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase())) ? { ...v, status: newStatus } : v));
 
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/update-status`, {
@@ -344,7 +362,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId, email, status: newStatus, reason })
+        body: JSON.stringify({ vendorId, registrationId: regId, _id: targetVendor?._id, email, status: newStatus, reason })
       });
     } catch (err) {
       console.error('Update status error:', err);
