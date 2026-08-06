@@ -352,12 +352,30 @@ router.post('/vendors/update-status', auth, async (req, res) => {
 
         await User.collection.updateMany(
             updateFilter,
-            { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive, isLocked: !isCurrentlyActive } }
+            { 
+                $set: { 
+                    status: formattedStatus, 
+                    isActive: isCurrentlyActive, 
+                    isApproved: isCurrentlyActive, 
+                    isLocked: !isCurrentlyActive,
+                    "businesses.$[].status": formattedStatus,
+                    "businesses.$[].isActive": isCurrentlyActive
+                } 
+            }
         ).catch(() => {});
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive, isLocked: !isCurrentlyActive } }
+            { 
+                $set: { 
+                    status: formattedStatus, 
+                    isActive: isCurrentlyActive, 
+                    isApproved: isCurrentlyActive, 
+                    isLocked: !isCurrentlyActive,
+                    "businesses.$[].status": formattedStatus,
+                    "businesses.$[].isActive": isCurrentlyActive
+                } 
+            }
         ).catch(() => {});
 
         await Vendor.collection.updateMany(
