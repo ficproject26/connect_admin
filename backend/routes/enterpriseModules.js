@@ -477,6 +477,114 @@ router.post('/vendors/update-status', auth, async (req, res) => {
     }
 });
 
+// POST Update Status of a Specific Business Outlet / Store
+router.post('/vendors/update-business-status', auth, async (req, res) => {
+    try {
+        const { vendorId, email, registrationId, businessId, businessName, status, reason } = req.body;
+
+        if (!status) {
+            return res.status(400).json({ msg: 'Status is required' });
+        }
+
+        const rawStatus = status.trim();
+        const formattedStatus = rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase();
+        const isCurrentlyActive = ['Active', 'Approved'].includes(formattedStatus);
+
+        const targetId = vendorId;
+        const targetEmail = email ? String(email).toLowerCase().trim() : '';
+        const updateFilter = buildVendorQuery(targetId, targetEmail, registrationId, '');
+
+        const vendorUsers = await User.find(updateFilter).catch(() => []);
+
+        for (const vUser of vendorUsers) {
+            if (vUser.businesses && Array.isArray(vUser.businesses)) {
+                let matched = false;
+                vUser.businesses.forEach(b => {
+                    const bIdStr = b._id ? b._id.toString() : '';
+                    const bNameStr = (b.businessName || b.name || '').toLowerCase().trim();
+                    const targetBizIdStr = businessId ? String(businessId) : '';
+                    const targetBizNameStr = businessName ? String(businessName).toLowerCase().trim() : '';
+
+                    if ((targetBizIdStr && bIdStr === targetBizIdStr) || (targetBizNameStr && bNameStr === targetBizNameStr)) {
+                        b.status = formattedStatus;
+                        b.isActive = isCurrentlyActive;
+                        matched = true;
+                    }
+                });
+
+                if (matched) {
+                    if (typeof vUser.markModified === 'function') {
+                        vUser.markModified('businesses');
+                    }
+                    await vUser.save().catch(e => console.error('vUser.save business status error:', e));
+                }
+            }
+        }
+
+        // Also update using raw MongoDB positional update with arrayFilters
+        if (businessId && mongoose.Types.ObjectId.isValid(businessId)) {
+            const bObjId = new mongoose.Types.ObjectId(businessId);
+            await User.collection.updateMany(
+                { ...updateFilter, "businesses._id": bObjId },
+                { 
+                    $set: { 
+                        "businesses.$[elem].status": formattedStatus,
+                        "businesses.$[elem].isActive": isCurrentlyActive
+                    } 
+                },
+                { arrayFilters: [{ "elem._id": bObjId }] }
+            ).catch(() => {});
+        } else if (businessName) {
+            await User.collection.updateMany(
+                { ...updateFilter, "businesses.businessName": businessName },
+                { 
+                    $set: { 
+                        "businesses.$[elem].status": formattedStatus,
+                        "businesses.$[elem].isActive": isCurrentlyActive
+                    } 
+                },
+                { arrayFilters: [{ "elem.businessName": businessName }] }
+            ).catch(() => {});
+        }
+
+        // Record Audit Log
+        try {
+            const adminUser = req.user ? await User.findById(req.user.id) : null;
+            await AuditLog.create({
+                action: 'vendor_business_status_changed',
+                details: `Admin changed status of business outlet "${businessName || businessId}" to "${formattedStatus}" for vendor (${targetEmail || targetId})`,
+                adminEmail: adminUser ? adminUser.email : 'System Admin',
+                ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
+                userAgent: req.headers['user-agent'] || 'System',
+                metadata: { vendorId: targetId, businessId, businessName, newStatus: formattedStatus }
+            }).catch(() => {});
+        } catch (e) {}
+
+        // Emit Socket.IO event for real-time customer app catalog update
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('vendor_status_changed', {
+                vendorId: targetId,
+                businessId,
+                businessName,
+                status: formattedStatus,
+                isActive: isCurrentlyActive
+            });
+        }
+
+        return res.json({
+            msg: `Business outlet status successfully updated to ${formattedStatus}`,
+            businessId,
+            businessName,
+            status: formattedStatus,
+            isActive: isCurrentlyActive
+        });
+    } catch (err) {
+        console.error('Update business status error:', err);
+        return res.status(500).send('Server error');
+    }
+});
+
 // POST Approve & Activate Direct Vendor Request
 router.post('/vendors/approve', auth, async (req, res) => {
     try {

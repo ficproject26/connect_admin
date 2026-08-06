@@ -438,6 +438,49 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     }
   };
 
+  const handleUpdateIndividualBusinessStatus = async (vendorObj, bizObj, newStatus) => {
+    if (!vendorObj || !bizObj || !newStatus) return;
+    const vendorId = vendorObj._id || vendorObj.registrationId;
+    const email = vendorObj.email || '';
+    const regId = vendorObj.registrationId || '';
+    const bizId = bizObj._id || '';
+    const bizName = bizObj.businessName || bizObj.name || '';
+    const isCurrentlyActive = ['Active', 'Approved'].includes(newStatus);
+
+    const updateBizInVendor = (v) => {
+      const isMatch = v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase());
+      if (!isMatch) return v;
+      const updatedBusinesses = (v.businesses || []).map(b => {
+        const bMatch = (bizId && b._id === bizId) || (bizName && (b.businessName || b.name) === bizName);
+        return bMatch ? { ...b, status: newStatus, isActive: isCurrentlyActive } : b;
+      });
+      return { ...v, businesses: updatedBusinesses };
+    };
+
+    setVendors(prev => prev.map(updateBizInVendor));
+    setSelectedVendorDetails(prev => prev ? updateBizInVendor(prev) : null);
+
+    try {
+      await fetch(`${API_BASE}/admin/enterprise/vendors/update-business-status`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          vendorId,
+          registrationId: regId,
+          email,
+          businessId: bizId,
+          businessName: bizName,
+          status: newStatus
+        })
+      });
+    } catch (err) {
+      console.error('Update individual business status error:', err);
+    }
+  };
+
   const renderStatusBadge = (status) => {
     const s = String(status || '').toLowerCase().trim();
     if (s === 'approved' || s === 'active') {
@@ -1192,12 +1235,22 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {selectedVendorDetails.businesses.map((biz, bIdx) => (
-                    <div key={biz._id || bIdx} className="p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-1">
-                      <div className="flex justify-between items-center font-extrabold text-slate-800 dark:text-slate-100">
-                        <span>{biz.businessName || biz.name || 'Outlet ' + (bIdx + 1)}</span>
-                        {renderStatusBadge(biz.status || selectedVendorDetails.status)}
+                    <div key={biz._id || bIdx} className="p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center flex-wrap gap-1 font-extrabold text-slate-800 dark:text-slate-100">
+                        <span className="truncate max-w-[140px]" title={biz.businessName || biz.name}>{biz.businessName || biz.name || 'Outlet ' + (bIdx + 1)}</span>
+                        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                          {renderStatusBadge(biz.status || selectedVendorDetails.status)}
+                          <select
+                            value={normalizeStatusValue(biz.status || selectedVendorDetails.status)}
+                            onChange={e => handleUpdateIndividualBusinessStatus(selectedVendorDetails, biz, e.target.value)}
+                            className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
+                          >
+                            <option value="Active">🟢 Active</option>
+                            <option value="Suspended">⚫ Suspend</option>
+                          </select>
+                        </div>
                       </div>
-                      <p className="text-[11px] text-slate-400">{biz.category || biz.vendorType || 'Category'}</p>
+                      <p className="text-[11px] text-slate-400 font-medium">{biz.category || biz.vendorType || 'Category'}</p>
                     </div>
                   ))}
                 </div>
