@@ -114,20 +114,21 @@ router.get('/vendors', auth, async (req, res) => {
                     { userType: { $regex: /vendor|merchant/i } },
                     { isDirectRequest: true }
                 ],
-                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE'] }
+                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
             }).sort({ createdAt: -1 });
 
             let directVendorDocs = await Vendor.find({
-                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE'] }
+                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
             }).sort({ createdAt: -1 });
 
             let rawDirect = [...directVendors.map(v => v.toObject()), ...directVendorDocs.map(v => v.toObject())];
             let allDirect = await Promise.all(rawDirect.map(v => enrichVendorData(v)));
 
-            // Filter out any approved/rejected/assigned/active vendors
+            // Filter out any approved/rejected/assigned/active/suspended vendors
+            const handledStatuses = new Set(['approved', 'rejected', 'assigned', 'active', 'suspended']);
             let pendingDirect = allDirect.filter(v => {
                 const s = String(v.status || '').toLowerCase().trim();
-                return s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active';
+                return !handledStatuses.has(s);
             });
 
             if (search) {

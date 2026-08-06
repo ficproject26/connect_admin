@@ -215,10 +215,16 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         list = data.vendors || [];
       }
       
-      // Filter out already approved/rejected/assigned vendors — only show pending requests
+      // Filter out already approved/rejected/assigned/active/suspended vendors — each request is shown ONCE
       const pendingOnly = list.filter(v => {
-        const s = (v.status || '').toLowerCase();
-        return s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active';
+        const vId = v._id || v.registrationId;
+        const em = v.email ? v.email.toLowerCase() : '';
+        const storedOverride = (vId && localStorage.getItem(`connect_vendor_status_override_${vId}`)) ||
+                               (v.registrationId && localStorage.getItem(`connect_vendor_status_override_${v.registrationId}`)) ||
+                               (em && localStorage.getItem(`connect_vendor_status_override_${em}`));
+
+        const s = (storedOverride || v.status || '').toLowerCase().trim();
+        return s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended');
       });
       setDirectRequests(pendingOnly);
     } catch (err) {
@@ -823,8 +829,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
               {directRequests.filter(dr => {
-                const s = (dr.status || '').toLowerCase();
-                return s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active';
+                const drId = dr._id || dr.registrationId;
+                const em = dr.email ? dr.email.toLowerCase() : '';
+                const storedOverride = (drId && localStorage.getItem(`connect_vendor_status_override_${drId}`)) ||
+                                       (dr.registrationId && localStorage.getItem(`connect_vendor_status_override_${dr.registrationId}`)) ||
+                                       (em && localStorage.getItem(`connect_vendor_status_override_${em}`));
+
+                const s = (storedOverride || dr.status || '').toLowerCase().trim();
+                return s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended');
               }).map(dr => (
                 <div key={dr._id} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
