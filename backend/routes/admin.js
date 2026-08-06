@@ -1050,10 +1050,39 @@ router.delete('/vendors', [auth, adminAuth], async (req, res) => {
 router.get('/customers', [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
-        const customers = await Customer.find(filter).populate('branchId', 'name');
-        res.json(customers);
+        const customersFromModel = await Customer.find(filter).populate('branchId', 'name').catch(() => []);
+        const usersAsCustomers = await User.find({
+            role: { $in: ['Member', 'member', 'customer', 'Customer'] }
+        }).catch(() => []);
+
+        const combined = [];
+        const seenEmails = new Set();
+        const seenPhones = new Set();
+
+        const addDoc = (doc) => {
+            const email = (doc.email || '').toLowerCase().trim();
+            const phone = (doc.phone || doc.mobileNumber || doc.mobileContact || doc.telephone || '').trim();
+            if (email && seenEmails.has(email)) return;
+            if (phone && seenPhones.has(phone)) return;
+            if (email) seenEmails.add(email);
+            if (phone) seenPhones.add(phone);
+            combined.push(doc);
+        };
+
+        customersFromModel.forEach(c => addDoc(c.toObject ? c.toObject() : c));
+        usersAsCustomers.forEach(u => {
+            const uObj = u.toObject ? u.toObject() : u;
+            uObj.aadhaarNumber = uObj.kyc?.aadhaarNumber || uObj.aadhaarNumber || '';
+            uObj.panNumber = uObj.kyc?.panNumber || uObj.panNumber || '';
+            uObj.customerType = uObj.customerType || 'Standard';
+            uObj.district = uObj.district || uObj.city || 'Direct';
+            uObj.status = uObj.status || 'Active';
+            addDoc(uObj);
+        });
+
+        res.json(combined);
     } catch (err) {
-        console.error(err);
+        console.error('Get customers error:', err);
         res.status(500).send('Server error');
     }
 });
