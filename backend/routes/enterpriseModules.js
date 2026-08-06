@@ -350,64 +350,51 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         const existingVendor = await User.findOne(updateFilter) || await Vendor.findOne(updateFilter);
         const oldStatus = existingVendor ? (existingVendor.status || 'Pending') : 'Pending';
 
-        await User.collection.updateMany(
-            updateFilter,
-            { 
-                $set: { 
-                    status: formattedStatus, 
-                    isActive: isCurrentlyActive, 
-                    isApproved: isCurrentlyActive, 
-                    isLocked: !isCurrentlyActive,
-                    "businesses.$[].status": formattedStatus,
-                    "businesses.$[].isActive": isCurrentlyActive
-                } 
-            }
-        ).catch(() => {});
+        const mainUpdatePayload = { 
+            status: formattedStatus, 
+            isActive: isCurrentlyActive, 
+            isApproved: isCurrentlyActive, 
+            isLocked: !isCurrentlyActive 
+        };
 
-        await User.updateMany(
-            updateFilter,
-            { 
-                $set: { 
-                    status: formattedStatus, 
-                    isActive: isCurrentlyActive, 
-                    isApproved: isCurrentlyActive, 
-                    isLocked: !isCurrentlyActive,
-                    "businesses.$[].status": formattedStatus,
-                    "businesses.$[].isActive": isCurrentlyActive
-                } 
-            }
-        ).catch(() => {});
+        // 1. Update top-level status on User collection
+        await User.collection.updateMany(updateFilter, { $set: mainUpdatePayload }).catch(e => console.error('User.collection update error:', e));
+        await User.updateMany(updateFilter, { $set: mainUpdatePayload }).catch(e => console.error('User.updateMany error:', e));
 
-        await Vendor.collection.updateMany(
-            updateFilter,
-            { $set: { status: formattedStatus, isActive: isCurrentlyActive } }
-        ).catch(() => {});
+        // 2. Update top-level status on Vendor collection
+        await Vendor.collection.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
+        await Vendor.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
 
-        await Vendor.updateMany(
-            updateFilter,
-            { $set: { status: formattedStatus, isActive: isCurrentlyActive } }
-        ).catch(() => {});
+        // 3. Update nested businesses array ONLY for documents where businesses array is non-empty
+        const bizFilter = { ...updateFilter, "businesses.0": { $exists: true } };
+        await User.collection.updateMany(bizFilter, { 
+            $set: { 
+                "businesses.$[].status": formattedStatus,
+                "businesses.$[].isActive": isCurrentlyActive
+            } 
+        }).catch(e => console.error('Businesses array update error:', e));
 
-        // 1. UNLOCK ACCOUNT IF ACTIVE / APPROVED OR BLOCK & TERMINATE ACTIVE SESSIONS IF INACTIVE, SUSPENDED, OR REJECTED
-        if (['Active', 'Approved'].includes(formattedStatus)) {
-            const vendorUsers = await User.find(updateFilter).catch(() => []);
-            for (const vUser of vendorUsers) {
-                vUser.isActive = true;
-                vUser.isApproved = true;
-                vUser.isLocked = false;
-                vUser.status = formattedStatus;
-                vUser.rejectionReason = '';
-                await vUser.save().catch(() => {});
-            }
-        } else if (['Inactive', 'Suspended', 'Rejected'].includes(formattedStatus)) {
-            const vendorUsers = await User.find(updateFilter).catch(() => []);
-            for (const vUser of vendorUsers) {
-                vUser.isActive = false;
-                vUser.status = formattedStatus;
-                vUser.isLocked = true;
+        // 4. Update each matched vendor user document explicitly
+        const vendorUsers = await User.find(updateFilter).catch(() => []);
+        for (const vUser of vendorUsers) {
+            vUser.status = formattedStatus;
+            vUser.isActive = isCurrentlyActive;
+            vUser.isApproved = isCurrentlyActive;
+            vUser.isLocked = !isCurrentlyActive;
+            if (!isCurrentlyActive) {
                 vUser.rejectionReason = reason || `Account ${formattedStatus} by Administrator`;
-                await vUser.save().catch(() => {});
+            } else {
+                vUser.rejectionReason = '';
+            }
+            if (vUser.businesses && Array.isArray(vUser.businesses)) {
+                vUser.businesses.forEach(b => {
+                    b.status = formattedStatus;
+                    b.isActive = isCurrentlyActive;
+                });
+            }
+            await vUser.save().catch(e => console.error('vUser.save error:', e));
 
+            if (!isCurrentlyActive) {
                 await SecuritySession.deleteMany({ userId: vUser._id }).catch(() => {});
                 await UserSession.deleteMany({ userId: vUser._id }).catch(() => {});
                 try {
