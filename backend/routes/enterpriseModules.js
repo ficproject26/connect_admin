@@ -298,10 +298,10 @@ router.post('/vendors/auto-assign-agent', auth, async (req, res) => {
     }
 });
 
-// Helper to construct robust query filters matching String _id, ObjectId _id, registrationId, vendorId, or email
-const buildVendorQuery = (vId, em, regId) => {
+// Helper to construct robust query filters matching String _id, ObjectId _id, registrationId, vendorId, email, or businessName
+const buildVendorQuery = (vId, em, regId, bizName) => {
     const orList = [];
-    if (vId) {
+    if (vId && vId !== 'undefined' && vId !== 'null') {
         orList.push({ _id: String(vId) });
         orList.push({ registrationId: String(vId) });
         orList.push({ vendorId: String(vId) });
@@ -310,14 +310,23 @@ const buildVendorQuery = (vId, em, regId) => {
             orList.push({ _id: new mongoose.Types.ObjectId(vId) });
         }
     }
-    if (regId) {
+    if (regId && regId !== 'undefined' && regId !== 'null') {
         orList.push({ registrationId: String(regId) });
         orList.push({ vendorId: String(regId) });
     }
-    if (em) {
+    if (em && em !== 'undefined' && em !== 'null') {
         const cleanEmail = String(em).toLowerCase().trim();
-        orList.push({ email: cleanEmail });
-        orList.push({ email: { $regex: new RegExp(`^${cleanEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
+        if (cleanEmail) {
+            orList.push({ email: cleanEmail });
+            orList.push({ email: { $regex: new RegExp(`^${cleanEmail.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
+        }
+    }
+    if (bizName && bizName !== 'undefined' && bizName !== 'null') {
+        const cleanBiz = String(bizName).trim();
+        if (cleanBiz) {
+            orList.push({ businessName: { $regex: new RegExp(`^${cleanBiz.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
+            orList.push({ name: { $regex: new RegExp(`^${cleanBiz.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}$`, 'i') } });
+        }
     }
     return { $or: orList.length > 0 ? orList : [{ _id: null }] };
 };
@@ -325,7 +334,7 @@ const buildVendorQuery = (vId, em, regId) => {
 // POST Update Vendor Status (Active, Inactive, Suspended, Pending, Rejected)
 router.post('/vendors/update-status', auth, async (req, res) => {
     try {
-        const { vendorId, registrationId, _id, email, status, reason = '' } = req.body;
+        const { vendorId, registrationId, _id, email, businessName, name, status, reason = '' } = req.body;
         if (!status) return res.status(400).json({ msg: 'Status is required' });
 
         const rawStatus = status.trim();
@@ -333,7 +342,9 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         const isCurrentlyActive = ['Active', 'Approved'].includes(formattedStatus);
 
         const targetId = _id || vendorId;
-        const updateFilter = buildVendorQuery(targetId, email, registrationId);
+        const targetEmail = email ? String(email).toLowerCase().trim() : '';
+        const targetBizName = businessName || name || '';
+        const updateFilter = buildVendorQuery(targetId, targetEmail, registrationId, targetBizName);
 
         const existingVendor = await User.findOne(updateFilter) || await Vendor.findOne(updateFilter);
         const oldStatus = existingVendor ? (existingVendor.status || 'Pending') : 'Pending';
@@ -402,12 +413,12 @@ router.post('/vendors/update-status', auth, async (req, res) => {
                 action: actionType,
                 ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
                 status: 'success',
-                details: `Admin changed status for vendor "${existingVendor?.businessName || existingVendor?.name || vendorId}" from "${oldStatus}" to "${formattedStatus}". Reason: ${reason || 'Status updated by Administrator'}`,
+                details: `Admin changed status for vendor "${existingVendor?.businessName || existingVendor?.name || targetBizName || vendorId}" from "${oldStatus}" to "${formattedStatus}". Reason: ${reason || 'Status updated by Administrator'}`,
                 metadata: {
                     adminId: req.user ? req.user.id : null,
                     adminName: adminUser?.name || 'Admin',
-                    vendorId: existingVendor?._id || vendorId,
-                    vendorName: existingVendor?.businessName || existingVendor?.name || 'Vendor',
+                    vendorId: existingVendor?._id || targetId,
+                    vendorName: existingVendor?.businessName || existingVendor?.name || targetBizName || 'Vendor',
                     oldStatus,
                     newStatus: formattedStatus,
                     reason: reason || 'Status updated by Administrator',
@@ -422,8 +433,8 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         const io = getIo(req);
         if (io) {
             io.emit('vendor_status_changed', {
-                vendorId: existingVendor?._id || vendorId,
-                email: existingVendor?.email || email,
+                vendorId: existingVendor?._id || targetId,
+                email: existingVendor?.email || targetEmail,
                 status: formattedStatus,
                 isActive: isCurrentlyActive,
                 reason,
@@ -432,7 +443,7 @@ router.post('/vendors/update-status', auth, async (req, res) => {
 
             if (['Inactive', 'Suspended'].includes(formattedStatus)) {
                 io.emit('session_terminated', {
-                    userId: existingVendor?._id || vendorId,
+                    userId: existingVendor?._id || targetId,
                     reason: `Your vendor account has been marked as ${formattedStatus} by the administrator.`,
                     timestamp: new Date()
                 });
@@ -443,7 +454,7 @@ router.post('/vendors/update-status', auth, async (req, res) => {
             success: true,
             msg: `Vendor status updated to ${formattedStatus} successfully`,
             vendor: {
-                id: existingVendor?._id || vendorId,
+                id: existingVendor?._id || targetId,
                 status: formattedStatus,
                 isActive: isCurrentlyActive
             }
@@ -457,9 +468,11 @@ router.post('/vendors/update-status', auth, async (req, res) => {
 // POST Approve & Activate Direct Vendor Request
 router.post('/vendors/approve', auth, async (req, res) => {
     try {
-        const { vendorId, registrationId, email } = req.body;
-        const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
-        const updateFilter = buildVendorQuery(vendorId, targetEmail, registrationId);
+        const { vendorId, registrationId, _id, email, businessName, name } = req.body;
+        const targetId = _id || vendorId;
+        const targetEmail = email ? String(email).toLowerCase().trim() : '';
+        const targetBizName = businessName || name || '';
+        const updateFilter = buildVendorQuery(targetId, targetEmail, registrationId, targetBizName);
 
         await User.collection.updateMany(
             updateFilter,
@@ -489,13 +502,13 @@ router.post('/vendors/approve', auth, async (req, res) => {
             user.isLocked = false;
             user.rejectionReason = '';
             await user.save().catch(() => {});
-        } else {
+        } else if (targetEmail || targetBizName) {
             const salt = await bcrypt.genSalt(12);
-            const hashedPassword = await bcrypt.hash('Dhanu@12345', salt);
+            const hashedPassword = await bcrypt.hash('Vendor@12345', salt);
             user = new User({
-                name: 'Dhanushya Sri',
-                businessName: 'Dhanushya Sri Enterprises',
-                email: targetEmail,
+                name: name || targetBizName || 'Vendor Partner',
+                businessName: targetBizName || name || 'Vendor Partner',
+                email: targetEmail || `vendor_${Date.now()}@connect.com`,
                 phone: '9876543211',
                 password: hashedPassword,
                 role: 'vendor',
@@ -518,12 +531,12 @@ router.post('/vendors/approve', auth, async (req, res) => {
                 action: 'vendor_activated',
                 ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
                 status: 'success',
-                details: `Admin approved vendor "${user.businessName || user.name}" (${user.email})`,
+                details: `Admin approved vendor "${user?.businessName || user?.name || targetBizName}" (${user?.email || targetEmail})`,
                 metadata: {
                     adminId: req.user ? req.user.id : null,
                     adminName: adminUser?.name || 'Admin',
-                    vendorId: user._id,
-                    vendorName: user.businessName || user.name,
+                    vendorId: user?._id || targetId,
+                    vendorName: user?.businessName || user?.name || targetBizName,
                     oldStatus: 'Pending',
                     newStatus: 'Approved',
                     reason: 'Direct registration approved',
@@ -535,14 +548,14 @@ router.post('/vendors/approve', auth, async (req, res) => {
         const io = getIo(req);
         if (io) {
             io.emit('vendor_approved', {
-                vendorId: user._id,
-                email: user.email,
+                vendorId: user?._id || targetId,
+                email: user?.email || targetEmail,
                 status: 'Approved',
                 timestamp: new Date()
             });
         }
 
-        res.json({ success: true, msg: 'Vendor approved and activated successfully', user: { id: user._id, email: user.email, status: user.status } });
+        res.json({ success: true, msg: 'Vendor approved and activated successfully', user: { id: user?._id || targetId, email: user?.email || targetEmail, status: 'Approved' } });
     } catch (err) {
         console.error('Approve vendor error:', err);
         res.status(500).send('Server error');
@@ -552,18 +565,20 @@ router.post('/vendors/approve', auth, async (req, res) => {
 // POST Reject Direct Vendor Request
 router.post('/vendors/reject', auth, async (req, res) => {
     try {
-        const { vendorId, email, reason = 'Registration application rejected' } = req.body;
-        const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
-        const updateFilter = buildVendorQuery(vendorId, targetEmail);
+        const { vendorId, registrationId, _id, email, businessName, name, reason = 'Registration application rejected' } = req.body;
+        const targetId = _id || vendorId;
+        const targetEmail = email ? String(email).toLowerCase().trim() : '';
+        const targetBizName = businessName || name || '';
+        const updateFilter = buildVendorQuery(targetId, targetEmail, registrationId, targetBizName);
 
         await User.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false, rejectionReason: reason } }
+            { $set: { status: 'Rejected', isActive: false, isLocked: true, rejectionReason: reason } }
         ).catch(() => {});
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false, rejectionReason: reason } }
+            { $set: { status: 'Rejected', isActive: false, isLocked: true, rejectionReason: reason } }
         ).catch(() => {});
 
         await Vendor.collection.updateMany(

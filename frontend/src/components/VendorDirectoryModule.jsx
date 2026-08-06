@@ -287,7 +287,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId, registrationId, email })
+        body: JSON.stringify({
+          vendorId,
+          registrationId,
+          _id: targetVendor?._id,
+          email,
+          businessName: targetVendor?.businessName || targetVendor?.name,
+          name: targetVendor?.contactPerson || targetVendor?.name
+        })
       });
     } catch (err) {
       console.error('Approve vendor error:', err);
@@ -316,7 +323,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId, email })
+        body: JSON.stringify({
+          vendorId,
+          registrationId: targetVendor?.registrationId,
+          _id: targetVendor?._id,
+          email,
+          businessName: targetVendor?.businessName || targetVendor?.name,
+          name: targetVendor?.contactPerson || targetVendor?.name
+        })
       });
     } catch (err) {
       console.error('Reject vendor error:', err);
@@ -370,7 +384,16 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId, registrationId: regId, _id: targetVendor?._id, email, status: newStatus, reason })
+        body: JSON.stringify({
+          vendorId,
+          registrationId: regId,
+          _id: targetVendor?._id,
+          email,
+          businessName: targetVendor?.businessName || targetVendor?.name,
+          name: targetVendor?.contactPerson || targetVendor?.name,
+          status: newStatus,
+          reason
+        })
       });
     } catch (err) {
       console.error('Update status error:', err);
