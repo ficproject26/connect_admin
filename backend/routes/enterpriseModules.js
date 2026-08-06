@@ -457,18 +457,18 @@ router.post('/vendors/update-status', auth, async (req, res) => {
 // POST Approve & Activate Direct Vendor Request
 router.post('/vendors/approve', auth, async (req, res) => {
     try {
-        const { vendorId, email } = req.body;
+        const { vendorId, registrationId, email } = req.body;
         const targetEmail = (email || 'dhanushiyasri@gmail.com').toLowerCase();
-        const updateFilter = buildVendorQuery(vendorId, targetEmail);
+        const updateFilter = buildVendorQuery(vendorId, targetEmail, registrationId);
 
         await User.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Approved', isActive: true, isApproved: true } }
+            { $set: { status: 'Approved', isActive: true, isApproved: true, isLocked: false, rejectionReason: '' } }
         ).catch(() => {});
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: 'Approved', isActive: true, isApproved: true } }
+            { $set: { status: 'Approved', isActive: true, isApproved: true, isLocked: false, rejectionReason: '' } }
         ).catch(() => {});
 
         await Vendor.collection.updateMany(
@@ -482,7 +482,14 @@ router.post('/vendors/approve', auth, async (req, res) => {
         ).catch(() => {});
 
         let user = await User.findOne(updateFilter);
-        if (!user) {
+        if (user) {
+            user.status = 'Approved';
+            user.isActive = true;
+            user.isApproved = true;
+            user.isLocked = false;
+            user.rejectionReason = '';
+            await user.save().catch(() => {});
+        } else {
             const salt = await bcrypt.genSalt(12);
             const hashedPassword = await bcrypt.hash('Dhanu@12345', salt);
             user = new User({
@@ -495,6 +502,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
                 status: 'Approved',
                 isActive: true,
                 isApproved: true,
+                isLocked: false,
                 createdAt: new Date()
             });
             await user.save();

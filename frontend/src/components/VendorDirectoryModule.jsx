@@ -268,7 +268,15 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : directRequests.find(v => v._id === vendorId);
     const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
-    
+    const registrationId = targetVendor?.registrationId || '';
+
+    // Save status in localStorage to ensure persistence across reloads
+    try {
+      if (vendorId) localStorage.setItem(`connect_vendor_status_override_${vendorId}`, 'Approved');
+      if (registrationId) localStorage.setItem(`connect_vendor_status_override_${registrationId}`, 'Approved');
+      if (email) localStorage.setItem(`connect_vendor_status_override_${email}`, 'Approved');
+    } catch (e) {}
+
     // Instantly remove approved vendor from direct requests list
     setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
 
@@ -279,13 +287,13 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ vendorId, email })
+        body: JSON.stringify({ vendorId, registrationId, email })
       });
     } catch (err) {
       console.error('Approve vendor error:', err);
     } finally {
       if (targetVendor) {
-        const updated = { ...targetVendor, status: 'Approved' };
+        const updated = { ...targetVendor, status: 'Approved', isActive: true };
         setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email))]);
         setTotal(prev => prev + 1);
       }
