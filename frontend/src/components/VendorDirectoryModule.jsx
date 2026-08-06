@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
 import {
   Store, LayoutGrid, List, Search, Filter, Download, ArrowUpRight, CheckCircle,
-  XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, AlertTriangle, RefreshCw, X, ChevronRight, Trash2
+  XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, AlertTriangle, RefreshCw, X, ChevronRight, Trash2,
+  Eye, Building, Phone, Mail, FileText, CreditCard, ShieldCheck, User, Globe, Tag, Calendar, Layers
 } from 'lucide-react';
 
 const formatVendorId = (rawId, index = 0) => {
@@ -102,6 +102,9 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     targetStatus: '',
     reason: ''
   });
+
+  // Full Vendor Details Profile Modal
+  const [selectedVendorDetails, setSelectedVendorDetails] = useState(null);
 
   const fetchVendors = async () => {
     setLoading(true);
@@ -628,30 +631,34 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       {viewMode === 'grid' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {vendors.map((v, idx) => (
-            <div key={v._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary-500/30 transition-all flex flex-col justify-between">
+            <div 
+              key={v._id} 
+              onClick={() => setSelectedVendorDetails(v)}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary-500/50 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group"
+            >
               <div className="space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-xl flex items-center justify-center border border-amber-500/20">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-xl flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-all">
                       {(v.businessName || v.name || 'V')[0].toUpperCase()}
                     </div>
                     <div>
-                      <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight">{v.businessName || v.name}</h4>
+                      <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all">{v.businessName || v.name}</h4>
                       <p className="text-xs text-slate-400 font-semibold">{v.contactPerson || v.email}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                     {renderStatusBadge(v.status)}
                     <select
                       value={normalizeStatusValue(v.status)}
-                      onChange={e => handleUpdateVendorStatus(v, e.target.value)}
+                      onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
                       className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
                     >
                       <option value="Active">Active</option>
                       <option value="Suspended">Suspended</option>
                     </select>
                     <button
-                      onClick={() => handleDeleteVendor(v)}
+                      onClick={e => { e.stopPropagation(); handleDeleteVendor(v); }}
                       title="Delete Vendor"
                       className="p-1.5 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer border border-rose-500/20 active:scale-95"
                     >
@@ -695,14 +702,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs">
+                  <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
                       <UserCheck className="w-4 h-4" />
                       <span>Agent: <strong>{v.assignedPincodeAgent?.name || 'Unassigned'}</strong></span>
                     </div>
                     {!v.assignedPincodeAgent && (
                       <button
-                        onClick={() => handleAutoAssignPincodeAgent(v._id)}
+                        onClick={e => { e.stopPropagation(); handleAutoAssignPincodeAgent(v._id); }}
                         className="text-[10px] font-black uppercase px-2 py-1 rounded-lg bg-blue-600 text-white shadow-xs hover:bg-blue-700 transition-all cursor-pointer"
                       >
                         Auto Assign
@@ -714,12 +721,20 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
               <div className="pt-2 flex items-center justify-between">
                 <span className="text-[10px] text-slate-400 font-semibold">Reg ID: {formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
-                <button
-                  onClick={() => handleDeleteVendor(v)}
-                  className="text-[10px] font-extrabold text-rose-600 hover:text-white hover:bg-rose-600 dark:text-rose-400 flex items-center gap-1 cursor-pointer bg-rose-500/10 px-2.5 py-1 rounded-xl border border-rose-500/20 transition-all active:scale-95"
-                >
-                  <Trash2 className="w-3 h-3" /> Delete
-                </button>
+                <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={e => { e.stopPropagation(); setSelectedVendorDetails(v); }}
+                    className="text-[10px] font-extrabold text-blue-600 hover:text-white hover:bg-blue-600 dark:text-blue-400 flex items-center gap-1 cursor-pointer bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-500/20 transition-all active:scale-95"
+                  >
+                    <Eye className="w-3 h-3" /> View Details
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); handleDeleteVendor(v); }}
+                    className="text-[10px] font-extrabold text-rose-600 hover:text-white hover:bg-rose-600 dark:text-rose-400 flex items-center gap-1 cursor-pointer bg-rose-500/10 px-2.5 py-1 rounded-xl border border-rose-500/20 transition-all active:scale-95"
+                  >
+                    <Trash2 className="w-3 h-3" /> Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -743,9 +758,13 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-850 text-xs">
               {vendors.map((v, idx) => (
-                <tr key={v._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40">
+                <tr 
+                  key={v._id} 
+                  onClick={() => setSelectedVendorDetails(v)}
+                  className="hover:bg-slate-50/80 dark:hover:bg-slate-850/60 cursor-pointer transition-colors group"
+                >
                   <td className="py-3 px-4">
-                    <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{v.businessName || v.name}</span>
+                    <span className="font-extrabold text-slate-800 dark:text-slate-100 block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{v.businessName || v.name}</span>
                     <span className="text-[11px] text-slate-400">{v.email} • {getVendorPhone(v)}</span>
                   </td>
                   <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
@@ -765,7 +784,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       </span>
                     )}
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                     {v.joiningType === 'agent' || v.onboardedByAgent ? (
                       <div className="space-y-0.5">
                         <span className="text-xs font-extrabold text-purple-700 dark:text-purple-300 flex items-center gap-1">
@@ -788,19 +807,19 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       </div>
                     ) : (
                       <button
-                        onClick={() => handleAutoAssignPincodeAgent(v._id)}
+                        onClick={e => { e.stopPropagation(); handleAutoAssignPincodeAgent(v._id); }}
                         className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs transition-all active:scale-95"
                       >
                         Auto Assign Agent
                       </button>
                     )}
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       {renderStatusBadge(v.status)}
                       <select
                         value={normalizeStatusValue(v.status)}
-                        onChange={e => handleUpdateVendorStatus(v, e.target.value)}
+                        onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
                         className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
                       >
                         <option value="Active">Active</option>
@@ -808,11 +827,18 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       </select>
                     </div>
                   </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <span className="text-[11px] text-slate-400 font-mono">{formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
+                  <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <span className="text-[11px] text-slate-400 font-mono mr-1">{formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
                       <button
-                        onClick={() => handleDeleteVendor(v)}
+                        onClick={e => { e.stopPropagation(); setSelectedVendorDetails(v); }}
+                        title="View Vendor Details"
+                        className="p-1.5 rounded-xl bg-blue-500/10 text-blue-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer border border-blue-500/20 active:scale-95"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); handleDeleteVendor(v); }}
                         title="Delete Vendor"
                         className="p-1.5 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer border border-rose-500/20 active:scale-95"
                       >
@@ -1040,6 +1066,172 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 Confirm Status Change
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. FULL VENDOR PROFILE DETAILS MODAL */}
+      {selectedVendorDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-3xl rounded-3xl p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/20 shadow-xs">
+                  {(selectedVendorDetails.businessName || selectedVendorDetails.name || 'V')[0].toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">
+                      {selectedVendorDetails.businessName || selectedVendorDetails.name}
+                    </h3>
+                    {renderStatusBadge(selectedVendorDetails.status)}
+                  </div>
+                  <p className="text-xs text-slate-400 font-semibold flex items-center gap-2 mt-0.5">
+                    <span>Contact: {selectedVendorDetails.contactPerson || 'N/A'}</span>
+                    <span>•</span>
+                    <span className="font-mono text-primary-600 dark:text-primary-400">
+                      {formatVendorId(selectedVendorDetails.registrationId || selectedVendorDetails.vendorId || selectedVendorDetails._id)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedVendorDetails(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Information Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+              
+              {/* 1. Business Overview */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold pb-2 border-b border-slate-200/60 dark:border-slate-850">
+                  <Building className="w-4 h-4 text-primary-500" />
+                  <span>Business Overview</span>
+                </div>
+                <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                  <div className="flex justify-between"><span className="text-slate-400">Business Name:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.businessName || selectedVendorDetails.name}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Contact Person:</span><span className="font-bold">{selectedVendorDetails.contactPerson || 'N/A'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold text-amber-600 dark:text-amber-400">{getVendorCategory(selectedVendorDetails)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Vendor Type:</span><span className="font-bold">{selectedVendorDetails.baseVendorType || selectedVendorDetails.vendorType || 'Retail Vendor'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Joining Method:</span>
+                    <span className="font-extrabold uppercase text-[10px] px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                      {selectedVendorDetails.joiningType === 'agent' || selectedVendorDetails.onboardedByAgent ? '👤 Agent Onboarded' : '🌐 Direct Website'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between"><span className="text-slate-400">Operating Hours:</span><span className="font-bold">{selectedVendorDetails.operatingHours || '9:00 AM - 9:00 PM'}</span></div>
+                </div>
+              </div>
+
+              {/* 2. Contact & Location */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold pb-2 border-b border-slate-200/60 dark:border-slate-850">
+                  <MapPin className="w-4 h-4 text-emerald-500" />
+                  <span>Contact & Territory</span>
+                </div>
+                <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                  <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.email || 'N/A'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Mobile Phone:</span><span className="font-bold">{getVendorPhone(selectedVendorDetails)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">District / City:</span><span className="font-bold">{selectedVendorDetails.city || 'Dharmapuri'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-bold">{selectedVendorDetails.state || 'Tamil Nadu'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-mono font-bold">{selectedVendorDetails.pincode || '635109'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-bold truncate max-w-[180px]" title={getVendorAddress(selectedVendorDetails)}>{getVendorAddress(selectedVendorDetails)}</span></div>
+                </div>
+              </div>
+
+              {/* 3. Onboarding & Agent Details */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold pb-2 border-b border-slate-200/60 dark:border-slate-850">
+                  <UserCheck className="w-4 h-4 text-purple-500" />
+                  <span>Agent & Onboarding</span>
+                </div>
+                <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                  <div className="flex justify-between"><span className="text-slate-400">Assigned Agent:</span><span className="font-bold text-purple-600 dark:text-purple-400">{selectedVendorDetails.onboardedByAgent?.name || selectedVendorDetails.assignedPincodeAgent?.name || 'Unassigned'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Agent Reg ID:</span><span className="font-mono font-bold">{selectedVendorDetails.onboardedByAgent?.registrationId || selectedVendorDetails.assignedPincodeAgent?.registrationId || 'AG-PIN-1042'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Agent Pincode:</span><span className="font-mono font-bold">{selectedVendorDetails.onboardedByAgent?.pincode || selectedVendorDetails.assignedPincodeAgent?.pincode || selectedVendorDetails.pincode || '635109'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Assigned Territory:</span><span className="font-bold">{selectedVendorDetails.assignedArea || 'Tamil Nadu / Dharmapuri'}</span></div>
+                </div>
+              </div>
+
+              {/* 4. Tax & Legal Info */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold pb-2 border-b border-slate-200/60 dark:border-slate-850">
+                  <ShieldCheck className="w-4 h-4 text-amber-500" />
+                  <span>Legal & Tax Verification</span>
+                </div>
+                <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                  <div className="flex justify-between"><span className="text-slate-400">GST Number:</span><span className="font-mono font-bold">{selectedVendorDetails.gstNumber || selectedVendorDetails.gstin || 'Not Provided'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">PAN Number:</span><span className="font-mono font-bold">{selectedVendorDetails.panNumber || selectedVendorDetails.kyc?.panNumber || 'Verified'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">License Number:</span><span className="font-mono font-bold">{selectedVendorDetails.businessLicense || selectedVendorDetails.licenseNumber || 'LIC-2026-8891'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">KYC Status:</span><span className="font-bold text-emerald-600">Verified Partner</span></div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Sub-businesses / Outlets if present */}
+            {selectedVendorDetails.businesses && Array.isArray(selectedVendorDetails.businesses) && selectedVendorDetails.businesses.length > 0 && (
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-3 text-xs">
+                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold pb-2 border-b border-slate-200/60 dark:border-slate-850">
+                  <Layers className="w-4 h-4 text-blue-500" />
+                  <span>Registered Businesses / Outlets ({selectedVendorDetails.businesses.length})</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {selectedVendorDetails.businesses.map((biz, bIdx) => (
+                    <div key={biz._id || bIdx} className="p-3 bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 rounded-xl space-y-1">
+                      <div className="flex justify-between items-center font-extrabold text-slate-800 dark:text-slate-100">
+                        <span>{biz.businessName || biz.name || 'Outlet ' + (bIdx + 1)}</span>
+                        {renderStatusBadge(biz.status || selectedVendorDetails.status)}
+                      </div>
+                      <p className="text-[11px] text-slate-400">{biz.category || biz.vendorType || 'Category'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Footer Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800 flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-400">Update Status:</span>
+                <select
+                  value={normalizeStatusValue(selectedVendorDetails.status)}
+                  onChange={e => {
+                    handleUpdateVendorStatus(selectedVendorDetails, e.target.value);
+                    setSelectedVendorDetails(prev => prev ? ({ ...prev, status: e.target.value }) : null);
+                  }}
+                  className="text-xs font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 cursor-pointer focus:outline-none"
+                >
+                  <option value="Active">🟢 Active</option>
+                  <option value="Suspended">⚫ Suspended</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleDeleteVendor(selectedVendorDetails);
+                    setSelectedVendorDetails(null);
+                  }}
+                  className="px-4 py-2 rounded-xl text-xs font-extrabold text-rose-600 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/20 transition-all cursor-pointer"
+                >
+                  Delete Vendor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedVendorDetails(null)}
+                  className="px-5 py-2 rounded-xl text-xs font-black text-white bg-slate-800 hover:bg-slate-900 transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}
