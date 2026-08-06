@@ -365,14 +365,17 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         await Vendor.collection.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
         await Vendor.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
 
-        // 3. Update nested businesses array ONLY for documents where businesses array is non-empty
-        const bizFilter = { ...updateFilter, "businesses.0": { $exists: true } };
-        await User.collection.updateMany(bizFilter, { 
-            $set: { 
-                "businesses.$[].status": formattedStatus,
-                "businesses.$[].isActive": isCurrentlyActive
-            } 
-        }).catch(e => console.error('Businesses array update error:', e));
+        // 3. Update nested businesses array with arrayFilters for documents where businesses array is non-empty
+        await User.collection.updateMany(
+            { ...updateFilter, "businesses": { $type: "array", $ne: [] } },
+            { 
+                $set: { 
+                    "businesses.$[elem].status": formattedStatus,
+                    "businesses.$[elem].isActive": isCurrentlyActive
+                } 
+            },
+            { arrayFilters: [{ "elem": { $exists: true } }] }
+        ).catch(e => console.error('Businesses array update error:', e));
 
         // 4. Update each matched vendor user document explicitly
         const vendorUsers = await User.find(updateFilter).catch(() => []);
@@ -391,6 +394,9 @@ router.post('/vendors/update-status', auth, async (req, res) => {
                     b.status = formattedStatus;
                     b.isActive = isCurrentlyActive;
                 });
+                if (typeof vUser.markModified === 'function') {
+                    vUser.markModified('businesses');
+                }
             }
             await vUser.save().catch(e => console.error('vUser.save error:', e));
 

@@ -403,8 +403,17 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     } catch (e) {}
 
     // Immediately update local state so UI responds instantly
-    setVendors(prev => prev.map(v => (v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase())) ? { ...v, status: newStatus, isActive: ['Active', 'Approved'].includes(newStatus) } : v));
+    const isCurrentlyActive = ['Active', 'Approved'].includes(newStatus);
+    const updateVendorObj = (v) => {
+      const isMatch = v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase());
+      if (!isMatch) return v;
+      const updatedBiz = (v.businesses || []).map(b => ({ ...b, status: newStatus, isActive: isCurrentlyActive }));
+      return { ...v, status: newStatus, isActive: isCurrentlyActive, businesses: updatedBiz };
+    };
+
+    setVendors(prev => prev.map(updateVendorObj));
     setDirectRequests(prev => prev.map(v => (v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase())) ? { ...v, status: newStatus } : v));
+    setSelectedVendorDetails(prev => prev ? updateVendorObj(prev) : null);
 
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/update-status`, {
@@ -939,7 +948,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
       {/* 6. ENTERPRISE STATUS CHANGE CONFIRMATION DIALOG MODAL */}
       {statusConfirmModal.isOpen && statusConfirmModal.vendor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-3">
