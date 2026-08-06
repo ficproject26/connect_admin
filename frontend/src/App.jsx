@@ -5403,19 +5403,6 @@ function App() {
                           2. Sub Categories ({filteredSubList.length}) <span className="text-slate-400 font-normal">- {activeMainCatName}</span>
                         </h3>
                         <div className="flex items-center gap-2">
-                          {displayedSubList.length > 0 && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await executeAction('/admin/categories-batch-delete', 'DELETE', { mainName: activeMainCatName, scope: 'all-sub' });
-                              }}
-                              className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
-                              title="Remove All Sub Categories"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Delete All
-                            </button>
-                          )}
                           <button
                             onClick={() => {
                               setAddFirstCategory(activeMainCatName);
@@ -5463,21 +5450,6 @@ function App() {
                                   {(subItem.childCategories || []).length}
                                 </span>
 
-                                {/* Direct Delete Button */}
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    if (subItem._id) {
-                                      await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
-                                    }
-                                    await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
-                                  }}
-                                  className="p-1.5 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                                  title="Delete Sub Category"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-
                                 <div className="relative">
                                   <button
                                     onClick={(e) => {
@@ -5513,19 +5485,6 @@ function App() {
                                       >
                                         Toggle Status
                                       </button>
-                                      <button
-                                        onClick={async (e) => {
-                                          e.stopPropagation();
-                                          setActiveCatMenuId(null);
-                                          if (subItem._id) {
-                                            await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
-                                          }
-                                          await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
-                                        }}
-                                        className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
-                                      >
-                                        Delete
-                                      </button>
                                     </div>
                                   )}
                                 </div>
@@ -5552,19 +5511,6 @@ function App() {
                           3. Child Categories ({filteredChildList.length}) <span className="text-slate-400 font-normal">- {activeSubCatName}</span>
                         </h3>
                         <div className="flex items-center gap-2">
-                          {displayedChildList.length > 0 && (
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                await executeAction('/admin/categories-batch-delete', 'DELETE', { mainName: activeMainCatName, subName: activeSubCatName, scope: 'all-child' });
-                              }}
-                              className="inline-flex items-center gap-1 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 px-2.5 py-1 rounded-lg transition-all border border-rose-200 dark:border-rose-900/40"
-                              title="Remove All Child Categories"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Delete All
-                            </button>
-                          )}
                           <button
                             onClick={() => {
                               setAddFirstCategory(activeMainCatName);
@@ -5603,21 +5549,6 @@ function App() {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
-                              {/* Direct Delete Button */}
-                              <button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  if (childItem._id) {
-                                    await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
-                                  }
-                                  await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
-                                }}
-                                className="p-1.5 rounded-lg text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
-                                title="Delete Child Category"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-
                               <div className="relative">
                                 <button
                                   onClick={(e) => {
@@ -5652,19 +5583,6 @@ function App() {
                                       className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
                                     >
                                       Toggle Status
-                                    </button>
-                                    <button
-                                      onClick={async (e) => {
-                                        e.stopPropagation();
-                                        setActiveCatMenuId(null);
-                                        if (childItem._id) {
-                                          await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
-                                        }
-                                        await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
-                                      }}
-                                      className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 font-semibold text-rose-600 dark:text-rose-400"
-                                    >
-                                      Delete
                                     </button>
                                   </div>
                                 )}
