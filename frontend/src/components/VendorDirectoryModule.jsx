@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Store, LayoutGrid, List, Search, Filter, Download, ArrowUpRight, CheckCircle,
-  XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, RefreshCw, X, ChevronRight, Trash2
+  XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, AlertTriangle, RefreshCw, X, ChevronRight, Trash2
 } from 'lucide-react';
 
 const formatVendorId = (rawId, index = 0) => {
