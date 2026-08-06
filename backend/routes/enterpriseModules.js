@@ -340,12 +340,12 @@ router.post('/vendors/update-status', auth, async (req, res) => {
 
         await User.collection.updateMany(
             updateFilter,
-            { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive } }
+            { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive, isLocked: !isCurrentlyActive } }
         ).catch(() => {});
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive } }
+            { $set: { status: formattedStatus, isActive: isCurrentlyActive, isApproved: isCurrentlyActive, isLocked: !isCurrentlyActive } }
         ).catch(() => {});
 
         await Vendor.collection.updateMany(
@@ -358,8 +358,18 @@ router.post('/vendors/update-status', auth, async (req, res) => {
             { $set: { status: formattedStatus, isActive: isCurrentlyActive } }
         ).catch(() => {});
 
-        // 1. BLOCK LOGIN & TERMINATE ACTIVE SESSIONS IF INACTIVE, SUSPENDED, OR REJECTED
-        if (['Inactive', 'Suspended', 'Rejected'].includes(formattedStatus)) {
+        // 1. UNLOCK ACCOUNT IF ACTIVE / APPROVED OR BLOCK & TERMINATE ACTIVE SESSIONS IF INACTIVE, SUSPENDED, OR REJECTED
+        if (['Active', 'Approved'].includes(formattedStatus)) {
+            const vendorUsers = await User.find(updateFilter).catch(() => []);
+            for (const vUser of vendorUsers) {
+                vUser.isActive = true;
+                vUser.isApproved = true;
+                vUser.isLocked = false;
+                vUser.status = formattedStatus;
+                vUser.rejectionReason = '';
+                await vUser.save().catch(() => {});
+            }
+        } else if (['Inactive', 'Suspended', 'Rejected'].includes(formattedStatus)) {
             const vendorUsers = await User.find(updateFilter).catch(() => []);
             for (const vUser of vendorUsers) {
                 vUser.isActive = false;
