@@ -623,10 +623,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
                     >
                       <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
                       <option value="Suspended">Suspended</option>
-                      <option value="Pending">Pending</option>
-                      <option value="Rejected">Rejected</option>
                     </select>
                     <button
                       onClick={() => handleDeleteVendor(v)}
@@ -782,10 +779,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                         className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
                       >
                         <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
                         <option value="Suspended">Suspended</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Rejected">Rejected</option>
                       </select>
                     </div>
                   </td>
