@@ -95,6 +95,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
   const [showDirectModal, setShowDirectModal] = useState(false);
   const [directRequests, setDirectRequests] = useState([]);
 
+  // Enterprise Status Change Confirmation Modal
+  const [statusConfirmModal, setStatusConfirmModal] = useState({
+    isOpen: false,
+    vendor: null,
+    targetStatus: '',
+    reason: ''
+  });
+
   const fetchVendors = async () => {
     setLoading(true);
     try {
@@ -359,18 +367,29 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     return 'Pending';
   };
 
-  const handleUpdateVendorStatus = async (vendorObj, newStatus) => {
+  const handleUpdateVendorStatus = (vendorObj, newStatus) => {
+    const vendorId = typeof vendorObj === 'object' ? (vendorObj._id || vendorObj.registrationId) : vendorObj;
+    const targetVendor = typeof vendorObj === 'object' ? vendorObj : vendors.find(v => v._id === vendorId);
+    
+    // Open Confirmation Dialog Modal as per Enterprise UI Requirements
+    setStatusConfirmModal({
+      isOpen: true,
+      vendor: targetVendor || vendorObj,
+      targetStatus: newStatus,
+      reason: `Account marked as ${newStatus} by Administrator`
+    });
+  };
+
+  const executeStatusUpdate = async () => {
+    const { vendor: vendorObj, targetStatus: newStatus, reason } = statusConfirmModal;
+    if (!vendorObj || !newStatus) return;
+
+    setStatusConfirmModal({ isOpen: false, vendor: null, targetStatus: '', reason: '' });
+
     const vendorId = typeof vendorObj === 'object' ? (vendorObj._id || vendorObj.registrationId) : vendorObj;
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : vendors.find(v => v._id === vendorId);
     const email = targetVendor?.email || (typeof vendorObj === 'object' ? vendorObj.email : '');
     const regId = targetVendor?.registrationId || '';
-
-    let reason = 'Admin status update';
-    if (newStatus === 'Inactive' || newStatus === 'Suspended' || newStatus === 'Rejected') {
-      const userPrompt = window.prompt(`Enter reason for marking "${targetVendor?.businessName || targetVendor?.name || 'Vendor'}" as ${newStatus}:`, `Account marked as ${newStatus} by Administrator`);
-      if (userPrompt === null) return; // User pressed Cancel
-      reason = userPrompt || `Account marked as ${newStatus}`;
-    }
 
     // Save status in localStorage to ensure 100% persistence on UI refresh
     try {
@@ -398,7 +417,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           businessName: targetVendor?.businessName || targetVendor?.name,
           name: targetVendor?.contactPerson || targetVendor?.name,
           status: newStatus,
-          reason
+          reason: reason || `Account marked as ${newStatus} by Administrator`
         })
       });
     } catch (err) {
@@ -886,6 +905,140 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                   <p className="text-xs font-bold">No pending direct vendor requests at the moment.</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. ENTERPRISE STATUS CHANGE CONFIRMATION DIALOG MODAL */}
+      {statusConfirmModal.isOpen && statusConfirmModal.vendor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-3 rounded-2xl ${
+                  ['Suspended', 'Inactive', 'Rejected'].includes(statusConfirmModal.targetStatus)
+                    ? 'bg-rose-500/10 text-rose-600'
+                    : 'bg-emerald-500/10 text-emerald-600'
+                }`}>
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">Change Vendor Status</h3>
+                  <p className="text-xs text-slate-400 font-semibold">Confirm vendor lifecycle state transition</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setStatusConfirmModal({ isOpen: false, vendor: null, targetStatus: '', reason: '' })}
+                className="p-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Vendor Details */}
+            <div className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-2xl space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Vendor Business:</span>
+                <span className="text-xs font-black text-slate-800 dark:text-slate-100">
+                  {statusConfirmModal.vendor.businessName || statusConfirmModal.vendor.name}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-500">Contact / Email:</span>
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  {statusConfirmModal.vendor.email || statusConfirmModal.vendor.contactPerson || 'N/A'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-slate-200/40 dark:border-slate-850">
+                <span className="text-xs font-bold text-slate-500">Target Status:</span>
+                {renderStatusBadge(statusConfirmModal.targetStatus)}
+              </div>
+            </div>
+
+            {/* Confirmation Question */}
+            <p className="text-sm font-extrabold text-slate-800 dark:text-slate-200">
+              Are you sure you want to change this vendor status to <span className={
+                ['Suspended', 'Inactive', 'Rejected'].includes(statusConfirmModal.targetStatus)
+                  ? 'text-rose-600 underline decoration-rose-500'
+                  : 'text-emerald-600 underline decoration-emerald-500'
+              }>{statusConfirmModal.targetStatus}</span>?
+            </p>
+
+            {/* Effects Box */}
+            <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl space-y-2 text-xs">
+              <span className="font-black text-amber-800 dark:text-amber-400 uppercase tracking-wider text-[10px] block">
+                Effects & Access Policies:
+              </span>
+              {['Suspended', 'Inactive', 'Rejected'].includes(statusConfirmModal.targetStatus) ? (
+                <ul className="space-y-1.5 text-slate-600 dark:text-slate-400 font-medium">
+                  <li className="flex items-start gap-2">
+                    <span className="text-rose-500 font-bold">•</span>
+                    <span><strong>Block Vendor Login:</strong> Vendor portal & active JWT sessions will be blocked immediately across all devices.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-rose-500 font-bold">•</span>
+                    <span><strong>Customer Portal Removal:</strong> Products, services, food, travel, stay, and jobs will be hidden from customer app.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-emerald-600 font-bold">•</span>
+                    <span><strong>Historical Data Preservation:</strong> 100% of historical orders, invoices, payments, and audit logs remain preserved.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-amber-600 font-bold">•</span>
+                    <span><strong>Pending Orders:</strong> Existing completed orders remain visible to customers; pending orders remain accessible for Admin review.</span>
+                  </li>
+                </ul>
+              ) : (
+                <ul className="space-y-1.5 text-slate-600 dark:text-slate-400 font-medium">
+                  <li className="flex items-start gap-2">
+                    <span className="text-emerald-600 font-bold">•</span>
+                    <span><strong>Restore Access:</strong> Vendor can log in and access Dashboard, Wallet, Orders, and Products immediately.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-emerald-600 font-bold">•</span>
+                    <span><strong>Restore Customer Visibility:</strong> Products and services will automatically reappear in customer app listings & search results.</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-emerald-600 font-bold">•</span>
+                    <span><strong>Order Acceptance:</strong> Vendor will be able to receive and fulfill new customer orders.</span>
+                  </li>
+                </ul>
+              )}
+            </div>
+
+            {/* Reason Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-400">Reason for Status Change:</label>
+              <input
+                type="text"
+                value={statusConfirmModal.reason}
+                onChange={e => setStatusConfirmModal(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder="Enter audit log reason..."
+                className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-950 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setStatusConfirmModal({ isOpen: false, vendor: null, targetStatus: '', reason: '' })}
+                className="px-4 py-2.5 rounded-xl text-xs font-extrabold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeStatusUpdate}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black text-white shadow-md transition-all cursor-pointer active:scale-95 ${
+                  ['Suspended', 'Inactive', 'Rejected'].includes(statusConfirmModal.targetStatus)
+                    ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20'
+                    : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                }`}
+              >
+                Confirm Status Change
+              </button>
             </div>
           </div>
         </div>
