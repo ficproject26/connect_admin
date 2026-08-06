@@ -1050,35 +1050,64 @@ router.delete('/vendors', [auth, adminAuth], async (req, res) => {
 router.get('/customers', [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
+
+        // 1. Fetch from Customer collection (admin-created customers)
         const customersFromModel = await Customer.find(filter).populate('branchId', 'name').catch(() => []);
+
+        // 2. Fetch from User collection via Mongoose (Members registered via admin/agent portal)
         const usersAsCustomers = await User.find({
-            role: { $in: ['Member', 'member', 'customer', 'Customer'] }
+            role: { $in: ['Member', 'member'] }
         }).catch(() => []);
+
+        // 3. Fetch directly from raw MongoDB collections to capture Connect App registrations
+        //    (these bypass Mongoose schema enum validation, so roles like 'customer'/'Customer' are picked up)
+        let rawUsersCustomers = [];
+        let rawCustomers = [];
+        try {
+            const db = mongoose.connection.db;
+            if (db) {
+                rawUsersCustomers = await db.collection('users').find({
+                    role: { $in: ['customer', 'Customer', 'Member', 'member'] }
+                }).toArray();
+                rawCustomers = await db.collection('customers').find({}).toArray();
+            }
+        } catch (e) {
+            console.error('Raw collection fetch error:', e.message);
+        }
 
         const combined = [];
         const seenEmails = new Set();
         const seenPhones = new Set();
 
+        const sanitize = (doc) => {
+            const d = doc.toObject ? doc.toObject() : { ...doc };
+            delete d.password; // never expose passwords
+            d.aadhaarNumber = d.kyc?.aadhaarNumber || d.aadhaarNumber || '';
+            d.panNumber = d.kyc?.panNumber || d.panNumber || '';
+            d.customerType = d.customerType || 'Standard';
+            d.district = d.district || d.city || 'Direct';
+            d.status = d.status || 'Active';
+            d.name = d.name || d.fullName || d.username || 'Customer';
+            d.phone = d.phone || d.mobileNumber || d.mobileContact || d.telephone || '';
+            return d;
+        };
+
         const addDoc = (doc) => {
-            const email = (doc.email || '').toLowerCase().trim();
-            const phone = (doc.phone || doc.mobileNumber || doc.mobileContact || doc.telephone || '').trim();
+            const d = sanitize(doc);
+            const email = (d.email || '').toLowerCase().trim();
+            const phone = (d.phone || '').trim();
             if (email && seenEmails.has(email)) return;
             if (phone && seenPhones.has(phone)) return;
             if (email) seenEmails.add(email);
             if (phone) seenPhones.add(phone);
-            combined.push(doc);
+            combined.push(d);
         };
 
-        customersFromModel.forEach(c => addDoc(c.toObject ? c.toObject() : c));
-        usersAsCustomers.forEach(u => {
-            const uObj = u.toObject ? u.toObject() : u;
-            uObj.aadhaarNumber = uObj.kyc?.aadhaarNumber || uObj.aadhaarNumber || '';
-            uObj.panNumber = uObj.kyc?.panNumber || uObj.panNumber || '';
-            uObj.customerType = uObj.customerType || 'Standard';
-            uObj.district = uObj.district || uObj.city || 'Direct';
-            uObj.status = uObj.status || 'Active';
-            addDoc(uObj);
-        });
+        // Priority: admin Customer model first, then Mongoose User model, then raw collections
+        customersFromModel.forEach(c => addDoc(c));
+        usersAsCustomers.forEach(u => addDoc(u));
+        rawUsersCustomers.forEach(u => addDoc(u));
+        rawCustomers.forEach(c => addDoc(c));
 
         res.json(combined);
     } catch (err) {
