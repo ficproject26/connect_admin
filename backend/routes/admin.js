@@ -2548,11 +2548,10 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
                     }
                     parentDoc = await Category.create({
                         level: 'sub',
-                        name: subcategory.trim(),
-                        slug: slugify(subcategory.trim()),
-                        parentId: mainParent._id,
                         name: name.trim(),
                         subcategory: subcategory.trim(),
+                        slug: slugify(subcategory.trim()),
+                        parentId: mainParent._id,
                         isActive: true
                     });
                 }

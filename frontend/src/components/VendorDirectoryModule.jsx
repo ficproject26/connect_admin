@@ -573,6 +573,20 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     document.body.removeChild(link);
   };
 
+  const totalVendorsCount = total || vendors.length;
+  const activeVendorsCount = vendors.filter(v => {
+    const s = normalizeStatusValue(v.status);
+    return s === 'Active';
+  }).length;
+  const pendingRequestsCount = directRequests.length + vendors.filter(v => {
+    const s = normalizeStatusValue(v.status);
+    return s === 'Pending';
+  }).length;
+  const suspendedVendorsCount = vendors.filter(v => {
+    const s = normalizeStatusValue(v.status);
+    return s === 'Suspended';
+  }).length;
+
   return (
     <div className="space-y-6 pb-12">
 
@@ -628,6 +642,49 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             >
               <List className="w-4 h-4" />
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI STAT CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Vendors</p>
+            <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-1">{totalVendorsCount}</h3>
+          </div>
+          <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-2xl border border-blue-500/20">
+            <Store className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Vendors</p>
+            <h3 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{activeVendorsCount}</h3>
+          </div>
+          <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl border border-emerald-500/20">
+            <CheckCircle className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Requests</p>
+            <h3 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{pendingRequestsCount}</h3>
+          </div>
+          <div className="p-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl border border-amber-500/20">
+            <Clock className="w-6 h-6" />
+          </div>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between">
+          <div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Suspended Vendors</p>
+            <h3 className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">{suspendedVendorsCount}</h3>
+          </div>
+          <div className="p-3 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl border border-rose-500/20">
+            <ShieldAlert className="w-6 h-6" />
           </div>
         </div>
       </div>
@@ -710,13 +767,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       <option value="Active">Active</option>
                       <option value="Suspended">Suspended</option>
                     </select>
-                    <button
-                      onClick={e => { e.stopPropagation(); handleDeleteVendor(v); }}
-                      title="Delete Vendor"
-                      className="p-1.5 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer border border-rose-500/20 active:scale-95"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
                   </div>
                 </div>
 
@@ -780,12 +830,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     className="text-[10px] font-extrabold text-blue-600 hover:text-white hover:bg-blue-600 dark:text-blue-400 flex items-center gap-1 cursor-pointer bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-500/20 transition-all active:scale-95"
                   >
                     <Eye className="w-3 h-3" /> View Details
-                  </button>
-                  <button
-                    onClick={e => { e.stopPropagation(); handleDeleteVendor(v); }}
-                    className="text-[10px] font-extrabold text-rose-600 hover:text-white hover:bg-rose-600 dark:text-rose-400 flex items-center gap-1 cursor-pointer bg-rose-500/10 px-2.5 py-1 rounded-xl border border-rose-500/20 transition-all active:scale-95"
-                  >
-                    <Trash2 className="w-3 h-3" /> Delete
                   </button>
                 </div>
               </div>
@@ -890,13 +934,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </button>
-                      <button
-                        onClick={e => { e.stopPropagation(); handleDeleteVendor(v); }}
-                        title="Delete Vendor"
-                        className="p-1.5 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer border border-rose-500/20 active:scale-95"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -966,13 +1003,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       className="px-3.5 py-2 bg-primary-600 hover:bg-primary-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <UserCheck className="w-4 h-4" /> Auto Assign
-                    </button>
-                    <button
-                      onClick={() => handleDeleteVendor(dr)}
-                      title="Delete Vendor Request"
-                      className="p-2 rounded-xl bg-rose-500/10 text-rose-600 hover:bg-rose-600 hover:text-white transition-all cursor-pointer border border-rose-500/20 active:scale-95"
-                    >
-                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -1275,16 +1305,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleDeleteVendor(selectedVendorDetails);
-                    setSelectedVendorDetails(null);
-                  }}
-                  className="px-4 py-2 rounded-xl text-xs font-extrabold text-rose-600 bg-rose-500/10 hover:bg-rose-600 hover:text-white border border-rose-500/20 transition-all cursor-pointer"
-                >
-                  Delete Vendor
-                </button>
                 <button
                   type="button"
                   onClick={() => setSelectedVendorDetails(null)}
