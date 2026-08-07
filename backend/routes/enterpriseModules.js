@@ -457,7 +457,7 @@ router.post('/vendors/update-status', auth, async (req, res) => {
             if (['Inactive', 'Suspended'].includes(formattedStatus)) {
                 io.emit('session_terminated', {
                     userId: existingVendor?._id || targetId,
-                    reason: `Your vendor account has been marked as ${formattedStatus} by the administrator.`,
+                    reason: 'Your vendor account has been suspended. Please contact the administrator.',
                     timestamp: new Date()
                 });
             }
