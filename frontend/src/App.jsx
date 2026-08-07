@@ -5450,6 +5450,23 @@ function App() {
                                   {(subItem.childCategories || []).length}
                                 </span>
 
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Are you sure you want to delete sub category "${subItem.name}"?`)) {
+                                      if (subItem._id) {
+                                        await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
+                                      } else {
+                                        await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
+                                      }
+                                    }
+                                  }}
+                                  title="Delete Sub Category"
+                                  className="p-1 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+
                                 <div className="relative">
                                   <button
                                     onClick={(e) => {
@@ -5484,6 +5501,22 @@ function App() {
                                         className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
                                       >
                                         Toggle Status
+                                      </button>
+                                      <button
+                                        onClick={async (e) => {
+                                          e.stopPropagation();
+                                          setActiveCatMenuId(null);
+                                          if (window.confirm(`Are you sure you want to delete sub category "${subItem.name}"?`)) {
+                                            if (subItem._id) {
+                                              await executeAction(`/admin/categories/${subItem._id}`, 'DELETE');
+                                            } else {
+                                              await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(subItem.name)}`, 'DELETE');
+                                            }
+                                          }
+                                        }}
+                                        className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 font-semibold text-rose-600 dark:text-rose-400"
+                                      >
+                                        Delete
                                       </button>
                                     </div>
                                   )}
@@ -5549,6 +5582,23 @@ function App() {
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (window.confirm(`Are you sure you want to delete child category "${childItem.name}"?`)) {
+                                    if (childItem._id) {
+                                      await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                    } else {
+                                      await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                    }
+                                  }
+                                }}
+                                title="Delete Child Category"
+                                className="p-1 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-all cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+
                               <div className="relative">
                                 <button
                                   onClick={(e) => {
@@ -5583,6 +5633,22 @@ function App() {
                                       className="w-full text-left px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-slate-700 dark:text-slate-300"
                                     >
                                       Toggle Status
+                                    </button>
+                                    <button
+                                      onClick={async (e) => {
+                                        e.stopPropagation();
+                                        setActiveCatMenuId(null);
+                                        if (window.confirm(`Are you sure you want to delete child category "${childItem.name}"?`)) {
+                                          if (childItem._id) {
+                                            await executeAction(`/admin/categories/${childItem._id}`, 'DELETE');
+                                          } else {
+                                            await executeAction(`/admin/categories-hierarchy?name=${encodeURIComponent(activeMainCatName)}&subcategory=${encodeURIComponent(activeSubCatName)}&subSubcategory=${encodeURIComponent(childItem.name)}`, 'DELETE');
+                                          }
+                                        }
+                                      }}
+                                      className="w-full text-left px-3 py-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/50 font-semibold text-rose-600 dark:text-rose-400"
+                                    >
+                                      Delete
                                     </button>
                                   </div>
                                 )}
