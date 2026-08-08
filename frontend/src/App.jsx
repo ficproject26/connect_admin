@@ -362,11 +362,23 @@ function App() {
     }
   };
 
-  // Search & Filter
+  // Search & Filter with Debouncing
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchTerm]);
+
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterBranch, setFilterBranch] = useState('All');
   const [reportType, setReportType] = useState('revenue');
+
+  // In-Memory SWR (Stale-While-Revalidate) API Cache Ref
+  const apiCacheRef = useRef({});
 
   // Notification Overlay State
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
@@ -429,10 +441,14 @@ function App() {
     }
   }, [darkMode]);
 
-  // Fetch Dashboard Stats & Associated Data
+  // Fetch Dashboard Stats & Associated Data (SWR Caching & Revalidation)
   const fetchData = async () => {
     if (!token) return;
     try {
+      // 1. Instantly populate from SWR Cache if available
+      if (apiCacheRef.current['stats']) setStats(apiCacheRef.current['stats']);
+      if (apiCacheRef.current['agents']) setAgents(apiCacheRef.current['agents']);
+
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
 
       // Priority Task 1: Agents & Dashboard Stats (unblocks screen immediately)
@@ -442,9 +458,19 @@ function App() {
             handleLogout();
             throw new Error("Unauthorized");
           }
-          if (r.ok) setStats(await r.json());
+          if (r.ok) {
+            const data = await r.json();
+            apiCacheRef.current['stats'] = data;
+            setStats(data);
+          }
         }),
-        fetch(`${API_BASE}/admin/agents`, { headers }).then(async r => { if (r.ok) setAgents(await r.json()); }),
+        fetch(`${API_BASE}/admin/agents`, { headers }).then(async r => {
+          if (r.ok) {
+            const data = await r.json();
+            apiCacheRef.current['agents'] = data;
+            setAgents(data);
+          }
+        }),
       ];
 
       // Secondary Background Tasks
@@ -1617,7 +1643,7 @@ function App() {
 
                 {(() => {
                   const filteredAgents = agents.filter(a => {
-                    const query = searchTerm.toLowerCase();
+                    const query = debouncedSearchTerm.toLowerCase();
                     const matchesSearch = !query ||
                       (a.name || '').toLowerCase().includes(query) ||
                       (a.email || '').toLowerCase().includes(query) ||
