@@ -492,132 +492,8 @@ router.delete('/admins/:id', [auth, adminAuth], async (req, res) => {
 // ==========================================
 router.get('/agents', [auth, adminAuth], async (req, res) => {
     try {
-        // Sync any agents from 'agents' collection into 'users' collection
-        const db = mongoose.connection.db;
-        if (db) {
-            try {
-                const rawAgents = await db.collection('agents').find().toArray();
-                for (const rAgent of rawAgents) {
-                    if (rAgent.email) {
-                        const email = rAgent.email.toLowerCase().trim();
-                        const agentLvl = (rAgent.role || rAgent.level || 'pincode').toLowerCase();
-                        let territoryParts = [];
-                        if (rAgent.territory) {
-                            const stateVal = rAgent.territory.state || '';
-                            const distVal = rAgent.territory.district || '';
-                            const divVal = rAgent.territory.division || '';
-                            const pinVal = rAgent.territory.pincode || '';
-                            if (agentLvl === 'state') territoryParts = [stateVal].filter(Boolean);
-                            else if (agentLvl === 'district') territoryParts = [stateVal, distVal].filter(Boolean);
-                            else if (agentLvl === 'division') territoryParts = [stateVal, distVal, divVal].filter(Boolean);
-                            else territoryParts = [stateVal, distVal, divVal, pinVal].filter(Boolean);
-                        }
-
-                        let territoryStr = territoryParts.length > 0 ? territoryParts.join(' / ') : (rAgent.assignedArea || '');
-                        if (territoryStr && territoryStr.includes(' / ')) {
-                            const rawParts = territoryStr.split(' / ').map(s => s.trim());
-                            if (agentLvl === 'state' && rawParts.length > 1) {
-                                territoryStr = rawParts[0];
-                            } else if (agentLvl === 'district' && rawParts.length > 2) {
-                                territoryStr = rawParts.slice(0, 2).join(' / ');
-                            } else if (agentLvl === 'division' && rawParts.length > 3) {
-                                territoryStr = rawParts.slice(0, 3).join(' / ');
-                            }
-                        }
-
-                        const kycData = {
-                            aadhaarNumber: rAgent.kycDocs?.aadhaarNumber || rAgent.kyc?.aadhaarNumber || '',
-                            aadhaarImage: rAgent.kycDocs?.aadhaarCard || rAgent.kycDocs?.aadhaarImage || rAgent.kyc?.aadhaarImage || '',
-                            panNumber: rAgent.kycDocs?.panNumber || rAgent.kyc?.panNumber || '',
-                            panImage: rAgent.kycDocs?.panCard || rAgent.kycDocs?.panImage || rAgent.kyc?.panImage || '',
-                            selfie: rAgent.kycDocs?.passportPhoto || rAgent.kycDocs?.selfie || rAgent.kyc?.selfie || '',
-                            businessProofImage: rAgent.kycDocs?.signature || rAgent.kycDocs?.businessProofImage || rAgent.kyc?.businessProofImage || ''
-                        };
-
-                        const rStatus = rAgent.kycStatus || rAgent.status || 'pending';
-
-                        const existingUser = await User.findOne({ email });
-                        if (!existingUser) {
-                            await User.create({
-                                name: rAgent.name,
-                                email: email,
-                                phone: rAgent.phone,
-                                password: rAgent.password,
-                                role: 'agent',
-                                level: rAgent.role || rAgent.level || 'pincode',
-                                assignedArea: territoryStr,
-                                registrationId: rAgent.registrationId,
-                                status: rStatus,
-                                isActive: rStatus === 'approved',
-                                kyc: kycData,
-                                createdAt: rAgent.createdAt || new Date()
-                            });
-                        } else {
-                            let updated = false;
-                            if (existingUser.role !== 'agent' && existingUser.role !== 'Agent') {
-                                existingUser.role = 'agent';
-                                updated = true;
-                            }
-                            if (rAgent.role && existingUser.level !== rAgent.role) {
-                                existingUser.level = rAgent.role;
-                                updated = true;
-                            }
-                            if (territoryStr && existingUser.assignedArea !== territoryStr) {
-                                existingUser.assignedArea = territoryStr;
-                                updated = true;
-                            }
-                            if (rStatus && existingUser.status !== rStatus) {
-                                if (existingUser.status === 'pending' || ['approved', 'rejected', 'suspended'].includes(rStatus)) {
-                                    existingUser.status = rStatus;
-                                    existingUser.isActive = (rStatus === 'approved');
-                                    updated = true;
-                                }
-                            }
-                            if (rAgent.kycDocs || rAgent.kyc) {
-                                existingUser.kyc = {
-                                    aadhaarNumber: rAgent.kycDocs?.aadhaarNumber || rAgent.kyc?.aadhaarNumber || existingUser.kyc?.aadhaarNumber || '',
-                                    aadhaarImage: rAgent.kycDocs?.aadhaarCard || rAgent.kycDocs?.aadhaarImage || rAgent.kyc?.aadhaarImage || existingUser.kyc?.aadhaarImage || '',
-                                    panNumber: rAgent.kycDocs?.panNumber || rAgent.kyc?.panNumber || existingUser.kyc?.panNumber || '',
-                                    panImage: rAgent.kycDocs?.panCard || rAgent.kycDocs?.panImage || rAgent.kyc?.panImage || existingUser.kyc?.panImage || '',
-                                    selfie: rAgent.kycDocs?.passportPhoto || rAgent.kycDocs?.selfie || rAgent.kyc?.selfie || existingUser.kyc?.selfie || '',
-                                    businessProofImage: rAgent.kycDocs?.signature || rAgent.kycDocs?.businessProofImage || rAgent.kyc?.businessProofImage || existingUser.kyc?.businessProofImage || ''
-                                };
-                                updated = true;
-                            }
-                            if (updated) {
-                                await existingUser.save();
-                            }
-                        }
-                    }
-                }
-
-                // Cleanup pass for existing agent users to ensure assignedArea matches level
-                const allAgentUsers = await User.find({ role: { $in: ['agent', 'Agent'] } });
-                for (const u of allAgentUsers) {
-                    const uLvl = (u.level || 'pincode').toLowerCase();
-                    if (u.assignedArea && u.assignedArea.includes(' / ')) {
-                        const parts = u.assignedArea.split(' / ').map(s => s.trim());
-                        let cleanedArea = u.assignedArea;
-                        if (uLvl === 'state' && parts.length > 1) {
-                            cleanedArea = parts[0];
-                        } else if (uLvl === 'district' && parts.length > 2) {
-                            cleanedArea = parts.slice(0, 2).join(' / ');
-                        } else if (uLvl === 'division' && parts.length > 3) {
-                            cleanedArea = parts.slice(0, 3).join(' / ');
-                        }
-                        if (cleanedArea !== u.assignedArea) {
-                            u.assignedArea = cleanedArea;
-                            await u.save();
-                        }
-                    }
-                }
-            } catch (syncErr) {
-                console.error("Error syncing agents collection:", syncErr);
-            }
-        }
-
         const filter = { role: { $in: ['agent', 'Agent'] } };
-        if (req.adminUser.adminRole !== 'super-admin') {
+        if (req.adminUser && req.adminUser.adminRole !== 'super-admin') {
             filter.$or = [
                 { branchId: req.adminUser.branchId },
                 { branchId: null },
@@ -626,10 +502,13 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         }
         const agents = await User.find(filter)
             .populate('branchId', 'name')
-            .populate('assignedPincode', 'code name');
+            .populate('assignedPincode', 'code name district state division')
+            .sort({ createdAt: -1 })
+            .lean();
+
         res.json(agents);
     } catch (err) {
-        console.error(err);
+        console.error('Error fetching agents:', err);
         res.status(500).send('Server error');
     }
 });

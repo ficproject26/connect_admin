@@ -432,12 +432,11 @@ function App() {
   // Fetch Dashboard Stats & Associated Data
   const fetchData = async () => {
     if (!token) return;
-    setLoading(true);
     try {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
 
-      const fetchTasks = [
-        // 1. Dashboard KPIs (Check auth status)
+      // Priority Task 1: Agents & Dashboard Stats (unblocks screen immediately)
+      const priorityTasks = [
         fetch(`${API_BASE}/admin/dashboard-stats`, { headers }).then(async r => {
           if (r.status === 401 || r.status === 403) {
             handleLogout();
@@ -445,33 +444,24 @@ function App() {
           }
           if (r.ok) setStats(await r.json());
         }),
-        // 2. Branches
-        fetch(`${API_BASE}/admin/branches`, { headers }).then(async r => { if (r.ok) setBranches(await r.json()); }),
-        // 3. Admins
-        fetch(`${API_BASE}/admin/admins`, { headers }).then(async r => { if (r.ok) setAdmins(await r.json()); }),
-        // 4. Agents
         fetch(`${API_BASE}/admin/agents`, { headers }).then(async r => { if (r.ok) setAgents(await r.json()); }),
-        // 5. Pincodes
+      ];
+
+      // Secondary Background Tasks
+      const secondaryTasks = [
+        fetch(`${API_BASE}/admin/branches`, { headers }).then(async r => { if (r.ok) setBranches(await r.json()); }),
+        fetch(`${API_BASE}/admin/admins`, { headers }).then(async r => { if (r.ok) setAdmins(await r.json()); }),
         fetch(`${API_BASE}/pincodes`, { headers }).then(async r => { if (r.ok) setPincodes(await r.json()); }),
-        // 6. Vendors
         fetch(`${API_BASE}/admin/vendors`, { headers }).then(async r => { if (r.ok) setVendors(await r.json()); }),
-        // 7. Customers
         fetch(`${API_BASE}/admin/customers`, { headers }).then(async r => { if (r.ok) setCustomers(await r.json()); }),
-        // 8. Withdrawals
         fetch(`${API_BASE}/admin/wallet/withdrawals`, { headers }).then(async r => { if (r.ok) setWithdrawals(await r.json()); }),
-        // 9. Commissions
         fetch(`${API_BASE}/admin/commissions`, { headers }).then(async r => { if (r.ok) setCommissions(await r.json()); }),
-        // 10. Memberships
         fetch(`${API_BASE}/admin/memberships/plans`, { headers }).then(async r => { if (r.ok) setMembershipPlans(await r.json()); }),
-        // 11. Banners & Ads
         fetch(`${API_BASE}/admin/banners`, { headers }).then(async r => { if (r.ok) setBanners(await r.json()); }),
         fetch(`${API_BASE}/admin/ads`, { headers }).then(async r => { if (r.ok) setAds(await r.json()); }),
-        // 12. Reports
         fetch(`${API_BASE}/admin/reports?type=${reportType}`, { headers }).then(async r => { if (r.ok) setReports(await r.json()); }),
-        // 13. Tie-ups & Tasks
         fetch(`${API_BASE}/admin/tie-ups`, { headers }).then(async r => { if (r.ok) setTieUps(await r.json()); }),
         fetch(`${API_BASE}/admin/tasks`, { headers }).then(async r => { if (r.ok) setTasks(await r.json()); }),
-        // 14. New endpoints
         fetch(`${API_BASE}/admin/orders`, { headers }).then(async r => { if (r.ok) setOrders(await r.json()); }),
         fetch(`${API_BASE}/admin/bookings`, { headers }).then(async r => { if (r.ok) setBookings(await r.json()); }),
         fetch(`${API_BASE}/admin/jobs`, { headers }).then(async r => { if (r.ok) setJobs(await r.json()); }),
@@ -486,10 +476,13 @@ function App() {
         fetch(`${API_BASE}/admin/exclusive-offers`, { headers }).then(async r => { if (r.ok) setExclusiveOffers(await r.json()); }),
       ];
 
-      await Promise.allSettled(fetchTasks);
+      await Promise.allSettled(priorityTasks);
+      setLoading(false);
+
+      // Continue secondary fetches in background without blocking screen
+      Promise.allSettled(secondaryTasks).catch(() => {});
     } catch (err) {
       console.error("API Server not reachable:", err);
-    } finally {
       setLoading(false);
     }
   };
