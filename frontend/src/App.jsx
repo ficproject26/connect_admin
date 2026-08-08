@@ -927,10 +927,12 @@ function App() {
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
-                <span className="absolute top-1 right-1 flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-                </span>
+                {(agents.filter(isPendingAgent).length + vendors.filter(v => v.status?.toLowerCase() === 'pending').length) > 0 && (
+                  <span className="absolute top-1 right-1 flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                  </span>
+                )}
               </button>
 
               {showNotificationsPanel && (
@@ -2248,10 +2250,25 @@ function App() {
                               {agent.status === 'approved' ? (
                                 <button
                                   onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
-                                  className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                  className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                                 >
                                   Suspend
                                 </button>
+                              ) : agent.status === 'suspended' ? (
+                                <>
+                                  <button
+                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                                  >
+                                    Suspend
+                                  </button>
+                                </>
                               ) : (
                                 <>
                                   <button
@@ -2261,13 +2278,13 @@ function App() {
                                       if (!reason.trim()) { alert("Rejection reason is required."); return; }
                                       executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected', rejectionReason: reason.trim() });
                                     }}
-                                    className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                    className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                                   >
                                     Reject
                                   </button>
                                   <button
                                     onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                                   >
                                     Approve
                                   </button>
@@ -2352,10 +2369,25 @@ function App() {
                               {agent.status === 'approved' ? (
                                 <button
                                   onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
-                                  className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                  className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                                 >
                                   Suspend
                                 </button>
+                              ) : agent.status === 'suspended' ? (
+                                <>
+                                  <button
+                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'suspended' })}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                                  >
+                                    Suspend
+                                  </button>
+                                </>
                               ) : (
                                 <>
                                   <button
@@ -2365,13 +2397,13 @@ function App() {
                                       if (!reason.trim()) { alert("Rejection reason is required."); return; }
                                       executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected', rejectionReason: reason.trim() });
                                     }}
-                                    className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                    className="bg-rose-100 hover:bg-rose-200 dark:bg-rose-950/30 text-rose-700 dark:text-rose-350 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                                   >
                                     Reject
                                   </button>
                                   <button
                                     onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
-                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                                   >
                                     Approve
                                   </button>
@@ -7788,21 +7820,21 @@ function App() {
                 <div className="bg-emerald-500/10 border border-emerald-500/20 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Tieups Today</span>
                   <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
-                    {modalData.tieupsToday || Math.min(24, modalData.vendorsAdded || 0)} Shops
+                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.tieupsToday || 0) : 0} Shops
                   </span>
                 </div>
 
                 <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">Tieups Yesterday</span>
                   <span className="text-xl font-black text-blue-600 dark:text-blue-400 mt-1 block">
-                    {modalData.tieupsYesterday || Math.min(29, modalData.vendorsAdded || 0)} Shops
+                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.tieupsYesterday || 0) : 0} Shops
                   </span>
                 </div>
 
                 <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-amber-700 dark:text-amber-300 uppercase tracking-wider">Total Tieups</span>
                   <span className="text-xl font-black text-amber-700 dark:text-amber-300 mt-1 block">
-                    {modalData.vendorsAdded || 307} Total
+                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.vendorsAdded || 0) : 0} Total
                   </span>
                 </div>
               </div>
@@ -7815,21 +7847,21 @@ function App() {
                 <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Revenue</span>
                   <span className="text-xl font-black text-emerald-500 mt-1 block">
-                    ₹{(modalData.balance || modalData.revenue || 38250).toLocaleString()}
+                    ₹{(((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.balance || modalData.revenue || modalData.totalRevenue || 0) : 0).toLocaleString()}
                   </span>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Performance Score</span>
                   <span className="text-xl font-black text-amber-600 dark:text-amber-400 mt-1 block">
-                    {modalData.score || 85}%
+                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.score || 100) : 0}%
                   </span>
                 </div>
 
                 <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-slate-400 uppercase tracking-wider">Reg. Fee</span>
-                  <span className={`text-base font-black mt-1 block ${modalData.regFeePaid ? 'text-emerald-500' : 'text-rose-500'}`}>
-                    {modalData.regFeePaid ? '✓ PAID' : '✕ UNPAID'}
+                  <span className={`text-base font-black mt-1 block ${((modalData.status || '').toLowerCase() === 'approved' || modalData.regFeePaid || modalData.isPaid) ? 'text-emerald-500' : 'text-rose-500'}`}>
+                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.regFeePaid || modalData.isPaid) ? '✓ PAID' : '✕ UNPAID'}
                   </span>
                 </div>
               </div>
@@ -7842,14 +7874,14 @@ function App() {
                 <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider">Division Managers</span>
                   <span className="text-xl font-black text-amber-900 dark:text-amber-200 mt-1 block">
-                    {modalData.downstreamDivisions || agents.filter(a => (a.level || '').toLowerCase() === 'division' && a.assignedArea?.includes(modalData.name)).length || 3} Agents
+                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.downstreamDivisions || agents.filter(a => (a.level || '').toLowerCase() === 'division' && a.assignedArea?.includes(modalData.name)).length) : 0} Agents
                   </span>
                 </div>
 
                 <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-wider">Pincode Agents</span>
                   <span className="text-xl font-black text-blue-900 dark:text-blue-200 mt-1 block">
-                    {modalData.downstreamPincodes || agents.filter(a => (a.level || '').toLowerCase() === 'pincode' && a.assignedArea?.includes(modalData.name)).length || 9} Agents
+                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.downstreamPincodes || agents.filter(a => (a.level || '').toLowerCase() === 'pincode' && a.assignedArea?.includes(modalData.name)).length) : 0} Agents
                   </span>
                 </div>
               </div>

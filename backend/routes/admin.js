@@ -93,15 +93,15 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             ordersCount = await Order.countDocuments({ vendorId: { $in: vendorIds } });
             bookingsCount = await Booking.countDocuments({ vendorId: { $in: vendorIds } });
 
-            completedOrders = await Order.find({ vendorId: { $in: vendorIds }, status: 'completed' });
-            completedBookings = await Booking.find({ vendorId: { $in: vendorIds }, status: { $in: ['confirmed', 'completed'] } });
+            completedOrders = await Order.find({ vendorId: { $in: vendorIds }, status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
+            completedBookings = await Booking.find({ vendorId: { $in: vendorIds }, status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
         } else {
             ordersCount = await Order.countDocuments();
             bookingsCount = await Booking.countDocuments();
-            completedOrders = await Order.find({ status: 'completed' });
-            completedBookings = await Booking.find({ status: { $in: ['confirmed', 'completed'] } });
+            completedOrders = await Order.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
+            completedBookings = await Booking.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
         }
-        totalRevenue = completedOrders.reduce((sum, o) => sum + o.amount, 0) + completedBookings.reduce((sum, b) => sum + b.amount, 0);
+        totalRevenue = completedOrders.reduce((sum, o) => sum + Number(o.finalAmount || o.totalAmount || o.amount || 0), 0) + completedBookings.reduce((sum, b) => sum + Number(b.finalAmount || b.totalAmount || b.amount || 0), 0);
 
         // Specific category counts
         const totalHospitals = await Vendor.countDocuments({ category: 'Hospitals', ...(isBranchScoped ? { branchId } : {}) });
@@ -567,9 +567,11 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                                 updated = true;
                             }
                             if (rStatus && existingUser.status !== rStatus) {
-                                existingUser.status = rStatus;
-                                existingUser.isActive = (rStatus === 'approved');
-                                updated = true;
+                                if (existingUser.status === 'pending' || ['approved', 'rejected', 'suspended'].includes(rStatus)) {
+                                    existingUser.status = rStatus;
+                                    existingUser.isActive = (rStatus === 'approved');
+                                    updated = true;
+                                }
                             }
                             if (rAgent.kycDocs || rAgent.kyc) {
                                 existingUser.kyc = {
@@ -641,7 +643,15 @@ const handleAgentStatusUpdate = async (req, res) => {
         }
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 
-        if (status) agent.status = status;
+        if (status) {
+            agent.status = status;
+            if (status === 'approved') {
+                agent.isPaid = true;
+                agent.isApproved = true;
+            } else if (status === 'suspended' || status === 'rejected') {
+                agent.isApproved = false;
+            }
+        }
         if (typeof isActive !== 'undefined') {
             agent.isActive = isActive;
         } else if (status) {
@@ -650,7 +660,7 @@ const handleAgentStatusUpdate = async (req, res) => {
 
         await agent.save();
 
-        // Also sync status update to agents collection
+        // Also sync status update to standalone agents collection
         const db = mongoose.connection.db;
         if (db && agent.email) {
             try {
@@ -659,6 +669,7 @@ const handleAgentStatusUpdate = async (req, res) => {
                     {
                         $set: {
                             kycStatus: status,
+                            status: status,
                             rejectionReason: rejectionReason || '',
                             updatedAt: new Date()
                         }
@@ -1571,12 +1582,15 @@ router.put('/approve-agent/:id', [auth, adminAuth], async (req, res) => {
         agent.status = status;
         if (status === 'approved') {
             agent.isActive = true;
+            agent.isApproved = true;
+            agent.isPaid = true;
             // Update Pincode activeAgentId linkage
             if (agent.assignedPincode) {
                 await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: agent._id });
             }
         } else if (status === 'rejected' || status === 'suspended') {
             agent.isActive = false;
+            agent.isApproved = false;
             if (agent.assignedPincode) {
                 await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: null });
             }
@@ -1587,10 +1601,10 @@ router.put('/approve-agent/:id', [auth, adminAuth], async (req, res) => {
         // Also update standalone 'agents' collection if present
         const db = mongoose.connection.db;
         if (db && agent.email) {
-            const syncKycStatus = status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : agent.status;
+            const syncKycStatus = status;
             await db.collection('agents').updateOne(
                 { email: agent.email.toLowerCase() },
-                { $set: { kycStatus: syncKycStatus, rejectionReason: req.body.rejectionReason || '' } }
+                { $set: { kycStatus: syncKycStatus, status: syncKycStatus, rejectionReason: req.body.rejectionReason || '', updatedAt: new Date() } }
             );
         }
 
