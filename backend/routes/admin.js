@@ -2950,6 +2950,16 @@ router.get('/tickets', [auth, adminAuth], async (req, res) => {
 // POST new support ticket
 router.post('/tickets', [auth, adminAuth], async (req, res) => {
     try {
+        const tenSecAgo = new Date(Date.now() - 10000);
+        const duplicate = await SupportTicket.findOne({
+            customerName: req.body.customerName,
+            issue: req.body.issue,
+            createdAt: { $gte: tenSecAgo }
+        });
+        if (duplicate) {
+            return res.json(duplicate);
+        }
+
         const count = await SupportTicket.countDocuments();
         const ticketId = 'TKT-' + (1000 + count + 1);
         const newTicket = new SupportTicket({ ...req.body, ticketId });
@@ -3011,6 +3021,17 @@ router.put('/announcements/:id', [auth, adminAuth], async (req, res) => {
     try {
         const ann = await Announcement.findByIdAndUpdate(req.params.id, req.body, { new: true });
         res.json(ann);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// DELETE announcement
+router.delete('/announcements/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        await Announcement.findByIdAndDelete(req.params.id);
+        res.json({ msg: 'Announcement deleted' });
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');

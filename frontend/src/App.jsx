@@ -245,6 +245,9 @@ function App() {
   const [bannerVideoUrl, setBannerVideoUrl] = useState("");
   const [catSubFilter, setCatSubFilter] = useState("All");
   const [catStatusFilter, setCatStatusFilter] = useState("All Status");
+  const [jobSearchTerm, setJobSearchTerm] = useState("");
+  const [jobStatusFilter, setJobStatusFilter] = useState("All");
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState(false);
   const [categoryViewMode, setCategoryViewMode] = useState("cards"); // 'cards' or 'table'
   const [activeCatMenuId, setActiveCatMenuId] = useState(null);
   const [mainCatPage, setMainCatPage] = useState(1);
@@ -4226,104 +4229,223 @@ function App() {
           })()}
 
           {/* 17. JOB APPLIED */}
-          {activeTab === 'jobs' && (
-            <div className="space-y-6">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Job Applications</h3>
-              </div>
+          {activeTab === 'jobs' && (() => {
+            const totalApps = jobs.length;
+            const shortlistedApps = jobs.filter(j => ['shortlisted', 'shortlist', 'interviewing'].includes((j.status || '').toLowerCase())).length;
+            const selectedApps = jobs.filter(j => ['selected', 'hired', 'offered'].includes((j.status || '').toLowerCase())).length;
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
-                        <th className="px-6 py-4">App ID</th>
-                        <th className="px-6 py-4">Candidate & Cust ID</th>
-                        <th className="px-6 py-4">Position & Company (HR)</th>
-                        <th className="px-6 py-4">Status</th>
-                        <th className="px-6 py-4">Resume</th>
-                        <th className="px-6 py-4">Applied Date</th>
-                        <th className="px-6 py-4 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                      {jobs.map((job, idx) => {
-                        const samplePositions = ['Senior Software Engineer', 'Full Stack Developer', 'UI/UX Designer', 'Product Manager', 'HR Executive', 'Marketing Lead', 'Data Analyst'];
-                        const sampleCompanies = ['Forge India Tech', 'Global Systems Inc.', 'Apex Digital Solutions', 'Innovate Soft', 'Connect Enterprises'];
-                        const sampleHRs = ['Rajesh Kumar', 'Ananya Sharma', 'Priya Nair', 'Suresh V', 'Talent Team'];
+            const filteredJobs = jobs.filter(job => {
+              const term = jobSearchTerm.toLowerCase();
+              const matchesSearch = !term ||
+                (job.candidateName || '').toLowerCase().includes(term) ||
+                (job.customerId || '').toLowerCase().includes(term) ||
+                (job.position || '').toLowerCase().includes(term) ||
+                (job.companyName || '').toLowerCase().includes(term) ||
+                (job.email || '').toLowerCase().includes(term) ||
+                (job.phone || '').toLowerCase().includes(term);
 
-                        const posVal = (!job.position || job.position === 'Job Application') ? samplePositions[idx % samplePositions.length] : job.position;
-                        const compVal = (!job.companyName || job.companyName === 'Krishna' || job.companyName === 'Connect Portal Inc.') ? sampleCompanies[idx % sampleCompanies.length] : job.companyName;
-                        const hrVal = (!job.hrName || job.hrName === 'Krishna' || job.hrName.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : job.hrName;
-                        const candPhone = (!job.phone || job.phone === 'N/A') ? '9876543210' : job.phone;
-                        const resumeVal = (job.resumeUrl && !job.resumeUrl.includes('unsplash')) ? job.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+              const st = (job.status || '').toLowerCase();
+              const matchesStatus = jobStatusFilter === 'All' ||
+                (jobStatusFilter === 'applied' && st === 'applied') ||
+                (jobStatusFilter === 'shortlisted' && ['shortlisted', 'shortlist', 'interviewing'].includes(st)) ||
+                (jobStatusFilter === 'selected' && ['selected', 'hired', 'offered'].includes(st)) ||
+                (jobStatusFilter === 'rejected' && st === 'rejected');
 
-                        return (
-                          <tr key={job._id}>
-                            <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">
-                              #{String(job.applicationId || job._id).substring(0, 8).toUpperCase()}
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="block font-bold text-slate-800 dark:text-slate-200">{job.candidateName}</span>
-                              <span className="block text-[11px] text-slate-400 font-semibold mt-0.5">ID: {job.customerId}</span>
-                              <span className="block text-xs text-slate-400 mt-0.5">{job.email} | {candPhone}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <span className="block font-bold text-primary-500">{posVal}</span>
-                              <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mt-0.5">{compVal}</span>
-                              <span className="block text-[10px] text-slate-400 mt-0.5">HR: {hrVal}</span>
-                            </td>
-                            <td className="px-6 py-4">
-                              <select
-                                value={job.status}
-                                onChange={(e) => executeAction(`/admin/jobs/${job._id}`, 'PUT', { status: e.target.value })}
-                                className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
-                              >
-                                <option value="applied">Applied</option>
-                                <option value="interviewing">Interviewing</option>
-                                <option value="selected">Selected</option>
-                                <option value="rejected">Rejected</option>
-                              </select>
-                            </td>
-                            <td className="px-6 py-4">
-                              <a
-                                href={resumeVal}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
-                              >
-                                <FileText className="w-3.5 h-3.5" /> View Resume
-                              </a>
-                            </td>
-                          <td className="px-6 py-4 text-xs text-slate-400">{new Date(job.createdAt || job.appliedDate).toLocaleDateString()}</td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-3">
-                              <button
-                                onClick={() => {
-                                  setModalData(job);
-                                  setShowModal('view-job');
-                                }}
-                                className="text-primary-605 dark:text-primary-400 hover:underline text-xs font-bold"
-                              >
-                                View
-                              </button>
-                              <button
-                                onClick={() => executeAction(`/admin/jobs/${job._id}`, 'DELETE')}
-                                className="text-rose-500 hover:text-rose-600 text-xs font-bold"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
+              return matchesSearch && matchesStatus;
+            });
+
+            return (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Job Applications</h3>
+                </div>
+
+                {/* 3 KPI STAT CARDS */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div
+                    onClick={() => setJobStatusFilter('All')}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-center justify-between shadow-sm cursor-pointer hover:border-primary-500/50 transition-all"
+                  >
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Applications</p>
+                      <h4 className="text-2xl font-black text-slate-900 dark:text-white mt-1">{totalApps}</h4>
+                      <p className="text-[10px] text-slate-400">All submitted applications</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-100 dark:border-indigo-900/40">
+                      <Briefcase className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setJobStatusFilter('shortlisted')}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-center justify-between shadow-sm cursor-pointer hover:border-amber-500/50 transition-all"
+                  >
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Shortlisted</p>
+                      <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{shortlistedApps}</h4>
+                      <p className="text-[10px] text-slate-400">Shortlisted / Interviewing</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-100 dark:border-amber-900/40">
+                      <CheckCircle className="w-6 h-6" />
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setJobStatusFilter('selected')}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 flex items-center justify-between shadow-sm cursor-pointer hover:border-emerald-500/50 transition-all"
+                  >
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Selected</p>
+                      <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{selectedApps}</h4>
+                      <p className="text-[10px] text-slate-400">Selected & Offered candidates</p>
+                    </div>
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-100 dark:border-emerald-900/40">
+                      <Sparkles className="w-6 h-6" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* SEARCH & FILTER TOOLBAR */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
+                  <div className="relative flex-1 w-full">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={jobSearchTerm}
+                      onChange={(e) => setJobSearchTerm(e.target.value)}
+                      placeholder="Search candidates, position, company, ID or contact..."
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 text-slate-800 dark:text-slate-200"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Status Filter</label>
+                    <select
+                      value={jobStatusFilter}
+                      onChange={(e) => setJobStatusFilter(e.target.value)}
+                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+                    >
+                      <option value="All">All Statuses</option>
+                      <option value="applied">Applied</option>
+                      <option value="shortlisted">Shortlisted / Interviewing</option>
+                      <option value="selected">Selected</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+
+                    <button
+                      onClick={() => {
+                        setJobSearchTerm("");
+                        setJobStatusFilter("All");
+                      }}
+                      className="p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
+                      title="Reset Filters"
+                    >
+                      <RotateCcw className="w-4 h-4 text-slate-400" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* JOB APPLICATIONS TABLE */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">App ID</th>
+                          <th className="px-6 py-4">Candidate & Cust ID</th>
+                          <th className="px-6 py-4">Position & Company (HR)</th>
+                          <th className="px-6 py-4">Status</th>
+                          <th className="px-6 py-4">Resume</th>
+                          <th className="px-6 py-4">Applied Date</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
-                      );
-                    })}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {filteredJobs.map((job, idx) => {
+                          const samplePositions = ['Senior Software Engineer', 'Full Stack Developer', 'UI/UX Designer', 'Product Manager', 'HR Executive', 'Marketing Lead', 'Data Analyst'];
+                          const sampleCompanies = ['Forge India Tech', 'Global Systems Inc.', 'Apex Digital Solutions', 'Innovate Soft', 'Connect Enterprises'];
+                          const sampleHRs = ['Rajesh Kumar', 'Ananya Sharma', 'Priya Nair', 'Suresh V', 'Talent Team'];
+
+                          const posVal = (!job.position || job.position === 'Job Application') ? samplePositions[idx % samplePositions.length] : job.position;
+                          const compVal = (!job.companyName || job.companyName === 'Krishna' || job.companyName === 'Connect Portal Inc.') ? sampleCompanies[idx % sampleCompanies.length] : job.companyName;
+                          const hrVal = (!job.hrName || job.hrName === 'Krishna' || job.hrName.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : job.hrName;
+                          const candPhone = (!job.phone || job.phone === 'N/A') ? '9876543210' : job.phone;
+                          const resumeVal = (job.resumeUrl && !job.resumeUrl.includes('unsplash')) ? job.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+
+                          return (
+                            <tr key={job._id}>
+                              <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">
+                                #{String(job.applicationId || job._id).substring(0, 8).toUpperCase()}
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="block font-bold text-slate-800 dark:text-slate-200">{job.candidateName}</span>
+                                <span className="block text-[11px] text-slate-400 font-semibold mt-0.5">ID: {job.customerId}</span>
+                                <span className="block text-xs text-slate-400 mt-0.5">{job.email} | {candPhone}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className="block font-bold text-primary-500">{posVal}</span>
+                                <span className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mt-0.5">{compVal}</span>
+                                <span className="block text-[10px] text-slate-400 mt-0.5">HR: {hrVal}</span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <select
+                                  value={job.status}
+                                  onChange={(e) => executeAction(`/admin/jobs/${job._id}`, 'PUT', { status: e.target.value })}
+                                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
+                                >
+                                  <option value="applied">Applied</option>
+                                  <option value="interviewing">Interviewing</option>
+                                  <option value="selected">Selected</option>
+                                  <option value="rejected">Rejected</option>
+                                </select>
+                              </td>
+                              <td className="px-6 py-4">
+                                <a
+                                  href={resumeVal}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                                >
+                                  <FileText className="w-3.5 h-3.5" /> View Resume
+                                </a>
+                              </td>
+                              <td className="px-6 py-4 text-xs text-slate-400">{new Date(job.createdAt || job.appliedDate).toLocaleDateString()}</td>
+                              <td className="px-6 py-4 text-right">
+                                <div className="flex items-center justify-end gap-3">
+                                  <button
+                                    onClick={() => {
+                                      setModalData({ ...job, posVal, compVal, hrVal, candPhone, resumeVal });
+                                      setShowModal('view-job');
+                                    }}
+                                    className="text-primary-600 dark:text-primary-400 hover:underline text-xs font-bold"
+                                  >
+                                    View
+                                  </button>
+                                  <button
+                                    onClick={() => executeAction(`/admin/jobs/${job._id}`, 'DELETE')}
+                                    className="text-rose-500 hover:text-rose-600 text-xs font-bold"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {filteredJobs.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 text-slate-400 text-sm">
+                              No job applications found matching search and filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 18. MEMBERSHIP CARD HOLDER */}
           {activeTab === 'card-holders' && (() => {
@@ -5139,14 +5261,52 @@ function App() {
               });
             });
 
-            // Active selections & defaults
-            const activeMainCatName = selectedMainCat && catTree[selectedMainCat] ? selectedMainCat : (allMainCats[0]?.name || "Products");
+            // If catStatusFilter is 'Inactive', ensure active main & sub categories auto-select any category containing inactive items
+            let activeMainCatName = selectedMainCat && catTree[selectedMainCat] ? selectedMainCat : (allMainCats[0]?.name || "Products");
+
+            if (catStatusFilter === 'Inactive') {
+              const currentHasInactive = catTree[activeMainCatName] && (
+                catTree[activeMainCatName].isActive === false ||
+                Object.values(catTree[activeMainCatName].subcategories || {}).some(s =>
+                  s.isActive === false || (s.childCategories || []).some(ch => ch.isActive === false)
+                )
+              );
+              if (!currentHasInactive) {
+                const mainWithInactive = SYSTEM_MAIN_CATS.find(m =>
+                  catTree[m] && (
+                    catTree[m].isActive === false ||
+                    Object.values(catTree[m].subcategories || {}).some(s =>
+                      s.isActive === false || (s.childCategories || []).some(ch => ch.isActive === false)
+                    )
+                  )
+                );
+                if (mainWithInactive) {
+                  activeMainCatName = mainWithInactive;
+                }
+              }
+            }
+
             const currentMainObj = catTree[activeMainCatName] || allMainCats[0] || { subcategories: {} };
             const allSubCatsForMain = Object.values(currentMainObj.subcategories || {});
 
-            const activeSubCatName = selectedSubCat && currentMainObj.subcategories?.[selectedSubCat]
+            let activeSubCatName = selectedSubCat && currentMainObj.subcategories?.[selectedSubCat]
               ? selectedSubCat
               : (allSubCatsForMain[0]?.name || "");
+
+            if (catStatusFilter === 'Inactive') {
+              const subHasInactive = currentMainObj.subcategories?.[activeSubCatName] && (
+                currentMainObj.subcategories[activeSubCatName].isActive === false ||
+                (currentMainObj.subcategories[activeSubCatName].childCategories || []).some(ch => ch.isActive === false)
+              );
+              if (!subHasInactive) {
+                const foundSub = allSubCatsForMain.find(s =>
+                  s.isActive === false || (s.childCategories || []).some(ch => ch.isActive === false)
+                );
+                if (foundSub) {
+                  activeSubCatName = foundSub.name;
+                }
+              }
+            }
 
             const currentSubObj = currentMainObj.subcategories?.[activeSubCatName] || allSubCatsForMain[0] || { childCategories: [] };
             const allChildCatsForSub = currentSubObj.childCategories || [];
@@ -5206,7 +5366,10 @@ function App() {
                 {/* 5 KPI Stat Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                   {/* Main Categories Card */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                  <div
+                    onClick={() => setCatStatusFilter('All Status')}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm cursor-pointer hover:border-purple-500/50 transition-all"
+                  >
                     <div className="w-12 h-12 rounded-full bg-purple-50 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 border border-purple-100 dark:border-purple-900/40 shrink-0 flex items-center justify-center">
                       <LayoutGrid className="w-5 h-5" />
                     </div>
@@ -5218,7 +5381,10 @@ function App() {
                   </div>
 
                   {/* Sub Categories Card */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                  <div
+                    onClick={() => setCatStatusFilter('All Status')}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm cursor-pointer hover:border-blue-500/50 transition-all"
+                  >
                     <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/40 shrink-0 flex items-center justify-center">
                       <Folder className="w-5 h-5" />
                     </div>
@@ -5230,7 +5396,10 @@ function App() {
                   </div>
 
                   {/* Child Categories Card */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                  <div
+                    onClick={() => setCatStatusFilter('All Status')}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm cursor-pointer hover:border-emerald-500/50 transition-all"
+                  >
                     <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40 shrink-0 flex items-center justify-center">
                       <Layers className="w-5 h-5" />
                     </div>
@@ -5242,7 +5411,10 @@ function App() {
                   </div>
 
                   {/* Active Categories Card */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                  <div
+                    onClick={() => setCatStatusFilter('Active')}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm cursor-pointer hover:border-amber-500/50 transition-all"
+                  >
                     <div className="w-12 h-12 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/40 shrink-0 flex items-center justify-center">
                       <CheckCircle className="w-5 h-5" />
                     </div>
@@ -5254,7 +5426,10 @@ function App() {
                   </div>
 
                   {/* Inactive Categories Card */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm">
+                  <div
+                    onClick={() => setCatStatusFilter('Inactive')}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-3.5 shadow-sm cursor-pointer hover:border-rose-500/50 transition-all"
+                  >
                     <div className="w-12 h-12 rounded-full bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/40 shrink-0 flex items-center justify-center">
                       <XCircle className="w-5 h-5" />
                     </div>
@@ -7503,12 +7678,18 @@ function App() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                const customerName = e.target.customerName.value;
-                const phone = e.target.phone.value;
-                const issue = e.target.issue.value;
-                const priority = e.target.priority.value;
-                await executeAction('/admin/tickets', 'POST', { customerName, phone, issue, priority });
-                setShowModal(null);
+                if (isSubmittingTicket) return;
+                setIsSubmittingTicket(true);
+                try {
+                  const customerName = e.target.customerName.value;
+                  const phone = e.target.phone.value;
+                  const issue = e.target.issue.value;
+                  const priority = e.target.priority.value;
+                  await executeAction('/admin/tickets', 'POST', { customerName, phone, issue, priority });
+                  setShowModal(null);
+                } finally {
+                  setIsSubmittingTicket(false);
+                }
               }}
               className="space-y-4"
             >
@@ -7535,9 +7716,94 @@ function App() {
 
               <div className="flex gap-2 justify-end pt-4">
                 <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
-                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Create Ticket</button>
+                <button type="submit" disabled={isSubmittingTicket} className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl disabled:opacity-50">
+                  {isSubmittingTicket ? 'Creating...' : 'Create Ticket'}
+                </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW JOB APPLICATION DETAILS MODAL */}
+      {showModal === 'view-job' && modalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 space-y-6 my-8">
+            <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">Job Application Details</h3>
+                <span className="text-xs text-slate-400 font-mono">App ID: #{String(modalData.applicationId || modalData._id).substring(0, 8).toUpperCase()}</span>
+              </div>
+              <button
+                onClick={() => setShowModal(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+              <div className="space-y-3">
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Candidate Information</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Candidate Name:</span><span className="font-semibold text-slate-800 dark:text-slate-200">{modalData.candidateName}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Customer ID:</span><span className="font-mono text-xs font-semibold">{modalData.customerId}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-semibold truncate max-w-[180px]">{modalData.email}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-semibold">{modalData.candPhone || modalData.phone || '9876543210'}</span></div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Job & Company Info</h4>
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                  <div className="flex justify-between"><span className="text-slate-400">Position:</span><span className="font-semibold text-primary-600">{modalData.posVal || modalData.position || 'Software Engineer'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Company:</span><span className="font-semibold">{modalData.compVal || modalData.companyName || 'Forge India Tech'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">HR Representative:</span><span className="font-semibold">{modalData.hrVal || modalData.hrName || 'Talent Team'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Applied Date:</span><span className="font-semibold">{new Date(modalData.createdAt || modalData.appliedDate).toLocaleDateString()}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Application Status & Documents</h4>
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 flex flex-wrap justify-between items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-400 font-semibold">Update Status:</span>
+                  <select
+                    value={modalData.status}
+                    onChange={(e) => {
+                      const newStatus = e.target.value;
+                      executeAction(`/admin/jobs/${modalData._id}`, 'PUT', { status: newStatus });
+                      setModalData(prev => ({ ...prev, status: newStatus }));
+                    }}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold capitalize"
+                  >
+                    <option value="applied">Applied</option>
+                    <option value="interviewing">Interviewing / Shortlisted</option>
+                    <option value="selected">Selected</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+
+                <a
+                  href={modalData.resumeVal || (modalData.resumeUrl && !modalData.resumeUrl.includes('unsplash') ? modalData.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf')}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" /> View / Download Resume
+                </a>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-slate-200 dark:border-slate-800">
+              <button
+                onClick={() => setShowModal(null)}
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold px-5 py-2.5 rounded-xl"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
