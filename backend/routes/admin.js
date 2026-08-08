@@ -1512,7 +1512,8 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
             role: { $in: ['agent', 'Agent'] },
             level: lvl,
             assignedArea: { $regex: new RegExp('^' + cleanArea.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
-            status: { $in: ['approved', 'Approved', 'active', 'Active'] }
+            status: { $in: ['approved', 'Approved', 'active', 'Active'] },
+            isActive: { $ne: false }
         };
         if (excludeList.length > 0) {
             query._id = { $nin: excludeList };
@@ -1521,7 +1522,7 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
         if (existing) {
             return {
                 allowed: false,
-                msg: `An active agent of level '${lvl}' is already assigned to area '${cleanArea}'`
+                msg: "This territory is already assigned to another Active Agent. Please select a different territory."
             };
         }
     }
@@ -1535,10 +1536,13 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
             if (excludeList.some(ex => ex.toString() === pinDoc.activeAgentId.toString())) {
                 return { allowed: true };
             }
-            return {
-                allowed: false,
-                msg: `A pincode agent is already assigned to pincode '${pincode}'`
-            };
+            const activePinAgent = await User.findById(pinDoc.activeAgentId);
+            if (activePinAgent && ['approved', 'Approved', 'active', 'Active'].includes(activePinAgent.status) && activePinAgent.isActive !== false) {
+                return {
+                    allowed: false,
+                    msg: "This territory is already assigned to another Active Agent. Please select a different territory."
+                };
+            }
         }
         
         if (pinDoc) {
@@ -1546,7 +1550,8 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
                 role: { $in: ['agent', 'Agent'] },
                 level: 'pincode',
                 assignedPincode: pinDoc._id,
-                status: { $in: ['approved', 'Approved', 'active', 'Active'] }
+                status: { $in: ['approved', 'Approved', 'active', 'Active'] },
+                isActive: { $ne: false }
             };
             if (excludeList.length > 0) {
                 query._id = { $nin: excludeList };
@@ -1555,7 +1560,7 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
             if (existing) {
                 return {
                     allowed: false,
-                    msg: `A pincode agent is already assigned to pincode '${pincode}'`
+                    msg: "This territory is already assigned to another Active Agent. Please select a different territory."
                 };
             }
         }

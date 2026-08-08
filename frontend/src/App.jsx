@@ -1702,484 +1702,357 @@ function App() {
                   };
 
                   if (agentViewMode === 'tree') {
-                    // Tree Hierarchy View
-                    const stateAgents = filteredAgents.filter(a => (a.level || '').toLowerCase() === 'state');
-                    const topLevelAgents = stateAgents.length > 0 ? stateAgents : filteredAgents;
+                    // Enterprise Strict Territory Hierarchy Tree View
+                    const hierarchyMap = {};
+
+                    filteredAgents.forEach((ag) => {
+                      const lvl = (ag.level || 'pincode').toLowerCase();
+
+                      // Determine State
+                      let stateName = 'Karnataka';
+                      if (ag.assignedState) stateName = ag.assignedState.trim();
+                      else if (ag.assignedArea) {
+                        const parts = ag.assignedArea.split('/').map(s => s.trim());
+                        if (parts[0]) stateName = parts[0];
+                      } else if (ag.assignedPincode?.state) {
+                        stateName = ag.assignedPincode.state.trim();
+                      }
+
+                      // Determine District
+                      let districtName = 'General District';
+                      if (ag.assignedDistrict) districtName = ag.assignedDistrict.trim();
+                      else if (ag.assignedArea) {
+                        const parts = ag.assignedArea.split('/').map(s => s.trim());
+                        if (parts.length > 1) districtName = parts[1];
+                      } else if (ag.assignedPincode?.district) {
+                        districtName = ag.assignedPincode.district.trim();
+                      }
+
+                      // Determine Division
+                      let divisionName = 'General Division';
+                      if (ag.assignedArea) {
+                        const parts = ag.assignedArea.split('/').map(s => s.trim());
+                        if (parts.length > 2) divisionName = parts[2];
+                      } else if (ag.assignedPincode?.division) {
+                        divisionName = ag.assignedPincode.division.trim();
+                      }
+
+                      if (!hierarchyMap[stateName]) {
+                        hierarchyMap[stateName] = { stateName, stateAgent: null, districts: {} };
+                      }
+
+                      if (lvl === 'state') {
+                        hierarchyMap[stateName].stateAgent = ag;
+                      } else {
+                        if (!hierarchyMap[stateName].districts[districtName]) {
+                          hierarchyMap[stateName].districts[districtName] = { districtName, districtAgent: null, divisions: {} };
+                        }
+
+                        if (lvl === 'district') {
+                          hierarchyMap[stateName].districts[districtName].districtAgent = ag;
+                        } else {
+                          if (!hierarchyMap[stateName].districts[districtName].divisions[divisionName]) {
+                            hierarchyMap[stateName].districts[districtName].divisions[divisionName] = { divisionName, divisionAgent: null, pincodeAgents: [] };
+                          }
+
+                          if (['division', 'divisional'].includes(lvl)) {
+                            hierarchyMap[stateName].districts[districtName].divisions[divisionName].divisionAgent = ag;
+                          } else if (lvl === 'pincode') {
+                            hierarchyMap[stateName].districts[districtName].divisions[divisionName].pincodeAgents.push(ag);
+                          }
+                        }
+                      }
+                    });
+
+                    const stateEntries = Object.values(hierarchyMap);
 
                     return (
-                      <div className="p-6 space-y-5 bg-slate-50/40 dark:bg-slate-950/20">
-                        {topLevelAgents.map((stAgent) => {
-                          const stId = stAgent._id;
-                          const isStExpanded = !!expandedAgents[stId];
-                          const stLvlLower = (stAgent.level || 'pincode').toLowerCase();
-                          const stLvlTag = stLvlLower.toUpperCase();
-                          const terrInfo = getAgentTerritoryDetail(stAgent);
-                          const displayName = formatAgentNameWithPincode(stAgent);
+                      <div className="space-y-4">
+                        {/* Expand / Collapse All Header Controls */}
+                        <div className="flex justify-between items-center px-6 pt-4 pb-2 bg-slate-50/50 dark:bg-slate-950/30 border-b border-slate-200/60 dark:border-slate-800">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Territory Hierarchy View ({stateEntries.length} States)</span>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const allKeys = {};
+                                stateEntries.forEach(s => {
+                                  if (s.stateAgent) allKeys[s.stateAgent._id] = true;
+                                  allKeys[s.stateName] = true;
+                                  Object.values(s.districts).forEach(d => {
+                                    if (d.districtAgent) allKeys[d.districtAgent._id] = true;
+                                    allKeys[d.districtName] = true;
+                                    Object.values(d.divisions).forEach(v => {
+                                      if (v.divisionAgent) allKeys[v.divisionAgent._id] = true;
+                                      allKeys[v.divisionName] = true;
+                                    });
+                                  });
+                                });
+                                setExpandedAgents(allKeys);
+                              }}
+                              className="text-xs font-bold text-primary-600 hover:text-primary-700 bg-primary-50 dark:bg-primary-950/40 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Expand All
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedAgents({})}
+                              className="text-xs font-bold text-slate-500 hover:text-slate-600 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Collapse All
+                            </button>
+                          </div>
+                        </div>
 
-                          // Find children based on level
-                          const districtAgents = (stLvlLower === 'state')
-                            ? filteredAgents.filter(a =>
-                              (a.level || '').toLowerCase() === 'district' &&
-                              a._id !== stId && (
-                                a.parentAgentId === stId ||
-                                (a.assignedArea && stAgent.assignedArea && a.assignedArea.toLowerCase().includes(stAgent.assignedArea.toLowerCase())) ||
-                                (a.assignedState && stAgent.assignedArea && stAgent.assignedArea.toLowerCase().includes(a.assignedState.toLowerCase())) ||
-                                stateAgents.length === 1
-                              )
-                            )
-                            : [];
+                        <div className="p-6 space-y-6 bg-slate-50/40 dark:bg-slate-950/20">
+                          {stateEntries.map((stObj) => {
+                            const stAgent = stObj.stateAgent;
+                            const stKey = stAgent ? stAgent._id : stObj.stateName;
+                            const isStExpanded = expandedAgents[stKey] !== false; // expanded by default
+                            const districtList = Object.values(stObj.districts);
 
-                          const divAgentsUnderSt = (stLvlLower === 'district')
-                            ? filteredAgents.filter(a =>
-                              ['division', 'divisional'].includes((a.level || '').toLowerCase()) && (
-                                a.parentAgentId === stId ||
-                                (a.assignedArea && stAgent.assignedArea && a.assignedArea.toLowerCase().includes(stAgent.assignedArea.toLowerCase())) ||
-                                true
-                              )
-                            )
-                            : [];
-
-                          const pincodeAgentsUnderSt = (['division', 'divisional'].includes(stLvlLower))
-                            ? filteredAgents.filter(a =>
-                              (a.level || 'pincode').toLowerCase() === 'pincode' && (
-                                a.parentAgentId === stId ||
-                                (a.assignedArea && stAgent.assignedArea && a.assignedArea.toLowerCase().includes(stAgent.assignedArea.toLowerCase())) ||
-                                true
-                              )
-                            )
-                            : (stLvlLower === 'district' && divAgentsUnderSt.length === 0)
-                              ? filteredAgents.filter(a => (a.level || 'pincode').toLowerCase() === 'pincode')
-                              : [];
-
-                          const hasSubAgents = stLvlLower === 'state' ? true : stLvlLower === 'district' ? true : ['division', 'divisional'].includes(stLvlLower);
-
-                          return (
-                            <div key={stId} className="bg-white dark:bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-5 shadow-sm space-y-4 transition-all">
-                              {/* Agent Header */}
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
-                                <div className="flex items-center gap-3">
-                                  {hasSubAgents && (
+                            return (
+                              <div key={stKey} className="bg-white dark:bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-5 shadow-sm space-y-4 transition-all">
+                                {/* State Agent Card Header */}
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                  <div className="flex items-center gap-3">
                                     <button
                                       type="button"
-                                      onClick={() => setExpandedAgents(prev => ({ ...prev, [stId]: !prev[stId] }))}
-                                      className="w-9 h-9 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all shadow-xs"
-                                      title={isStExpanded ? "Collapse Sub Agents" : "Expand Sub Agents"}
+                                      onClick={() => setExpandedAgents(prev => ({ ...prev, [stKey]: !isStExpanded }))}
+                                      className="w-8 h-8 rounded-full border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all shadow-xs shrink-0 cursor-pointer"
+                                      title={isStExpanded ? "Collapse District Agents" : "Expand District Agents"}
                                     >
-                                      <ChevronRight className={`w-5 h-5 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
+                                      <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
                                     </button>
-                                  )}
-                                  <div
-                                    onClick={() => { setModalData(stAgent); setShowModal('agent-scorecard'); }}
-                                    className="cursor-pointer group"
-                                  >
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-lg uppercase tracking-wider">
-                                        {stLvlTag === 'PINCODE' ? 'PINCODE AGENT' : `${stLvlTag} AGENT`}
-                                      </span>
-                                      <span className="text-xs font-mono text-slate-400 font-bold">
-                                        ID: AG-{stLvlTag.slice(0, 4)}-{stId.slice(-4)}
-                                      </span>
-                                      <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full capitalize ${stAgent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500'}`}>
-                                        {stAgent.status || 'Approved'}
-                                      </span>
-                                    </div>
-                                    <h4 className="text-lg font-black text-slate-850 dark:text-slate-100 mt-1 flex items-center gap-2 group-hover:text-blue-500 transition-colors">
-                                      {displayName}
-                                    </h4>
-                                    <p className="text-xs text-slate-400 font-medium flex items-center gap-1.5 mt-0.5">
-                                      <MapPin className="w-3.5 h-3.5 text-blue-500" /> {terrInfo.label}: <span className="font-bold text-slate-700 dark:text-slate-300">{terrInfo.value}</span>
-                                    </p>
-                                  </div>
-                                </div>
 
-                                <div className="flex items-center gap-2 justify-end">
-                                  <button
-                                    onClick={() => { setModalData(stAgent); setShowModal('agent-profile'); }}
-                                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
-                                  >
-                                    View Profile
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* State Agent -> District Agents Container */}
-                              {stLvlLower === 'state' && isStExpanded && (
-                                <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-amber-400 dark:border-amber-600/70 space-y-4 pt-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-extrabold uppercase text-amber-600 dark:text-amber-400 tracking-wider">
-                                      District Agents ({districtAgents.length})
-                                    </span>
-                                  </div>
-
-                                  {districtAgents.map((distAgent) => {
-                                    const distId = distAgent._id;
-                                    const isDistExpanded = !!expandedAgents[distId];
-                                    const distTerrInfo = getAgentTerritoryDetail(distAgent);
-                                    const distName = formatAgentNameWithPincode(distAgent);
-
-                                    const divAgents = filteredAgents.filter(a =>
-                                      ['division', 'divisional'].includes((a.level || '').toLowerCase()) && (
-                                        a.parentAgentId === distId ||
-                                        (a.assignedArea && distAgent.assignedArea && a.assignedArea.toLowerCase().includes(distAgent.assignedArea.toLowerCase())) ||
-                                        true
-                                      )
-                                    );
-
-                                    return (
-                                      <div key={distId} className="bg-white dark:bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-4 shadow-sm space-y-3">
-                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
-                                          <div className="flex items-center gap-3">
-                                            <button
-                                              type="button"
-                                              onClick={() => setExpandedAgents(prev => ({ ...prev, [distId]: !prev[distId] }))}
-                                              className="w-8 h-8 rounded-xl border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all shadow-xs"
-                                              title={isDistExpanded ? "Collapse Divisional Agents" : "Expand Divisional Agents"}
-                                            >
-                                              <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
-                                            </button>
-                                            <div
-                                              onClick={() => { setModalData(distAgent); setShowModal('agent-scorecard'); }}
-                                              className="cursor-pointer group"
-                                            >
-                                              <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-lg uppercase tracking-wider">
-                                                  DISTRICT AGENT
-                                                </span>
-                                                <span className="text-xs font-mono text-slate-400 font-bold">
-                                                  ID: AG-DIST-{distId.slice(-4)}
-                                                </span>
-                                                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${distAgent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                                  {distAgent.status || 'Approved'}
-                                                </span>
-                                              </div>
-                                              <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-amber-500 transition-colors">
-                                                {distName}
-                                              </h5>
-                                              <p className="text-xs text-slate-400 font-medium flex items-center gap-1 mt-0.5">
-                                                <MapPin className="w-3 h-3 text-amber-500" /> {distTerrInfo.label}: <span className="font-bold text-slate-700 dark:text-slate-300">{distTerrInfo.value}</span>
-                                              </p>
-                                            </div>
-                                          </div>
-
-                                          <div className="flex items-center gap-2 justify-end">
-                                            <button
-                                              onClick={() => { setModalData(distAgent); setShowModal('agent-profile'); }}
-                                              className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
-                                            >
-                                              View Profile
-                                            </button>
-                                          </div>
-                                        </div>
-
-                                        {isDistExpanded && (
-                                          <div className="ml-2 sm:ml-5 pl-3 sm:pl-4 border-l-2 border-indigo-400 dark:border-indigo-600/70 space-y-3 pt-2">
-                                            <div className="flex items-center justify-between">
-                                              <span className="text-xs font-extrabold uppercase text-indigo-600 dark:text-indigo-400 tracking-wider">
-                                                Divisional Agents ({divAgents.length})
-                                              </span>
-                                            </div>
-
-                                            {divAgents.map((divAgent) => {
-                                              const divId = divAgent._id;
-                                              const isDivExpanded = !!expandedAgents[divId];
-                                              const divTerrInfo = getAgentTerritoryDetail(divAgent);
-                                              const divName = formatAgentNameWithPincode(divAgent);
-
-                                              const pincodeAgents = filteredAgents.filter(a =>
-                                                (a.level || 'pincode').toLowerCase() === 'pincode' && (
-                                                  a.parentAgentId === divId ||
-                                                  true
-                                                )
-                                              );
-
-                                              return (
-                                                <div key={divId} className="bg-white dark:bg-slate-900 border-2 border-indigo-500/70 rounded-2xl p-3.5 shadow-sm space-y-2.5">
-                                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
-                                                    <div className="flex items-center gap-2.5">
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => setExpandedAgents(prev => ({ ...prev, [divId]: !prev[divId] }))}
-                                                        className="w-7 h-7 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all shadow-xs"
-                                                        title={isDivExpanded ? "Collapse Pincode Agents" : "Expand Pincode Agents"}
-                                                      >
-                                                        <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
-                                                      </button>
-                                                      <div
-                                                        onClick={() => { setModalData(divAgent); setShowModal('agent-scorecard'); }}
-                                                        className="cursor-pointer group"
-                                                      >
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                          <span className="bg-indigo-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                                            DIVISIONAL AGENT
-                                                          </span>
-                                                          <span className="text-[11px] font-mono text-slate-400 font-bold">
-                                                            ID: AG-DIV-{divId.slice(-4)}
-                                                          </span>
-                                                        </div>
-                                                        <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-indigo-500 transition-colors">
-                                                          {divName}
-                                                        </h6>
-                                                        <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
-                                                          <MapPin className="w-3 h-3 text-indigo-500" /> {divTerrInfo.label}: <span className="font-bold text-slate-700 dark:text-slate-300">{divTerrInfo.value}</span>
-                                                        </p>
-                                                      </div>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-2 justify-end">
-                                                      <button
-                                                        onClick={() => { setModalData(divAgent); setShowModal('agent-profile'); }}
-                                                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
-                                                      >
-                                                        View Profile
-                                                      </button>
-                                                    </div>
-                                                  </div>
-
-                                                  {isDivExpanded && (
-                                                    <div className="ml-2 sm:ml-4 pl-3 border-l-2 border-emerald-400 dark:border-emerald-600/70 space-y-2 pt-1.5">
-                                                      <div className="flex items-center justify-between">
-                                                        <span className="text-[11px] font-extrabold uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">
-                                                          Pincode Agents ({pincodeAgents.length})
-                                                        </span>
-                                                      </div>
-
-                                                      {pincodeAgents.map((pinAgent) => {
-                                                        const pinTerrInfo = getAgentTerritoryDetail(pinAgent);
-                                                        const pinName = formatAgentNameWithPincode(pinAgent);
-                                                        return (
-                                                          <div key={pinAgent._id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                            <div className="flex items-center gap-2.5">
-                                                              <span className="bg-emerald-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                                                PINCODE AGENT
-                                                              </span>
-                                                              <div
-                                                                onClick={() => { setModalData(pinAgent); setShowModal('agent-scorecard'); }}
-                                                                className="cursor-pointer group"
-                                                              >
-                                                                <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block group-hover:text-emerald-500 transition-colors">{pinName}</span>
-                                                                <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                                                  <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{pinTerrInfo.value}</span>
-                                                                </span>
-                                                              </div>
-                                                            </div>
-
-                                                            <div className="flex items-center gap-1.5 justify-end">
-                                                              <button
-                                                                onClick={() => { setModalData(pinAgent); setShowModal('agent-profile'); }}
-                                                                className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer"
-                                                              >
-                                                                View Profile
-                                                              </button>
-                                                            </div>
-                                                          </div>
-                                                        );
-                                                      })}
-
-                                                      {pincodeAgents.length === 0 && (
-                                                        <p className="text-xs text-slate-400 italic py-1">No pincode agents assigned under this division.</p>
-                                                      )}
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              );
-                                            })}
-
-                                            {divAgents.length === 0 && (
-                                              <p className="text-xs text-slate-400 italic py-1">No divisional agents assigned under this district.</p>
-                                            )}
-                                          </div>
-                                        )}
+                                    <div
+                                      onClick={() => stAgent && (setModalData(stAgent), setShowModal('agent-scorecard'))}
+                                      className="cursor-pointer group"
+                                    >
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                          STATE AGENT
+                                        </span>
+                                        <span className="text-xs font-mono text-slate-400 font-bold">
+                                          ID: {stAgent ? `AG-STAT-${String(stAgent._id).slice(-4)}` : 'N/A'}
+                                        </span>
+                                        <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full capitalize ${stAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500'}`}>
+                                          {stAgent?.status || 'Approved'}
+                                        </span>
                                       </div>
-                                    );
-                                  })}
 
-                                  {districtAgents.length === 0 && (
-                                    <p className="text-xs text-slate-400 italic py-1">No district agents assigned under this state agent.</p>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* District Agent -> Divisional / Pincode Agents Container */}
-                              {stLvlLower === 'district' && isStExpanded && (
-                                <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-indigo-400 dark:border-indigo-600/70 space-y-4 pt-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-extrabold uppercase text-indigo-600 dark:text-indigo-400 tracking-wider">
-                                      {divAgentsUnderSt.length > 0 ? `Divisional Agents (${divAgentsUnderSt.length})` : `Pincode Agents (${pincodeAgentsUnderSt.length})`}
-                                    </span>
+                                      <h4 className="text-xl font-black text-slate-850 dark:text-slate-100 mt-1 group-hover:text-blue-500 transition-colors">
+                                        {stAgent ? formatAgentNameWithPincode(stAgent) : `${stObj.stateName} State`}
+                                      </h4>
+                                      <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                        <MapPin className="w-3.5 h-3.5 text-blue-500" /> State Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{stObj.stateName}</span>
+                                      </p>
+                                    </div>
                                   </div>
 
-                                  {divAgentsUnderSt.length > 0 ? (
-                                    divAgentsUnderSt.map((divAgent) => {
-                                      const divId = divAgent._id;
-                                      const isDivExpanded = !!expandedAgents[divId];
-                                      const divTerrInfo = getAgentTerritoryDetail(divAgent);
-                                      const divName = formatAgentNameWithPincode(divAgent);
-                                      const pincodeAgents = filteredAgents.filter(a => (a.level || 'pincode').toLowerCase() === 'pincode');
+                                  {stAgent && (
+                                    <div className="flex items-center gap-2 justify-end">
+                                      <button
+                                        onClick={() => { setModalData(stAgent); setShowModal('agent-profile'); }}
+                                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm transition-all cursor-pointer"
+                                      >
+                                        View Profile
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* District Agents Container */}
+                                {isStExpanded && (
+                                  <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-amber-400 dark:border-amber-600/70 space-y-4 pt-2">
+                                    <h5 className="text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">
+                                      DISTRICT AGENTS ({districtList.length})
+                                    </h5>
+
+                                    {districtList.map((distObj) => {
+                                      const distAgent = distObj.districtAgent;
+                                      const distKey = distAgent ? distAgent._id : distObj.districtName;
+                                      const isDistExpanded = expandedAgents[distKey] !== false; // expanded by default
+                                      const divList = Object.values(distObj.divisions);
 
                                       return (
-                                        <div key={divId} className="bg-white dark:bg-slate-900 border-2 border-indigo-500/70 rounded-2xl p-3.5 shadow-sm space-y-2.5">
-                                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
-                                            <div className="flex items-center gap-2.5">
+                                        <div key={distKey} className="bg-white dark:bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-4 shadow-sm space-y-3">
+                                          {/* District Agent Header */}
+                                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
+                                            <div className="flex items-center gap-3">
                                               <button
                                                 type="button"
-                                                onClick={() => setExpandedAgents(prev => ({ ...prev, [divId]: !prev[divId] }))}
-                                                className="w-7 h-7 rounded-lg border border-indigo-300 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all shadow-xs"
-                                                title={isDivExpanded ? "Collapse Pincode Agents" : "Expand Pincode Agents"}
+                                                onClick={() => setExpandedAgents(prev => ({ ...prev, [distKey]: !isDistExpanded }))}
+                                                className="w-7 h-7 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all shadow-xs shrink-0 cursor-pointer"
+                                                title={isDistExpanded ? "Collapse Divisional Agents" : "Expand Divisional Agents"}
                                               >
-                                                <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
+                                                <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
                                               </button>
+
                                               <div
-                                                onClick={() => { setModalData(divAgent); setShowModal('agent-scorecard'); }}
+                                                onClick={() => distAgent && (setModalData(distAgent), setShowModal('agent-scorecard'))}
                                                 className="cursor-pointer group"
                                               >
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                  <span className="bg-indigo-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                                    DIVISIONAL AGENT
+                                                  <span className="bg-amber-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                                    DISTRICT AGENT
                                                   </span>
-                                                  <span className="text-[11px] font-mono text-slate-400 font-bold">
-                                                    ID: AG-DIV-{divId.slice(-4)}
+                                                  <span className="text-xs font-mono text-slate-400 font-bold">
+                                                    ID: {distAgent ? `AG-DIST-${String(distAgent._id).slice(-4)}` : 'N/A'}
+                                                  </span>
+                                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${distAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                                    {distAgent?.status || 'Approved'}
                                                   </span>
                                                 </div>
-                                                <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-indigo-500 transition-colors">
-                                                  {divName}
-                                                </h6>
-                                                <p className="text-[11px] text-slate-400 font-medium flex items-center gap-1 mt-0.5">
-                                                  <MapPin className="w-3 h-3 text-indigo-500" /> {divTerrInfo.label}: <span className="font-bold text-slate-700 dark:text-slate-300">{divTerrInfo.value}</span>
+
+                                                <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-amber-500 transition-colors">
+                                                  {distAgent ? formatAgentNameWithPincode(distAgent) : distObj.districtName}
+                                                </h5>
+                                                <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                  <MapPin className="w-3 h-3 text-amber-500" /> District Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{distObj.districtName}</span>
                                                 </p>
                                               </div>
                                             </div>
 
-                                            <div className="flex items-center gap-2 justify-end">
-                                              <button
-                                                onClick={() => { setModalData(divAgent); setShowModal('agent-profile'); }}
-                                                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
-                                              >
-                                                View Profile
-                                              </button>
-                                            </div>
+                                            {distAgent && (
+                                              <div className="flex items-center gap-2 justify-end">
+                                                <button
+                                                  onClick={() => { setModalData(distAgent); setShowModal('agent-profile'); }}
+                                                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm transition-all cursor-pointer"
+                                                >
+                                                  View Profile
+                                                </button>
+                                              </div>
+                                            )}
                                           </div>
 
-                                          {isDivExpanded && (
-                                            <div className="ml-2 sm:ml-4 pl-3 border-l-2 border-emerald-400 dark:border-emerald-600/70 space-y-2 pt-1.5">
-                                              {pincodeAgents.map((pinAgent) => {
-                                                const pinTerrInfo = getAgentTerritoryDetail(pinAgent);
-                                                const pinName = formatAgentNameWithPincode(pinAgent);
+                                          {/* Divisional Agents Container */}
+                                          {isDistExpanded && (
+                                            <div className="ml-2 sm:ml-5 pl-3 sm:pl-4 border-l-2 border-purple-400 dark:border-purple-600/70 space-y-3 pt-2">
+                                              <h6 className="text-xs font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">
+                                                DIVISIONAL AGENTS ({divList.length})
+                                              </h6>
+
+                                              {divList.map((divObj) => {
+                                                const divAgent = divObj.divisionAgent;
+                                                const divKey = divAgent ? divAgent._id : divObj.divisionName;
+                                                const isDivExpanded = expandedAgents[divKey] !== false; // expanded by default
+                                                const pinAgents = divObj.pincodeAgents;
+
                                                 return (
-                                                  <div key={pinAgent._id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                                    <div className="flex items-center gap-2.5">
-                                                      <span className="bg-emerald-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                                        PINCODE AGENT
-                                                      </span>
-                                                      <div
-                                                        onClick={() => { setModalData(pinAgent); setShowModal('agent-scorecard'); }}
-                                                        className="cursor-pointer group"
-                                                      >
-                                                        <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block group-hover:text-emerald-500 transition-colors">{pinName}</span>
-                                                        <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                                          <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{pinTerrInfo.value}</span>
-                                                        </span>
+                                                  <div key={divKey} className="bg-white dark:bg-slate-900 border-2 border-purple-500/70 rounded-2xl p-3.5 shadow-sm space-y-2.5">
+                                                    {/* Divisional Agent Header */}
+                                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+                                                      <div className="flex items-center gap-2.5">
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => setExpandedAgents(prev => ({ ...prev, [divKey]: !isDivExpanded }))}
+                                                          className="w-6 h-6 rounded-full border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-all shadow-xs shrink-0 cursor-pointer"
+                                                          title={isDivExpanded ? "Collapse Pincode Agents" : "Expand Pincode Agents"}
+                                                        >
+                                                          <ChevronRight className={`w-3 h-3 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
+                                                        </button>
+
+                                                        <div
+                                                          onClick={() => divAgent && (setModalData(divAgent), setShowModal('agent-scorecard'))}
+                                                          className="cursor-pointer group"
+                                                        >
+                                                          <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="bg-purple-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                                              DIVISIONAL AGENT
+                                                            </span>
+                                                            <span className="text-[11px] font-mono text-slate-400 font-bold">
+                                                              ID: {divAgent ? `AG-DIV-${String(divAgent._id).slice(-4)}` : 'N/A'}
+                                                            </span>
+                                                          </div>
+                                                          <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-purple-500 transition-colors">
+                                                            {divAgent ? formatAgentNameWithPincode(divAgent) : divObj.divisionName}
+                                                          </h6>
+                                                          <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                            <MapPin className="w-3 h-3 text-purple-500" /> Division Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{divObj.divisionName}</span>
+                                                          </p>
+                                                        </div>
                                                       </div>
+
+                                                      {divAgent && (
+                                                        <div className="flex items-center gap-2 justify-end">
+                                                          <button
+                                                            onClick={() => { setModalData(divAgent); setShowModal('agent-profile'); }}
+                                                            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm transition-all cursor-pointer"
+                                                          >
+                                                            View Profile
+                                                          </button>
+                                                        </div>
+                                                      )}
                                                     </div>
-                                                    <div className="flex items-center gap-1.5 justify-end">
-                                                      <button
-                                                        onClick={() => { setModalData(pinAgent); setShowModal('agent-profile'); }}
-                                                        className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer"
-                                                      >
-                                                        View Profile
-                                                      </button>
-                                                    </div>
+
+                                                    {/* Pincode Agents Container */}
+                                                    {isDivExpanded && (
+                                                      <div className="ml-2 sm:ml-4 pl-3 border-l-2 border-emerald-400 dark:border-emerald-600/70 space-y-2 pt-1.5">
+                                                        <span className="block text-[11px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">
+                                                          PINCODE AGENTS ({pinAgents.length})
+                                                        </span>
+
+                                                        {pinAgents.map((pinAgent) => {
+                                                          const pinCode = getAgentPincodeCode(pinAgent);
+                                                          const pinName = formatAgentNameWithPincode(pinAgent);
+
+                                                          return (
+                                                            <div key={pinAgent._id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-l-4 border-l-emerald-500">
+                                                              <div className="flex items-center gap-2.5">
+                                                                <span className="bg-emerald-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                                                  PINCODE AGENT
+                                                                </span>
+                                                                <div
+                                                                  onClick={() => { setModalData(pinAgent); setShowModal('agent-scorecard'); }}
+                                                                  className="cursor-pointer group"
+                                                                >
+                                                                  <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block group-hover:text-emerald-500 transition-colors">{pinName}</span>
+                                                                  <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                                    <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{pinCode || '560096'}</span>
+                                                                  </span>
+                                                                </div>
+                                                              </div>
+
+                                                              <div className="flex items-center gap-1.5 justify-end">
+                                                                <button
+                                                                  onClick={() => { setModalData(pinAgent); setShowModal('agent-profile'); }}
+                                                                  className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-sm transition-all cursor-pointer"
+                                                                >
+                                                                  View Profile
+                                                                </button>
+                                                              </div>
+                                                            </div>
+                                                          );
+                                                        })}
+
+                                                        {pinAgents.length === 0 && (
+                                                          <p className="text-xs text-slate-400 italic py-1">No pincode agents assigned under this division.</p>
+                                                        )}
+                                                      </div>
+                                                    )}
                                                   </div>
                                                 );
                                               })}
+
+                                              {divList.length === 0 && (
+                                                <p className="text-xs text-slate-400 italic py-1">No divisional agents assigned under this district.</p>
+                                              )}
                                             </div>
                                           )}
                                         </div>
                                       );
-                                    })
-                                  ) : (
-                                    pincodeAgentsUnderSt.map((pinAgent) => {
-                                      const pinTerrInfo = getAgentTerritoryDetail(pinAgent);
-                                      const pinName = formatAgentNameWithPincode(pinAgent);
-                                      return (
-                                        <div key={pinAgent._id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                          <div className="flex items-center gap-2.5">
-                                            <span className="bg-emerald-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                              PINCODE AGENT
-                                            </span>
-                                            <div
-                                              onClick={() => { setModalData(pinAgent); setShowModal('agent-scorecard'); }}
-                                              className="cursor-pointer group"
-                                            >
-                                              <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block group-hover:text-emerald-500 transition-colors">{pinName}</span>
-                                              <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                                <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{pinTerrInfo.value}</span>
-                                              </span>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-1.5 justify-end">
-                                            <button
-                                              onClick={() => { setModalData(pinAgent); setShowModal('agent-profile'); }}
-                                              className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer"
-                                            >
-                                              View Profile
-                                            </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })
-                                  )}
-                                  {divAgentsUnderSt.length === 0 && pincodeAgentsUnderSt.length === 0 && (
-                                    <p className="text-xs text-slate-400 italic py-1">No sub-agents assigned under this district agent.</p>
-                                  )}
-                                </div>
-                              )}
+                                    })}
 
-                              {/* Division Agent -> Pincode Agents Container */}
-                              {['division', 'divisional'].includes(stLvlLower) && isStExpanded && (
-                                <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-emerald-400 dark:border-emerald-600/70 space-y-4 pt-2">
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-xs font-extrabold uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">
-                                      Pincode Agents ({pincodeAgentsUnderSt.length})
-                                    </span>
+                                    {districtList.length === 0 && (
+                                      <p className="text-xs text-slate-400 italic py-1">No district agents assigned under this state agent.</p>
+                                    )}
                                   </div>
-                                  {pincodeAgentsUnderSt.map((pinAgent) => {
-                                    const pinTerrInfo = getAgentTerritoryDetail(pinAgent);
-                                    const pinName = formatAgentNameWithPincode(pinAgent);
-                                    return (
-                                      <div key={pinAgent._id} className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2.5">
-                                          <span className="bg-emerald-600 text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
-                                            PINCODE AGENT
-                                          </span>
-                                          <div
-                                            onClick={() => { setModalData(pinAgent); setShowModal('agent-scorecard'); }}
-                                            className="cursor-pointer group"
-                                          >
-                                            <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block group-hover:text-emerald-500 transition-colors">{pinName}</span>
-                                            <span className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                              <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{pinTerrInfo.value}</span>
-                                            </span>
-                                          </div>
-                                        </div>
-                                        <div className="flex items-center gap-1.5 justify-end">
-                                          <button
-                                            onClick={() => { setModalData(pinAgent); setShowModal('agent-profile'); }}
-                                            className="bg-amber-600 hover:bg-amber-700 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer"
-                                          >
-                                            View Profile
-                                          </button>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                  {pincodeAgentsUnderSt.length === 0 && (
-                                    <p className="text-xs text-slate-400 italic py-1">No pincode agents assigned under this division.</p>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     );
                   }
