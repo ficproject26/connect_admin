@@ -280,9 +280,20 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // For agents: enforce status check
+        // For agents: enforce suspension and status check
         if (user.role === 'agent' || user.role === 'Agent') {
             const userStatus = (user.status || 'pending').toLowerCase();
+            if (userStatus === 'suspended' || (!user.isActive && userStatus !== 'approved')) {
+                return res.status(403).json({
+                    title: 'Account Suspended',
+                    message: 'Your agent account has been suspended by the Administrator. Your access to the Agent Portal has been temporarily disabled. Please contact the Administration Team to reactivate your account.',
+                    error: 'Account Suspended',
+                    status: 'suspended',
+                    isSuspended: true,
+                    registrationId: user.registrationId || 'N/A',
+                    role: user.level || 'pincode'
+                });
+            }
             if (userStatus === 'pending') {
                 return res.status(403).json({
                     message: 'Your registration has been submitted successfully. You can log in only after Admin approval.',
@@ -291,10 +302,10 @@ router.post('/login', async (req, res) => {
                     role: user.level || 'pincode'
                 });
             }
-            if (userStatus === 'rejected' || userStatus === 'suspended') {
+            if (userStatus === 'rejected') {
                 const reasonText = user.rejectionReason ? ` Reason: ${user.rejectionReason}` : '';
                 return res.status(403).json({
-                    message: `Your registration application was rejected or suspended.${reasonText}`,
+                    message: `Your registration application was rejected.${reasonText}`,
                     rejectionReason: user.rejectionReason || '',
                     status: userStatus,
                     registrationId: user.registrationId || 'N/A',
@@ -577,6 +588,17 @@ router.get('/me', async (req, res) => {
         if (!user) return res.status(404).json({ message: 'User not found' });
 
         if (user.role === 'agent' || user.role === 'Agent') {
+            const uStatus = (user.status || '').toLowerCase();
+            if (uStatus === 'suspended' || (!user.isActive && uStatus !== 'approved')) {
+                return res.status(403).json({
+                    title: 'Account Suspended',
+                    message: 'Your agent account has been suspended by the Administrator. Your access to the Agent Portal has been temporarily disabled. Please contact the Administration Team to reactivate your account.',
+                    error: 'Account Suspended',
+                    status: 'suspended',
+                    isSuspended: true
+                });
+            }
+
             const agent = {
                 _id: user._id,
                 name: user.name,
