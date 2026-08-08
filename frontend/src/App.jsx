@@ -3438,10 +3438,10 @@ function App() {
               </div>
 
               {membershipPlans.length > 0 ? (() => {
-                const activePlan = membershipPlans[selectedPlanTab] || membershipPlans[0];
                 const isGold = activePlan.name.toLowerCase().includes('gold');
-                const isPlatinum = activePlan.name.toLowerCase().includes('platinum') || activePlan.name.toLowerCase().includes('enterprise');
-                const isSilver = !isGold && !isPlatinum;
+                const isDiamond = activePlan.name.toLowerCase().includes('diamond') || activePlan.name.toLowerCase().includes('enterprise');
+                const isPlatinum = !isDiamond && activePlan.name.toLowerCase().includes('platinum');
+                const isSilver = !isGold && !isPlatinum && !isDiamond;
 
                 // Card gradient definitions
                 let cardGradient = 'from-slate-300 via-slate-100 to-slate-400 text-slate-800';
@@ -3449,8 +3449,11 @@ function App() {
                 if (isGold) {
                   cardGradient = 'from-amber-300 via-yellow-100 to-amber-500 text-amber-950 shadow-amber-500/10';
                   tierText = 'GOLD TIER';
-                } else if (isPlatinum) {
+                } else if (isDiamond) {
                   cardGradient = 'from-slate-850 via-slate-900 to-slate-950 text-slate-100 border border-slate-700/60 shadow-slate-950/40';
+                  tierText = 'DIAMOND TIER';
+                } else if (isPlatinum) {
+                  cardGradient = 'from-indigo-900 via-purple-900 to-slate-950 text-slate-100 border border-purple-700/60 shadow-purple-950/40';
                   tierText = 'PLATINUM TIER';
                 }
 
@@ -3624,9 +3627,17 @@ function App() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {ads.map((ad) => (
                     <div key={ad._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200/50 dark:border-slate-850 space-y-3">
-                      <div className="flex justify-between">
-                        <span className="font-bold text-sm">{ad.title}</span>
-                        <span className="text-emerald-500 text-xs font-bold">Earnings: ₹{ad.revenue}</span>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{ad.title}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-emerald-500 text-xs font-bold">Earnings: ₹{ad.revenue}</span>
+                          <button
+                            onClick={() => executeAction(`/admin/ads/${ad._id}`, 'DELETE')}
+                            className="text-rose-500 hover:text-rose-600 text-xs font-bold transition-colors cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-3 gap-2 text-center text-xs">
@@ -3676,7 +3687,12 @@ function App() {
                           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{offer.desc}</p>
                         </div>
                         {offer.imageUrl && (
-                          <img src={offer.imageUrl} alt="" className="w-16 h-16 object-cover rounded-xl shrink-0 border border-slate-200 dark:border-slate-800" />
+                          <img
+                            src={offer.imageUrl}
+                            alt={offer.title}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                            className="w-16 h-16 object-cover rounded-xl shrink-0 border border-slate-200 dark:border-slate-800"
+                          />
                         )}
                       </div>
 
@@ -4370,7 +4386,8 @@ function App() {
                           const compVal = (!job.companyName || job.companyName === 'Krishna' || job.companyName === 'Connect Portal Inc.') ? sampleCompanies[idx % sampleCompanies.length] : job.companyName;
                           const hrVal = (!job.hrName || job.hrName === 'Krishna' || job.hrName.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : job.hrName;
                           const candPhone = (!job.phone || job.phone === 'N/A') ? '9876543210' : job.phone;
-                          const resumeVal = (job.resumeUrl && !job.resumeUrl.includes('unsplash')) ? job.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+                          const isValidResumeUrl = (url) => url && (url.startsWith('http://') || url.startsWith('https://')) && !url.includes('unsplash');
+                          const resumeVal = isValidResumeUrl(job.resumeUrl) ? job.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
 
                           return (
                             <tr key={job._id}>
@@ -6776,7 +6793,7 @@ function App() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Image URL</label>
-                <input name="imageUrl" defaultValue="https://images.unsplash.com/photo-1505751172876-fa1923c5c528?w=600" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input name="imageUrl" defaultValue="" placeholder="https://example.com/image.jpg" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Video URL (Optional)</label>
