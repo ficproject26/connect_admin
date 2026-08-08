@@ -108,30 +108,25 @@ export const PayrollManagement = ({ token, API_BASE }) => {
       </div>
 
       {/* 2. PAYROLL KPI SUMMARY CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
           <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Salary Outflow</span>
-          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">₹{(kpi.totalSalary || 280000).toLocaleString()}</span>
+          <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">₹{(kpi.totalSalary || 0).toLocaleString()}</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
           <span className="text-[10px] font-black uppercase tracking-wider text-amber-500">Commission Paid</span>
-          <span className="block text-2xl font-black text-amber-600 dark:text-amber-400">₹{(kpi.commissionPaid || 125000).toLocaleString()}</span>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
-          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-500">Bonus Paid</span>
-          <span className="block text-2xl font-black text-emerald-600 dark:text-emerald-400">₹{(kpi.bonusPaid || 35000).toLocaleString()}</span>
+          <span className="block text-2xl font-black text-amber-600 dark:text-amber-400">₹{(kpi.commissionPaid || 0).toLocaleString()}</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
           <span className="text-[10px] font-black uppercase tracking-wider text-purple-500">Current Month Payroll</span>
-          <span className="block text-2xl font-black text-purple-600 dark:text-purple-400">₹{(kpi.currentMonthPayroll || 315000).toLocaleString()}</span>
+          <span className="block text-2xl font-black text-purple-600 dark:text-purple-400">₹{(kpi.currentMonthPayroll || 0).toLocaleString()}</span>
         </div>
 
         <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs space-y-2">
           <span className="text-[10px] font-black uppercase tracking-wider text-rose-500">Pending Salary</span>
-          <span className="block text-2xl font-black text-rose-600 dark:text-rose-400">₹{(kpi.pendingSalary || 45000).toLocaleString()}</span>
+          <span className="block text-2xl font-black text-rose-600 dark:text-rose-400">₹{(kpi.pendingSalary || 0).toLocaleString()}</span>
         </div>
       </div>
 
@@ -151,7 +146,12 @@ export const PayrollManagement = ({ token, API_BASE }) => {
 
           <select
             value={employeeType}
-            onChange={e => setEmployeeType(e.target.value)}
+            onChange={e => {
+              setEmployeeType(e.target.value);
+              if (e.target.value === 'Agent') {
+                setDepartment('all');
+              }
+            }}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3 py-2 font-semibold focus:outline-none"
           >
             <option value="all">All Types</option>
@@ -166,9 +166,16 @@ export const PayrollManagement = ({ token, API_BASE }) => {
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3 py-2 font-semibold focus:outline-none"
           >
             <option value="all">All Departments</option>
-            <option value="Customer Support">Customer Support</option>
-            <option value="KYC Team">KYC Team</option>
-            <option value="Payment Team">Payment Team</option>
+            {employeeType === 'Agent' ? (
+              <option value="Agent Operations">Agent Operations</option>
+            ) : (
+              <>
+                <option value="Customer Support">Customer Support</option>
+                <option value="KYC Team">KYC Team</option>
+                <option value="Payment Team">Payment Team</option>
+                <option value="Agent Operations">Agent Operations</option>
+              </>
+            )}
           </select>
         </div>
 
@@ -183,7 +190,7 @@ export const PayrollManagement = ({ token, API_BASE }) => {
               <th className="py-3 px-4">Employee</th>
               <th className="py-3 px-4">Type & Dept</th>
               <th className="py-3 px-4">Base Salary</th>
-              <th className="py-3 px-4">Bonus / Commission</th>
+              <th className="py-3 px-4">Commission</th>
               <th className="py-3 px-4">PF / Tax / Deductions</th>
               <th className="py-3 px-4">Net Salary</th>
               <th className="py-3 px-4">Status</th>
@@ -204,7 +211,7 @@ export const PayrollManagement = ({ token, API_BASE }) => {
                   ₹{(p.salary || 0).toLocaleString()}
                 </td>
                 <td className="py-3 px-4 text-emerald-600 font-bold">
-                  +₹{((p.bonus || 0) + (p.commission || 0) + (p.incentive || 0)).toLocaleString()}
+                  +₹{(p.commission || 0).toLocaleString()}
                 </td>
                 <td className="py-3 px-4 text-rose-500 font-bold">
                   -₹{((p.pf || 0) + (p.esi || 0) + (p.professionalTax || 0) + (p.deduction || 0)).toLocaleString()}

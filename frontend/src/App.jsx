@@ -2856,18 +2856,6 @@ function App() {
                         />
                       </div>
 
-                      {/* District Filter */}
-                      <select
-                        value={customerDistrictFilter}
-                        onChange={(e) => setCustomerDistrictFilter(e.target.value)}
-                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
-                      >
-                        <option value="All">All Districts</option>
-                        {customerDistricts.map(d => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-
                       {/* Status Filter */}
                       <select
                         value={customerStatusFilter}
@@ -2902,7 +2890,6 @@ function App() {
                           <th className="px-6 py-4">Customer Type</th>
                           <th className="px-6 py-4">Aadhaar Number</th>
                           <th className="px-6 py-4">PAN Number</th>
-                          <th className="px-6 py-4">District</th>
                           <th className="px-6 py-4">Status</th>
                         </tr>
                       </thead>
@@ -2922,7 +2909,6 @@ function App() {
                             </td>
                             <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.aadhaarNumber || '—'}</td>
                             <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.panNumber || '—'}</td>
-                            <td className="px-6 py-4 font-semibold text-slate-600 dark:text-slate-400">{c.district || c.branchId?.name || c.city || 'Direct'}</td>
                             <td className="px-6 py-4">
                               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${c.status === 'active' || c.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                                 {c.status === 'active' || c.status === 'Active' ? 'Active' : 'Inactive'}
@@ -2932,7 +2918,7 @@ function App() {
                         ))}
                         {filteredCustomers.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="text-center py-8 text-slate-400 text-sm">
+                            <td colSpan={6} className="text-center py-8 text-slate-400 text-sm">
                               No customers found matching search and filters.
                             </td>
                           </tr>

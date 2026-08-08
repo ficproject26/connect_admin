@@ -11,19 +11,19 @@ import {
 export const EnterprisePaymentDashboard = ({ token, API_BASE }) => {
   const [loading, setLoading] = useState(false);
   const [kpi, setKpi] = useState({
-    totalRevenue: 1485000,
-    todayRevenue: 42500,
-    monthlyRevenue: 385000,
-    customerPayments: 620000,
-    vendorRegFees: 245000,
-    vendorTieupFees: 310000,
-    membershipRevenue: 310000,
-    agentFees: 98000,
-    commissionPaid: 125000,
-    salaryPaid: 280000,
-    expenses: 145000,
-    balance: 935000,
-    pendingPayments: 68000
+    totalRevenue: 0,
+    todayRevenue: 0,
+    monthlyRevenue: 0,
+    customerPayments: 0,
+    vendorRegFees: 0,
+    vendorTieupFees: 0,
+    membershipRevenue: 0,
+    agentFees: 0,
+    commissionPaid: 0,
+    salaryPaid: 0,
+    expenses: 0,
+    balance: 0,
+    pendingPayments: 0
   });
 
   const fetchPaymentKPIs = async () => {
@@ -47,22 +47,17 @@ export const EnterprisePaymentDashboard = ({ token, API_BASE }) => {
     fetchPaymentKPIs();
   }, []);
 
-  // Mock Trend Chart Data
+  // Trend Chart Data dynamically calculated from real KPI
   const revenueTrendData = [
-    { month: 'Jan', revenue: 180000, expenses: 45000, commission: 25000 },
-    { month: 'Feb', revenue: 220000, expenses: 50000, commission: 30000 },
-    { month: 'Mar', revenue: 270000, expenses: 65000, commission: 38000 },
-    { month: 'Apr', revenue: 310000, expenses: 80000, commission: 42000 },
-    { month: 'May', revenue: 360000, expenses: 95000, commission: 50000 },
-    { month: 'Jun', revenue: 385000, expenses: 145000, commission: 125000 }
+    { month: 'Current', revenue: kpi.totalRevenue || 0, expenses: kpi.expenses || 0, commission: kpi.commissionPaid || 0 }
   ];
 
   const paymentDistributionData = [
-    { name: 'Customer Payments', value: kpi.customerPayments, color: '#10b981' },
-    { name: 'Vendor Reg Fees', value: kpi.vendorRegFees, color: '#3b82f6' },
-    { name: 'Vendor Tie-up Fees', value: kpi.vendorTieupFees, color: '#f59e0b' },
-    { name: 'Membership Revenue', value: kpi.membershipRevenue, color: '#8b5cf6' },
-    { name: 'Agent Fees', value: kpi.agentFees, color: '#ec4899' }
+    { name: 'Customer Payments', value: kpi.customerPayments || 0, color: '#10b981' },
+    { name: 'Vendor Reg Fees', value: kpi.vendorRegFees || 0, color: '#3b82f6' },
+    { name: 'Vendor Tie-up Fees', value: kpi.vendorTieupFees || 0, color: '#f59e0b' },
+    { name: 'Membership Revenue', value: kpi.membershipRevenue || 0, color: '#8b5cf6' },
+    { name: 'Agent Fees', value: kpi.agentFees || 0, color: '#ec4899' }
   ];
 
   const exportReport = (format) => {
