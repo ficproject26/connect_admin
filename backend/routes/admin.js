@@ -516,69 +516,132 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 const handleAgentStatusUpdate = async (req, res) => {
     const { status, isActive, rejectionReason } = req.body;
     try {
-        let agent = await User.findById(req.params.id);
+        const idParam = req.params.id;
+        let agent = null;
+
+        if (mongoose.Types.ObjectId.isValid(idParam)) {
+            agent = await User.findById(idParam);
+        }
         if (!agent) {
-            agent = await User.findOne({ _id: req.params.id });
-        }
-        if (!agent) return res.status(404).json({ msg: 'Agent not found' });
-
-        if (status) {
-            agent.status = status;
-            if (status === 'approved') {
-                agent.isPaid = true;
-                agent.isApproved = true;
-            } else if (status === 'suspended' || status === 'rejected') {
-                agent.isApproved = false;
-            }
-        }
-        if (typeof isActive !== 'undefined') {
-            agent.isActive = isActive;
-        } else if (status) {
-            agent.isActive = (status === 'approved');
+            agent = await User.findOne({ $or: [{ _id: idParam }, { email: idParam }, { registrationId: idParam }] });
         }
 
-        await agent.save();
-
-        // Also sync status update to standalone agents collection
         const db = mongoose.connection.db;
-        if (db && agent.email) {
-            try {
+
+        // If agent exists in User collection
+        if (agent) {
+            if (status) {
+                agent.status = status;
+                if (status === 'approved') {
+                    agent.isPaid = true;
+                    agent.isApproved = true;
+                    agent.isActive = true;
+                } else if (status === 'suspended' || status === 'rejected' || status === 'inactive') {
+                    agent.isApproved = false;
+                    agent.isActive = false;
+                }
+            }
+            if (typeof isActive !== 'undefined') {
+                agent.isActive = !!isActive;
+            } else if (status) {
+                agent.isActive = (status === 'approved');
+            }
+
+            await agent.save();
+
+            // Sync status update to standalone agents collection
+            if (db && agent.email) {
+                try {
+                    await db.collection('agents').updateOne(
+                        { email: agent.email.toLowerCase() },
+                        {
+                            $set: {
+                                kycStatus: agent.status,
+                                status: agent.status,
+                                isActive: agent.isActive,
+                                rejectionReason: rejectionReason || '',
+                                updatedAt: new Date()
+                            }
+                        }
+                    );
+                } catch (aErr) {
+                    console.error("Error updating standalone agents collection:", aErr);
+                }
+            }
+
+            // Unbind pincode assignment if agent is suspended/rejected/inactive
+            if (agent.status === 'suspended' || agent.status === 'rejected' || agent.status === 'inactive' || !agent.isActive) {
+                if (agent.assignedPincode) {
+                    await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: null });
+                }
+                await Pincode.updateMany({ activeAgentId: agent._id }, { $set: { activeAgentId: null } });
+            } else if (agent.status === 'approved' && agent.assignedPincode) {
+                await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: agent._id });
+            }
+
+            return res.json({ msg: `Agent status updated to ${agent.status}`, agent });
+        }
+
+        // Fallback: If agent only exists in standalone agents collection
+        if (db) {
+            let filter = {};
+            if (mongoose.Types.ObjectId.isValid(idParam)) {
+                filter = { _id: new mongoose.Types.ObjectId(idParam) };
+            } else {
+                filter = { $or: [{ email: idParam }, { registrationId: idParam }] };
+            }
+
+            const rawAgent = await db.collection('agents').findOne(filter);
+            if (rawAgent) {
+                const targetStatus = status || 'suspended';
+                const targetActive = typeof isActive !== 'undefined' ? !!isActive : (targetStatus === 'approved');
+
                 await db.collection('agents').updateOne(
-                    { email: agent.email.toLowerCase() },
+                    filter,
                     {
                         $set: {
-                            kycStatus: status,
-                            status: status,
-                            rejectionReason: rejectionReason || '',
+                            kycStatus: targetStatus,
+                            status: targetStatus,
+                            isActive: targetActive,
                             updatedAt: new Date()
                         }
                     }
                 );
-            } catch (aErr) {
-                console.error("Error updating agents collection:", aErr);
+
+                // Also create/sync to User collection
+                await User.findOneAndUpdate(
+                    { email: rawAgent.email.toLowerCase() },
+                    {
+                        $set: {
+                            name: rawAgent.name,
+                            email: rawAgent.email.toLowerCase(),
+                            phone: rawAgent.phone,
+                            role: 'agent',
+                            level: rawAgent.role || rawAgent.level || 'pincode',
+                            status: targetStatus,
+                            isActive: targetActive,
+                            isApproved: targetStatus === 'approved'
+                        }
+                    },
+                    { upsert: true, new: true }
+                );
+
+                return res.json({ msg: `Agent status updated to ${targetStatus}` });
             }
         }
 
-        // Update Pincode activeAgentId linkage
-        if (agent.assignedPincode) {
-            if (status === 'approved') {
-                await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: agent._id });
-            } else if (status === 'rejected' || status === 'suspended') {
-                await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: null });
-            }
-        }
-
-        res.json(agent);
+        return res.status(404).json({ msg: 'Agent not found' });
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
+        console.error("Error in handleAgentStatusUpdate:", err);
+        res.status(500).json({ msg: 'Server error updating agent status', error: err.message });
     }
 };
 
 router.put('/agents/:id/status', [auth, adminAuth], handleAgentStatusUpdate);
 router.put('/approve-agent/:id', [auth, adminAuth], handleAgentStatusUpdate);
 router.put('/agents/:id/approve', [auth, adminAuth], (req, res, next) => { req.body.status = 'approved'; handleAgentStatusUpdate(req, res); });
-router.put('/agents/:id/reject', [auth, adminAuth], (req, res, next) => { req.body.status = 'rejected'; handleAgentStatusUpdate(req, res); });
+router.put('/agents/:id/suspend', [auth, adminAuth], (req, res, next) => { req.body.status = 'suspended'; req.body.isActive = false; handleAgentStatusUpdate(req, res); });
+router.put('/agents/:id/reject', [auth, adminAuth], (req, res, next) => { req.body.status = 'rejected'; req.body.isActive = false; handleAgentStatusUpdate(req, res); });
 
 // ==========================================
 // 5. PINCODE MANAGEMENT
