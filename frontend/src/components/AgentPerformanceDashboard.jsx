@@ -767,8 +767,13 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Customer Registrations Target</label>
                 <input
                   type="number"
-                  value={targetForm.registrations}
-                  onChange={e => setTargetForm({ ...targetForm, registrations: Number(e.target.value) })}
+                  min="0"
+                  value={targetForm.registrations === 0 ? '' : targetForm.registrations}
+                  placeholder="0"
+                  onChange={e => {
+                    const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                    setTargetForm({ ...targetForm, registrations: raw === '' ? 0 : Number(raw) });
+                  }}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs font-bold focus:outline-none"
                 />
               </div>
@@ -777,8 +782,13 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Membership Sales Target</label>
                 <input
                   type="number"
-                  value={targetForm.membershipSales}
-                  onChange={e => setTargetForm({ ...targetForm, membershipSales: Number(e.target.value) })}
+                  min="0"
+                  value={targetForm.membershipSales === 0 ? '' : targetForm.membershipSales}
+                  placeholder="0"
+                  onChange={e => {
+                    const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                    setTargetForm({ ...targetForm, membershipSales: raw === '' ? 0 : Number(raw) });
+                  }}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs font-bold focus:outline-none"
                 />
               </div>
@@ -787,8 +797,13 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vendor Onboarding Target</label>
                 <input
                   type="number"
-                  value={targetForm.vendorOnboarding}
-                  onChange={e => setTargetForm({ ...targetForm, vendorOnboarding: Number(e.target.value) })}
+                  min="0"
+                  value={targetForm.vendorOnboarding === 0 ? '' : targetForm.vendorOnboarding}
+                  placeholder="0"
+                  onChange={e => {
+                    const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                    setTargetForm({ ...targetForm, vendorOnboarding: raw === '' ? 0 : Number(raw) });
+                  }}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs font-bold focus:outline-none"
                 />
               </div>
@@ -797,8 +812,13 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Orders Target</label>
                 <input
                   type="number"
-                  value={targetForm.orders}
-                  onChange={e => setTargetForm({ ...targetForm, orders: Number(e.target.value) })}
+                  min="0"
+                  value={targetForm.orders === 0 ? '' : targetForm.orders}
+                  placeholder="0"
+                  onChange={e => {
+                    const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                    setTargetForm({ ...targetForm, orders: raw === '' ? 0 : Number(raw) });
+                  }}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs font-bold focus:outline-none"
                 />
               </div>
@@ -807,8 +827,13 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Revenue Target (₹)</label>
                 <input
                   type="number"
-                  value={targetForm.revenue}
-                  onChange={e => setTargetForm({ ...targetForm, revenue: Number(e.target.value) })}
+                  min="0"
+                  value={targetForm.revenue === 0 ? '' : targetForm.revenue}
+                  placeholder="0"
+                  onChange={e => {
+                    const raw = e.target.value.replace(/^0+(?=\d)/, '');
+                    setTargetForm({ ...targetForm, revenue: raw === '' ? 0 : Number(raw) });
+                  }}
                   className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 text-xs font-bold focus:outline-none"
                 />
               </div>

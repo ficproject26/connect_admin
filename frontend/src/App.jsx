@@ -7967,7 +7967,7 @@ function App() {
       )}
 
       {/* 36A. AGENT SCORECARD MODAL (Triggered when clicking Agent Name / Box) */}
-      {showModal === 'agent-scorecard' && modalData && (
+      {(showModal === 'agent-scorecard' || showModal === 'agent-details' || showModal === 'view-agent-profile') && modalData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 sm:p-8 space-y-6 my-8 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             
@@ -8202,112 +8202,76 @@ function App() {
             {/* STEP 4: DOCUMENT UPLOADS & DECLARATIONS */}
             <div className="space-y-3">
               <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                <FileText className="w-4 h-4" /> Step 4: Document Uploads & Declarations
+                <FileText className="w-4 h-4" /> Step 4: Agent Uploaded Documents & Declarations
               </h4>
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 space-y-4 text-xs">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div
-                    onClick={() => {
-                      setModalData({
-                        ...modalData,
-                        docTitle: 'Aadhaar Card Document',
-                        docUrl: modalData.kyc?.aadhaarDoc || modalData.kycDocs?.aadhaar || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800',
-                        agentName: modalData.name,
-                        agentCode: modalData.registrationId || `AG-${(modalData.level || 'PIN').slice(0, 4).toUpperCase()}-${(modalData._id || '1001').slice(-4)}`
-                      });
-                      setShowModal('view-agent-doc');
-                    }}
-                    className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1 cursor-pointer hover:border-amber-500 hover:shadow-md transition-all group"
-                  >
-                    <span className="text-slate-500 dark:text-slate-300 font-bold block group-hover:text-amber-500 transition-colors">Aadhaar Card</span>
-                    <span className="text-emerald-500 font-bold block text-xs">✓ Verified Document</span>
-                  </div>
+                {(() => {
+                  const kycData = modalData.kyc || modalData.kycDocs || {};
+                  const docItems = [
+                    { title: 'Aadhaar Card', url: kycData.aadhaarImage || kycData.aadhaarDoc || kycData.aadhaarCard || kycData.aadhaar || '', type: 'Document' },
+                    { title: 'PAN Card', url: kycData.panImage || kycData.panDoc || kycData.panCard || kycData.pan || '', type: 'Document' },
+                    { title: 'Passport Photo / Selfie', url: kycData.selfie || kycData.passportPhoto || '', type: 'Image' },
+                    { title: 'Digital Signature / Proof', url: kycData.signature || kycData.businessProofImage || '', type: 'Signature' },
+                    { title: 'Educational Certificate', url: kycData.educationCert || kycData.degree || '', type: 'Certificate' },
+                    { title: 'Bank Proof / Cheque', url: kycData.bankCheque || kycData.cheque || '', type: 'Bank Proof' },
+                  ];
 
-                  <div
-                    onClick={() => {
-                      setModalData({
-                        ...modalData,
-                        docTitle: 'PAN Card Document',
-                        docUrl: modalData.kyc?.panDoc || modalData.kycDocs?.pan || 'https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=800',
-                        agentName: modalData.name,
-                        agentCode: modalData.registrationId || `AG-${(modalData.level || 'PIN').slice(0, 4).toUpperCase()}-${(modalData._id || '1001').slice(-4)}`
-                      });
-                      setShowModal('view-agent-doc');
-                    }}
-                    className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1 cursor-pointer hover:border-amber-500 hover:shadow-md transition-all group"
-                  >
-                    <span className="text-slate-500 dark:text-slate-300 font-bold block group-hover:text-amber-500 transition-colors">PAN Card</span>
-                    <span className="text-emerald-500 font-bold block text-xs">✓ Verified Document</span>
-                  </div>
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {docItems.map((doc, i) => {
+                        const isUploaded = !!doc.url;
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => {
+                              if (isUploaded) {
+                                setModalData({
+                                  ...modalData,
+                                  docTitle: `${doc.title}`,
+                                  docUrl: doc.url,
+                                  agentName: modalData.name,
+                                  agentCode: modalData.registrationId || `AG-${(modalData.level || 'PIN').slice(0, 4).toUpperCase()}-${(modalData._id || '1001').slice(-4)}`
+                                });
+                                setShowModal('view-agent-doc');
+                              } else {
+                                alert(`No ${doc.title} uploaded by this agent.`);
+                              }
+                            }}
+                            className={`p-3.5 border rounded-xl space-y-1.5 transition-all ${
+                              isUploaded
+                                ? 'bg-white dark:bg-slate-900 border-emerald-500/30 cursor-pointer hover:border-emerald-500 hover:shadow-md group'
+                                : 'bg-slate-100/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-700 dark:text-slate-200 font-bold block truncate">{doc.title}</span>
+                              {isUploaded && doc.url.startsWith('http') && (
+                                <img src={doc.url} alt="" className="w-6 h-6 rounded-md object-cover border border-slate-200 shrink-0" />
+                              )}
+                            </div>
+                            {isUploaded ? (
+                              <span className="text-emerald-600 dark:text-emerald-400 font-extrabold block text-[11px] flex items-center gap-1">
+                                <CheckCircle className="w-3 h-3 inline" /> ✓ Uploaded {doc.type}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 font-medium block text-[11px]">
+                                Not Uploaded
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
-                  <div
-                    onClick={() => {
-                      setModalData({
-                        ...modalData,
-                        docTitle: 'Passport Photo',
-                        docUrl: modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
-                        agentName: modalData.name,
-                        agentCode: modalData.registrationId || `AG-${(modalData.level || 'PIN').slice(0, 4).toUpperCase()}-${(modalData._id || '1001').slice(-4)}`
-                      });
-                      setShowModal('view-agent-doc');
-                    }}
-                    className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1 cursor-pointer hover:border-amber-500 hover:shadow-md transition-all group"
-                  >
-                    <span className="text-slate-500 dark:text-slate-300 font-bold block group-hover:text-amber-500 transition-colors">Passport Photo</span>
-                    <span className="text-emerald-500 font-bold block text-xs">✓ Verified Image</span>
-                  </div>
-
-                  <div
-                    onClick={() => {
-                      setModalData({
-                        ...modalData,
-                        docTitle: 'Digital Signature',
-                        docUrl: modalData.kyc?.signature || modalData.kycDocs?.signature || 'https://images.unsplash.com/photo-1583521214690-73421a1829a9?w=800',
-                        agentName: modalData.name,
-                        agentCode: modalData.registrationId || `AG-${(modalData.level || 'PIN').slice(0, 4).toUpperCase()}-${(modalData._id || '1001').slice(-4)}`
-                      });
-                      setShowModal('view-agent-doc');
-                    }}
-                    className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1 cursor-pointer hover:border-amber-500 hover:shadow-md transition-all group"
-                  >
-                    <span className="text-slate-500 dark:text-slate-300 font-bold block group-hover:text-amber-500 transition-colors">Digital Signature</span>
-                    <span className="text-emerald-500 font-bold block text-xs">✓ Touchpad Signature</span>
-                  </div>
-
-                  <div
-                    onClick={() => {
-                      setModalData({
-                        ...modalData,
-                        docTitle: 'Educational Certificate',
-                        docUrl: modalData.kyc?.educationCert || modalData.kycDocs?.degree || 'https://images.unsplash.com/photo-1523050854058-8df90110c9f1?w=800',
-                        agentName: modalData.name,
-                        agentCode: modalData.registrationId || `AG-${(modalData.level || 'PIN').slice(0, 4).toUpperCase()}-${(modalData._id || '1001').slice(-4)}`
-                      });
-                      setShowModal('view-agent-doc');
-                    }}
-                    className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1 cursor-pointer hover:border-amber-500 hover:shadow-md transition-all group"
-                  >
-                    <span className="text-slate-500 dark:text-slate-300 font-bold block group-hover:text-amber-500 transition-colors">Educational Certificate</span>
-                    <span className="text-emerald-500 font-bold block text-xs">✓ Degree Verified</span>
-                  </div>
-
-                  <div
-                    onClick={() => {
-                      setModalData({
-                        ...modalData,
-                        docTitle: 'Bank Proof / Cheque',
-                        docUrl: modalData.kyc?.bankCheque || modalData.kycDocs?.cheque || 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?w=800',
-                        agentName: modalData.name,
-                        agentCode: modalData.registrationId || `AG-${(modalData.level || 'PIN').slice(0, 4).toUpperCase()}-${(modalData._id || '1001').slice(-4)}`
-                      });
-                      setShowModal('view-agent-doc');
-                    }}
-                    className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1 cursor-pointer hover:border-amber-500 hover:shadow-md transition-all group"
-                  >
-                    <span className="text-slate-500 dark:text-slate-300 font-bold block group-hover:text-amber-500 transition-colors">Bank Proof / Cheque</span>
-                    <span className="text-emerald-500 font-bold block text-xs">✓ Cheque Uploaded</span>
-                  </div>
+                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1.5 font-bold">
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Information Correct Check: Confirmed</div>
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Terms & Privacy Check: Agreed</div>
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Admin Approval Check: Acknowledged & Approved</div>
                 </div>
+              </div>
+            </div>
 
                 <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1.5 font-bold">
                   <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Information Correct Check: Confirmed</div>

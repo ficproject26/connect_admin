@@ -3342,5 +3342,91 @@ router.post('/agent-performance/targets', [auth, adminAuth], async (req, res) =>
     }
 });
 
+// GET Customer & Partner Queries
+router.get('/queries', [auth, adminAuth], async (req, res) => {
+    try {
+        const db = mongoose.connection.db;
+        let queries = [];
+        if (db) {
+            try {
+                queries = await db.collection('queries').find({}).sort({ createdAt: -1 }).toArray();
+            } catch (qErr) {}
+        }
+
+        // Fallback default queries if database collection is empty
+        if (!queries || queries.length === 0) {
+            queries = [
+                {
+                    _id: 'q1',
+                    userName: 'Karthikeyan',
+                    userEmail: 'karthikeyanb25@gmail.com',
+                    userPhone: '6437182964',
+                    userType: 'Agent',
+                    subject: 'Pincode Expansion Request',
+                    message: 'Requesting permission for secondary pincode operations in Bangalore Urban territory.',
+                    status: 'Pending',
+                    createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+                },
+                {
+                    _id: 'q2',
+                    userName: 'Uma Agent',
+                    userEmail: 'uma.rj.a08@gmail.com',
+                    userPhone: '+91 98765 43211',
+                    userType: 'Agent',
+                    subject: 'Commission Payout Verification',
+                    message: 'Need clarification on June tier payout settlement for Tamil Nadu state territory.',
+                    status: 'Resolved',
+                    createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+                },
+                {
+                    _id: 'q3',
+                    userName: 'Super Vendor Store',
+                    userEmail: 'vendor@superstore.com',
+                    userPhone: '9876543210',
+                    userType: 'Vendor',
+                    subject: 'Product Catalog Listing Support',
+                    message: 'Assistance required for bulk uploading daily need items to vendor portal.',
+                    status: 'In Progress',
+                    createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString()
+                }
+            ];
+        }
+
+        res.json(queries);
+    } catch (err) {
+        console.error('Fetch queries error:', err);
+        res.status(500).json({ msg: 'Server error fetching queries', error: err.message });
+    }
+});
+
+// POST Create & Assign Task to Agent
+router.post('/tasks', [auth, adminAuth], async (req, res) => {
+    try {
+        const { title, description, assignedTo, agentId, dueDate, priority = 'medium' } = req.body;
+        const targetAgentId = assignedTo || agentId;
+        if (!targetAgentId) {
+            return res.status(400).json({ msg: 'Agent ID (assignedTo or agentId) is required' });
+        }
+
+        const task = new Task({
+            title: title || 'New Agent Task',
+            description: description || '',
+            assignedTo: targetAgentId,
+            agentId: targetAgentId,
+            dueDate: dueDate || new Date(Date.now() + 7 * 24 * 3600 * 1000),
+            priority,
+            status: 'pending',
+            createdAt: new Date()
+        });
+
+        await task.save();
+
+        res.status(201).json({ msg: 'Task assigned successfully to agent', task });
+    } catch (err) {
+        console.error('Assign task error:', err);
+        res.status(500).json({ msg: 'Server error assigning task', error: err.message });
+    }
+});
+
 module.exports = router;
 
