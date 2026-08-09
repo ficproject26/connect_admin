@@ -301,6 +301,12 @@ function App() {
       totalOrders: 72,
       totalAgents: 10,
       pendingAgentApprovals: 0,
+      pendingAgentKYC: 0,
+      pendingVendorKYC: 0,
+      stateAgents: 3,
+      districtAgents: 4,
+      subDistrictAgents: 2,
+      pincodeAgents: 3,
       totalVendors: 3,
       pendingVendorApprovals: 1,
       totalCustomers: 154,
@@ -309,6 +315,28 @@ function App() {
       completedBookings: 19,
       pendingWithdrawalsAmount: 4500,
       totalJobsApplied: 32
+    },
+    charts: {
+      revenueOverview: [
+        { month: 'Jan', revenue: 45000, orders: 12 },
+        { month: 'Feb', revenue: 52000, orders: 15 },
+        { month: 'Mar', revenue: 61000, orders: 18 },
+        { month: 'Apr', revenue: 75000, orders: 22 },
+        { month: 'May', revenue: 89000, orders: 28 },
+        { month: 'Jun', revenue: 104000, orders: 35 },
+        { month: 'Jul', revenue: 124500, orders: 42 }
+      ],
+      categoryWiseRevenue: [
+        { category: 'Daily Needs', value: 45000 },
+        { category: 'Food & Hospitality', value: 35000 },
+        { category: 'Services', value: 25000 },
+        { category: 'Travel & Packages', value: 19500 }
+      ],
+      branchWiseRevenue: [
+        { name: 'Bangalore Urban', revenue: 55000 },
+        { name: 'Chennai', revenue: 42000 },
+        { name: 'Mysore', revenue: 27500 }
+      ]
     },
     recentTransactions: [],
     revenueTrend: [
@@ -1204,7 +1232,7 @@ function App() {
                     <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Revenue Overview</h3>
                     <div className="h-72">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={stats.charts.revenueOverview}>
+                        <AreaChart data={stats?.charts?.revenueOverview || stats?.revenueTrend || []}>
                           <defs>
                             <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2} />
@@ -1228,7 +1256,7 @@ function App() {
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={stats.charts.categoryWiseRevenue}
+                            data={stats?.charts?.categoryWiseRevenue || []}
                             cx="50%"
                             cy="55%"
                             innerRadius={60}
@@ -1237,7 +1265,7 @@ function App() {
                             dataKey="value"
                             nameKey="category"
                           >
-                            {stats.charts.categoryWiseRevenue.map((entry, index) => (
+                            {(stats?.charts?.categoryWiseRevenue || []).map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
                             ))}
                           </Pie>
@@ -1256,7 +1284,7 @@ function App() {
                     <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">District Wise Performance</h3>
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={stats.charts.branchWiseRevenue}>
+                        <BarChart data={stats?.charts?.branchWiseRevenue || []}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
                           <YAxis stroke="#94a3b8" fontSize={11} />
