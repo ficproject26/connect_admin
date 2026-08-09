@@ -8301,14 +8301,6 @@ function App() {
               </div>
             </div>
 
-                <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-1.5 font-bold">
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Information Correct Check: Confirmed</div>
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Terms & Privacy Check: Agreed</div>
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-4 h-4" /> Admin Approval Check: Acknowledged & Approved</div>
-                </div>
-              </div>
-            </div>
-
             {/* Footer Close Button */}
             <div className="pt-2 flex justify-end">
               <button
