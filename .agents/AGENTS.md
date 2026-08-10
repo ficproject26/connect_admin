@@ -43,3 +43,15 @@
 3. **Suspended Vendor & Product Isolation**:
    - Suspended, inactive, or rejected vendors MUST NOT have their products, services, or category items rendered across customer dashboard, category pages, or public API endpoints (`/api/public/products`, `/api/products`).
    - When a vendor's status is modified in the Admin panel, matching product documents in MongoDB MUST automatically synchronize `vendorStatus`, `isVendorSuspended`, and `isActive` properties.
+
+## Multi-Vendor Business & Listing Visibility Flow
+
+### Mandatory Principles (NEVER CHANGE THIS WORKFLOW)
+1. **Dynamic Multi-Vendor & Business Relationship Binding**:
+   - Every product, service, job, food item, or listing added by any vendor MUST be dynamically linked to `vendorId`, `vendorEmail`, `vendorPhone`, `vendorName`, `businessId`, `businessName`, `vendorStatus`, and `businessStatus`.
+   - Never hardcode vendor IDs, business IDs, category IDs, or sample company names in backend endpoints or frontend filters.
+
+2. **Customer Visibility Rule**:
+   - A listing MUST appear on the Customer Website (`/api/public/products`, `/api/products`) ONLY when: `Vendor == ACTIVE` AND `Business Outlet == ACTIVE` AND `Listing == ACTIVE`.
+   - If a specific business outlet of a vendor is suspended (`status: 'Suspended'`), ONLY items belonging to that suspended business outlet MUST be hidden. Other active business outlets of that same vendor and all other active vendors MUST remain completely unaffected and visible.
+   - When a suspended business outlet is re-activated by Admin, its listings MUST immediately become visible on the Customer Website again.
