@@ -2123,16 +2123,28 @@ router.get(['/products', '/'], async (req, res) => {
                 { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive'] } },
                 { isActive: false }
             ]
-        }).select('_id');
+        }).select('_id email phone');
 
         const suspendedVendors = await Vendor.find({
             status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive'] }
-        }).select('_id');
+        }).select('_id email phone');
 
-        const suspendedIds = new Set([
-            ...suspendedUsers.map(u => u._id.toString()),
-            ...suspendedVendors.map(v => v._id.toString())
-        ]);
+        const suspendedIds = new Set();
+        const suspendedEmails = new Set();
+        const suspendedPhones = new Set();
+        const suspendedPrefixes = new Set();
+
+        [...suspendedUsers, ...suspendedVendors].forEach(v => {
+            if (v._id) {
+                const idStr = v._id.toString();
+                suspendedIds.add(idStr);
+                if (idStr.length >= 20) {
+                    suspendedPrefixes.add(idStr.substring(0, 20));
+                }
+            }
+            if (v.email) suspendedEmails.add(v.email.toLowerCase().trim());
+            if (v.phone) suspendedPhones.add(v.phone.replace(/\D/g, ''));
+        });
 
         const allProducts = await Product.find({
             isActive: { $ne: false },
@@ -2141,7 +2153,12 @@ router.get(['/products', '/'], async (req, res) => {
 
         const activeProducts = allProducts.filter(p => {
             const vId = p.vendorId ? p.vendorId.toString() : '';
-            if (vId && suspendedIds.has(vId)) return false;
+            if (vId) {
+                if (suspendedIds.has(vId)) return false;
+                if (vId.length >= 20 && Array.from(suspendedPrefixes).some(prefix => vId.startsWith(prefix))) return false;
+            }
+            if (p.vendorEmail && suspendedEmails.has(p.vendorEmail.toLowerCase().trim())) return false;
+            if (p.vendorPhone && suspendedPhones.has(p.vendorPhone.replace(/\D/g, ''))) return false;
             const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase();
             if (['suspended', 'inactive', 'rejected', 'blocked'].includes(pVendorStatus)) return false;
             return true;
