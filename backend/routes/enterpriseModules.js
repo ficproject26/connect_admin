@@ -511,75 +511,73 @@ router.post('/vendors/update-business-status', auth, async (req, res) => {
         const targetEmail = email ? String(email).toLowerCase().trim() : '';
         const updateFilter = buildVendorQuery(targetId, targetEmail, registrationId, '');
 
-        const vendorUsers = await User.find(updateFilter).catch(() => []);
+        let vendorUser = await User.findOne(updateFilter);
+        let legacyVendor = await Vendor.findOne(updateFilter);
 
-        for (const vUser of vendorUsers) {
-            if (vUser.businesses && Array.isArray(vUser.businesses)) {
+        let targetBizName = businessName || '';
+        const vendorIdentifiers = new Set();
+
+        [vendorUser, legacyVendor].forEach(v => {
+            if (!v) return;
+            if (v._id) vendorIdentifiers.add(v._id.toString());
+            if (v.registrationId) vendorIdentifiers.add(v.registrationId.toString());
+            if (v.vendorId) vendorIdentifiers.add(v.vendorId.toString());
+            if (v.email) vendorIdentifiers.add(v.email.toLowerCase().trim());
+            if (v.phone) vendorIdentifiers.add(v.phone.replace(/\D/g, ''));
+            if (v.businessName) vendorIdentifiers.add(v.businessName.toLowerCase().trim());
+            if (v.name) vendorIdentifiers.add(v.name.toLowerCase().trim());
+
+            if (Array.isArray(v.businesses)) {
                 let matched = false;
-                vUser.businesses.forEach(b => {
+                v.businesses.forEach(b => {
                     const bIdStr = b._id ? b._id.toString() : '';
                     const bNameStr = (b.businessName || b.name || '').toLowerCase().trim();
                     const targetBizIdStr = businessId ? String(businessId) : '';
-                    const targetBizNameStr = businessName ? String(businessName).toLowerCase().trim() : '';
+                    const targetBizNameStr = targetBizName ? String(targetBizName).toLowerCase().trim() : '';
 
-                    if ((targetBizIdStr && bIdStr === targetBizIdStr) || (targetBizNameStr && bNameStr === targetBizNameStr)) {
+                    if ((targetBizIdStr && (bIdStr === targetBizIdStr || (bIdStr.length >= 16 && targetBizIdStr.startsWith(bIdStr.substring(0, 16))))) || (targetBizNameStr && bNameStr === targetBizNameStr)) {
                         b.status = formattedStatus;
                         b.isActive = isCurrentlyActive;
+                        if (!targetBizName) targetBizName = b.businessName || b.name || '';
                         matched = true;
                     }
                 });
-
-                if (matched) {
-                    if (typeof vUser.markModified === 'function') {
-                        vUser.markModified('businesses');
-                    }
-                    await vUser.save().catch(e => console.error('vUser.save business status error:', e));
+                if (matched && typeof v.markModified === 'function') {
+                    v.markModified('businesses');
                 }
             }
-        }
+        });
 
-        // Also update using raw MongoDB positional update with arrayFilters
-        if (businessId && mongoose.Types.ObjectId.isValid(businessId)) {
-            const bObjId = new mongoose.Types.ObjectId(businessId);
-            await User.collection.updateMany(
-                { ...updateFilter, "businesses._id": bObjId },
-                { 
-                    $set: { 
-                        "businesses.$[elem].status": formattedStatus,
-                        "businesses.$[elem].isActive": isCurrentlyActive
-                    } 
-                },
-                { arrayFilters: [{ "elem._id": bObjId }] }
-            ).catch(() => {});
-        } else if (businessName) {
-            await User.collection.updateMany(
-                { ...updateFilter, "businesses.businessName": businessName },
-                { 
-                    $set: { 
-                        "businesses.$[elem].status": formattedStatus,
-                        "businesses.$[elem].isActive": isCurrentlyActive
-                    } 
-                },
-                { arrayFilters: [{ "elem.businessName": businessName }] }
-            ).catch(() => {});
-        }
+        if (vendorUser) await vendorUser.save().catch(e => console.error('vendorUser.save error:', e));
+        if (legacyVendor) await legacyVendor.save().catch(e => console.error('legacyVendor.save error:', e));
 
-        // Soft hide/show ONLY products & services belonging to this specific business outlet
-        const orConds = [];
+        const vIdArr = Array.from(vendorIdentifiers);
+
+        const vendorMatch = {
+            $or: [
+                { vendorId: { $in: vIdArr } },
+                { vendorEmail: { $in: vIdArr.map(v => v.toLowerCase()) } },
+                { vendorPhone: { $in: vIdArr } }
+            ]
+        };
+
+        const bizMatchConds = [];
         if (businessId) {
-            orConds.push({ businessId });
-            orConds.push({ 'business._id': businessId });
+            bizMatchConds.push({ businessId });
+            bizMatchConds.push({ 'business._id': businessId });
             if (mongoose.Types.ObjectId.isValid(businessId)) {
-                orConds.push({ businessId: new mongoose.Types.ObjectId(businessId) });
+                bizMatchConds.push({ businessId: new mongoose.Types.ObjectId(businessId) });
             }
         }
-        if (businessName) {
-            orConds.push({ businessName: new RegExp('^' + String(businessName).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') });
+        if (targetBizName) {
+            const escapedBizName = targetBizName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            bizMatchConds.push({ businessName: new RegExp('^' + escapedBizName + '$', 'i') });
+            bizMatchConds.push({ subNavbarCategory: new RegExp('^' + escapedBizName + '$', 'i') });
         }
 
-        if (orConds.length > 0) {
+        if (bizMatchConds.length > 0) {
             await Product.updateMany(
-                { $or: orConds },
+                { $and: [vendorMatch, { $or: bizMatchConds }] },
                 { $set: { businessStatus: formattedStatus.toLowerCase(), businessIsActive: isCurrentlyActive, isAvailable: isCurrentlyActive } }
             ).catch(e => console.error('Product update error for business status change:', e));
         }
@@ -589,11 +587,11 @@ router.post('/vendors/update-business-status', auth, async (req, res) => {
             const adminUser = req.user ? await User.findById(req.user.id) : null;
             await AuditLog.create({
                 action: 'vendor_business_status_changed',
-                details: `Admin changed status of business outlet "${businessName || businessId}" to "${formattedStatus}" for vendor (${targetEmail || targetId})`,
+                details: `Admin changed status of business outlet "${targetBizName || businessId}" to "${formattedStatus}" for vendor (${targetEmail || targetId})`,
                 adminEmail: adminUser ? adminUser.email : 'System Admin',
                 ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
                 userAgent: req.headers['user-agent'] || 'System',
-                metadata: { vendorId: targetId, businessId, businessName, newStatus: formattedStatus }
+                metadata: { vendorId: targetId, businessId, businessName: targetBizName, newStatus: formattedStatus }
             }).catch(() => {});
         } catch (e) {}
 
@@ -603,16 +601,18 @@ router.post('/vendors/update-business-status', auth, async (req, res) => {
             io.emit('vendor_status_changed', {
                 vendorId: targetId,
                 businessId,
-                businessName,
+                businessName: targetBizName,
                 status: formattedStatus,
                 isActive: isCurrentlyActive
             });
         }
 
         return res.json({
+            success: true,
             msg: `Business outlet status successfully updated to ${formattedStatus}`,
+            vendor: vendorUser || legacyVendor,
             businessId,
-            businessName,
+            businessName: targetBizName,
             status: formattedStatus,
             isActive: isCurrentlyActive
         });

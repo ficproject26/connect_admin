@@ -440,20 +440,36 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
   const handleUpdateIndividualBusinessStatus = async (vendorObj, bizObj, newStatus) => {
     if (!vendorObj || !bizObj || !newStatus) return;
-    const vendorId = vendorObj._id || vendorObj.registrationId;
-    const email = vendorObj.email || '';
-    const regId = vendorObj.registrationId || '';
-    const bizId = bizObj._id || '';
-    const bizName = bizObj.businessName || bizObj.name || '';
+    const vendorIdStr = String(vendorObj._id || vendorObj.registrationId || vendorObj.id || '');
+    const emailStr = String(vendorObj.email || '').toLowerCase().trim();
+    const regIdStr = String(vendorObj.registrationId || '');
+    const bizIdStr = String(bizObj._id || bizObj.id || '');
+    const bizNameStr = String(bizObj.businessName || bizObj.name || '').toLowerCase().trim();
     const isCurrentlyActive = ['Active', 'Approved'].includes(newStatus);
+    const formattedStatus = isCurrentlyActive ? 'Active' : 'Suspended';
 
     const updateBizInVendor = (v) => {
-      const isMatch = v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase());
+      const vId = String(v._id || v.id || '');
+      const vRegId = String(v.registrationId || '');
+      const vEmail = String(v.email || '').toLowerCase().trim();
+
+      const isMatch = (vendorIdStr && vId === vendorIdStr) ||
+                      (regIdStr && vRegId === regIdStr) ||
+                      (emailStr && vEmail === emailStr);
+
       if (!isMatch) return v;
+
       const updatedBusinesses = (v.businesses || []).map(b => {
-        const bMatch = (bizId && b._id === bizId) || (bizName && (b.businessName || b.name) === bizName);
-        return bMatch ? { ...b, status: newStatus, isActive: isCurrentlyActive } : b;
+        const bId = String(b._id || b.id || '');
+        const bName = String(b.businessName || b.name || '').toLowerCase().trim();
+
+        const bMatch = (bizIdStr && bId === bizIdStr) ||
+                       (bizNameStr && bName === bizNameStr) ||
+                       (bizIdStr && bizIdStr.length >= 16 && bId.startsWith(bizIdStr.substring(0, 16)));
+
+        return bMatch ? { ...b, status: formattedStatus, isActive: isCurrentlyActive } : b;
       });
+
       return { ...v, businesses: updatedBusinesses };
     };
 
@@ -461,21 +477,26 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     setSelectedVendorDetails(prev => prev ? updateBizInVendor(prev) : null);
 
     try {
-      await fetch(`${API_BASE}/admin/enterprise/vendors/update-business-status`, {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors/update-business-status`, {
         method: 'POST',
         headers: {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          vendorId,
-          registrationId: regId,
-          email,
-          businessId: bizId,
-          businessName: bizName,
-          status: newStatus
+          vendorId: vendorIdStr,
+          registrationId: regIdStr,
+          email: emailStr,
+          businessId: bizIdStr,
+          businessName: bizObj.businessName || bizObj.name || '',
+          status: formattedStatus
         })
       });
+      const data = await res.json().catch(() => null);
+      if (data && data.vendor) {
+        setVendors(prev => prev.map(v => (String(v._id) === String(data.vendor._id) || String(v.registrationId) === String(data.vendor.registrationId)) ? { ...v, ...data.vendor } : v));
+        setSelectedVendorDetails(prev => (prev && (String(prev._id) === String(data.vendor._id) || String(prev.registrationId) === String(data.vendor.registrationId))) ? { ...prev, ...data.vendor } : prev);
+      }
     } catch (err) {
       console.error('Update individual business status error:', err);
     }
