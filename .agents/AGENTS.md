@@ -19,6 +19,10 @@
 4. **Multi-View Parity**:
    - All 3 directory view modes — **Tree View** (`tree`), **Grid View** (`grid`), and **List View** (`list`) — MUST remain 100% synchronized and display the exact same total count of non-rejected agents.
 
+5. **Approved Agent Directory Scoping & Safe Territory Resolution**:
+   - The active Agent Directory (`Tree View`, `Grid View`, `List View`) and level filter tabs MUST strictly show approved/active agents (`isApprovedAgent(agent)`). Unapproved, pending, or under-verification agents MUST NOT render in active directory views until approved by Admin.
+   - `getAgentTerritoryDetail(agent)` MUST safely return a valid `{ label: string, value: string }` object for all agent levels (State, District, Division, Pincode) and default fallbacks with optional chaining (`terrInfo?.label`, `terrInfo?.value`) to prevent portal rendering errors.
+
 ## Direct Registration Requests & Onboarding Approval Flow
 
 ### Mandatory Principles (NEVER CHANGE THIS WORKFLOW)
