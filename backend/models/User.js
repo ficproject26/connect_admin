@@ -6,7 +6,7 @@ const UserSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     phone: { type: String, unique: true, sparse: true },
     password: { type: String, required: true },
-    role: { type: String, enum: ['admin', 'agent', 'Vendor', 'Member', 'vendor', 'member'], default: 'agent' },
+    role: { type: String, enum: ['admin', 'agent', 'Vendor', 'Member', 'vendor', 'member', 'customer', 'Customer'], default: 'agent' },
     level: { type: String, enum: ['state', 'district', 'division', 'pincode'], default: 'pincode' },
     assignedArea: { type: String }, // For state, district, division
     assignedPincode: { type: mongoose.Schema.Types.ObjectId, ref: 'Pincode' },
