@@ -19,18 +19,31 @@ module.exports = async function(req, res, next) {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded.user || { id: decoded.agentId, role: 'agent' };
 
-        // Agent Suspension Access Control Check
+        // Suspension Access Control Check for Agents & Vendors
         if (req.user && req.user.id) {
             const dbUser = await User.findById(req.user.id).select('status isActive role rejectionReason');
-            if (dbUser && (dbUser.role === 'agent' || dbUser.role === 'Agent')) {
+            if (dbUser) {
+                const uRole = (dbUser.role || '').toLowerCase();
                 const uStatus = (dbUser.status || '').toLowerCase();
-                if (uStatus === 'suspended' || (!dbUser.isActive && uStatus !== 'approved')) {
-                    return res.status(403).json({
-                        title: 'Account Suspended',
-                        message: 'Your agent account has been suspended by the Administrator. Your access to the Agent Portal has been temporarily disabled. Please contact the Administration Team to reactivate your account.',
-                        status: 'suspended',
-                        isSuspended: true
-                    });
+
+                if (uRole === 'agent') {
+                    if (uStatus === 'suspended' || (!dbUser.isActive && uStatus !== 'approved' && uStatus !== 'active')) {
+                        return res.status(403).json({
+                            title: 'Account Suspended',
+                            message: 'Your agent account has been suspended by the Administrator. Access to the Agent Portal has been temporarily disabled.',
+                            status: 'suspended',
+                            isSuspended: true
+                        });
+                    }
+                } else if (['vendor', 'merchant'].includes(uRole)) {
+                    if (uStatus === 'suspended' || uStatus === 'rejected' || (!dbUser.isActive && uStatus !== 'approved' && uStatus !== 'active')) {
+                        return res.status(403).json({
+                            title: 'Vendor Account Suspended',
+                            message: 'Your vendor account has been suspended by the Administrator. Access to the Vendor Dashboard has been disabled. Please contact Admin.',
+                            status: uStatus || 'suspended',
+                            isSuspended: true
+                        });
+                    }
                 }
             }
         }

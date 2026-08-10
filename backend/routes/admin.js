@@ -1110,6 +1110,79 @@ router.put('/vendors/:id/status', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// Individual Business Outlet Suspension Endpoint
+router.put('/vendors/:id/businesses/:bizId/status', [auth, adminAuth], async (req, res) => {
+    const { status, reason } = req.body;
+    try {
+        const isBizActive = (status || '').toLowerCase() === 'active' || (status || '').toLowerCase() === 'approved';
+        const formattedStatus = isBizActive ? 'Active' : 'Suspended';
+        const vendorId = req.params.id;
+        const bizId = req.params.bizId;
+
+        let vendor = await User.findById(vendorId);
+        let targetBizName = '';
+
+        if (vendor && Array.isArray(vendor.businesses)) {
+            let matched = false;
+            vendor.businesses.forEach(b => {
+                const bIdStr = b._id ? b._id.toString() : '';
+                const bName = b.businessName || b.name || '';
+                if (bIdStr === bizId || (bIdStr.length >= 16 && bizId.startsWith(bIdStr.substring(0, 16))) || bName.toLowerCase() === bizId.toLowerCase()) {
+                    b.status = formattedStatus;
+                    b.isActive = isBizActive;
+                    targetBizName = bName;
+                    matched = true;
+                }
+            });
+
+            if (matched) {
+                if (typeof vendor.markModified === 'function') vendor.markModified('businesses');
+                await vendor.save();
+            }
+        }
+
+        let legacy = await Vendor.findById(vendorId);
+        if (legacy && Array.isArray(legacy.businesses)) {
+            legacy.businesses.forEach(b => {
+                const bIdStr = b._id ? b._id.toString() : '';
+                const bName = b.businessName || b.name || '';
+                if (bIdStr === bizId || bName.toLowerCase() === bizId.toLowerCase()) {
+                    b.status = formattedStatus;
+                    b.isActive = isBizActive;
+                    if (!targetBizName) targetBizName = bName;
+                }
+            });
+            await legacy.save();
+        }
+
+        // Soft hide/show ONLY products & services belonging to this specific business outlet
+        const orConds = [
+            { businessId: bizId },
+            { 'business._id': bizId }
+        ];
+        if (mongoose.Types.ObjectId.isValid(bizId)) {
+            orConds.push({ businessId: new mongoose.Types.ObjectId(bizId) });
+        }
+        if (targetBizName) {
+            orConds.push({ businessName: new RegExp('^' + targetBizName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') });
+        }
+
+        await Product.updateMany(
+            { $or: orConds },
+            { $set: { businessStatus: formattedStatus.toLowerCase(), businessIsActive: isBizActive, isAvailable: isBizActive } }
+        ).catch(e => console.error('Product update error for business status change:', e));
+
+        return res.json({
+            success: true,
+            msg: `Business outlet "${targetBizName || bizId}" status updated to ${formattedStatus}`,
+            vendor: vendor || legacy
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Server error updating business status', error: err.message });
+    }
+});
+
 // DELETE a vendor by ID
 router.delete('/vendors/:id', [auth, adminAuth], async (req, res) => {
     try {
@@ -2264,6 +2337,10 @@ router.get(['/products', '/'], async (req, res) => {
             const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase().trim();
             if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated'].includes(pVendorStatus)) return false;
             if (p.isVendorSuspended === true || p.isSuspended === true) return false;
+
+            const pBizStatus = (p.businessStatus || '').toLowerCase().trim();
+            if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated'].includes(pBizStatus)) return false;
+            if (p.businessIsActive === false) return false;
 
             const vId = p.vendorId ? p.vendorId.toString() : '';
             const vEmail = (p.vendorEmail || '').toLowerCase().trim();

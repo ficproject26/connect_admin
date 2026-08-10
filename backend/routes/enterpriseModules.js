@@ -564,6 +564,26 @@ router.post('/vendors/update-business-status', auth, async (req, res) => {
             ).catch(() => {});
         }
 
+        // Soft hide/show ONLY products & services belonging to this specific business outlet
+        const orConds = [];
+        if (businessId) {
+            orConds.push({ businessId });
+            orConds.push({ 'business._id': businessId });
+            if (mongoose.Types.ObjectId.isValid(businessId)) {
+                orConds.push({ businessId: new mongoose.Types.ObjectId(businessId) });
+            }
+        }
+        if (businessName) {
+            orConds.push({ businessName: new RegExp('^' + String(businessName).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') });
+        }
+
+        if (orConds.length > 0) {
+            await Product.updateMany(
+                { $or: orConds },
+                { $set: { businessStatus: formattedStatus.toLowerCase(), businessIsActive: isCurrentlyActive, isAvailable: isCurrentlyActive } }
+            ).catch(e => console.error('Product update error for business status change:', e));
+        }
+
         // Record Audit Log
         try {
             const adminUser = req.user ? await User.findById(req.user.id) : null;
