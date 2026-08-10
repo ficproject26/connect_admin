@@ -2209,37 +2209,57 @@ router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
 // GET all active products from non-suspended vendors
 router.get(['/products', '/'], async (req, res) => {
     try {
+        // 1. Fetch active approved vendors
+        const activeApprovedVendors = await User.find({
+            role: { $in: ['vendor', 'Vendor', 'merchant', 'Merchant'] },
+            status: { $in: ['approved', 'Approved', 'active', 'Active'] },
+            isActive: { $ne: false }
+        }).select('_id email phone businessName name registrationId vendorId');
+
+        // 2. Fetch suspended/inactive/rejected vendors
         const suspendedUsers = await User.find({
             $or: [
-                { role: { $in: ['vendor', 'Vendor'] } },
-                { vendorType: { $exists: true } }
-            ],
-            $or: [
-                { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive'] } },
+                { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
                 { isActive: false }
             ]
-        }).select('_id email phone');
+        }).select('_id email phone businessName name registrationId vendorId');
 
         const suspendedVendors = await Vendor.find({
-            status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive'] }
-        }).select('_id email phone');
+            $or: [
+                { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
+                { isActive: false }
+            ]
+        }).select('_id email phone businessName registrationId vendorId');
+
+        // If ALL vendors in system are suspended (or no active approved vendors exist), return [] immediately
+        if (activeApprovedVendors.length === 0 && (suspendedUsers.length > 0 || suspendedVendors.length > 0)) {
+            return res.json([]);
+        }
 
         const suspendedIds = new Set();
         const suspendedEmails = new Set();
         const suspendedPhones = new Set();
+        const suspendedNames = new Set();
         const suspendedPrefixes = new Set();
 
         [...suspendedUsers, ...suspendedVendors].forEach(v => {
             if (v._id) {
                 const idStr = v._id.toString();
                 suspendedIds.add(idStr);
-                if (idStr.length >= 20) {
-                    suspendedPrefixes.add(idStr.substring(0, 20));
+                if (idStr.length >= 16) {
+                    suspendedPrefixes.add(idStr.substring(0, 16));
                 }
             }
             if (v.email) suspendedEmails.add(v.email.toLowerCase().trim());
             if (v.phone) suspendedPhones.add(v.phone.replace(/\D/g, ''));
+            if (v.businessName) suspendedNames.add(v.businessName.toLowerCase().trim());
+            if (v.name) suspendedNames.add(v.name.toLowerCase().trim());
         });
+
+        const activeVendorIds = new Set(activeApprovedVendors.map(v => v._id.toString()));
+        const activeVendorPrefixes = new Set(activeApprovedVendors.map(v => v._id.toString().substring(0, 16)));
+        const activeVendorEmails = new Set(activeApprovedVendors.map(v => (v.email || '').toLowerCase().trim()).filter(Boolean));
+        const activeVendorPhones = new Set(activeApprovedVendors.map(v => (v.phone || '').replace(/\D/g, '')).filter(Boolean));
 
         const allProducts = await Product.find({
             isActive: { $ne: false },
@@ -2247,15 +2267,31 @@ router.get(['/products', '/'], async (req, res) => {
         }).sort({ createdAt: -1 });
 
         const activeProducts = allProducts.filter(p => {
+            const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase().trim();
+            if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated'].includes(pVendorStatus)) return false;
+            if (p.isVendorSuspended === true || p.isSuspended === true) return false;
+
             const vId = p.vendorId ? p.vendorId.toString() : '';
+            const vEmail = (p.vendorEmail || '').toLowerCase().trim();
+            const vPhone = (p.vendorPhone || '').replace(/\D/g, '');
+            const vName = (p.vendorName || p.brand || '').toLowerCase().trim();
+
             if (vId) {
                 if (suspendedIds.has(vId)) return false;
-                if (vId.length >= 20 && Array.from(suspendedPrefixes).some(prefix => vId.startsWith(prefix))) return false;
+                if (vId.length >= 16 && Array.from(suspendedPrefixes).some(prefix => vId.startsWith(prefix))) return false;
             }
-            if (p.vendorEmail && suspendedEmails.has(p.vendorEmail.toLowerCase().trim())) return false;
-            if (p.vendorPhone && suspendedPhones.has(p.vendorPhone.replace(/\D/g, ''))) return false;
-            const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase();
-            if (['suspended', 'inactive', 'rejected', 'blocked'].includes(pVendorStatus)) return false;
+            if (vEmail && suspendedEmails.has(vEmail)) return false;
+            if (vPhone && suspendedPhones.has(vPhone)) return false;
+            if (vName && suspendedNames.has(vName)) return false;
+
+            // If active approved vendors exist, enforce matching against active approved vendor credentials
+            if (activeApprovedVendors.length > 0) {
+                const isMatch = (vId && (activeVendorIds.has(vId) || Array.from(activeVendorPrefixes).some(prefix => vId.startsWith(prefix)))) ||
+                                (vEmail && activeVendorEmails.has(vEmail)) ||
+                                (vPhone && activeVendorPhones.has(vPhone));
+                if (!isMatch) return false;
+            }
+
             return true;
         });
 
