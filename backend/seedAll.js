@@ -269,9 +269,25 @@ const seedDatabase = async () => {
             totalRevenue: 45000,
             totalBookings: 0
         });
+        const krishnaVendor = new Vendor({
+            _id: new mongoose.Types.ObjectId("6a61afeb40e12f1f2fd59d5f"),
+            id: 'v_krishna',
+            businessName: 'Krishna Stores & Supermarket',
+            category: 'Store Vendor',
+            contactName: 'Krishna',
+            phone: '+91 98765 12345',
+            email: 'krishna@gmail.com',
+            status: 'approved',
+            membership: { planId: plan2._id, status: 'active', expiryDate: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000) },
+            kycStatus: 'approved',
+            totalOrders: 48,
+            totalRevenue: 92000,
+            totalBookings: 0
+        });
         await vendor1.save();
         await vendor2.save();
         await vendor3.save();
+        await krishnaVendor.save();
         console.log('Vendors created');
 
         // 8. Create Customers
