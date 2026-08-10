@@ -14,8 +14,12 @@ const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./midd
 app.use(applySecurityHeaders);
 app.use(sanitizeInput);
 app.use(express.json({ limit: '100mb', extended: true }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
-app.use(cors());
+app.use(cors({
+    origin: true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization', 'Cache-Control', 'Pragma']
+}));
 
 // Apply Auth Rate Limiter to Auth Endpoints
 app.use('/api/auth/login', authRateLimiter({ windowMs: 60 * 1000, max: 5 }));

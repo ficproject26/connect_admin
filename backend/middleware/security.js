@@ -4,13 +4,22 @@ const AuditLog = require('../models/AuditLog');
 
 // 1. HELMET SECURITY HEADERS MIDDLEWARE
 const applySecurityHeaders = (req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'x-auth-token, Content-Type, Authorization, Cache-Control, Pragma');
+    }
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+    }
     // OWASP & Banking level HTTP Security Headers
     res.setHeader('X-Frame-Options', 'DENY'); // Clickjacking Protection
     res.setHeader('X-XSS-Protection', '1; mode=block'); // Cross Site Scripting Filter
     res.setHeader('X-Content-Type-Options', 'nosniff'); // MIME Sniffing Guard
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload'); // HSTS (1 year)
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' ws: wss: https:;");
     res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
     next();
 };
