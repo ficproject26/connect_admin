@@ -2174,27 +2174,89 @@ router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
 // GET all products (Filtered for active & approved vendors/agents)
 router.get(['/products', '/'], async (req, res) => {
     try {
-        const rawProducts = await Product.find()
-            .populate('vendorId', 'name email status isActive role')
-            .sort({ createdAt: -1 });
+        const rawProducts = await Product.find().lean().sort({ createdAt: -1 });
 
+        // Collect all vendorId values from products
+        const rawVendorIds = rawProducts.map(p => p.vendorId).filter(Boolean);
+
+        // Convert to ObjectIds for Mongoose query
+        const validObjectIds = rawVendorIds
+            .filter(id => mongoose.Types.ObjectId.isValid(id))
+            .map(id => new mongoose.Types.ObjectId(id));
+
+        // Lookup in User collection (where vendors and agents are stored)
+        const vendorUsers = validObjectIds.length > 0 
+            ? await User.find({ _id: { $in: validObjectIds } }).select('_id name email status isActive role agentId createdBy assignedAgentId pincode').lean()
+            : [];
+
+        // Also lookup in Vendor collection (if vendor is stored in Vendor collection)
+        const standaloneVendors = validObjectIds.length > 0
+            ? await Vendor.find({ _id: { $in: validObjectIds } }).select('_id name email status isActive agentId').lean()
+            : [];
+
+        // Build status lookup map for vendors
+        const vendorMap = {};
+        vendorUsers.forEach(u => {
+            vendorMap[u._id.toString()] = u;
+        });
+        standaloneVendors.forEach(v => {
+            if (!vendorMap[v._id.toString()]) {
+                vendorMap[v._id.toString()] = v;
+            }
+        });
+
+        // Collect all agent IDs linked to these vendors
+        const agentIds = [];
+        Object.values(vendorMap).forEach(v => {
+            if (v.agentId && mongoose.Types.ObjectId.isValid(v.agentId)) agentIds.push(new mongoose.Types.ObjectId(v.agentId));
+            if (v.createdBy && mongoose.Types.ObjectId.isValid(v.createdBy)) agentIds.push(new mongoose.Types.ObjectId(v.createdBy));
+            if (v.assignedAgentId && mongoose.Types.ObjectId.isValid(v.assignedAgentId)) agentIds.push(new mongoose.Types.ObjectId(v.assignedAgentId));
+        });
+
+        // Lookup Agent user statuses
+        const agentUsers = agentIds.length > 0 
+            ? await User.find({ _id: { $in: agentIds } }).select('_id status isActive').lean()
+            : [];
+        
+        const agentMap = {};
+        agentUsers.forEach(a => {
+            agentMap[a._id.toString()] = a;
+        });
+
+        // Filter products: return ONLY products whose product, vendor, AND agent are active/approved
         const filteredProducts = rawProducts.filter(p => {
             if (p.isActive === false || p.isAvailable === false) return false;
             const pStatus = (p.status || '').toLowerCase();
             if (pStatus === 'suspended' || pStatus === 'inactive' || pStatus === 'rejected') return false;
 
-            if (p.vendorId && typeof p.vendorId === 'object') {
-                const vStatus = (p.vendorId.status || '').toLowerCase();
-                if (vStatus === 'suspended' || vStatus === 'inactive' || vStatus === 'rejected' || p.vendorId.isActive === false) {
-                    return false;
+            if (p.vendorId) {
+                const vKey = p.vendorId.toString();
+                const vendorObj = vendorMap[vKey];
+
+                if (vendorObj) {
+                    const vStatus = (vendorObj.status || '').toLowerCase();
+                    if (vStatus === 'suspended' || vStatus === 'inactive' || vStatus === 'rejected' || vendorObj.isActive === false) {
+                        return false;
+                    }
+
+                    // Check associated agent status
+                    const parentAgentId = (vendorObj.agentId || vendorObj.createdBy || vendorObj.assignedAgentId || '').toString();
+                    if (parentAgentId && agentMap[parentAgentId]) {
+                        const agObj = agentMap[parentAgentId];
+                        const agStatus = (agObj.status || '').toLowerCase();
+                        if (agStatus === 'suspended' || agStatus === 'inactive' || agStatus === 'rejected' || agObj.isActive === false) {
+                            return false;
+                        }
+                    }
                 }
             }
+
             return true;
         });
 
         res.json(filteredProducts);
     } catch (err) {
-        console.error(err);
+        console.error('Error fetching public products:', err);
         res.status(500).json({ success: false, message: 'Server error fetching products', error: err.message });
     }
 });
