@@ -1084,11 +1084,12 @@ router.put('/vendors/:id', [auth, adminAuth], async (req, res) => {
 router.put('/vendors/:id/status', [auth, adminAuth], async (req, res) => {
     const { status } = req.body;
     try {
-        const isApproved = (status || '').toLowerCase() === 'approved';
+        const isApproved = ['approved', 'active'].includes((status || '').toLowerCase().trim());
         let vendor = await User.findById(req.params.id);
         if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
             vendor.status = status;
             vendor.isActive = isApproved;
+            vendor.isApproved = isApproved;
             await vendor.save();
             await Product.updateMany(
                 buildProductVendorQuery(vendor),
