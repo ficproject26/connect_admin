@@ -791,21 +791,38 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
 router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
-        let pendingUserVendors = [];
+        const isPendingStatus = (st) => {
+            const s = (st || 'pending').toLowerCase().trim();
+            if (['approved', 'rejected', 'suspended', 'deactivated', 'blocked'].includes(s)) return false;
+            return true;
+        };
+
+        let allUserVendors = [];
         try {
-            pendingUserVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] }, status: { $in: ['Pending', 'pending'] } }).populate('branchId', 'name').populate('referredBy', 'name');
+            allUserVendors = await User.find({
+                $or: [
+                    { role: { $in: ['Vendor', 'vendor', 'Merchant', 'merchant'] } },
+                    { vendorType: { $exists: true, $ne: '' } }
+                ]
+            }).populate('branchId', 'name').populate('referredBy', 'name');
         } catch (err1) {
-            console.error('Error fetching pending user vendors:', err1.message);
-            pendingUserVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] }, status: { $in: ['Pending', 'pending'] } });
+            allUserVendors = await User.find({
+                $or: [
+                    { role: { $in: ['Vendor', 'vendor', 'Merchant', 'merchant'] } },
+                    { vendorType: { $exists: true, $ne: '' } }
+                ]
+            });
         }
 
-        let pendingLegacy = [];
+        let allLegacyVendors = [];
         try {
-            pendingLegacy = await Vendor.find({ ...filter, status: { $in: ['Pending', 'pending'] } }).populate('branchId', 'name').populate('agentId', 'name');
+            allLegacyVendors = await Vendor.find(filter).populate('branchId', 'name').populate('agentId', 'name');
         } catch (err2) {
-            console.error('Error fetching pending legacy vendors:', err2.message);
-            pendingLegacy = await Vendor.find({ ...filter, status: { $in: ['Pending', 'pending'] } });
+            allLegacyVendors = await Vendor.find(filter);
         }
+
+        const pendingUserVendors = allUserVendors.filter(v => isPendingStatus(v.status));
+        const pendingLegacy = allLegacyVendors.filter(v => isPendingStatus(v.status));
 
         const formatVId = (v, index) => {
             if (v && v.registrationId && /^ven-fic-/i.test(v.registrationId)) return String(v.registrationId).toLowerCase();
@@ -819,7 +836,7 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
             const vId = formatVId(v, idx);
             return {
                 _id: v._id,
-                registrationId: vId,
+                registrationId: v.registrationId || vId,
                 vendorId: vId,
                 businessName: v.businessName || v.name || 'Unnamed Vendor',
                 category: v.category || 'Store Vendor',
@@ -829,7 +846,7 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
                 contactName: v.contactPerson || v.name || '',
                 phone: v.phone || '',
                 email: v.email || '',
-                status: v.status || 'Pending',
+                status: v.status || 'Pending Approval',
                 agentId: v.referredBy || null,
                 membership: { status: v.isPaid ? 'active' : 'none' },
                 createdAt: v.createdAt || new Date(),
@@ -842,7 +859,7 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
             const vId = formatVId(v, pendingUserVendors.length + idx);
             return {
                 _id: v._id,
-                registrationId: vId,
+                registrationId: v.registrationId || vId,
                 vendorId: vId,
                 businessName: v.businessName || 'Unnamed Vendor',
                 category: v.category || 'Store Vendor',
@@ -852,7 +869,7 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
                 contactName: v.contactName || '',
                 phone: v.phone || '',
                 email: v.email || '',
-                status: v.status || 'Pending',
+                status: v.status || 'Pending Approval',
                 agentId: v.agentId || null,
                 membership: v.membership || { status: 'none' },
                 createdAt: v.createdAt || new Date(),
