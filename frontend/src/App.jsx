@@ -243,6 +243,9 @@ function App() {
 
   const [bannerImageUrl, setBannerImageUrl] = useState("https://images.unsplash.com/photo-1542838132-92c53300491e?w=600");
   const [bannerVideoUrl, setBannerVideoUrl] = useState("");
+  const [adImageUrl, setAdImageUrl] = useState("");
+  const [adVideoUrl, setAdVideoUrl] = useState("");
+  const [offerImageUrl, setOfferImageUrl] = useState("");
   const [catSubFilter, setCatSubFilter] = useState("All");
   const [catStatusFilter, setCatStatusFilter] = useState("All Status");
   const [jobSearchTerm, setJobSearchTerm] = useState("");
@@ -3593,7 +3596,7 @@ function App() {
                 <div className="flex justify-between items-center">
                   <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">Paid Advertisements Campaigns</h3>
                   <button
-                    onClick={() => setShowModal('ad')}
+                    onClick={() => { setAdImageUrl(""); setAdVideoUrl(""); setShowModal('ad'); }}
                     className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg"
                   >
                     Launch Ad Campaign
@@ -3649,7 +3652,7 @@ function App() {
                     <p className="text-xs text-slate-400 mt-0.5">Manage exclusive discount offers visible on the Customer Dashboard</p>
                   </div>
                   <button
-                    onClick={() => setShowModal('exclusive-offer')}
+                    onClick={() => { setOfferImageUrl(""); setShowModal('exclusive-offer'); }}
                     className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-3 py-2 rounded-lg inline-flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -6713,7 +6716,57 @@ function App() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Banner / Image URL</label>
-                <input name="imageUrl" placeholder="https://images.unsplash.com/photo-..." type="text" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-sm" />
+                <div className="flex gap-2 items-center">
+                  <input
+                    name="imageUrl"
+                    value={offerImageUrl}
+                    onChange={(e) => setOfferImageUrl(e.target.value)}
+                    placeholder="https://images.unsplash.com/photo-..."
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-sm"
+                  />
+                  <label className="bg-[#b8860b] hover:bg-[#966d09] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs transition-all border-none">
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Upload</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            const img = new window.Image();
+                            img.onload = () => {
+                              const canvas = document.createElement('canvas');
+                              let width = img.width;
+                              let height = img.height;
+                              const maxDim = 1200;
+                              if (width > maxDim || height > maxDim) {
+                                if (width > height) {
+                                  height = Math.round((height * maxDim) / width);
+                                  width = maxDim;
+                                } else {
+                                  width = Math.round((width * maxDim) / height);
+                                  height = maxDim;
+                                }
+                              }
+                              canvas.width = width;
+                              canvas.height = height;
+                              const ctx = canvas.getContext('2d');
+                              ctx.drawImage(img, 0, 0, width, height);
+                              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                              setOfferImageUrl(compressedDataUrl);
+                            };
+                            img.src = evt.target.result;
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">
@@ -6781,11 +6834,89 @@ function App() {
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Image URL</label>
-                <input name="imageUrl" defaultValue="" placeholder="https://example.com/image.jpg" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <div className="flex gap-2 items-center">
+                  <input
+                    name="imageUrl"
+                    value={adImageUrl}
+                    onChange={(e) => setAdImageUrl(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                  <label className="bg-[#b8860b] hover:bg-[#966d09] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs transition-all border-none">
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Upload</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            const img = new window.Image();
+                            img.onload = () => {
+                              const canvas = document.createElement('canvas');
+                              let width = img.width;
+                              let height = img.height;
+                              const maxDim = 1200;
+                              if (width > maxDim || height > maxDim) {
+                                if (width > height) {
+                                  height = Math.round((height * maxDim) / width);
+                                  width = maxDim;
+                                } else {
+                                  width = Math.round((width * maxDim) / height);
+                                  height = maxDim;
+                                }
+                              }
+                              canvas.width = width;
+                              canvas.height = height;
+                              const ctx = canvas.getContext('2d');
+                              ctx.drawImage(img, 0, 0, width, height);
+                              const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                              setAdImageUrl(compressedDataUrl);
+                            };
+                            img.src = evt.target.result;
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Video URL (Optional)</label>
-                <input name="videoUrl" placeholder="e.g. https://example.com/promo.mp4" type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <div className="flex gap-2 items-center">
+                  <input
+                    name="videoUrl"
+                    value={adVideoUrl}
+                    onChange={(e) => setAdVideoUrl(e.target.value)}
+                    placeholder="e.g. https://example.com/promo.mp4"
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                  <label className="bg-[#b8860b] hover:bg-[#966d09] text-white text-xs font-bold px-3.5 py-2.5 rounded-xl cursor-pointer shrink-0 flex items-center gap-1.5 shadow-xs transition-all border-none">
+                    <UploadCloud className="w-4 h-4" />
+                    <span>Upload</span>
+                    <input
+                      type="file"
+                      accept="video/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            setAdVideoUrl(evt.target.result);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Redirect URL</label>
