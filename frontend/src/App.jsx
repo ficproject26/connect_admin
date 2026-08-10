@@ -1803,6 +1803,7 @@ function App() {
                   };
 
                   const getAgentTerritoryDetail = (agent) => {
+                    if (!agent) return { label: 'Territory', value: 'General Territory' };
                     const lvl = (agent.level || 'pincode').toLowerCase();
                     const area = agent.assignedArea || '';
                     const pin = getAgentPincodeCode(agent);
@@ -1818,8 +1819,10 @@ function App() {
                       const parts = area.split('/');
                       const name = parts.length > 2 ? parts[2].trim() : (parts.length > 1 ? parts[1].trim() : (parts[0]?.trim() || 'Division Territory'));
                       return { label: 'Division Territory', value: name };
-                      return { label: 'Pincode Territory', value: value };
                     }
+
+                    const val = pin ? `${pin}${area ? ` (${area})` : ''}` : (area || 'Pincode Territory');
+                    return { label: 'Pincode Territory', value: val };
                   };
 
                   if (agentViewMode === 'tree') {
@@ -2213,9 +2216,9 @@ function App() {
 
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
                                 <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">{terrInfo.label}</span>
+                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">{terrInfo?.label || 'Territory'}</span>
                                   <span className="font-bold">
-                                    {terrInfo.value}
+                                    {terrInfo?.value || 'N/A'}
                                   </span>
                                 </div>
                                 <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
@@ -2332,9 +2335,9 @@ function App() {
 
                               <div className="grid grid-cols-2 gap-2.5 text-center text-xs">
                                 <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{terrInfo.label}</span>
+                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{terrInfo?.label || 'Territory'}</span>
                                   <span className="font-bold text-slate-700 dark:text-slate-300">
-                                    {terrInfo.value}
+                                    {terrInfo?.value || 'N/A'}
                                   </span>
                                 </div>
                                 <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
