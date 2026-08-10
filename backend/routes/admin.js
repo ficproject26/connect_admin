@@ -1111,7 +1111,7 @@ router.put('/vendors/:id/status', [auth, adminAuth], async (req, res) => {
     }
 });
 
-// Individual Business Outlet Suspension Endpoint
+// Individual Business Outlet Suspension Endpoint (Vendor-Scoped)
 router.put('/vendors/:id/businesses/:bizId/status', [auth, adminAuth], async (req, res) => {
     const { status, reason } = req.body;
     try {
@@ -1120,56 +1120,70 @@ router.put('/vendors/:id/businesses/:bizId/status', [auth, adminAuth], async (re
         const vendorId = req.params.id;
         const bizId = req.params.bizId;
 
-        let vendor = await User.findById(vendorId);
+        const vQuery = buildVendorQuery(vendorId, '', '', vendorId);
+
+        let vendor = await User.findOne(vQuery) || (mongoose.Types.ObjectId.isValid(vendorId) ? await User.findById(vendorId) : null);
+        let legacy = await Vendor.findOne(vQuery) || (mongoose.Types.ObjectId.isValid(vendorId) ? await Vendor.findById(vendorId) : null);
+
         let targetBizName = '';
+        const vendorIdentifiers = new Set();
 
-        if (vendor && Array.isArray(vendor.businesses)) {
-            let matched = false;
-            vendor.businesses.forEach(b => {
-                const bIdStr = b._id ? b._id.toString() : '';
-                const bName = b.businessName || b.name || '';
-                if (bIdStr === bizId || (bIdStr.length >= 16 && bizId.startsWith(bIdStr.substring(0, 16))) || bName.toLowerCase() === bizId.toLowerCase()) {
-                    b.status = formattedStatus;
-                    b.isActive = isBizActive;
-                    targetBizName = bName;
-                    matched = true;
+        [vendor, legacy].forEach(v => {
+            if (!v) return;
+            if (v._id) vendorIdentifiers.add(v._id.toString());
+            if (v.registrationId) vendorIdentifiers.add(v.registrationId.toString());
+            if (v.vendorId) vendorIdentifiers.add(v.vendorId.toString());
+            if (v.email) vendorIdentifiers.add(v.email.toLowerCase().trim());
+            if (v.phone) vendorIdentifiers.add(v.phone.replace(/\D/g, ''));
+            if (v.businessName) vendorIdentifiers.add(v.businessName.toLowerCase().trim());
+            if (v.name) vendorIdentifiers.add(v.name.toLowerCase().trim());
+
+            if (Array.isArray(v.businesses)) {
+                let matched = false;
+                v.businesses.forEach(b => {
+                    const bIdStr = b._id ? b._id.toString() : '';
+                    const bName = b.businessName || b.name || '';
+                    if (bIdStr === bizId || (bIdStr.length >= 16 && bizId.startsWith(bIdStr.substring(0, 16))) || bName.toLowerCase() === bizId.toLowerCase()) {
+                        b.status = formattedStatus;
+                        b.isActive = isBizActive;
+                        targetBizName = bName;
+                        matched = true;
+                    }
+                });
+                if (matched && typeof v.markModified === 'function') {
+                    v.markModified('businesses');
                 }
-            });
-
-            if (matched) {
-                if (typeof vendor.markModified === 'function') vendor.markModified('businesses');
-                await vendor.save();
             }
-        }
+        });
 
-        let legacy = await Vendor.findById(vendorId);
-        if (legacy && Array.isArray(legacy.businesses)) {
-            legacy.businesses.forEach(b => {
-                const bIdStr = b._id ? b._id.toString() : '';
-                const bName = b.businessName || b.name || '';
-                if (bIdStr === bizId || bName.toLowerCase() === bizId.toLowerCase()) {
-                    b.status = formattedStatus;
-                    b.isActive = isBizActive;
-                    if (!targetBizName) targetBizName = bName;
-                }
-            });
-            await legacy.save();
-        }
+        if (vendor) await vendor.save().catch(() => {});
+        if (legacy) await legacy.save().catch(() => {});
 
-        // Soft hide/show ONLY products & services belonging to this specific business outlet
-        const orConds = [
+        const vIdArr = Array.from(vendorIdentifiers);
+
+        const vendorMatch = {
+            $or: [
+                { vendorId: { $in: vIdArr } },
+                { vendorEmail: { $in: vIdArr.map(v => v.toLowerCase()) } },
+                { vendorPhone: { $in: vIdArr } }
+            ]
+        };
+
+        const bizMatchConds = [
             { businessId: bizId },
             { 'business._id': bizId }
         ];
         if (mongoose.Types.ObjectId.isValid(bizId)) {
-            orConds.push({ businessId: new mongoose.Types.ObjectId(bizId) });
+            bizMatchConds.push({ businessId: new mongoose.Types.ObjectId(bizId) });
         }
         if (targetBizName) {
-            orConds.push({ businessName: new RegExp('^' + targetBizName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') });
+            const escapedBizName = targetBizName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            bizMatchConds.push({ businessName: new RegExp('^' + escapedBizName + '$', 'i') });
+            bizMatchConds.push({ subNavbarCategory: new RegExp('^' + escapedBizName + '$', 'i') });
         }
 
         await Product.updateMany(
-            { $or: orConds },
+            { $and: [vendorMatch, { $or: bizMatchConds }] },
             { $set: { businessStatus: formattedStatus.toLowerCase(), businessIsActive: isBizActive, isAvailable: isBizActive } }
         ).catch(e => console.error('Product update error for business status change:', e));
 
@@ -2326,32 +2340,59 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
     const activeVendorNames = new Set();
     const activeVendorPrefixes = new Set();
 
-    const suspendedBusinessIds = new Set();
-    const suspendedBusinessNames = new Set();
+    // Vendor-Scoped Suspended Business Map: `${vendorKey}:${bizKey}`
+    const suspendedVendorBizKeys = new Set();
 
     [...activeUsers, ...activeVendors].forEach(v => {
+        const vKeys = [];
         if (v._id) {
             const idStr = v._id.toString();
+            vKeys.push(idStr);
             activeVendorIds.add(idStr);
             if (idStr.length >= 16) {
                 activeVendorPrefixes.add(idStr.substring(0, 16));
             }
         }
-        if (v.registrationId) activeVendorIds.add(v.registrationId.toString());
-        if (v.vendorId) activeVendorIds.add(v.vendorId.toString());
-        if (v.email) activeVendorEmails.add(v.email.toLowerCase().trim());
-        if (v.phone) activeVendorPhones.add(v.phone.replace(/\D/g, ''));
-        if (v.businessName) activeVendorNames.add(v.businessName.toLowerCase().trim());
-        if (v.name) activeVendorNames.add(v.name.toLowerCase().trim());
+        if (v.registrationId) {
+            vKeys.push(v.registrationId.toString());
+            activeVendorIds.add(v.registrationId.toString());
+        }
+        if (v.vendorId) {
+            vKeys.push(v.vendorId.toString());
+            activeVendorIds.add(v.vendorId.toString());
+        }
+        if (v.email) {
+            const em = v.email.toLowerCase().trim();
+            vKeys.push(em);
+            activeVendorEmails.add(em);
+        }
+        if (v.phone) {
+            const ph = v.phone.replace(/\D/g, '');
+            vKeys.push(ph);
+            activeVendorPhones.add(ph);
+        }
+        if (v.businessName) {
+            const bn = v.businessName.toLowerCase().trim();
+            vKeys.push(bn);
+            activeVendorNames.add(bn);
+        }
+        if (v.name) {
+            const nm = v.name.toLowerCase().trim();
+            vKeys.push(nm);
+            activeVendorNames.add(nm);
+        }
 
         if (Array.isArray(v.businesses)) {
             v.businesses.forEach(b => {
                 const bStatus = (b.status || '').toLowerCase().trim();
                 const isBActive = (bStatus === 'active' || bStatus === 'approved') && b.isActive !== false;
                 if (!isBActive) {
-                    if (b._id) suspendedBusinessIds.add(b._id.toString());
-                    if (b.businessName) suspendedBusinessNames.add(b.businessName.toLowerCase().trim());
-                    if (b.name) suspendedBusinessNames.add(b.name.toLowerCase().trim());
+                    const bId = b._id ? b._id.toString() : '';
+                    const bName = (b.businessName || b.name || '').toLowerCase().trim();
+                    vKeys.forEach(vKey => {
+                        if (bId) suspendedVendorBizKeys.add(`${vKey}:${bId}`);
+                        if (bName) suspendedVendorBizKeys.add(`${vKey}:${bName}`);
+                    });
                 }
             });
         }
@@ -2390,10 +2431,16 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
         if (!isVendorActive) return false;
 
         const pBizId = p.businessId ? p.businessId.toString() : (p.business ? (p.business._id?.toString() || p.business.id?.toString()) : '');
-        const pBizName = (p.businessName || p.business?.businessName || p.business?.name || '').toLowerCase().trim();
+        const pBizName = (p.businessName || p.business?.businessName || p.business?.name || p.subNavbarCategory || '').toLowerCase().trim();
 
-        if (pBizId && suspendedBusinessIds.has(pBizId)) return false;
-        if (pBizName && suspendedBusinessNames.has(pBizName)) return false;
+        const productVendorKeys = [vId, vEmail, vPhone, vName].filter(Boolean);
+        const isThisVendorBizSuspended = productVendorKeys.some(vKey => {
+            if (pBizId && suspendedVendorBizKeys.has(`${vKey}:${pBizId}`)) return true;
+            if (pBizName && suspendedVendorBizKeys.has(`${vKey}:${pBizName}`)) return true;
+            return false;
+        });
+
+        if (isThisVendorBizSuspended) return false;
 
         return true;
     });
@@ -2427,9 +2474,44 @@ router.get('/products/:id', async (req, res) => {
     }
 });
 
-// POST new product
+// POST new product (with Vendor & Business status validation)
 router.post(['/products', '/'], [auth, adminAuth], async (req, res) => {
     try {
+        const { vendorId, vendorEmail, vendorPhone, businessId, businessName, subNavbarCategory } = req.body;
+        const targetVendorId = vendorId || req.user?.id;
+
+        if (targetVendorId) {
+            const vQuery = buildVendorQuery(targetVendorId, vendorEmail, '', targetVendorId);
+            const vendor = await User.findOne(vQuery) || await Vendor.findOne(vQuery);
+
+            if (vendor) {
+                const vStatus = (vendor.status || '').toLowerCase().trim();
+                const isVActive = (vStatus === 'approved' || vStatus === 'active') && vendor.isActive !== false;
+                if (!isVActive) {
+                    return res.status(403).json({ success: false, message: 'This vendor account is currently suspended and cannot perform modifications.' });
+                }
+
+                if (Array.isArray(vendor.businesses)) {
+                    const targetBizKey = (businessId || businessName || subNavbarCategory || '').toString().toLowerCase().trim();
+                    if (targetBizKey) {
+                        const matchedBiz = vendor.businesses.find(b => {
+                            const bId = (b._id || '').toString();
+                            const bName = (b.businessName || b.name || '').toLowerCase().trim();
+                            return bId === targetBizKey || bName === targetBizKey;
+                        });
+
+                        if (matchedBiz) {
+                            const bStatus = (matchedBiz.status || '').toLowerCase().trim();
+                            const isBActive = (bStatus === 'active' || bStatus === 'approved') && matchedBiz.isActive !== false;
+                            if (!isBActive) {
+                                return res.status(403).json({ success: false, message: 'This business is currently suspended and cannot be modified.' });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         const newProduct = new Product(req.body);
         await newProduct.save();
         res.status(201).json({ success: true, message: 'Product created successfully', data: newProduct });
