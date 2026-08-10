@@ -1,5 +1,12 @@
 # Project Guidelines & Architectural Rules
 
+## Strict Workflow Preservation & Admin Portal Stability
+
+### Core Directive (NEVER ALTER WITHOUT EXPLICIT USER INSTRUCTION)
+1. **Preserve Current Admin Flow**:
+   - The overall workflow, UI layouts, navigation structures, and data handling of the Admin Portal are fully correct and locked.
+   - NEVER refactor, remove, or modify existing working features, modals, navigation tabs, directory flows, or backend handlers unless explicitly asked by the USER for a targeted bug fix or new requirement.
+
 ## Territory Hierarchy & Multi-Agent Directory Flow
 
 ### Mandatory Principles (NEVER CHANGE THIS WORKFLOW)
