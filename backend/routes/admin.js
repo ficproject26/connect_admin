@@ -2298,67 +2298,131 @@ router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
     }
 });
 
-// GET all active products from non-suspended vendors
+const fetchActiveVendorProducts = async (reqProductId = null) => {
+    const activeUsers = await User.find({
+        $or: [
+            { role: { $in: ['vendor', 'Vendor'] } },
+            { vendorType: { $exists: true } }
+        ],
+        $or: [
+            { status: { $in: ['Approved', 'approved', 'Active', 'active'] } },
+            { isApproved: true }
+        ],
+        isActive: { $ne: false }
+    }).select('_id email phone businessName name registrationId vendorId businesses');
+
+    const activeVendors = await Vendor.find({
+        $or: [
+            { status: { $in: ['Approved', 'approved', 'Active', 'active'] } },
+            { isApproved: true }
+        ],
+        isActive: { $ne: false }
+    }).select('_id email phone businessName registrationId vendorId businesses');
+
+    const activeVendorIds = new Set();
+    const activeVendorEmails = new Set();
+    const activeVendorPhones = new Set();
+    const activeVendorNames = new Set();
+    const activeVendorPrefixes = new Set();
+
+    const suspendedBusinessIds = new Set();
+    const suspendedBusinessNames = new Set();
+
+    [...activeUsers, ...activeVendors].forEach(v => {
+        if (v._id) {
+            const idStr = v._id.toString();
+            activeVendorIds.add(idStr);
+            if (idStr.length >= 16) {
+                activeVendorPrefixes.add(idStr.substring(0, 16));
+            }
+        }
+        if (v.registrationId) activeVendorIds.add(v.registrationId.toString());
+        if (v.vendorId) activeVendorIds.add(v.vendorId.toString());
+        if (v.email) activeVendorEmails.add(v.email.toLowerCase().trim());
+        if (v.phone) activeVendorPhones.add(v.phone.replace(/\D/g, ''));
+        if (v.businessName) activeVendorNames.add(v.businessName.toLowerCase().trim());
+        if (v.name) activeVendorNames.add(v.name.toLowerCase().trim());
+
+        if (Array.isArray(v.businesses)) {
+            v.businesses.forEach(b => {
+                const bStatus = (b.status || '').toLowerCase().trim();
+                const isBActive = (bStatus === 'active' || bStatus === 'approved') && b.isActive !== false;
+                if (!isBActive) {
+                    if (b._id) suspendedBusinessIds.add(b._id.toString());
+                    if (b.businessName) suspendedBusinessNames.add(b.businessName.toLowerCase().trim());
+                    if (b.name) suspendedBusinessNames.add(b.name.toLowerCase().trim());
+                }
+            });
+        }
+    });
+
+    const query = {
+        isActive: { $ne: false },
+        isAvailable: { $ne: false }
+    };
+    if (reqProductId) {
+        query.$or = [{ _id: reqProductId }, { id: reqProductId }];
+    }
+
+    const allProducts = await Product.find(query).sort({ createdAt: -1 });
+
+    const activeProducts = allProducts.filter(p => {
+        if (p.isActive === false || p.isAvailable === false || p.isVendorSuspended === true || p.isSuspended === true) return false;
+        const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase().trim();
+        if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated', 'pending'].includes(pVendorStatus)) return false;
+
+        const pBizStatus = (p.businessStatus || '').toLowerCase().trim();
+        if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated', 'pending'].includes(pBizStatus)) return false;
+        if (p.businessIsActive === false) return false;
+
+        const vId = p.vendorId ? p.vendorId.toString() : '';
+        const vEmail = (p.vendorEmail || '').toLowerCase().trim();
+        const vPhone = (p.vendorPhone || '').replace(/\D/g, '');
+        const vName = (p.vendorName || p.brand || '').toLowerCase().trim();
+
+        const isVendorActive = (vId && activeVendorIds.has(vId)) ||
+                               (vEmail && activeVendorEmails.has(vEmail)) ||
+                               (vPhone && activeVendorPhones.has(vPhone)) ||
+                               (vName && activeVendorNames.has(vName)) ||
+                               (vId && Array.from(activeVendorPrefixes).some(prefix => vId.startsWith(prefix)));
+
+        if (!isVendorActive) return false;
+
+        const pBizId = p.businessId ? p.businessId.toString() : (p.business ? (p.business._id?.toString() || p.business.id?.toString()) : '');
+        const pBizName = (p.businessName || p.business?.businessName || p.business?.name || '').toLowerCase().trim();
+
+        if (pBizId && suspendedBusinessIds.has(pBizId)) return false;
+        if (pBizName && suspendedBusinessNames.has(pBizName)) return false;
+
+        return true;
+    });
+
+    return activeProducts;
+};
+
+// GET all active products from non-suspended vendors and active businesses
 router.get(['/products', '/'], async (req, res) => {
     try {
-        const suspendedUsers = await User.find({
-            $or: [
-                { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
-                { isActive: false }
-            ]
-        }).select('_id email phone businessName name registrationId vendorId');
-
-        const suspendedVendors = await Vendor.find({
-            $or: [
-                { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
-                { isActive: false }
-            ]
-        }).select('_id email phone businessName registrationId vendorId');
-
-        const suspendedIds = new Set();
-        const suspendedEmails = new Set();
-        const suspendedPhones = new Set();
-        const suspendedNames = new Set();
-
-        [...suspendedUsers, ...suspendedVendors].forEach(v => {
-            if (v._id) suspendedIds.add(v._id.toString());
-            if (v.email) suspendedEmails.add(v.email.toLowerCase().trim());
-            if (v.phone) suspendedPhones.add(v.phone.replace(/\D/g, ''));
-            if (v.businessName) suspendedNames.add(v.businessName.toLowerCase().trim());
-            if (v.name) suspendedNames.add(v.name.toLowerCase().trim());
-        });
-
-        const allProducts = await Product.find({
-            isActive: { $ne: false },
-            isAvailable: { $ne: false }
-        }).sort({ createdAt: -1 });
-
-        const activeProducts = allProducts.filter(p => {
-            const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase().trim();
-            if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated'].includes(pVendorStatus)) return false;
-            if (p.isVendorSuspended === true || p.isSuspended === true) return false;
-
-            const pBizStatus = (p.businessStatus || '').toLowerCase().trim();
-            if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated'].includes(pBizStatus)) return false;
-            if (p.businessIsActive === false) return false;
-
-            const vId = p.vendorId ? p.vendorId.toString() : '';
-            const vEmail = (p.vendorEmail || '').toLowerCase().trim();
-            const vPhone = (p.vendorPhone || '').replace(/\D/g, '');
-            const vName = (p.vendorName || p.brand || '').toLowerCase().trim();
-
-            if (vId && suspendedIds.has(vId)) return false;
-            if (vEmail && suspendedEmails.has(vEmail)) return false;
-            if (vPhone && suspendedPhones.has(vPhone)) return false;
-            if (vName && suspendedNames.has(vName)) return false;
-
-            return true;
-        });
-
+        const activeProducts = await fetchActiveVendorProducts();
         res.json(activeProducts);
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Server error fetching products', error: err.message });
+    }
+});
+
+// GET single product by ID with Vendor & Business active validation
+router.get('/products/:id', async (req, res) => {
+    try {
+        const productId = req.params.id;
+        const activeProducts = await fetchActiveVendorProducts(productId);
+        if (!activeProducts || activeProducts.length === 0) {
+            return res.status(404).json({ success: false, message: 'This product, service, or business is currently unavailable.' });
+        }
+        res.json(activeProducts[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Server error fetching product details', error: err.message });
     }
 });
 
