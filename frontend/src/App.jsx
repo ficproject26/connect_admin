@@ -142,6 +142,22 @@ const isPendingAgent = (agent) => {
   return false;
 };
 
+const isApprovedAgent = (agent) => {
+  if (!agent) return false;
+  const status = (agent.status || agent.kycStatus || '').toLowerCase().trim();
+  const kycStatus = (agent.kycStatus || agent.status || '').toLowerCase().trim();
+
+  if (['approved', 'active'].includes(status) || ['approved', 'active'].includes(kycStatus)) {
+    return true;
+  }
+
+  if (!status && agent.isActive === true) {
+    return true;
+  }
+
+  return false;
+};
+
 // --- Error Boundary to prevent blank screens ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -1603,35 +1619,35 @@ function App() {
                     onClick={() => setAgentLevelFilter('all')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'all' ? 'bg-primary-500/10 border-2 border-primary-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-primary-500">{agents.length}</span>
+                    <span className="block text-2xl font-black text-primary-500">{agents.filter(isApprovedAgent).length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">Total Agents</span>
                   </div>
                   <div
                     onClick={() => setAgentLevelFilter('state')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'state' ? 'bg-purple-500/10 border-2 border-purple-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-purple-500">{agents.filter(a => (a.level || '').toLowerCase() === 'state').length}</span>
+                    <span className="block text-2xl font-black text-purple-500">{agents.filter(a => isApprovedAgent(a) && (a.level || '').toLowerCase() === 'state').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">State Agents</span>
                   </div>
                   <div
                     onClick={() => setAgentLevelFilter('district')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'district' ? 'bg-blue-500/10 border-2 border-blue-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-blue-500">{agents.filter(a => (a.level || '').toLowerCase() === 'district').length}</span>
+                    <span className="block text-2xl font-black text-blue-500">{agents.filter(a => isApprovedAgent(a) && (a.level || '').toLowerCase() === 'district').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">District Agents</span>
                   </div>
                   <div
                     onClick={() => setAgentLevelFilter('division')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'division' ? 'bg-indigo-500/10 border-2 border-indigo-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-indigo-500">{agents.filter(a => ['division', 'divisional'].includes((a.level || '').toLowerCase())).length}</span>
+                    <span className="block text-2xl font-black text-indigo-500">{agents.filter(a => isApprovedAgent(a) && ['division', 'divisional'].includes((a.level || '').toLowerCase())).length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">Divisional Agents</span>
                   </div>
                   <div
                     onClick={() => setAgentLevelFilter('pincode')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'pincode' ? 'bg-emerald-500/10 border-2 border-emerald-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-emerald-500">{agents.filter(a => (a.level || 'pincode').toLowerCase() === 'pincode').length}</span>
+                    <span className="block text-2xl font-black text-emerald-500">{agents.filter(a => isApprovedAgent(a) && (a.level || 'pincode').toLowerCase() === 'pincode').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">Pincode Agents</span>
                   </div>
                 </div>
@@ -1704,11 +1720,11 @@ function App() {
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap gap-2 items-center bg-slate-50/60 dark:bg-slate-950/40">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Agent Level:</span>
                   {[
-                    { id: 'all', label: 'All Agents', count: agents.filter(a => (a.status || '').toLowerCase() !== 'rejected').length },
-                    { id: 'state', label: 'State Agents', count: agents.filter(a => (a.status || '').toLowerCase() !== 'rejected' && (a.level || '').toLowerCase() === 'state').length },
-                    { id: 'district', label: 'District Agents', count: agents.filter(a => (a.status || '').toLowerCase() !== 'rejected' && (a.level || '').toLowerCase() === 'district').length },
-                    { id: 'division', label: 'Divisional Agents', count: agents.filter(a => (a.status || '').toLowerCase() !== 'rejected' && ['division', 'divisional'].includes((a.level || '').toLowerCase())).length },
-                    { id: 'pincode', label: 'Pincode Agents', count: agents.filter(a => (a.status || '').toLowerCase() !== 'rejected' && (a.level || 'pincode').toLowerCase() === 'pincode').length },
+                    { id: 'all', label: 'All Agents', count: agents.filter(isApprovedAgent).length },
+                    { id: 'state', label: 'State Agents', count: agents.filter(a => isApprovedAgent(a) && (a.level || '').toLowerCase() === 'state').length },
+                    { id: 'district', label: 'District Agents', count: agents.filter(a => isApprovedAgent(a) && (a.level || '').toLowerCase() === 'district').length },
+                    { id: 'division', label: 'Divisional Agents', count: agents.filter(a => isApprovedAgent(a) && ['division', 'divisional'].includes((a.level || '').toLowerCase())).length },
+                    { id: 'pincode', label: 'Pincode Agents', count: agents.filter(a => isApprovedAgent(a) && (a.level || 'pincode').toLowerCase() === 'pincode').length },
                     { id: 'rejected', label: 'Rejected Agents', count: agents.filter(a => (a.status || '').toLowerCase() === 'rejected').length }
                   ].map((filter) => (
                     <button
@@ -1746,8 +1762,8 @@ function App() {
                       return matchesSearch && aStatus === 'rejected';
                     }
 
-                    // For non-rejected tabs (All, State, District, Division, Pincode), exclude rejected agents
-                    if (aStatus === 'rejected') return false;
+                    // Active directory level tabs MUST ONLY display approved agents
+                    if (!isApprovedAgent(a)) return false;
 
                     let matchesLevel = true;
                     if (agentLevelFilter === 'state') matchesLevel = lvl === 'state';
