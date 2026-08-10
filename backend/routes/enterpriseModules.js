@@ -366,6 +366,22 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         await Vendor.collection.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
         await Vendor.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
 
+        // 2b. Update all products associated with this vendor
+        const matchedVendors = await User.find(updateFilter).select('_id');
+        const matchedVendorCols = await Vendor.find(updateFilter).select('_id');
+        const vendorIdsToSync = [
+            ...(targetId ? [targetId, targetId.toString()] : []),
+            ...matchedVendors.map(v => v._id),
+            ...matchedVendors.map(v => v._id.toString()),
+            ...matchedVendorCols.map(v => v._id),
+            ...matchedVendorCols.map(v => v._id.toString())
+        ];
+
+        await Product.updateMany(
+            { vendorId: { $in: vendorIdsToSync } },
+            { $set: { isActive: isCurrentlyActive, isAvailable: isCurrentlyActive, vendorStatus: formattedStatus } }
+        ).catch(e => console.error('Product updateMany error on vendor status change:', e));
+
         // 3. Update nested businesses array with arrayFilters for documents where businesses array is non-empty
         await User.collection.updateMany(
             { ...updateFilter, "businesses": { $type: "array", $ne: [] } },

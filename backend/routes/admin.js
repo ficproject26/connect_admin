@@ -2111,11 +2111,43 @@ router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
     }
 });
 
-// GET all products
+// GET all active products from non-suspended vendors
 router.get(['/products', '/'], async (req, res) => {
     try {
-        const products = await Product.find().sort({ createdAt: -1 });
-        res.json(products);
+        const suspendedUsers = await User.find({
+            $or: [
+                { role: { $in: ['vendor', 'Vendor'] } },
+                { vendorType: { $exists: true } }
+            ],
+            $or: [
+                { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive'] } },
+                { isActive: false }
+            ]
+        }).select('_id');
+
+        const suspendedVendors = await Vendor.find({
+            status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive'] }
+        }).select('_id');
+
+        const suspendedIds = new Set([
+            ...suspendedUsers.map(u => u._id.toString()),
+            ...suspendedVendors.map(v => v._id.toString())
+        ]);
+
+        const allProducts = await Product.find({
+            isActive: { $ne: false },
+            isAvailable: { $ne: false }
+        }).sort({ createdAt: -1 });
+
+        const activeProducts = allProducts.filter(p => {
+            const vId = p.vendorId ? p.vendorId.toString() : '';
+            if (vId && suspendedIds.has(vId)) return false;
+            const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase();
+            if (['suspended', 'inactive', 'rejected', 'blocked'].includes(pVendorStatus)) return false;
+            return true;
+        });
+
+        res.json(activeProducts);
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Server error fetching products', error: err.message });
