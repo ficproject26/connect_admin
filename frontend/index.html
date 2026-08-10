@@ -3,6 +3,39 @@
 
 <head>
   <meta charset="UTF-8" />
+  <script>
+    (function () {
+      const isExtensionError = (msg) => {
+        if (!msg) return false;
+        const str = typeof msg === 'string' ? msg : (msg.message || '');
+        return (
+          str.includes('A listener indicated an asynchronous response') ||
+          str.includes('message channel closed') ||
+          str.includes('runtime.lastError')
+        );
+      };
+
+      const origConsoleError = console.error;
+      console.error = function (...args) {
+        if (args.some(isExtensionError)) return;
+        origConsoleError.apply(console, args);
+      };
+
+      window.addEventListener('unhandledrejection', function (e) {
+        if (isExtensionError(e.reason)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
+
+      window.addEventListener('error', function (e) {
+        if (isExtensionError(e.error || e.message)) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
+    })();
+  </script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description"

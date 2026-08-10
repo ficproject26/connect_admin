@@ -526,56 +526,64 @@ function App() {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
 
       // Priority Task 1: Agents & Dashboard Stats (unblocks screen immediately)
-      const priorityTasks = [
-        fetch(`${API_BASE}/admin/dashboard-stats`, { headers }).then(async r => {
+      const safeFetch = async (url, setter) => {
+        try {
+          const r = await fetch(url, { headers });
           if (r.status === 401 || r.status === 403) {
             handleLogout();
-            throw new Error("Unauthorized");
+            return null;
           }
           if (r.ok) {
             const data = await r.json();
-            apiCacheRef.current['stats'] = data;
-            try { localStorage.setItem('cached_dashboard_stats', JSON.stringify(data)); } catch (e) {}
-            setStats(data);
+            if (setter) setter(data);
+            return data;
           }
+        } catch (e) {
+          // Ignore network cancel or fetch errors silently
+        }
+        return null;
+      };
+
+      const priorityTasks = [
+        safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
+          apiCacheRef.current['stats'] = data;
+          try { localStorage.setItem('cached_dashboard_stats', JSON.stringify(data)); } catch (e) {}
+          setStats(data);
         }),
-        fetch(`${API_BASE}/admin/agents`, { headers }).then(async r => {
-          if (r.ok) {
-            const data = await r.json();
-            apiCacheRef.current['agents'] = data;
-            try { localStorage.setItem('cached_agents', JSON.stringify(data)); } catch (e) {}
-            setAgents(data);
-          }
+        safeFetch(`${API_BASE}/admin/agents`, (data) => {
+          apiCacheRef.current['agents'] = data;
+          try { localStorage.setItem('cached_agents', JSON.stringify(data)); } catch (e) {}
+          setAgents(data);
         }),
       ];
 
       // Secondary Background Tasks
       const secondaryTasks = [
-        fetch(`${API_BASE}/admin/branches`, { headers }).then(async r => { if (r.ok) setBranches(await r.json()); }),
-        fetch(`${API_BASE}/admin/admins`, { headers }).then(async r => { if (r.ok) setAdmins(await r.json()); }),
-        fetch(`${API_BASE}/pincodes`, { headers }).then(async r => { if (r.ok) setPincodes(await r.json()); }),
-        fetch(`${API_BASE}/admin/vendors`, { headers }).then(async r => { if (r.ok) setVendors(await r.json()); }),
-        fetch(`${API_BASE}/admin/customers`, { headers }).then(async r => { if (r.ok) setCustomers(await r.json()); }),
-        fetch(`${API_BASE}/admin/wallet/withdrawals`, { headers }).then(async r => { if (r.ok) setWithdrawals(await r.json()); }),
-        fetch(`${API_BASE}/admin/commissions`, { headers }).then(async r => { if (r.ok) setCommissions(await r.json()); }),
-        fetch(`${API_BASE}/admin/memberships/plans`, { headers }).then(async r => { if (r.ok) setMembershipPlans(await r.json()); }),
-        fetch(`${API_BASE}/admin/banners`, { headers }).then(async r => { if (r.ok) setBanners(await r.json()); }),
-        fetch(`${API_BASE}/admin/ads`, { headers }).then(async r => { if (r.ok) setAds(await r.json()); }),
-        fetch(`${API_BASE}/admin/reports?type=${reportType}`, { headers }).then(async r => { if (r.ok) setReports(await r.json()); }),
-        fetch(`${API_BASE}/admin/tie-ups`, { headers }).then(async r => { if (r.ok) setTieUps(await r.json()); }),
-        fetch(`${API_BASE}/admin/tasks`, { headers }).then(async r => { if (r.ok) setTasks(await r.json()); }),
-        fetch(`${API_BASE}/admin/orders`, { headers }).then(async r => { if (r.ok) setOrders(await r.json()); }),
-        fetch(`${API_BASE}/admin/bookings`, { headers }).then(async r => { if (r.ok) setBookings(await r.json()); }),
-        fetch(`${API_BASE}/admin/jobs`, { headers }).then(async r => { if (r.ok) setJobs(await r.json()); }),
-        fetch(`${API_BASE}/admin/card-holders`, { headers }).then(async r => { if (r.ok) setCardHolders(await r.json()); }),
-        fetch(`${API_BASE}/admin/payments`, { headers }).then(async r => { if (r.ok) setPayments(await r.json()); }),
-        fetch(`${API_BASE}/admin/delivery-partners`, { headers }).then(async r => { if (r.ok) setDeliveryPartners(await r.json()); }),
-        fetch(`${API_BASE}/admin/support-team`, { headers }).then(async r => { if (r.ok) setSupportTeam(await r.json()); }),
-        fetch(`${API_BASE}/admin/categories`, { headers }).then(async r => { if (r.ok) setCategories(await r.json()); }),
-        fetch(`${API_BASE}/admin/queries`, { headers }).then(async r => { if (r.ok) setQueries(await r.json()); }),
-        fetch(`${API_BASE}/admin/tickets`, { headers }).then(async r => { if (r.ok) setTickets(await r.json()); }),
-        fetch(`${API_BASE}/admin/announcements`, { headers }).then(async r => { if (r.ok) setAnnouncements(await r.json()); }),
-        fetch(`${API_BASE}/admin/exclusive-offers`, { headers }).then(async r => { if (r.ok) setExclusiveOffers(await r.json()); }),
+        safeFetch(`${API_BASE}/admin/branches`, setBranches),
+        safeFetch(`${API_BASE}/admin/admins`, setAdmins),
+        safeFetch(`${API_BASE}/pincodes`, setPincodes),
+        safeFetch(`${API_BASE}/admin/vendors`, setVendors),
+        safeFetch(`${API_BASE}/admin/customers`, setCustomers),
+        safeFetch(`${API_BASE}/admin/wallet/withdrawals`, setWithdrawals),
+        safeFetch(`${API_BASE}/admin/commissions`, setCommissions),
+        safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans),
+        safeFetch(`${API_BASE}/admin/banners`, setBanners),
+        safeFetch(`${API_BASE}/admin/ads`, setAds),
+        safeFetch(`${API_BASE}/admin/reports?type=${reportType}`, setReports),
+        safeFetch(`${API_BASE}/admin/tie-ups`, setTieUps),
+        safeFetch(`${API_BASE}/admin/tasks`, setTasks),
+        safeFetch(`${API_BASE}/admin/orders`, setOrders),
+        safeFetch(`${API_BASE}/admin/bookings`, setBookings),
+        safeFetch(`${API_BASE}/admin/jobs`, setJobs),
+        safeFetch(`${API_BASE}/admin/card-holders`, setCardHolders),
+        safeFetch(`${API_BASE}/admin/payments`, setPayments),
+        safeFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners),
+        safeFetch(`${API_BASE}/admin/support-team`, setSupportTeam),
+        safeFetch(`${API_BASE}/admin/categories`, setCategories),
+        safeFetch(`${API_BASE}/admin/queries`, setQueries),
+        safeFetch(`${API_BASE}/admin/tickets`, setTickets),
+        safeFetch(`${API_BASE}/admin/announcements`, setAnnouncements),
+        safeFetch(`${API_BASE}/admin/exclusive-offers`, setExclusiveOffers),
       ];
 
       await Promise.allSettled(priorityTasks);
