@@ -3570,8 +3570,14 @@ function App() {
                         <div className="flex justify-between items-center">
                           <span className="text-emerald-500 text-[10px] font-bold">Active</span>
                           <button
-                            onClick={() => executeAction(`/admin/banners/${b._id}`, 'DELETE')}
-                            className="text-rose-500 text-[10px] font-bold"
+                            onClick={async () => {
+                              if (window.confirm('Are you sure you want to remove this banner?')) {
+                                setBanners(prev => prev.filter(item => item._id !== b._id));
+                                const res = await executeAction(`/admin/banners/${b._id}`, 'DELETE');
+                                if (!res || !res.success) fetchData();
+                              }
+                            }}
+                            className="text-rose-500 hover:text-rose-600 text-[10px] font-bold transition-colors cursor-pointer"
                           >
                             Remove
                           </button>
@@ -3602,7 +3608,13 @@ function App() {
                         <div className="flex items-center gap-3">
                           <span className="text-emerald-500 text-xs font-bold">Earnings: ₹{ad.revenue}</span>
                           <button
-                            onClick={() => executeAction(`/admin/ads/${ad._id}`, 'DELETE')}
+                            onClick={async () => {
+                              if (window.confirm('Are you sure you want to delete this ad campaign?')) {
+                                setAds(prev => prev.filter(item => item._id !== ad._id));
+                                const res = await executeAction(`/admin/ads/${ad._id}`, 'DELETE');
+                                if (!res || !res.success) fetchData();
+                              }
+                            }}
                             className="text-rose-500 hover:text-rose-600 text-xs font-bold transition-colors cursor-pointer"
                           >
                             Delete
@@ -3674,7 +3686,13 @@ function App() {
                           </span>
                         </div>
                         <button
-                          onClick={() => executeAction(`/admin/exclusive-offers/${offer._id}`, 'DELETE')}
+                          onClick={async () => {
+                            if (window.confirm('Are you sure you want to remove this offer?')) {
+                              setExclusiveOffers(prev => prev.filter(item => item._id !== offer._id));
+                              const res = await executeAction(`/admin/exclusive-offers/${offer._id}`, 'DELETE');
+                              if (!res || !res.success) fetchData();
+                            }
+                          }}
                           className="text-rose-600 hover:text-rose-700 dark:text-rose-400 text-xs font-bold transition-colors cursor-pointer"
                         >
                           Remove

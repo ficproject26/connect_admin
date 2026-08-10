@@ -1284,13 +1284,14 @@ router.post('/banners', [auth, adminAuth], async (req, res) => {
     }
 });
 
-router.delete('/banners/:id', [auth, adminAuth], async (req, res) => {
+router.delete(['/banners/:id', '/banners/delete/:id'], [auth, adminAuth], async (req, res) => {
     try {
-        await Banner.findByIdAndDelete(req.params.id);
-        res.json({ msg: 'Banner deleted' });
+        const id = req.params.id;
+        const deleted = await Banner.findByIdAndDelete(id) || await Banner.deleteOne({ _id: id });
+        res.json({ msg: 'Banner deleted', success: true });
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
+        console.error('Error deleting banner:', err);
+        res.status(500).json({ error: 'Server error deleting banner', message: err.message });
     }
 });
 
