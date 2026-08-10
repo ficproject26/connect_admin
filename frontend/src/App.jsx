@@ -1798,8 +1798,6 @@ function App() {
                       const parts = area.split('/');
                       const name = parts.length > 2 ? parts[2].trim() : (parts.length > 1 ? parts[1].trim() : (parts[0]?.trim() || 'Division Territory'));
                       return { label: 'Division Territory', value: name };
-                    } else {
-                      const value = pin || (area ? area : '560072');
                       return { label: 'Pincode Territory', value: value };
                     }
                   };
@@ -1812,7 +1810,7 @@ function App() {
                       const lvl = (ag.level || 'pincode').toLowerCase();
 
                       // Determine State
-                      let stateName = 'Karnataka';
+                      let stateName = 'General State';
                       if (ag.assignedState) stateName = ag.assignedState.trim();
                       else if (ag.assignedArea) {
                         const parts = ag.assignedArea.split('/').map(s => s.trim());
@@ -1841,25 +1839,25 @@ function App() {
                       }
 
                       if (!hierarchyMap[stateName]) {
-                        hierarchyMap[stateName] = { stateName, stateAgent: null, districts: {} };
+                        hierarchyMap[stateName] = { stateName, stateAgents: [], districts: {} };
                       }
 
                       if (lvl === 'state') {
-                        hierarchyMap[stateName].stateAgent = ag;
+                        hierarchyMap[stateName].stateAgents.push(ag);
                       } else {
                         if (!hierarchyMap[stateName].districts[districtName]) {
-                          hierarchyMap[stateName].districts[districtName] = { districtName, districtAgent: null, divisions: {} };
+                          hierarchyMap[stateName].districts[districtName] = { districtName, districtAgents: [], divisions: {} };
                         }
 
                         if (lvl === 'district') {
-                          hierarchyMap[stateName].districts[districtName].districtAgent = ag;
+                          hierarchyMap[stateName].districts[districtName].districtAgents.push(ag);
                         } else {
                           if (!hierarchyMap[stateName].districts[districtName].divisions[divisionName]) {
-                            hierarchyMap[stateName].districts[districtName].divisions[divisionName] = { divisionName, divisionAgent: null, pincodeAgents: [] };
+                            hierarchyMap[stateName].districts[districtName].divisions[divisionName] = { divisionName, divisionAgents: [], pincodeAgents: [] };
                           }
 
                           if (['division', 'divisional'].includes(lvl)) {
-                            hierarchyMap[stateName].districts[districtName].divisions[divisionName].divisionAgent = ag;
+                            hierarchyMap[stateName].districts[districtName].divisions[divisionName].divisionAgents.push(ag);
                           } else if (lvl === 'pincode') {
                             hierarchyMap[stateName].districts[districtName].divisions[divisionName].pincodeAgents.push(ag);
                           }
@@ -1880,14 +1878,14 @@ function App() {
                               onClick={() => {
                                 const allKeys = {};
                                 stateEntries.forEach(s => {
-                                  if (s.stateAgent) allKeys[s.stateAgent._id] = true;
                                   allKeys[s.stateName] = true;
+                                  s.stateAgents.forEach(sa => { allKeys[sa._id] = true; });
                                   Object.values(s.districts).forEach(d => {
-                                    if (d.districtAgent) allKeys[d.districtAgent._id] = true;
                                     allKeys[d.districtName] = true;
+                                    d.districtAgents.forEach(da => { allKeys[da._id] = true; });
                                     Object.values(d.divisions).forEach(v => {
-                                      if (v.divisionAgent) allKeys[v.divisionAgent._id] = true;
                                       allKeys[v.divisionName] = true;
+                                      v.divisionAgents.forEach(va => { allKeys[va._id] = true; });
                                     });
                                   });
                                 });
@@ -1909,14 +1907,14 @@ function App() {
 
                         <div className="p-6 space-y-6 bg-slate-50/40 dark:bg-slate-950/20">
                           {stateEntries.map((stObj) => {
-                            const stAgent = stObj.stateAgent;
-                            const stKey = stAgent ? stAgent._id : stObj.stateName;
+                            const stKey = stObj.stateName;
                             const isStExpanded = expandedAgents[stKey] !== false; // expanded by default
                             const districtList = Object.values(stObj.districts);
+                            const totalDistrictAgents = districtList.reduce((sum, d) => sum + d.districtAgents.length, 0);
 
                             return (
                               <div key={stKey} className="bg-white dark:bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-5 shadow-sm space-y-4 transition-all">
-                                {/* State Agent Card Header */}
+                                {/* State Header */}
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800">
                                   <div className="flex items-center gap-3">
                                     <button
@@ -1928,59 +1926,61 @@ function App() {
                                       <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
                                     </button>
 
-                                    <div
-                                      onClick={() => stAgent && (setModalData(stAgent), setShowModal('agent-scorecard'))}
-                                      className="cursor-pointer group"
-                                    >
+                                    <div>
                                       <div className="flex items-center gap-2 flex-wrap">
                                         <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                                          STATE AGENT
+                                          STATE TERRITORY
                                         </span>
                                         <span className="text-xs font-mono text-slate-400 font-bold">
-                                          ID: {stAgent ? `AG-STAT-${String(stAgent._id).slice(-4)}` : 'N/A'}
-                                        </span>
-                                        <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full capitalize ${stAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500'}`}>
-                                          {stAgent?.status || 'Approved'}
+                                          {stObj.stateAgents.length} State Agent(s)
                                         </span>
                                       </div>
 
-                                      <h4 className="text-xl font-black text-slate-850 dark:text-slate-100 mt-1 group-hover:text-blue-500 transition-colors">
-                                        {stAgent ? formatAgentNameWithPincode(stAgent) : `${stObj.stateName} State`}
+                                      <h4 className="text-xl font-black text-slate-850 dark:text-slate-100 mt-1">
+                                        {stObj.stateName} State
                                       </h4>
-                                      <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
-                                        <MapPin className="w-3.5 h-3.5 text-blue-500" /> State Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{stObj.stateName}</span>
-                                      </p>
                                     </div>
                                   </div>
-
-                                  {stAgent && (
-                                    <div className="flex items-center gap-2 justify-end">
-                                      <button
-                                        onClick={() => { setModalData(stAgent); setShowModal('agent-profile'); }}
-                                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm transition-all cursor-pointer"
-                                      >
-                                        View Profile
-                                      </button>
-                                    </div>
-                                  )}
                                 </div>
+
+                                {/* State Agents Cards (if any exist) */}
+                                {stObj.stateAgents.map((stAgent) => (
+                                  <div key={stAgent._id} className="bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div onClick={() => { setModalData(stAgent); setShowModal('agent-scorecard'); }} className="cursor-pointer group">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">STATE AGENT</span>
+                                        <span className="text-xs font-mono text-slate-400 font-bold">ID: AG-STAT-{String(stAgent._id).slice(-4)}</span>
+                                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${stAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500'}`}>
+                                          {stAgent?.status || 'Approved'}
+                                        </span>
+                                      </div>
+                                      <h5 className="text-base font-black text-slate-850 dark:text-slate-100 mt-1 group-hover:text-blue-500 transition-colors">
+                                        {formatAgentNameWithPincode(stAgent)}
+                                      </h5>
+                                      <p className="text-xs text-slate-500 font-semibold mt-0.5">{stAgent.email} • {stAgent.phone}</p>
+                                    </div>
+                                    <button onClick={() => { setModalData(stAgent); setShowModal('agent-profile'); }} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center">
+                                      View Profile
+                                    </button>
+                                  </div>
+                                ))}
 
                                 {/* District Agents Container */}
                                 {isStExpanded && (
                                   <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-amber-400 dark:border-amber-600/70 space-y-4 pt-2">
                                     <h5 className="text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">
-                                      DISTRICT AGENTS ({districtList.length})
+                                      DISTRICT AGENTS ({totalDistrictAgents})
                                     </h5>
 
                                     {districtList.map((distObj) => {
-                                      const distAgent = distObj.districtAgent;
-                                      const distKey = distAgent ? distAgent._id : distObj.districtName;
+                                      const distKey = distObj.districtName;
                                       const isDistExpanded = expandedAgents[distKey] !== false; // expanded by default
                                       const divList = Object.values(distObj.divisions);
+                                      const totalDivisionalAgents = divList.reduce((sum, v) => sum + v.divisionAgents.length, 0);
 
                                       return (
                                         <div key={distKey} className="bg-white dark:bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-4 shadow-sm space-y-3">
-                                          {/* District Agent Header */}
+                                          {/* District Territory Header */}
                                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 dark:border-slate-800">
                                             <div className="flex items-center gap-3">
                                               <button
@@ -1992,53 +1992,50 @@ function App() {
                                                 <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
                                               </button>
 
-                                              <div
-                                                onClick={() => distAgent && (setModalData(distAgent), setShowModal('agent-scorecard'))}
-                                                className="cursor-pointer group"
-                                              >
+                                              <div>
+                                                <span className="bg-amber-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                                                  DISTRICT TERRITORY
+                                                </span>
+                                                <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5">
+                                                  {distObj.districtName} District ({distObj.districtAgents.length} Agent(s))
+                                                </h5>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* District Agent Cards */}
+                                          {distObj.districtAgents.map((distAgent) => (
+                                            <div key={distAgent._id} className="bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                              <div onClick={() => { setModalData(distAgent); setShowModal('agent-scorecard'); }} className="cursor-pointer group">
                                                 <div className="flex items-center gap-2 flex-wrap">
-                                                  <span className="bg-amber-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                                                    DISTRICT AGENT
-                                                  </span>
-                                                  <span className="text-xs font-mono text-slate-400 font-bold">
-                                                    ID: {distAgent ? `AG-DIST-${String(distAgent._id).slice(-4)}` : 'N/A'}
-                                                  </span>
+                                                  <span className="bg-amber-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">DISTRICT AGENT</span>
+                                                  <span className="text-xs font-mono text-slate-400 font-bold">ID: AG-DIST-{String(distAgent._id).slice(-4)}</span>
                                                   <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${distAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
                                                     {distAgent?.status || 'Approved'}
                                                   </span>
                                                 </div>
-
                                                 <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-amber-500 transition-colors">
-                                                  {distAgent ? formatAgentNameWithPincode(distAgent) : distObj.districtName}
+                                                  {formatAgentNameWithPincode(distAgent)}
                                                 </h5>
                                                 <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
-                                                  <MapPin className="w-3 h-3 text-amber-500" /> District Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{distObj.districtName}</span>
+                                                  <MapPin className="w-3 h-3 text-amber-500" /> District Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{distObj.districtName}</span> ({distAgent.email})
                                                 </p>
                                               </div>
+                                              <button onClick={() => { setModalData(distAgent); setShowModal('agent-profile'); }} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center">
+                                                View Profile
+                                              </button>
                                             </div>
-
-                                            {distAgent && (
-                                              <div className="flex items-center gap-2 justify-end">
-                                                <button
-                                                  onClick={() => { setModalData(distAgent); setShowModal('agent-profile'); }}
-                                                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm transition-all cursor-pointer"
-                                                >
-                                                  View Profile
-                                                </button>
-                                              </div>
-                                            )}
-                                          </div>
+                                          ))}
 
                                           {/* Divisional Agents Container */}
                                           {isDistExpanded && (
                                             <div className="ml-2 sm:ml-5 pl-3 sm:pl-4 border-l-2 border-purple-400 dark:border-purple-600/70 space-y-3 pt-2">
                                               <h6 className="text-xs font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">
-                                                DIVISIONAL AGENTS ({divList.length})
+                                                DIVISIONAL AGENTS ({totalDivisionalAgents})
                                               </h6>
 
                                               {divList.map((divObj) => {
-                                                const divAgent = divObj.divisionAgent;
-                                                const divKey = divAgent ? divAgent._id : divObj.divisionName;
+                                                const divKey = divObj.divisionName;
                                                 const isDivExpanded = expandedAgents[divKey] !== false; // expanded by default
                                                 const pinAgents = divObj.pincodeAgents;
 
@@ -2056,38 +2053,35 @@ function App() {
                                                           <ChevronRight className={`w-3 h-3 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
                                                         </button>
 
-                                                        <div
-                                                          onClick={() => divAgent && (setModalData(divAgent), setShowModal('agent-scorecard'))}
-                                                          className="cursor-pointer group"
-                                                        >
-                                                          <div className="flex items-center gap-2 flex-wrap">
-                                                            <span className="bg-purple-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                                                              DIVISIONAL AGENT
-                                                            </span>
-                                                            <span className="text-[11px] font-mono text-slate-400 font-bold">
-                                                              ID: {divAgent ? `AG-DIV-${String(divAgent._id).slice(-4)}` : 'N/A'}
-                                                            </span>
-                                                          </div>
-                                                          <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-purple-500 transition-colors">
-                                                            {divAgent ? formatAgentNameWithPincode(divAgent) : divObj.divisionName}
+                                                        <div>
+                                                          <span className="bg-purple-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">DIVISION TERRITORY</span>
+                                                          <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5">
+                                                            {divObj.divisionName} Division ({divObj.divisionAgents.length} Agent(s))
                                                           </h6>
-                                                          <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
-                                                            <MapPin className="w-3 h-3 text-purple-500" /> Division Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{divObj.divisionName}</span>
-                                                          </p>
                                                         </div>
                                                       </div>
-
-                                                      {divAgent && (
-                                                        <div className="flex items-center gap-2 justify-end">
-                                                          <button
-                                                            onClick={() => { setModalData(divAgent); setShowModal('agent-profile'); }}
-                                                            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm transition-all cursor-pointer"
-                                                          >
-                                                            View Profile
-                                                          </button>
-                                                        </div>
-                                                      )}
                                                     </div>
+
+                                                    {/* Division Agent Cards */}
+                                                    {divObj.divisionAgents.map((divAgent) => (
+                                                      <div key={divAgent._id} className="bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                        <div onClick={() => { setModalData(divAgent); setShowModal('agent-scorecard'); }} className="cursor-pointer group">
+                                                          <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className="bg-purple-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase">DIVISIONAL AGENT</span>
+                                                            <span className="text-[11px] font-mono text-slate-400 font-bold">ID: AG-DIV-{String(divAgent._id).slice(-4)}</span>
+                                                          </div>
+                                                          <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-purple-500 transition-colors">
+                                                            {formatAgentNameWithPincode(divAgent)}
+                                                          </h6>
+                                                          <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                            <MapPin className="w-3 h-3 text-purple-500" /> Division Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{divObj.divisionName}</span> ({divAgent.email})
+                                                          </p>
+                                                        </div>
+                                                        <button onClick={() => { setModalData(divAgent); setShowModal('agent-profile'); }} className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center">
+                                                          View Profile
+                                                        </button>
+                                                      </div>
+                                                    ))}
 
                                                     {/* Pincode Agents Container */}
                                                     {isDivExpanded && (
@@ -2112,7 +2106,7 @@ function App() {
                                                                 >
                                                                   <span className="font-bold text-xs text-slate-850 dark:text-slate-100 block group-hover:text-emerald-500 transition-colors">{pinName}</span>
                                                                   <span className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
-                                                                    <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{pinCode || '560096'}</span>
+                                                                    <MapPin className="w-3 h-3 text-emerald-500" /> Pincode: <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{pinCode || '560096'}</span> ({pinAgent.email})
                                                                   </span>
                                                                 </div>
                                                               </div>
