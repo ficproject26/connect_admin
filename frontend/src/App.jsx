@@ -1235,7 +1235,7 @@ function App() {
                   <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
                     <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Revenue Overview</h3>
                     <div className="h-72 min-h-[288px] w-full min-w-0">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 288 }}>
                         <AreaChart data={stats?.charts?.revenueOverview || stats?.revenueTrend || []}>
                           <defs>
                             <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
@@ -1257,7 +1257,7 @@ function App() {
                   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
                     <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Category Wise Revenue</h3>
                     <div className="h-72 min-h-[288px] w-full min-w-0">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 288 }}>
                         <PieChart>
                           <Pie
                             data={stats?.charts?.categoryWiseRevenue || []}
@@ -1287,7 +1287,7 @@ function App() {
                   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
                     <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">District Wise Performance</h3>
                     <div className="h-64 min-h-[256px] w-full min-w-0">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 256 }}>
                         <BarChart data={stats?.charts?.branchWiseRevenue || []}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} />
                           <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />

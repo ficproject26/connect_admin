@@ -424,7 +424,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             </h4>
           </div>
           <div className="h-64 min-h-[256px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 256 }}>
               <LineChart data={chartsData?.lineChartData || []}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="period" stroke="#94a3b8" fontSize={11} />
@@ -446,7 +446,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             </h4>
           </div>
           <div className="h-64 min-h-[256px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 256 }}>
               <BarChart data={chartsData?.barChartRevenue || []}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="category" stroke="#94a3b8" fontSize={11} />
@@ -466,7 +466,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             </h4>
           </div>
           <div className="h-64 min-h-[256px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 256 }}>
               <PieChart>
                 <Pie data={chartsData?.pieChartCategory || []} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
                   {(chartsData?.pieChartCategory || []).map((entry, index) => (
@@ -488,7 +488,7 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
             </h4>
           </div>
           <div className="h-64 min-h-[256px] w-full min-w-0">
-            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 256 }}>
               <AreaChart data={chartsData?.areaChartRegistrations || []}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
