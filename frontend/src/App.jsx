@@ -6,7 +6,7 @@ import {
   Search, Filter, ChevronRight, Download, CreditCard, Clock,
   ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, EyeOff, UploadCloud, Bell, User,
   Briefcase, Truck, Headphones, Folder, HelpCircle, MessageSquare, Megaphone, ShoppingBag, Calendar, Contact,
-  MoreVertical, RotateCcw, LayoutGrid, List, Smartphone, Laptop, Tv, Home, Shirt, Sparkles, Package, Utensils, Tag, Activity, ArrowRight, ChevronLeft, Lock, Store, Shield
+  MoreVertical, RotateCcw, LayoutGrid, List, Smartphone, Laptop, Tv, Home, Shirt, Sparkles, Package, Utensils, Tag, Activity, ArrowRight, ChevronLeft, Lock, Store, Shield, Ban
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -2775,23 +2775,48 @@ function App() {
                         </div>
                       </div>
 
-                      <div className="flex gap-2 justify-end flex-wrap">
-                        {vendor.status?.toLowerCase() !== 'approved' && (
+                      <div className="flex gap-2 justify-end flex-wrap items-center">
+                        {vendor.status?.toLowerCase() === 'approved' ? (
                           <button
-                            onClick={() => executeAction(`/admin/vendors/${vendor._id}/approve`, 'PUT', {})}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
-                            title="Direct Approval for this Vendor"
+                            onClick={() => executeAction(`/admin/vendors/${vendor._id}/suspend`, 'PUT', {})}
+                            className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                            title="Suspend this vendor"
                           >
-                            <CheckCircle size={14} /> Direct Approval
+                            <Ban size={13} /> Suspend
                           </button>
-                        )}
-                        {vendor.status?.toLowerCase() !== 'rejected' && (
-                          <button
-                            onClick={() => executeAction(`/admin/vendors/${vendor._id}/reject`, 'PUT', {})}
-                            className="bg-slate-100 hover:bg-rose-500/10 dark:bg-slate-800 hover:text-rose-500 text-slate-600 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer"
-                          >
-                            Reject
-                          </button>
+                        ) : vendor.status?.toLowerCase() === 'suspended' ? (
+                          <>
+                            <button
+                              onClick={() => executeAction(`/admin/vendors/${vendor._id}/approve`, 'PUT', {})}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                              title="Approve this vendor"
+                            >
+                              <CheckCircle size={14} /> Approve
+                            </button>
+                            <button
+                              onClick={() => executeAction(`/admin/vendors/${vendor._id}/suspend`, 'PUT', {})}
+                              className="bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                              title="Keep Suspended"
+                            >
+                              <Ban size={13} /> Suspended
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => executeAction(`/admin/vendors/${vendor._id}/approve`, 'PUT', {})}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                              title="Direct Approval for this Vendor"
+                            >
+                              <CheckCircle size={14} /> Direct Approval
+                            </button>
+                            <button
+                              onClick={() => executeAction(`/admin/vendors/${vendor._id}/reject`, 'PUT', {})}
+                              className="bg-slate-100 hover:bg-rose-500/10 dark:bg-slate-800 hover:text-rose-500 text-slate-600 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => {

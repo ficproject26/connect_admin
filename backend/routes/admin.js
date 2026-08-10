@@ -895,6 +895,23 @@ router.post('/vendors', [auth, adminAuth], async (req, res) => {
     }
 });
 
+const buildProductVendorQuery = (v) => {
+    if (!v) return { _id: null };
+    const vIdStr = (v._id || '').toString();
+    const vPrefix = vIdStr.length >= 16 ? vIdStr.substring(0, 16) : vIdStr;
+    const idRegex = new RegExp('^' + vPrefix);
+    const orConds = [
+        { vendorId: v._id },
+        { vendorId: vIdStr },
+        { vendorId: idRegex }
+    ];
+    if (v.email) orConds.push({ vendorEmail: v.email.toLowerCase().trim() });
+    if (v.phone) orConds.push({ vendorPhone: v.phone.replace(/\D/g, '') });
+    const name = v.businessName || v.name;
+    if (name) orConds.push({ vendorName: new RegExp('^' + name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') });
+    return { $or: orConds };
+};
+
 router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
     try {
         let vendor = await User.findById(req.params.id);
@@ -904,8 +921,8 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
             vendor.isApproved = true;
             await vendor.save();
             await Product.updateMany(
-                { $or: [{ vendorId: vendor._id }, { vendorEmail: vendor.email }, { vendorPhone: vendor.phone }] },
-                { $set: { vendorStatus: 'approved', isVendorSuspended: false, isActive: true, isAvailable: true } }
+                buildProductVendorQuery(vendor),
+                { $set: { vendorStatus: 'approved', isVendorSuspended: false, isSuspended: false, isActive: true, isAvailable: true } }
             ).catch(() => {});
             return res.json(vendor);
         }
@@ -915,8 +932,8 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
             legacy.isActive = true;
             await legacy.save();
             await Product.updateMany(
-                { $or: [{ vendorId: legacy._id }, { vendorEmail: legacy.email }, { vendorPhone: legacy.phone }] },
-                { $set: { vendorStatus: 'approved', isVendorSuspended: false, isActive: true, isAvailable: true } }
+                buildProductVendorQuery(legacy),
+                { $set: { vendorStatus: 'approved', isVendorSuspended: false, isSuspended: false, isActive: true, isAvailable: true } }
             ).catch(() => {});
             return res.json(legacy);
         }
@@ -936,8 +953,8 @@ router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
             vendor.isApproved = false;
             await vendor.save();
             await Product.updateMany(
-                { $or: [{ vendorId: vendor._id }, { vendorEmail: vendor.email }, { vendorPhone: vendor.phone }] },
-                { $set: { vendorStatus: 'rejected', isVendorSuspended: true, isActive: false } }
+                buildProductVendorQuery(vendor),
+                { $set: { vendorStatus: 'rejected', isVendorSuspended: true, isSuspended: true, isActive: false } }
             ).catch(() => {});
             return res.json(vendor);
         }
@@ -947,8 +964,8 @@ router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
             legacy.isActive = false;
             await legacy.save();
             await Product.updateMany(
-                { $or: [{ vendorId: legacy._id }, { vendorEmail: legacy.email }, { vendorPhone: legacy.phone }] },
-                { $set: { vendorStatus: 'rejected', isVendorSuspended: true, isActive: false } }
+                buildProductVendorQuery(legacy),
+                { $set: { vendorStatus: 'rejected', isVendorSuspended: true, isSuspended: true, isActive: false } }
             ).catch(() => {});
             return res.json(legacy);
         }
@@ -968,8 +985,8 @@ router.put('/vendors/:id/suspend', [auth, adminAuth], async (req, res) => {
             vendor.isApproved = false;
             await vendor.save();
             await Product.updateMany(
-                { $or: [{ vendorId: vendor._id }, { vendorEmail: vendor.email }, { vendorPhone: vendor.phone }] },
-                { $set: { vendorStatus: 'suspended', isVendorSuspended: true, isActive: false } }
+                buildProductVendorQuery(vendor),
+                { $set: { vendorStatus: 'suspended', isVendorSuspended: true, isSuspended: true, isActive: false } }
             ).catch(() => {});
             return res.json(vendor);
         }
@@ -979,8 +996,8 @@ router.put('/vendors/:id/suspend', [auth, adminAuth], async (req, res) => {
             legacy.isActive = false;
             await legacy.save();
             await Product.updateMany(
-                { $or: [{ vendorId: legacy._id }, { vendorEmail: legacy.email }, { vendorPhone: legacy.phone }] },
-                { $set: { vendorStatus: 'suspended', isVendorSuspended: true, isActive: false } }
+                buildProductVendorQuery(legacy),
+                { $set: { vendorStatus: 'suspended', isVendorSuspended: true, isSuspended: true, isActive: false } }
             ).catch(() => {});
             return res.json(legacy);
         }
@@ -996,24 +1013,26 @@ router.put('/vendors/:id/toggle-status', [auth, adminAuth], async (req, res) => 
         let vendor = await User.findById(req.params.id);
         if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
             const isNowApproved = !(vendor.status === 'Approved' || vendor.status === 'approved');
-            vendor.status = isNowApproved ? 'Approved' : 'Rejected';
+            const targetStatus = isNowApproved ? 'Approved' : 'Suspended';
+            vendor.status = targetStatus;
             vendor.isActive = isNowApproved;
             await vendor.save();
             await Product.updateMany(
-                { $or: [{ vendorId: vendor._id }, { vendorEmail: vendor.email }, { vendorPhone: vendor.phone }] },
-                { $set: { vendorStatus: isNowApproved ? 'approved' : 'rejected', isVendorSuspended: !isNowApproved, isActive: isNowApproved } }
+                buildProductVendorQuery(vendor),
+                { $set: { vendorStatus: targetStatus.toLowerCase(), isVendorSuspended: !isNowApproved, isSuspended: !isNowApproved, isActive: isNowApproved, isAvailable: isNowApproved } }
             ).catch(() => {});
             return res.json(vendor);
         }
         let legacy = await Vendor.findById(req.params.id);
         if (legacy) {
             const isNowApproved = !(legacy.status === 'approved');
-            legacy.status = isNowApproved ? 'approved' : 'rejected';
+            const targetStatus = isNowApproved ? 'approved' : 'suspended';
+            legacy.status = targetStatus;
             legacy.isActive = isNowApproved;
             await legacy.save();
             await Product.updateMany(
-                { $or: [{ vendorId: legacy._id }, { vendorEmail: legacy.email }, { vendorPhone: legacy.phone }] },
-                { $set: { vendorStatus: isNowApproved ? 'approved' : 'rejected', isVendorSuspended: !isNowApproved, isActive: isNowApproved } }
+                buildProductVendorQuery(legacy),
+                { $set: { vendorStatus: targetStatus.toLowerCase(), isVendorSuspended: !isNowApproved, isSuspended: !isNowApproved, isActive: isNowApproved, isAvailable: isNowApproved } }
             ).catch(() => {});
             return res.json(legacy);
         }
@@ -1072,16 +1091,16 @@ router.put('/vendors/:id/status', [auth, adminAuth], async (req, res) => {
             vendor.isActive = isApproved;
             await vendor.save();
             await Product.updateMany(
-                { $or: [{ vendorId: vendor._id }, { vendorEmail: vendor.email }, { vendorPhone: vendor.phone }] },
-                { $set: { vendorStatus: (status || '').toLowerCase(), isVendorSuspended: !isApproved, isActive: isApproved } }
+                buildProductVendorQuery(vendor),
+                { $set: { vendorStatus: (status || '').toLowerCase(), isVendorSuspended: !isApproved, isSuspended: !isApproved, isActive: isApproved, isAvailable: isApproved } }
             ).catch(() => {});
             return res.json(vendor);
         }
         let legacy = await Vendor.findByIdAndUpdate(req.params.id, { status, isActive: isApproved }, { new: true });
         if (legacy) {
             await Product.updateMany(
-                { $or: [{ vendorId: legacy._id }, { vendorEmail: legacy.email }, { vendorPhone: legacy.phone }] },
-                { $set: { vendorStatus: (status || '').toLowerCase(), isVendorSuspended: !isApproved, isActive: isApproved } }
+                buildProductVendorQuery(legacy),
+                { $set: { vendorStatus: (status || '').toLowerCase(), isVendorSuspended: !isApproved, isSuspended: !isApproved, isActive: isApproved, isAvailable: isApproved } }
             ).catch(() => {});
         }
         res.json(legacy);
