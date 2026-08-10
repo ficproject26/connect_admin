@@ -570,14 +570,73 @@ const handleAgentStatusUpdate = async (req, res) => {
                 }
             }
 
-            // Unbind pincode assignment if agent is suspended/rejected/inactive
+            // Unbind pincode assignment & propagate suspension/approval to associated vendors and products
             if (agent.status === 'suspended' || agent.status === 'rejected' || agent.status === 'inactive' || !agent.isActive) {
                 if (agent.assignedPincode) {
                     await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: null });
                 }
                 await Pincode.updateMany({ activeAgentId: agent._id }, { $set: { activeAgentId: null } });
+
+                try {
+                    const agentVendorUsers = await User.find({
+                        $or: [
+                            { agentId: agent._id },
+                            { createdBy: agent._id },
+                            { assignedAgentId: agent._id },
+                            ...(agent.assignedPincode ? [{ pincode: agent.assignedPincode }] : [])
+                        ]
+                    }).distinct('_id');
+
+                    const allVendorIdsToSuspend = [...agentVendorUsers, agent._id];
+
+                    await User.updateMany(
+                        { _id: { $in: agentVendorUsers } },
+                        { $set: { status: 'Suspended', isActive: false, isApproved: false } }
+                    ).catch(e => console.error("Error updating agent vendors User status:", e));
+
+                    await Vendor.updateMany(
+                        { _id: { $in: agentVendorUsers } },
+                        { $set: { status: 'Suspended', isActive: false } }
+                    ).catch(e => console.error("Error updating agent vendors Vendor status:", e));
+
+                    await Product.updateMany(
+                        { vendorId: { $in: allVendorIdsToSuspend } },
+                        { $set: { status: 'Suspended', isActive: false, isAvailable: false } }
+                    ).catch(e => console.error("Error updating agent products status:", e));
+                } catch (propErr) {
+                    console.error("Error propagating agent suspension to vendors/products:", propErr);
+                }
             } else if (agent.status === 'approved' && agent.assignedPincode) {
                 await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: agent._id });
+
+                try {
+                    const agentVendorUsers = await User.find({
+                        $or: [
+                            { agentId: agent._id },
+                            { createdBy: agent._id },
+                            { assignedAgentId: agent._id }
+                        ]
+                    }).distinct('_id');
+
+                    const allVendorIdsToActivate = [...agentVendorUsers, agent._id];
+
+                    await User.updateMany(
+                        { _id: { $in: agentVendorUsers }, role: 'vendor' },
+                        { $set: { status: 'Active', isActive: true, isApproved: true } }
+                    ).catch(e => console.error("Error activating agent vendors User status:", e));
+
+                    await Vendor.updateMany(
+                        { _id: { $in: agentVendorUsers } },
+                        { $set: { status: 'Active', isActive: true } }
+                    ).catch(e => console.error("Error activating agent vendors Vendor status:", e));
+
+                    await Product.updateMany(
+                        { vendorId: { $in: allVendorIdsToActivate } },
+                        { $set: { status: 'Active', isActive: true, isAvailable: true } }
+                    ).catch(e => console.error("Error activating agent products status:", e));
+                } catch (propErr) {
+                    console.error("Error propagating agent approval to vendors/products:", propErr);
+                }
             }
 
             return res.json({ msg: `Agent status updated to ${agent.status}`, agent });
@@ -2112,11 +2171,28 @@ router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
     }
 });
 
-// GET all products
+// GET all products (Filtered for active & approved vendors/agents)
 router.get(['/products', '/'], async (req, res) => {
     try {
-        const products = await Product.find().sort({ createdAt: -1 });
-        res.json(products);
+        const rawProducts = await Product.find()
+            .populate('vendorId', 'name email status isActive role')
+            .sort({ createdAt: -1 });
+
+        const filteredProducts = rawProducts.filter(p => {
+            if (p.isActive === false || p.isAvailable === false) return false;
+            const pStatus = (p.status || '').toLowerCase();
+            if (pStatus === 'suspended' || pStatus === 'inactive' || pStatus === 'rejected') return false;
+
+            if (p.vendorId && typeof p.vendorId === 'object') {
+                const vStatus = (p.vendorId.status || '').toLowerCase();
+                if (vStatus === 'suspended' || vStatus === 'inactive' || vStatus === 'rejected' || p.vendorId.isActive === false) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        res.json(filteredProducts);
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Server error fetching products', error: err.message });
