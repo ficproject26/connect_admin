@@ -26,6 +26,7 @@ const SupportTicket = require('../models/SupportTicket');
 const Announcement = require('../models/Announcement');
 const ExclusiveOffer = require('../models/ExclusiveOffer');
 const Category = require('../models/Category');
+const Product = require('../models/Product');
 const { validateIndianMobile } = require('../utils/inputValidator');
 
 const adminAuth = async (req, res, next) => {
@@ -693,7 +694,7 @@ router.post('/pincodes/remove', [auth, adminAuth], async (req, res) => {
 // ==========================================
 // 6. VENDOR MANAGEMENT
 // ==========================================
-router.get('/vendors', [auth, adminAuth], async (req, res) => {
+router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
         let usersVendors = [];
@@ -2065,7 +2066,7 @@ const resolveVendorAndCustomer = async (items) => {
 };
 
 // GET all orders
-router.get('/orders', [auth, adminAuth], async (req, res) => {
+router.get(['/orders', '/'], [auth, adminAuth], async (req, res) => {
     try {
         const rawOrders = await Order.find({ type: { $nin: ['Booking', 'Job', 'Stay', 'Travel', 'Jobs'] } })
             .sort({ createdAt: -1 });
@@ -2074,7 +2075,53 @@ router.get('/orders', [auth, adminAuth], async (req, res) => {
         res.json(resolvedOrders);
     } catch (err) {
         console.error(err);
-        res.status(500).send('Server error');
+        res.status(500).json({ success: false, message: 'Server error fetching orders', error: err.message });
+    }
+});
+
+// POST new order
+router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
+    try {
+        const newOrder = new Order(req.body);
+        await newOrder.save();
+        res.status(201).json({ success: true, message: 'Order created successfully', data: newOrder });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error creating order', error: err.message });
+    }
+});
+
+// GET all products
+router.get(['/products', '/'], async (req, res) => {
+    try {
+        const products = await Product.find().sort({ createdAt: -1 });
+        res.json(products);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Server error fetching products', error: err.message });
+    }
+});
+
+// POST new product
+router.post(['/products', '/'], [auth, adminAuth], async (req, res) => {
+    try {
+        const newProduct = new Product(req.body);
+        await newProduct.save();
+        res.status(201).json({ success: true, message: 'Product created successfully', data: newProduct });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error creating product', error: err.message });
+    }
+});
+
+// GET all users
+router.get(['/users', '/'], [auth, adminAuth], async (req, res) => {
+    try {
+        const users = await User.find().select('-password').sort({ createdAt: -1 });
+        res.json(users);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Server error fetching users', error: err.message });
     }
 });
 

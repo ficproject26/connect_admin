@@ -32,8 +32,14 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
         origin: '*',
-        methods: ['GET', 'POST', 'PUT', 'DELETE']
-    }
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization'],
+        credentials: true
+    },
+    transports: ['websocket', 'polling'],
+    allowUpgrades: true,
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
 // Make io accessible in routes via req.app.get('io')
@@ -50,8 +56,8 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('disconnect', () => {
-        console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
+    socket.on('disconnect', (reason) => {
+        console.log(`[Socket.IO] Client disconnected (${socket.id}): ${reason}`);
     });
 });
 
@@ -66,6 +72,31 @@ app.use('/api/public', require('./routes/admin'));
 app.use('/api/agent', require('./routes/agent'));
 app.use('/api/pincodes', require('./routes/pincodes'));
 app.use('/api/payment', require('./routes/payment'));
+
+// Top-level Route Aliases for Standard REST Paths
+app.use('/api/orders', require('./routes/admin'));
+app.use('/api/products', require('./routes/admin'));
+app.use('/api/vendors', require('./routes/admin'));
+app.use('/api/users', require('./routes/admin'));
+
+// 404 Handler for unmapped API routes
+app.use('/api', (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `API route not found: ${req.method} ${req.originalUrl}`,
+        error: 'Route Not Found'
+    });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error('Global Error Handler:', err);
+    res.status(err.status || 500).json({
+        success: false,
+        message: err.message || 'Internal Server Error',
+        error: process.env.NODE_ENV === 'production' ? 'Server Error' : err.stack
+    });
+});
 
 // Auto-seed admin user if it doesn't exist
 const seedAdminUser = async () => {
