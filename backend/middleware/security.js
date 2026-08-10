@@ -5,13 +5,12 @@ const AuditLog = require('../models/AuditLog');
 // 1. HELMET SECURITY HEADERS MIDDLEWARE
 const applySecurityHeaders = (req, res, next) => {
     const origin = req.headers.origin;
-    if (origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-        const reqHeaders = req.headers['access-control-request-headers'];
-        res.setHeader('Access-Control-Allow-Headers', reqHeaders || 'x-auth-token, Content-Type, Authorization, Cache-Control, Pragma, Expires, expires, x-requested-with');
-    }
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    const reqHeaders = req.headers['access-control-request-headers'];
+    res.setHeader('Access-Control-Allow-Headers', reqHeaders || 'x-auth-token, Content-Type, Authorization, Cache-Control, Pragma, Expires, expires, x-requested-with');
+
     if (req.method === 'OPTIONS') {
         return res.sendStatus(204);
     }
