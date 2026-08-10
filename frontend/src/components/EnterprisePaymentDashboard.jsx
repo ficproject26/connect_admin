@@ -133,8 +133,8 @@ export const EnterprisePaymentDashboard = ({ token, API_BASE }) => {
             <span className="text-xs font-bold text-slate-400">Monthly Cash Flow</span>
           </div>
 
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-h-[256px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <AreaChart data={revenueTrendData}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.1} />
                 <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
@@ -153,8 +153,8 @@ export const EnterprisePaymentDashboard = ({ token, API_BASE }) => {
             <PieIcon className="w-5 h-5 text-purple-500" /> Payment Distribution
           </h3>
 
-          <div className="h-48 flex justify-center">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-48 min-h-[192px] w-full min-w-0 flex justify-center">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <PieChart>
                 <Pie data={paymentDistributionData} innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value">
                   {paymentDistributionData.map((entry, index) => (

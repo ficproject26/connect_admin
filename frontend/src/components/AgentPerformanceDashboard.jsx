@@ -423,8 +423,8 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
               <TrendingUp className="w-4 h-4 text-primary-500" /> Agent Performance Trend (Actual vs Target)
             </h4>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-h-[256px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <LineChart data={chartsData?.lineChartData || []}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="period" stroke="#94a3b8" fontSize={11} />
@@ -445,8 +445,8 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
               <BarChart3 className="w-4 h-4 text-emerald-500" /> Revenue Generation by Agent Tier
             </h4>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-h-[256px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <BarChart data={chartsData?.barChartRevenue || []}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="category" stroke="#94a3b8" fontSize={11} />
@@ -465,8 +465,8 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
               <PieChartIcon className="w-4 h-4 text-blue-500" /> Agent Network Distribution
             </h4>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-h-[256px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <PieChart>
                 <Pie data={chartsData?.pieChartCategory || []} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
                   {(chartsData?.pieChartCategory || []).map((entry, index) => (
@@ -487,8 +487,8 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
               <Activity className="w-4 h-4 text-purple-500" /> Customer Registrations Growth
             </h4>
           </div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64 min-h-[256px] w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <AreaChart data={chartsData?.areaChartRegistrations || []}>
                 <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
                 <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />

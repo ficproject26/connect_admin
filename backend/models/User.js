@@ -12,9 +12,10 @@ const UserSchema = new mongoose.Schema({
     assignedPincode: { type: mongoose.Schema.Types.ObjectId, ref: 'Pincode' },
     assignedDistrict: { type: String }, // For district agents / admin
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' }, // For branch admin / staff / agents
+    referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Referred by agent / parent user
     adminRole: { type: String, enum: ['super-admin', 'branch-admin', 'staff'], default: 'staff' },
     registrationId: { type: String },
-    
+
     // Vendor profile fields
     vendorType: { type: String },
     category: { type: String },
@@ -53,7 +54,7 @@ const UserSchema = new mongoose.Schema({
     refreshToken: { type: String, default: '' },
 
     createdAt: { type: Date, default: Date.now }
-});
+}, { strictPopulate: false });
 
 const castIdToObjectId = (val) => {
     if (val && typeof val === 'object' && (val.$in || val.$eq || val.$nin || val.$ne)) {

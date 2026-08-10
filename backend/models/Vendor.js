@@ -28,6 +28,6 @@ const VendorSchema = new mongoose.Schema({
     totalRevenue: { type: Number, default: 0 },
     totalBookings: { type: Number, default: 0 },
     createdAt: { type: Date, default: Date.now }
-});
+}, { strictPopulate: false });
 
 module.exports = mongoose.model('Vendor', VendorSchema);

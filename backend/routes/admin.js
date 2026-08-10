@@ -696,34 +696,48 @@ router.post('/pincodes/remove', [auth, adminAuth], async (req, res) => {
 router.get('/vendors', [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
-        const usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).populate('branchId', 'name').populate('referredBy', 'name');
-        const legacyVendors = await Vendor.find(filter).populate('branchId', 'name').populate('agentId', 'name');
+        let usersVendors = [];
+        try {
+            usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).populate('branchId', 'name').populate('referredBy', 'name');
+        } catch (err1) {
+            console.error('Error fetching user vendors with populate:', err1.message);
+            usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } });
+        }
+
+        let legacyVendors = [];
+        try {
+            legacyVendors = await Vendor.find(filter).populate('branchId', 'name').populate('agentId', 'name');
+        } catch (err2) {
+            console.error('Error fetching legacy vendors with populate:', err2.message);
+            legacyVendors = await Vendor.find(filter);
+        }
         
         const formatVId = (v, index) => {
-            if (v.registrationId && /^ven-fic-/i.test(v.registrationId)) return v.registrationId.toLowerCase();
-            if (v.vendorId && /^ven-fic-/i.test(v.vendorId)) return v.vendorId.toLowerCase();
+            if (v && v.registrationId && /^ven-fic-/i.test(v.registrationId)) return String(v.registrationId).toLowerCase();
+            if (v && v.vendorId && /^ven-fic-/i.test(v.vendorId)) return String(v.vendorId).toLowerCase();
             const seq = String(index + 1).padStart(3, '0');
             return `ven-fic-2026-v${seq}`;
         };
 
-        const formattedUserVendors = usersVendors.map((v, idx) => {
+        const formattedUserVendors = (usersVendors || []).map((v, idx) => {
+            if (!v) return null;
             const vId = formatVId(v, idx);
             return {
                 _id: v._id,
                 registrationId: vId,
                 vendorId: vId,
-                businessName: v.businessName || v.name,
+                businessName: v.businessName || v.name || 'Unnamed Vendor',
                 category: v.category || 'Store Vendor',
                 subcategory: v.subcategory || '',
                 vendorType: v.vendorType || '',
                 baseVendorType: v.baseVendorType || '',
-                contactName: v.contactPerson || v.name,
+                contactName: v.contactPerson || v.name || '',
                 phone: v.phone || '',
-                email: v.email,
+                email: v.email || '',
                 status: v.status || 'Pending',
                 agentId: v.referredBy || null,
                 membership: { status: v.isPaid ? 'active' : 'none' },
-                createdAt: v.createdAt,
+                createdAt: v.createdAt || new Date(),
                 kycStatus: v.status || 'Pending',
                 kycDocs: {
                     aadhaarNumber: v.kyc?.aadhaarNumber || '',
@@ -738,101 +752,117 @@ router.get('/vendors', [auth, adminAuth], async (req, res) => {
                 paymentOptions: v.paymentOptions || null,
                 isUserCollection: true
             };
-        });
+        }).filter(Boolean);
 
-        const formattedLegacy = legacyVendors.map((v, idx) => {
+        const formattedLegacy = (legacyVendors || []).map((v, idx) => {
+            if (!v) return null;
             const vId = formatVId(v, usersVendors.length + idx);
             return {
                 _id: v._id,
                 registrationId: vId,
                 vendorId: vId,
-                businessName: v.businessName,
-                category: v.category,
+                businessName: v.businessName || 'Unnamed Vendor',
+                category: v.category || 'Store Vendor',
                 subcategory: '',
                 vendorType: '',
                 baseVendorType: '',
-                contactName: v.contactName,
-                phone: v.phone,
-                email: v.email,
-                status: v.status,
-                agentId: v.agentId,
-                membership: v.membership,
-                createdAt: v.createdAt,
+                contactName: v.contactName || '',
+                phone: v.phone || '',
+                email: v.email || '',
+                status: v.status || 'Pending',
+                agentId: v.agentId || null,
+                membership: v.membership || { status: 'none' },
+                createdAt: v.createdAt || new Date(),
                 kycStatus: v.kycStatus || 'pending',
                 kycDocs: v.kycDocs || null,
                 address: v.address || '',
                 isUserCollection: false
             };
-        });
+        }).filter(Boolean);
 
         res.json([...formattedUserVendors, ...formattedLegacy]);
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
+        console.error('Fatal error in GET /api/admin/vendors:', err);
+        res.status(500).json({ error: 'Server error fetching vendors', message: err.message });
     }
 });
 
 router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
-        const pendingUserVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] }, status: { $in: ['Pending', 'pending'] } }).populate('branchId', 'name').populate('referredBy', 'name');
-        const pendingLegacy = await Vendor.find({ ...filter, status: { $in: ['Pending', 'pending'] } }).populate('branchId', 'name').populate('agentId', 'name');
+        let pendingUserVendors = [];
+        try {
+            pendingUserVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] }, status: { $in: ['Pending', 'pending'] } }).populate('branchId', 'name').populate('referredBy', 'name');
+        } catch (err1) {
+            console.error('Error fetching pending user vendors:', err1.message);
+            pendingUserVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] }, status: { $in: ['Pending', 'pending'] } });
+        }
+
+        let pendingLegacy = [];
+        try {
+            pendingLegacy = await Vendor.find({ ...filter, status: { $in: ['Pending', 'pending'] } }).populate('branchId', 'name').populate('agentId', 'name');
+        } catch (err2) {
+            console.error('Error fetching pending legacy vendors:', err2.message);
+            pendingLegacy = await Vendor.find({ ...filter, status: { $in: ['Pending', 'pending'] } });
+        }
 
         const formatVId = (v, index) => {
-            if (v.registrationId && /^ven-fic-/i.test(v.registrationId)) return v.registrationId.toLowerCase();
-            if (v.vendorId && /^ven-fic-/i.test(v.vendorId)) return v.vendorId.toLowerCase();
+            if (v && v.registrationId && /^ven-fic-/i.test(v.registrationId)) return String(v.registrationId).toLowerCase();
+            if (v && v.vendorId && /^ven-fic-/i.test(v.vendorId)) return String(v.vendorId).toLowerCase();
             const seq = String(index + 1).padStart(3, '0');
             return `ven-fic-2026-v${seq}`;
         };
 
-        const formattedUser = pendingUserVendors.map((v, idx) => {
+        const formattedUser = (pendingUserVendors || []).map((v, idx) => {
+            if (!v) return null;
             const vId = formatVId(v, idx);
             return {
                 _id: v._id,
                 registrationId: vId,
                 vendorId: vId,
-                businessName: v.businessName || v.name,
+                businessName: v.businessName || v.name || 'Unnamed Vendor',
                 category: v.category || 'Store Vendor',
                 subcategory: v.subcategory || '',
                 vendorType: v.vendorType || '',
                 baseVendorType: v.baseVendorType || '',
-                contactName: v.contactPerson || v.name,
+                contactName: v.contactPerson || v.name || '',
                 phone: v.phone || '',
-                email: v.email,
+                email: v.email || '',
                 status: v.status || 'Pending',
                 agentId: v.referredBy || null,
                 membership: { status: v.isPaid ? 'active' : 'none' },
-                createdAt: v.createdAt,
+                createdAt: v.createdAt || new Date(),
                 isUserCollection: true
             };
-        });
+        }).filter(Boolean);
 
-        const formattedLegacy = pendingLegacy.map((v, idx) => {
+        const formattedLegacy = (pendingLegacy || []).map((v, idx) => {
+            if (!v) return null;
             const vId = formatVId(v, pendingUserVendors.length + idx);
             return {
                 _id: v._id,
                 registrationId: vId,
                 vendorId: vId,
-                businessName: v.businessName,
-                category: v.category,
+                businessName: v.businessName || 'Unnamed Vendor',
+                category: v.category || 'Store Vendor',
                 subcategory: '',
                 vendorType: '',
                 baseVendorType: '',
-                contactName: v.contactName,
-                phone: v.phone,
-                email: v.email,
-                status: v.status,
-                agentId: v.agentId,
-                membership: v.membership,
-                createdAt: v.createdAt,
+                contactName: v.contactName || '',
+                phone: v.phone || '',
+                email: v.email || '',
+                status: v.status || 'Pending',
+                agentId: v.agentId || null,
+                membership: v.membership || { status: 'none' },
+                createdAt: v.createdAt || new Date(),
                 isUserCollection: false
             };
-        });
+        }).filter(Boolean);
 
         res.json([...formattedUser, ...formattedLegacy]);
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
+        console.error('Fatal error in GET /api/admin/vendors/requests:', err);
+        res.status(500).json({ error: 'Server error fetching vendor requests', message: err.message });
     }
 });
 
