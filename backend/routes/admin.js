@@ -570,73 +570,14 @@ const handleAgentStatusUpdate = async (req, res) => {
                 }
             }
 
-            // Unbind pincode assignment & propagate suspension/approval to associated vendors and products
+            // Unbind pincode assignment if agent is suspended/rejected/inactive
             if (agent.status === 'suspended' || agent.status === 'rejected' || agent.status === 'inactive' || !agent.isActive) {
                 if (agent.assignedPincode) {
                     await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: null });
                 }
                 await Pincode.updateMany({ activeAgentId: agent._id }, { $set: { activeAgentId: null } });
-
-                try {
-                    const agentVendorUsers = await User.find({
-                        $or: [
-                            { agentId: agent._id },
-                            { createdBy: agent._id },
-                            { assignedAgentId: agent._id },
-                            ...(agent.assignedPincode ? [{ pincode: agent.assignedPincode }] : [])
-                        ]
-                    }).distinct('_id');
-
-                    const allVendorIdsToSuspend = [...agentVendorUsers, agent._id];
-
-                    await User.updateMany(
-                        { _id: { $in: agentVendorUsers } },
-                        { $set: { status: 'Suspended', isActive: false, isApproved: false } }
-                    ).catch(e => console.error("Error updating agent vendors User status:", e));
-
-                    await Vendor.updateMany(
-                        { _id: { $in: agentVendorUsers } },
-                        { $set: { status: 'Suspended', isActive: false } }
-                    ).catch(e => console.error("Error updating agent vendors Vendor status:", e));
-
-                    await Product.updateMany(
-                        { vendorId: { $in: allVendorIdsToSuspend } },
-                        { $set: { status: 'Suspended', isActive: false, isAvailable: false } }
-                    ).catch(e => console.error("Error updating agent products status:", e));
-                } catch (propErr) {
-                    console.error("Error propagating agent suspension to vendors/products:", propErr);
-                }
             } else if (agent.status === 'approved' && agent.assignedPincode) {
                 await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: agent._id });
-
-                try {
-                    const agentVendorUsers = await User.find({
-                        $or: [
-                            { agentId: agent._id },
-                            { createdBy: agent._id },
-                            { assignedAgentId: agent._id }
-                        ]
-                    }).distinct('_id');
-
-                    const allVendorIdsToActivate = [...agentVendorUsers, agent._id];
-
-                    await User.updateMany(
-                        { _id: { $in: agentVendorUsers }, role: 'vendor' },
-                        { $set: { status: 'Active', isActive: true, isApproved: true } }
-                    ).catch(e => console.error("Error activating agent vendors User status:", e));
-
-                    await Vendor.updateMany(
-                        { _id: { $in: agentVendorUsers } },
-                        { $set: { status: 'Active', isActive: true } }
-                    ).catch(e => console.error("Error activating agent vendors Vendor status:", e));
-
-                    await Product.updateMany(
-                        { vendorId: { $in: allVendorIdsToActivate } },
-                        { $set: { status: 'Active', isActive: true, isAvailable: true } }
-                    ).catch(e => console.error("Error activating agent products status:", e));
-                } catch (propErr) {
-                    console.error("Error propagating agent approval to vendors/products:", propErr);
-                }
             }
 
             return res.json({ msg: `Agent status updated to ${agent.status}`, agent });
@@ -1097,20 +1038,19 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
         // 1. Fetch from Customer collection (admin-created customers)
         const customersFromModel = await Customer.find(filter).populate('branchId', 'name').catch(() => []);
 
-        // 2. Fetch from User collection via Mongoose (Members registered via admin/agent portal)
+        // 2. Fetch from User collection via Mongoose (Members/Customers registered via any portal)
         const usersAsCustomers = await User.find({
-            role: { $in: ['Member', 'member'] }
+            role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
         }).catch(() => []);
 
         // 3. Fetch directly from raw MongoDB collections to capture Connect App registrations
-        //    (these bypass Mongoose schema enum validation, so roles like 'customer'/'Customer' are picked up)
         let rawUsersCustomers = [];
         let rawCustomers = [];
         try {
             const db = mongoose.connection.db;
             if (db) {
                 rawUsersCustomers = await db.collection('users').find({
-                    role: { $in: ['customer', 'Customer', 'Member', 'member'] }
+                    role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
                 }).toArray();
                 rawCustomers = await db.collection('customers').find({}).toArray();
             }
@@ -2171,92 +2111,13 @@ router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
     }
 });
 
-// GET all products (Filtered for active & approved vendors/agents)
+// GET all products
 router.get(['/products', '/'], async (req, res) => {
     try {
-        const rawProducts = await Product.find().lean().sort({ createdAt: -1 });
-
-        // Collect all vendorId values from products
-        const rawVendorIds = rawProducts.map(p => p.vendorId).filter(Boolean);
-
-        // Convert to ObjectIds for Mongoose query
-        const validObjectIds = rawVendorIds
-            .filter(id => mongoose.Types.ObjectId.isValid(id))
-            .map(id => new mongoose.Types.ObjectId(id));
-
-        // Lookup in User collection (where vendors and agents are stored)
-        const vendorUsers = validObjectIds.length > 0 
-            ? await User.find({ _id: { $in: validObjectIds } }).select('_id name email status isActive role agentId createdBy assignedAgentId pincode').lean()
-            : [];
-
-        // Also lookup in Vendor collection (if vendor is stored in Vendor collection)
-        const standaloneVendors = validObjectIds.length > 0
-            ? await Vendor.find({ _id: { $in: validObjectIds } }).select('_id name email status isActive agentId').lean()
-            : [];
-
-        // Build status lookup map for vendors
-        const vendorMap = {};
-        vendorUsers.forEach(u => {
-            vendorMap[u._id.toString()] = u;
-        });
-        standaloneVendors.forEach(v => {
-            if (!vendorMap[v._id.toString()]) {
-                vendorMap[v._id.toString()] = v;
-            }
-        });
-
-        // Collect all agent IDs linked to these vendors
-        const agentIds = [];
-        Object.values(vendorMap).forEach(v => {
-            if (v.agentId && mongoose.Types.ObjectId.isValid(v.agentId)) agentIds.push(new mongoose.Types.ObjectId(v.agentId));
-            if (v.createdBy && mongoose.Types.ObjectId.isValid(v.createdBy)) agentIds.push(new mongoose.Types.ObjectId(v.createdBy));
-            if (v.assignedAgentId && mongoose.Types.ObjectId.isValid(v.assignedAgentId)) agentIds.push(new mongoose.Types.ObjectId(v.assignedAgentId));
-        });
-
-        // Lookup Agent user statuses
-        const agentUsers = agentIds.length > 0 
-            ? await User.find({ _id: { $in: agentIds } }).select('_id status isActive').lean()
-            : [];
-        
-        const agentMap = {};
-        agentUsers.forEach(a => {
-            agentMap[a._id.toString()] = a;
-        });
-
-        // Filter products: return ONLY products whose product, vendor, AND agent are active/approved
-        const filteredProducts = rawProducts.filter(p => {
-            if (p.isActive === false || p.isAvailable === false) return false;
-            const pStatus = (p.status || '').toLowerCase();
-            if (pStatus === 'suspended' || pStatus === 'inactive' || pStatus === 'rejected') return false;
-
-            if (p.vendorId) {
-                const vKey = p.vendorId.toString();
-                const vendorObj = vendorMap[vKey];
-
-                if (vendorObj) {
-                    const vStatus = (vendorObj.status || '').toLowerCase();
-                    if (vStatus === 'suspended' || vStatus === 'inactive' || vStatus === 'rejected' || vendorObj.isActive === false) {
-                        return false;
-                    }
-
-                    // Check associated agent status
-                    const parentAgentId = (vendorObj.agentId || vendorObj.createdBy || vendorObj.assignedAgentId || '').toString();
-                    if (parentAgentId && agentMap[parentAgentId]) {
-                        const agObj = agentMap[parentAgentId];
-                        const agStatus = (agObj.status || '').toLowerCase();
-                        if (agStatus === 'suspended' || agStatus === 'inactive' || agStatus === 'rejected' || agObj.isActive === false) {
-                            return false;
-                        }
-                    }
-                }
-            }
-
-            return true;
-        });
-
-        res.json(filteredProducts);
+        const products = await Product.find().sort({ createdAt: -1 });
+        res.json(products);
     } catch (err) {
-        console.error('Error fetching public products:', err);
+        console.error(err);
         res.status(500).json({ success: false, message: 'Server error fetching products', error: err.message });
     }
 });

@@ -246,6 +246,7 @@ function App() {
   const [adImageUrl, setAdImageUrl] = useState("");
   const [adVideoUrl, setAdVideoUrl] = useState("");
   const [offerImageUrl, setOfferImageUrl] = useState("");
+  const [kycRoleTab, setKycRoleTab] = useState("agent"); // 'agent' or 'vendor'
   const [catSubFilter, setCatSubFilter] = useState("All");
   const [catStatusFilter, setCatStatusFilter] = useState("All Status");
   const [jobSearchTerm, setJobSearchTerm] = useState("");
@@ -2911,8 +2912,25 @@ function App() {
           {activeTab === 'kyc' && (
             <div className="space-y-6">
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 space-y-6">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">KYC Verification Inbox</h3>
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">KYC Verification Inbox</h3>
+                    <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                      <button
+                        onClick={() => setKycRoleTab('agent')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${kycRoleTab === 'agent' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                      >
+                        Agent KYC ({agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'in_review'].includes((a.status || '').toLowerCase())).length})
+                      </button>
+                      <button
+                        onClick={() => setKycRoleTab('vendor')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${kycRoleTab === 'vendor' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                      >
+                        Vendor KYC ({vendors.filter(v => ['pending', 'pending_approval', 'under_verification', 'in_review'].includes((v.status || '').toLowerCase())).length})
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="flex gap-2">
                     {['pending', 'approved', 'rejected'].map(st => {
                       const isSelected = (filterCategory === st) || (st === 'pending' && !['approved', 'rejected'].includes(filterCategory));
@@ -2930,95 +2948,193 @@ function App() {
                 </div>
 
                 <div className="divide-y divide-slate-200 dark:divide-slate-800">
-                  {agents
-                    .filter(a => {
-                      const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
-                      const aStatus = (a.status || '').toLowerCase();
-                      if (currentFilter === 'pending') {
-                        return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(aStatus);
-                      }
-                      return aStatus === currentFilter;
-                    })
-                    .map((agent) => (
-                      <div key={agent._id} className="py-5 space-y-4">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{agent.name}</span>
-                            <span className="block text-xs text-slate-400">{agent.email} • {agent.phone}</span>
-                          </div>
-                          <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
-                              agent.status === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
-                                'bg-amber-500/10 text-amber-500'
-                            }`}>
-                            KYC {agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}
-                          </span>
-                        </div>
+                  {kycRoleTab === 'agent' && (
+                    <>
+                      {agents
+                        .filter(a => {
+                          const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                          const aStatus = (a.status || '').toLowerCase();
+                          if (currentFilter === 'pending') {
+                            return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(aStatus);
+                          }
+                          return aStatus === currentFilter;
+                        })
+                        .map((agent) => (
+                          <div key={agent._id} className="py-5 space-y-4">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{agent.name}</span>
+                                <span className="block text-xs text-slate-400">Agent • {agent.email} • {agent.phone}</span>
+                              </div>
+                              <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                                  agent.status === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
+                                    'bg-amber-500/10 text-amber-500'
+                                }`}>
+                                KYC {agent.status.charAt(0).toUpperCase() + agent.status.slice(1)}
+                              </span>
+                            </div>
 
-                        {/* Documents viewer */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          <div
-                            onClick={() => setKycPreviewImage(agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500')}
-                            className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                          >
-                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
-                            <img src={agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
-                            <span className="block text-[10px] font-mono mt-2">{agent.kyc?.aadhaarNumber || '987654321098'}</span>
-                          </div>
-                          <div
-                            onClick={() => setKycPreviewImage(agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500')}
-                            className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                          >
-                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
-                            <img src={agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
-                            <span className="block text-[10px] font-mono mt-2">{agent.kyc?.panNumber || 'ABCDE1234F'}</span>
-                          </div>
-                          <div
-                            onClick={() => setKycPreviewImage(agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500')}
-                            className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                          >
-                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Video/Photo</span>
-                            <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
-                          </div>
-                          <div
-                            onClick={() => setKycPreviewImage(agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500')}
-                            className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                          >
-                            <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
-                            <img src={agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
-                          </div>
-                        </div>
+                            {/* Documents viewer */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                              <div
+                                onClick={() => setKycPreviewImage(agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500')}
+                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                              >
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
+                                <img src={agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
+                                <span className="block text-[10px] font-mono mt-2">{agent.kyc?.aadhaarNumber || '987654321098'}</span>
+                              </div>
+                              <div
+                                onClick={() => setKycPreviewImage(agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500')}
+                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                              >
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
+                                <img src={agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
+                                <span className="block text-[10px] font-mono mt-2">{agent.kyc?.panNumber || 'ABCDE1234F'}</span>
+                              </div>
+                              <div
+                                onClick={() => setKycPreviewImage(agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500')}
+                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                              >
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Photo/Video</span>
+                                <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
+                              </div>
+                              <div
+                                onClick={() => setKycPreviewImage(agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500')}
+                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                              >
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
+                                <img src={agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
+                              </div>
+                            </div>
 
-                        {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((agent.status || '').toLowerCase()) && (
-                          <div className="flex gap-3 justify-end">
-                            <button
-                              onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
-                              className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
-                            >
-                              Reject / Request Reupload
-                            </button>
-                            <button
-                              onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
-                              className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
-                            >
-                              Verify & Approve KYC
-                            </button>
+                            {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((agent.status || '').toLowerCase()) && (
+                              <div className="flex gap-3 justify-end">
+                                <button
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                                  className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                                >
+                                  Reject / Request Reupload
+                                </button>
+                                <button
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                                >
+                                  Verify & Approve KYC
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      {agents.filter(a => {
+                        const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                        const aStatus = (a.status || '').toLowerCase();
+                        if (currentFilter === 'pending') {
+                          return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(aStatus);
+                        }
+                        return aStatus === currentFilter;
+                      }).length === 0 && (
+                          <div className="text-center py-12 text-slate-400 text-sm">
+                            <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                            No agent KYC records found for this status.
                           </div>
                         )}
-                      </div>
-                    ))}
-                  {agents.filter(a => {
-                    const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
-                    const aStatus = (a.status || '').toLowerCase();
-                    if (currentFilter === 'pending') {
-                      return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(aStatus);
-                    }
-                    return aStatus === currentFilter;
-                  }).length === 0 && (
-                      <div className="text-center py-12 text-slate-400 text-sm">
-                        <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                        No agents found for this status.
-                      </div>
-                    )}
+                    </>
+                  )}
+
+                  {kycRoleTab === 'vendor' && (
+                    <>
+                      {vendors
+                        .filter(v => {
+                          const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                          const vStatus = (v.status || '').toLowerCase();
+                          if (currentFilter === 'pending') {
+                            return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(vStatus);
+                          }
+                          return vStatus === currentFilter;
+                        })
+                        .map((vendor) => (
+                          <div key={vendor._id} className="py-5 space-y-4">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{vendor.businessName || vendor.name}</span>
+                                <span className="block text-xs text-slate-400">Vendor ({vendor.category || 'Store'}) • {vendor.contactName || vendor.contactPerson || vendor.name} • {vendor.email} • {vendor.phone}</span>
+                              </div>
+                              <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${(vendor.status || '').toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                                  (vendor.status || '').toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
+                                    'bg-amber-500/10 text-amber-500'
+                                }`}>
+                                KYC {(vendor.status || 'Pending').charAt(0).toUpperCase() + (vendor.status || 'Pending').slice(1)}
+                              </span>
+                            </div>
+
+                            {/* Documents viewer */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                              <div
+                                onClick={() => setKycPreviewImage(vendor.kycDocs?.aadhaarImage || vendor.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500')}
+                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                              >
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
+                                <img src={vendor.kycDocs?.aadhaarImage || vendor.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
+                                <span className="block text-[10px] font-mono mt-2">{vendor.kycDocs?.aadhaarNumber || vendor.kyc?.aadhaarNumber || '987654321098'}</span>
+                              </div>
+                              <div
+                                onClick={() => setKycPreviewImage(vendor.kycDocs?.panImage || vendor.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500')}
+                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                              >
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
+                                <img src={vendor.kycDocs?.panImage || vendor.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
+                                <span className="block text-[10px] font-mono mt-2">{vendor.kycDocs?.panNumber || vendor.kyc?.panNumber || 'ABCDE1234F'}</span>
+                              </div>
+                              <div
+                                onClick={() => setKycPreviewImage(vendor.kycDocs?.selfie || vendor.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500')}
+                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                              >
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Photo/Video</span>
+                                <img src={vendor.kycDocs?.selfie || vendor.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
+                              </div>
+                              <div
+                                onClick={() => setKycPreviewImage(vendor.kycDocs?.businessProofImage || vendor.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500')}
+                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                              >
+                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business License/Proof</span>
+                                <img src={vendor.kycDocs?.businessProofImage || vendor.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
+                              </div>
+                            </div>
+
+                            {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((vendor.status || '').toLowerCase()) && (
+                              <div className="flex gap-3 justify-end">
+                                <button
+                                  onClick={() => executeAction(`/admin/vendors/${vendor._id}/reject`, 'PUT', {})}
+                                  className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                                >
+                                  Reject / Request Reupload
+                                </button>
+                                <button
+                                  onClick={() => executeAction(`/admin/vendors/${vendor._id}/approve`, 'PUT', {})}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                                >
+                                  Verify & Approve Vendor KYC
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      {vendors.filter(v => {
+                        const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                        const vStatus = (v.status || '').toLowerCase();
+                        if (currentFilter === 'pending') {
+                          return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(vStatus);
+                        }
+                        return vStatus === currentFilter;
+                      }).length === 0 && (
+                          <div className="text-center py-12 text-slate-400 text-sm">
+                            <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                            No vendor KYC records found for this status.
+                          </div>
+                        )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -3411,6 +3527,7 @@ function App() {
               </div>
 
               {membershipPlans.length > 0 ? (() => {
+                const activePlan = membershipPlans[selectedPlanTab] || membershipPlans[0];
                 const isGold = activePlan.name.toLowerCase().includes('gold');
                 const isDiamond = activePlan.name.toLowerCase().includes('diamond') || activePlan.name.toLowerCase().includes('enterprise');
                 const isPlatinum = !isDiamond && activePlan.name.toLowerCase().includes('platinum');
@@ -6630,9 +6747,17 @@ function App() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
+                          if (file.size > 25 * 1024 * 1024) {
+                            addToast("Video file exceeds 25MB limit. Please select a smaller video file or paste a URL.", "error");
+                            return;
+                          }
                           const reader = new FileReader();
                           reader.onload = (evt) => {
                             setBannerVideoUrl(evt.target.result);
+                            addToast("Video uploaded successfully!", "success");
+                          };
+                          reader.onerror = () => {
+                            addToast("Failed to read video file.", "error");
                           };
                           reader.readAsDataURL(file);
                         }
@@ -6907,9 +7032,17 @@ function App() {
                       onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
+                          if (file.size > 25 * 1024 * 1024) {
+                            addToast("Video file exceeds 25MB limit. Please select a smaller video file or paste a URL.", "error");
+                            return;
+                          }
                           const reader = new FileReader();
                           reader.onload = (evt) => {
                             setAdVideoUrl(evt.target.result);
+                            addToast("Video uploaded successfully!", "success");
+                          };
+                          reader.onerror = () => {
+                            addToast("Failed to read video file.", "error");
                           };
                           reader.readAsDataURL(file);
                         }
