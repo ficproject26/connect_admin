@@ -338,6 +338,10 @@ function App() {
         { name: 'Mysore', revenue: 27500 }
       ]
     },
+    recent: {
+      latestVendors: [],
+      latestAgents: []
+    },
     recentTransactions: [],
     revenueTrend: [
       { month: 'Jan', revenue: 45000, orders: 12 },
@@ -1347,7 +1351,7 @@ function App() {
                   <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
                     <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Latest Platform Activity</h3>
                     <div className="space-y-4">
-                      {stats.recent.latestVendors.slice(0, 3).map((v, idx) => (
+                      {(stats?.recent?.latestVendors || vendors || []).slice(0, 3).map((v, idx) => (
                         <div key={idx} className="flex gap-3 items-start text-sm">
                           <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
                             <Award className="w-4 h-4" />
@@ -1360,7 +1364,7 @@ function App() {
                           </div>
                         </div>
                       ))}
-                      {stats.recent.latestAgents.slice(0, 2).map((a, idx) => (
+                      {(stats?.recent?.latestAgents || agents || []).slice(0, 2).map((a, idx) => (
                         <div key={idx} className="flex gap-3 items-start text-sm">
                           <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
                             <Users className="w-4 h-4" />
