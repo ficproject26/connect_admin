@@ -183,6 +183,100 @@ router.post('/register', async (req, res) => {
     }
 });
 
+// @route    POST api/auth/register-customer
+// @desc     Register customer user directly
+// @access   Public
+router.post('/register-customer', async (req, res) => {
+    try {
+        const { name, email, phone, password, aadhaarNumber, panNumber, address, city, pincode } = req.body;
+        const cleanName = (name || '').trim();
+        const lowerEmail = (email || '').toLowerCase().trim();
+        const cleanPhone = (phone || '').replace(/\D/g, '');
+        const cleanAddress = (address || '').trim();
+        const cleanCity = (city || '').trim();
+        const cleanPincode = (pincode || '').trim();
+
+        if (!lowerEmail && !cleanPhone) {
+            return res.status(400).json({ status: 'error', message: 'Email or mobile number is required', msg: 'Email or mobile number is required' });
+        }
+
+        // Check if user with same email or phone already exists
+        let existingUser = await User.findOne({
+            $or: [
+                ...(lowerEmail ? [{ email: lowerEmail }] : []),
+                ...(cleanPhone ? [
+                    { phone: cleanPhone },
+                    { phone: `+91${cleanPhone}` },
+                    { phone: `91${cleanPhone}` }
+                ] : [])
+            ]
+        });
+
+        if (existingUser) {
+            return res.status(400).json({
+                status: 'error',
+                message: 'A user with this mobile number or email is already registered. Please login.',
+                msg: 'A user with this mobile number or email is already registered. Please login.'
+            });
+        }
+
+        // Hash password if provided, or default
+        const pwd = password || 'ConnectCustomer123!';
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(pwd, salt);
+
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randDigits = Math.floor(1000 + Math.random() * 9000);
+        const registrationId = `CUST-${dateStr}-${randDigits}`;
+
+        const newUser = new User({
+            name: cleanName || 'Customer Member',
+            email: lowerEmail || `${cleanPhone}@connect.app`,
+            phone: cleanPhone || '',
+            password: hashedPassword,
+            role: 'customer',
+            status: 'active',
+            isActive: true,
+            address: cleanAddress,
+            city: cleanCity,
+            pincode: cleanPincode,
+            registrationId,
+            kyc: {
+                aadhaarNumber: aadhaarNumber || '',
+                panNumber: panNumber || ''
+            },
+            createdAt: new Date()
+        });
+
+        await newUser.save();
+
+        const payload = { user: { id: newUser.id, role: 'customer' } };
+        const token = jwt.sign(payload, process.env.JWT_SECRET || 'secretKey123', { expiresIn: '30d' });
+
+        return res.status(201).json({
+            status: 'success',
+            success: true,
+            message: 'Customer registered successfully',
+            msg: 'Customer registered successfully',
+            token,
+            user: {
+                id: newUser._id,
+                name: newUser.name,
+                email: newUser.email,
+                phone: newUser.phone,
+                role: 'customer',
+                address: newUser.address,
+                city: newUser.city,
+                pincode: newUser.pincode,
+                registrationId
+            }
+        });
+    } catch (err) {
+        console.error('Customer registration error:', err);
+        return res.status(500).json({ status: 'error', message: 'Registration failed due to server error', error: err.message });
+    }
+});
+
 // @route    POST api/auth/login
 // @desc     Authenticate user & get token with progressive security
 // @access   Public
