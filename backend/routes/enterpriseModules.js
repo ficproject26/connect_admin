@@ -14,6 +14,7 @@ const CardHolder = require('../models/CardHolder');
 const SecuritySession = require('../models/SecuritySession');
 const UserSession = require('../models/UserSession');
 const AuditLog = require('../models/AuditLog');
+const Product = require('../models/Product');
 
 // Helper to get Socket.IO instance
 const getIo = (req) => req.app.get('io');
