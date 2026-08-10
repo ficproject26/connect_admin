@@ -1316,6 +1316,26 @@ router.post('/ads', [auth, adminAuth], async (req, res) => {
     }
 });
 
+router.get('/public/ads', async (req, res) => {
+    try {
+        const ads = await Advertisement.find().sort({ createdAt: -1 });
+        res.json(ads);
+    } catch (err) {
+        console.error('Error fetching public ads:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
+router.get('/ads/public', async (req, res) => {
+    try {
+        const ads = await Advertisement.find().sort({ createdAt: -1 });
+        res.json(ads);
+    } catch (err) {
+        console.error('Error fetching public ads:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
+    }
+});
+
 router.delete('/ads/:id', [auth, adminAuth], async (req, res) => {
     try {
         await Advertisement.findByIdAndDelete(req.params.id);
