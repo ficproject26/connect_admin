@@ -411,13 +411,39 @@ router.post('/login', async (req, res) => {
 // @access   Public
 router.post('/send-otp', async (req, res) => {
     try {
-        const identifier = (req.body.phone || req.body.mobileNumber || req.body.email || '').toString().toLowerCase().trim();
-        if (!identifier) return res.status(400).json({ msg: 'Mobile number or Email is required' });
+        const identifier = (req.body.phone || req.body.mobileNumber || req.body.mobileOrEmail || req.body.email || '').toString().toLowerCase().trim();
+        if (!identifier) return res.status(400).json({ status: 'error', message: 'Mobile number or Email is required', msg: 'Mobile number or Email is required' });
+
+        const cleanDigits = identifier.replace(/\D/g, '');
+
+        // Verify if user is registered in MongoDB database
+        let user = await User.findOne({
+            $or: [
+                { email: identifier },
+                { phone: identifier },
+                ...(cleanDigits ? [
+                    { phone: cleanDigits },
+                    { phone: `+91${cleanDigits}` },
+                    { phone: `91${cleanDigits}` },
+                    { phone: new RegExp(cleanDigits + '$') }
+                ] : [])
+            ]
+        });
+
+        // Allow common test accounts or existing registered accounts
+        const isKnownTestMobile = ['9876543210', '8220266311', '9176543210', '9443322110', '6379068721'].includes(cleanDigits);
+        if (!user && !isKnownTestMobile) {
+            return res.status(404).json({
+                status: 'error',
+                notRegistered: true,
+                message: 'Your mobile number is not registered. Please sign up first.',
+                msg: 'Your mobile number is not registered. Please sign up first.'
+            });
+        }
 
         const existingOtp = otpStore.get(identifier);
-
         if (existingOtp && (Date.now() - existingOtp.lastSentAt) < 30000) {
-            return res.status(429).json({ msg: 'Please wait 30 seconds before requesting another OTP.' });
+            return res.status(429).json({ status: 'error', message: 'Please wait 30 seconds before requesting another OTP.', msg: 'Please wait 30 seconds before requesting another OTP.' });
         }
 
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
@@ -436,7 +462,13 @@ router.post('/send-otp', async (req, res) => {
             details: `OTP generated for ${identifier}`
         }).catch(() => {});
 
-        res.json({ success: true, otp: otpCode, msg: `6-digit OTP (${otpCode}) sent successfully. Valid for 5 minutes.` });
+        res.json({
+            success: true,
+            status: 'success',
+            devOtpPreview: otpCode,
+            otp: otpCode,
+            msg: `6-digit OTP (${otpCode}) sent successfully. Valid for 5 minutes.`
+        });
     } catch (err) {
         console.error('Send OTP error:', err);
         res.status(500).send('Server error');
@@ -448,12 +480,13 @@ router.post('/send-otp', async (req, res) => {
 // @access   Public
 router.post('/verify-otp', async (req, res) => {
     try {
-        const identifier = (req.body.phone || req.body.mobileNumber || req.body.email || '').toString().toLowerCase().trim();
+        const identifier = (req.body.phone || req.body.mobileNumber || req.body.mobileOrEmail || req.body.email || '').toString().toLowerCase().trim();
         const otp = (req.body.otp || '').toString().trim();
 
-        if (!identifier || !otp) return res.status(400).json({ msg: 'Mobile/Email and OTP are required' });
+        if (!identifier || !otp) return res.status(400).json({ status: 'error', message: 'Mobile/Email and OTP are required', msg: 'Mobile/Email and OTP are required' });
 
-        const stored = otpStore.get(identifier);
+        const cleanDigits = identifier.replace(/\D/g, '');
+        const stored = otpStore.get(identifier) || (cleanDigits ? otpStore.get(cleanDigits) : null);
 
         // Fallback demo check: accept 123456 or 1234
         if (!stored && (otp === '123456' || otp === '1234')) {
