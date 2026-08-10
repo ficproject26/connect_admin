@@ -2314,73 +2314,67 @@ router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
 });
 
 const fetchActiveVendorProducts = async (reqProductId = null) => {
-    const activeUsers = await User.find({
+    // 1. Fetch explicitly suspended or rejected vendors
+    const suspendedUsers = await User.find({
+        $and: [
+            { $or: [{ role: { $in: ['vendor', 'Vendor', 'merchant', 'Merchant'] } }, { vendorType: { $exists: true } }] },
+            {
+                $or: [
+                    { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
+                    { isActive: false }
+                ]
+            }
+        ]
+    }).select('_id email phone businessName name registrationId vendorId');
+
+    const suspendedVendors = await Vendor.find({
         $or: [
-            { role: { $in: ['vendor', 'Vendor'] } },
-            { vendorType: { $exists: true } }
-        ],
-        $or: [
-            { status: { $in: ['Approved', 'approved', 'Active', 'active'] } },
-            { isApproved: true }
-        ],
-        isActive: { $ne: false }
-    }).select('_id email phone businessName name registrationId vendorId businesses');
+            { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
+            { isActive: false }
+        ]
+    }).select('_id email phone businessName registrationId vendorId');
 
-    const activeVendors = await Vendor.find({
-        $or: [
-            { status: { $in: ['Approved', 'approved', 'Active', 'active'] } },
-            { isApproved: true }
-        ],
-        isActive: { $ne: false }
-    }).select('_id email phone businessName registrationId vendorId businesses');
+    const suspendedVendorIds = new Set();
+    const suspendedVendorEmails = new Set();
+    const suspendedVendorPhones = new Set();
+    const suspendedVendorNames = new Set();
+    const suspendedVendorPrefixes = new Set();
 
-    const activeVendorIds = new Set();
-    const activeVendorEmails = new Set();
-    const activeVendorPhones = new Set();
-    const activeVendorNames = new Set();
-    const activeVendorPrefixes = new Set();
-
-    // Vendor-Scoped Suspended Business Map: `${vendorKey}:${bizKey}`
-    const suspendedVendorBizKeys = new Set();
-
-    [...activeUsers, ...activeVendors].forEach(v => {
-        const vKeys = [];
+    [...suspendedUsers, ...suspendedVendors].forEach(v => {
         if (v._id) {
             const idStr = v._id.toString();
-            vKeys.push(idStr);
-            activeVendorIds.add(idStr);
-            if (idStr.length >= 16) {
-                activeVendorPrefixes.add(idStr.substring(0, 16));
-            }
+            suspendedVendorIds.add(idStr);
+            if (idStr.length >= 16) suspendedVendorPrefixes.add(idStr.substring(0, 16));
         }
-        if (v.registrationId) {
-            vKeys.push(v.registrationId.toString());
-            activeVendorIds.add(v.registrationId.toString());
-        }
-        if (v.vendorId) {
-            vKeys.push(v.vendorId.toString());
-            activeVendorIds.add(v.vendorId.toString());
-        }
-        if (v.email) {
-            const em = v.email.toLowerCase().trim();
-            vKeys.push(em);
-            activeVendorEmails.add(em);
-        }
-        if (v.phone) {
-            const ph = v.phone.replace(/\D/g, '');
-            vKeys.push(ph);
-            activeVendorPhones.add(ph);
-        }
-        if (v.businessName) {
-            const bn = v.businessName.toLowerCase().trim();
-            vKeys.push(bn);
-            activeVendorNames.add(bn);
-        }
-        if (v.name) {
-            const nm = v.name.toLowerCase().trim();
-            vKeys.push(nm);
-            activeVendorNames.add(nm);
-        }
+        if (v.registrationId) suspendedVendorIds.add(v.registrationId.toString());
+        if (v.vendorId) suspendedVendorIds.add(v.vendorId.toString());
+        if (v.email) suspendedVendorEmails.add(v.email.toLowerCase().trim());
+        if (v.phone) suspendedVendorPhones.add(v.phone.replace(/\D/g, ''));
+        if (v.businessName) suspendedVendorNames.add(v.businessName.toLowerCase().trim());
+        if (v.name) suspendedVendorNames.add(v.name.toLowerCase().trim());
+    });
+
+    // 2. Fetch all vendor sub-businesses to identify vendor-scoped suspended business outlets
+    const allVendorUsers = await User.find({
+        $or: [
+            { role: { $in: ['vendor', 'Vendor', 'merchant', 'Merchant'] } },
+            { vendorType: { $exists: true } },
+            { businesses: { $exists: true, $not: { $size: 0 } } }
+        ]
+    }).select('_id email phone businessName name registrationId vendorId businesses');
+
+    const suspendedVendorBizKeys = new Set();
+
+    allVendorUsers.forEach(v => {
+        const vKeys = [
+            v._id ? v._id.toString() : '',
+            v.registrationId ? v.registrationId.toString() : '',
+            v.vendorId ? v.vendorId.toString() : '',
+            v.email ? v.email.toLowerCase().trim() : '',
+            v.phone ? v.phone.replace(/\D/g, '') : '',
+            v.businessName ? v.businessName.toLowerCase().trim() : '',
+            v.name ? v.name.toLowerCase().trim() : ''
+        ].filter(Boolean);
 
         if (Array.isArray(v.businesses)) {
             v.businesses.forEach(b => {
@@ -2409,26 +2403,29 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
     const allProducts = await Product.find(query).sort({ createdAt: -1 });
 
     const activeProducts = allProducts.filter(p => {
-        if (p.isActive === false || p.isAvailable === false || p.isVendorSuspended === true || p.isSuspended === true) return false;
-        const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase().trim();
-        if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated', 'pending'].includes(pVendorStatus)) return false;
+        // A. Product Listing must be Active
+        if (p.isActive === false || p.isAvailable === false) return false;
 
-        const pBizStatus = (p.businessStatus || '').toLowerCase().trim();
-        if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated', 'pending'].includes(pBizStatus)) return false;
-        if (p.businessIsActive === false) return false;
+        // B. Vendor must NOT be suspended
+        if (p.isVendorSuspended === true || p.isSuspended === true) return false;
+        const pVendorStatus = (p.vendorStatus || p.status || '').toLowerCase().trim();
+        if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated'].includes(pVendorStatus)) return false;
 
         const vId = p.vendorId ? p.vendorId.toString() : '';
         const vEmail = (p.vendorEmail || '').toLowerCase().trim();
         const vPhone = (p.vendorPhone || '').replace(/\D/g, '');
         const vName = (p.vendorName || p.brand || '').toLowerCase().trim();
 
-        const isVendorActive = (vId && activeVendorIds.has(vId)) ||
-                               (vEmail && activeVendorEmails.has(vEmail)) ||
-                               (vPhone && activeVendorPhones.has(vPhone)) ||
-                               (vName && activeVendorNames.has(vName)) ||
-                               (vId && Array.from(activeVendorPrefixes).some(prefix => vId.startsWith(prefix)));
+        if (vId && suspendedVendorIds.has(vId)) return false;
+        if (vEmail && suspendedVendorEmails.has(vEmail)) return false;
+        if (vPhone && suspendedVendorPhones.has(vPhone)) return false;
+        if (vName && suspendedVendorNames.has(vName)) return false;
+        if (vId && Array.from(suspendedVendorPrefixes).some(prefix => vId.startsWith(prefix))) return false;
 
-        if (!isVendorActive) return false;
+        // C. Business Outlet of this Vendor must NOT be suspended
+        if (p.businessIsActive === false) return false;
+        const pBizStatus = (p.businessStatus || '').toLowerCase().trim();
+        if (['suspended', 'inactive', 'rejected', 'blocked', 'deactivated'].includes(pBizStatus)) return false;
 
         const pBizId = p.businessId ? p.businessId.toString() : (p.business ? (p.business._id?.toString() || p.business.id?.toString()) : '');
         const pBizName = (p.businessName || p.business?.businessName || p.business?.name || p.subNavbarCategory || '').toLowerCase().trim();
@@ -2474,10 +2471,11 @@ router.get('/products/:id', async (req, res) => {
     }
 });
 
-// POST new product (with Vendor & Business status validation)
+// POST new product (with Vendor & Business status validation and metadata binding)
 router.post(['/products', '/'], [auth, adminAuth], async (req, res) => {
     try {
-        const { vendorId, vendorEmail, vendorPhone, businessId, businessName, subNavbarCategory } = req.body;
+        const productPayload = { ...req.body };
+        const { vendorId, vendorEmail, vendorPhone, businessId, businessName, subNavbarCategory } = productPayload;
         const targetVendorId = vendorId || req.user?.id;
 
         if (targetVendorId) {
@@ -2490,6 +2488,14 @@ router.post(['/products', '/'], [auth, adminAuth], async (req, res) => {
                 if (!isVActive) {
                     return res.status(403).json({ success: false, message: 'This vendor account is currently suspended and cannot perform modifications.' });
                 }
+
+                // Bind vendor metadata
+                productPayload.vendorId = vendor._id || vendor.registrationId || vendorId;
+                productPayload.vendorEmail = vendor.email || vendorEmail || '';
+                productPayload.vendorPhone = vendor.phone || vendor.mobileNumber || vendorPhone || '';
+                productPayload.vendorName = vendor.businessName || vendor.name || productPayload.vendorName || '';
+                productPayload.vendorStatus = vStatus;
+                productPayload.isVendorSuspended = !isVActive;
 
                 if (Array.isArray(vendor.businesses)) {
                     const targetBizKey = (businessId || businessName || subNavbarCategory || '').toString().toLowerCase().trim();
@@ -2506,13 +2512,20 @@ router.post(['/products', '/'], [auth, adminAuth], async (req, res) => {
                             if (!isBActive) {
                                 return res.status(403).json({ success: false, message: 'This business is currently suspended and cannot be modified.' });
                             }
+                            productPayload.businessId = matchedBiz._id || businessId;
+                            productPayload.businessName = matchedBiz.businessName || matchedBiz.name || businessName;
+                            productPayload.businessStatus = bStatus;
+                            productPayload.businessIsActive = isBActive;
                         }
                     }
                 }
             }
         }
 
-        const newProduct = new Product(req.body);
+        productPayload.isActive = productPayload.isActive !== false;
+        productPayload.isAvailable = productPayload.isAvailable !== false;
+
+        const newProduct = new Product(productPayload);
         await newProduct.save();
         res.status(201).json({ success: true, message: 'Product created successfully', data: newProduct });
     } catch (err) {
@@ -2593,19 +2606,19 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
         const mappedDbJobs = dbJobs.map((j, idx) => {
             const obj = j.toObject ? j.toObject() : j;
             const custIdVal = obj.customerId || 'CUST-' + String(obj._id).substring(18, 24).toUpperCase();
-            const posVal = (!obj.position || obj.position === 'Job Application') ? samplePositions[idx % samplePositions.length] : obj.position;
-            const compVal = (!obj.companyName || obj.companyName === 'Krishna' || obj.companyName === 'Connect Portal Inc.') ? sampleCompanies[idx % sampleCompanies.length] : obj.companyName;
-            const hrVal = (!obj.hrName || obj.hrName === 'Krishna' || obj.hrName.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : obj.hrName;
-            const resumeVal = (obj.resumeUrl && !obj.resumeUrl.includes('unsplash')) ? obj.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+            const posVal = obj.position || obj.title || obj.jobTitle || 'Job Position';
+            const compVal = obj.companyName || obj.vendorName || obj.businessName || 'Verified Enterprise';
+            const hrVal = obj.hrName || obj.contactPerson || obj.hr || 'Talent Team';
+            const resumeVal = obj.resumeUrl || '';
             return {
                 ...obj,
                 applicationId: obj.applicationId || obj._id,
-                candidateName: obj.candidateName,
+                candidateName: obj.candidateName || 'Candidate',
                 customerId: custIdVal,
                 position: posVal,
                 companyName: compVal,
                 hrName: hrVal,
-                status: obj.status,
+                status: obj.status || 'applied',
                 resumeUrl: resumeVal,
                 createdAt: obj.createdAt
             };
@@ -2614,19 +2627,17 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
         const mappedCustomJobs = resolvedCustomJobs.map((order, idx) => {
             const appId = order.order_number || order.id || order._id;
             const custIdVal = (order.customerId && (order.customerId.memberId || order.customerId._id || order.customerId.id)) || 'CUST-' + String(order._id).substring(18, 24).toUpperCase();
-            const rawCompany = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || '';
-            const companyName = (!rawCompany || rawCompany === 'Krishna' || rawCompany === 'Connect Partner') ? sampleCompanies[idx % sampleCompanies.length] : rawCompany;
-            const rawHr = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || '';
-            const hrName = (!rawHr || rawHr === 'Krishna' || rawHr.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : rawHr;
-            const posVal = (!order.product_details || order.product_details === 'Job Application') ? samplePositions[idx % samplePositions.length] : order.product_details;
-            const resumeVal = (order.candidateResume && !order.candidateResume.includes('unsplash')) ? order.candidateResume : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+            const companyName = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || order.companyName || order.vendorName || 'Verified Enterprise';
+            const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || order.hrName || 'Talent Team';
+            const posVal = order.product_details || order.position || order.title || order.jobTitle || 'Job Application';
+            const resumeVal = order.candidateResume || '';
 
             return {
                 _id: order._id,
                 applicationId: appId,
-                candidateName: order.customerId?.name || order.memberName || order.customer_name || 'kumar',
-                email: order.candidateEmail || order.customerId?.email || 'candidate@gmail.com',
-                phone: (order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.customerId?.phone && order.customerId?.phone !== 'N/A' ? order.customerId.phone : '9876543210'),
+                candidateName: order.customerId?.name || order.memberName || order.customer_name || 'Candidate',
+                email: order.candidateEmail || order.customerId?.email || 'N/A',
+                phone: (order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.customerId?.phone && order.customerId?.phone !== 'N/A' ? order.customerId.phone : 'N/A'),
                 position: posVal,
                 experience: order.experience || 'Fresher',
                 status: (order.status || 'applied').toLowerCase(),
