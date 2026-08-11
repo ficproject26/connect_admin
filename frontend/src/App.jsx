@@ -5607,12 +5607,14 @@ function App() {
                       _id: c._id,
                       name: subName,
                       description: c.description || `${subName} subcategory`,
+                      requiredVendorFields: c.requiredVendorFields || [],
                       isActive: c.isActive !== undefined ? c.isActive : true,
                       childCategories: []
                     };
                   } else if (!c.subSubcategory && c.level !== 'child') {
                     catTree[targetMainName].subcategories[subName]._id = c._id;
                     if (c.description) catTree[targetMainName].subcategories[subName].description = c.description;
+                    if (c.requiredVendorFields) catTree[targetMainName].subcategories[subName].requiredVendorFields = c.requiredVendorFields;
                     if (c.isActive !== undefined) catTree[targetMainName].subcategories[subName].isActive = c.isActive;
                   }
 
@@ -6032,6 +6034,13 @@ function App() {
                                 <div className="min-w-0">
                                   <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{subItem.name}</h4>
                                   <p className="text-[11px] text-slate-400 truncate max-w-[130px]">{subItem.description}</p>
+                                  {Array.isArray(subItem.requiredVendorFields) && subItem.requiredVendorFields.length > 0 && (
+                                    <div className="mt-1">
+                                      <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-1.5 py-0.5 rounded border border-indigo-200 dark:border-indigo-900/40 inline-block max-w-[140px] truncate" title={`Required Vendor Fields: ${subItem.requiredVendorFields.join(', ')}`}>
+                                        Fields: {subItem.requiredVendorFields.join(', ')}
+                                      </span>
+                                    </div>
+                                  )}
                                   <div className="flex items-center gap-1.5 mt-1">
                                     <span className={`w-1.5 h-1.5 rounded-full ${subItem.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`}></span>
                                     <span className={`text-[10px] font-bold ${subItem.isActive !== false ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
@@ -8150,12 +8159,9 @@ function App() {
                 const name = addFirstCategory || e.target.name?.value || '';
                 const subcategory = categoryModalTier === 'sub' ? e.target.subcategory.value : (addSecondCategory || e.target.subcategory?.value || '');
                 const subSubcategory = categoryModalTier === 'child' ? (e.target.subSubcategory?.value || '') : '';
-                const price = e.target.price?.value || 0;
-                const duration = e.target.duration?.value || '';
-                const features = e.target.features?.value || '';
-                const vendorType = e.target.vendorType?.value || '';
                 const description = e.target.description.value;
-                await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, price, duration, features, vendorType, level: categoryModalTier });
+                const requiredVendorFields = categoryModalTier === 'sub' ? (e.target.requiredVendorFields?.value || '') : '';
+                await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level: categoryModalTier, requiredVendorFields });
                 setShowModal(null);
               }}
               className="space-y-4"
@@ -8172,16 +8178,28 @@ function App() {
               </div>
 
               {categoryModalTier === 'sub' ? (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
-                  <input
-                    name="subcategory"
-                    placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
-                    required
-                    type="text"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
+                    <input
+                      name="subcategory"
+                      placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
+                      required
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Required Vendor Fields</label>
+                    <input
+                      name="requiredVendorFields"
+                      placeholder="e.g. Size, Color, Brand"
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields (e.g. Size, Color, Brand).</p>
+                  </div>
+                </>
               ) : (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -8207,56 +8225,9 @@ function App() {
                 </div>
               )}
 
-              {/* Service & Pricing Details */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Service Base Price (₹)</label>
-                  <input
-                    name="price"
-                    type="number"
-                    placeholder="e.g. 499"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Estimated Duration</label>
-                  <input
-                    name="duration"
-                    type="text"
-                    placeholder="e.g. 45 Mins / 1 Hour"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vendor / Specialist Type</label>
-                  <select
-                    name="vendorType"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm font-semibold"
-                  >
-                    <option value="Retail Vendor">Retail Vendor</option>
-                    <option value="Store Vendor">Store Vendor</option>
-                    <option value="Technician / Service Specialist">Technician / Service Specialist</option>
-                    <option value="Hospital Vendor">Hospital Vendor</option>
-                    <option value="Hotel Vendor">Hotel Vendor</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Key Highlights / Features</label>
-                  <input
-                    name="features"
-                    type="text"
-                    placeholder="e.g. Free Inspection, Warranty"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                  />
-                </div>
-              </div>
-
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description & Service Terms</label>
-                <textarea name="description" placeholder="Enter comprehensive service description and specifications..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[90px]" />
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
+                <textarea name="description" placeholder="Description of the category..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]" />
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
@@ -9025,14 +8996,12 @@ function App() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                const subcategory = e.target.subcategory.value;
-                const subSubcategory = e.target.subSubcategory.value;
-                const price = e.target.price?.value || 0;
-                const duration = e.target.duration?.value || '';
-                const features = e.target.features?.value || '';
-                const vendorType = e.target.vendorType?.value || '';
-                const description = e.target.description.value;
-                await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { subcategory, subSubcategory, description, price, duration, features, vendorType });
+                const subcategory = e.target.subcategory?.value || '';
+                const subSubcategory = e.target.subSubcategory?.value || '';
+                const description = e.target.description?.value || '';
+                const isSubCatModal = modalData.level === 'sub' || (modalData.subcategory && !modalData.subSubcategory);
+                const requiredVendorFields = isSubCatModal ? (e.target.requiredVendorFields?.value || '') : undefined;
+                await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { subcategory, subSubcategory, description, requiredVendorFields });
                 setShowModal(null);
               }}
               className="space-y-4"
@@ -9067,64 +9036,26 @@ function App() {
                 </div>
               </div>
 
-              {/* Service & Pricing Details */}
-              <div className="grid grid-cols-2 gap-4">
+              {(modalData.level === 'sub' || (modalData.subcategory && !modalData.subSubcategory)) && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Service Base Price (₹)</label>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Required Vendor Fields</label>
                   <input
-                    name="price"
-                    type="number"
-                    defaultValue={modalData.price || ''}
-                    placeholder="e.g. 499"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Estimated Duration</label>
-                  <input
-                    name="duration"
+                    name="requiredVendorFields"
+                    defaultValue={Array.isArray(modalData.requiredVendorFields) ? modalData.requiredVendorFields.join(', ') : (modalData.requiredVendorFields || '')}
+                    placeholder="e.g. Size, Color, Brand"
                     type="text"
-                    defaultValue={modalData.duration || ''}
-                    placeholder="e.g. 45 Mins / 1 Hour"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
                   />
+                  <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields (e.g. Size, Color, Brand).</p>
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vendor / Specialist Type</label>
-                  <select
-                    name="vendorType"
-                    defaultValue={modalData.vendorType || 'Retail Vendor'}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm font-semibold"
-                  >
-                    <option value="Retail Vendor">Retail Vendor</option>
-                    <option value="Store Vendor">Store Vendor</option>
-                    <option value="Technician / Service Specialist">Technician / Service Specialist</option>
-                    <option value="Hospital Vendor">Hospital Vendor</option>
-                    <option value="Hotel Vendor">Hotel Vendor</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Key Highlights / Features</label>
-                  <input
-                    name="features"
-                    type="text"
-                    defaultValue={modalData.features || ''}
-                    placeholder="e.g. Free Inspection, Warranty"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                  />
-                </div>
-              </div>
+              )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description & Service Terms</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
                 <textarea
                   name="description"
                   defaultValue={modalData.description || ''}
-                  placeholder="Enter comprehensive service description and specifications..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[90px]"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]"
                 />
               </div>
 

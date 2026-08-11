@@ -2985,7 +2985,7 @@ router.get('/categories/:id', async (req, res) => {
 // POST create sub or child category (Admin only)
 router.post('/categories', [auth, adminAuth], async (req, res) => {
     try {
-        let { name, parentId, level, subcategory, subSubcategory, description, icon, banner, themeColor, isFeatured, price, duration, features, vendorType } = req.body;
+        let { name, parentId, level, subcategory, subSubcategory, description, icon, banner, themeColor, isFeatured } = req.body;
 
         // Auto-resolve level, name, and parentId if form-based subcategory / subSubcategory is passed
         let targetName = name;
@@ -3075,6 +3075,21 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
         const maxOrder = await Category.findOne({ parentId: parentObjId }).sort({ sortOrder: -1 }).select('sortOrder');
         const nextOrder = (maxOrder?.sortOrder ?? -1) + 1;
 
+        // Parse requiredVendorFields EXCLUSIVELY for Subcategories (level === 'sub')
+        let parsedRequiredVendorFields = [];
+        if ((level === 'sub' || (!subSubcategory && subcategory)) && req.body.requiredVendorFields) {
+            if (typeof req.body.requiredVendorFields === 'string') {
+                parsedRequiredVendorFields = req.body.requiredVendorFields
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+            } else if (Array.isArray(req.body.requiredVendorFields)) {
+                parsedRequiredVendorFields = req.body.requiredVendorFields
+                    .map(s => String(s).trim())
+                    .filter(Boolean);
+            }
+        }
+
         const newCat = await Category.create({
             level: level || 'sub',
             name: name ? name.trim() : targetName,
@@ -3089,13 +3104,10 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
             isVisible: true,
             isFeatured: isFeatured || false,
             description: description || '',
-            price: Number(price) || 0,
-            duration: duration || '',
-            features: features || '',
-            vendorType: vendorType || '',
             icon: icon || '',
             banner: banner || '',
             themeColor: themeColor || '',
+            requiredVendorFields: parsedRequiredVendorFields,
             sortOrder: nextOrder
         });
 
@@ -3128,6 +3140,24 @@ router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
         delete updates.isDeletable;
         delete updates.isEditable;
         delete updates._id;
+
+        // Dynamic Vendor Fields: ONLY allowed for Subcategories
+        const isSubCategory = cat.level === 'sub' || (cat.subcategory && !cat.subSubcategory);
+        if (isSubCategory && updates.requiredVendorFields !== undefined) {
+            if (typeof updates.requiredVendorFields === 'string') {
+                updates.requiredVendorFields = updates.requiredVendorFields
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(Boolean);
+            } else if (Array.isArray(updates.requiredVendorFields)) {
+                updates.requiredVendorFields = updates.requiredVendorFields
+                    .map(s => String(s).trim())
+                    .filter(Boolean);
+            }
+        } else {
+            // Strictly exclude requiredVendorFields for Main or Child categories
+            delete updates.requiredVendorFields;
+        }
 
         // Auto-generate slug if name changed
         if (updates.name) {
