@@ -9339,6 +9339,8 @@ function App() {
       {showVendorRequestsModal && (() => {
         const isPendingVendor = (v) => {
           if (!v) return false;
+          const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+          if (isAgentOnboarded) return false;
           const status = (v.status || v.kycStatus || 'pending').toLowerCase().trim();
           return !['approved', 'active', 'rejected', 'suspended', 'deactivated', 'blocked'].includes(status);
         };

@@ -821,8 +821,15 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
             allLegacyVendors = await Vendor.find(filter);
         }
 
-        const pendingUserVendors = allUserVendors.filter(v => isPendingStatus(v.status));
-        const pendingLegacy = allLegacyVendors.filter(v => isPendingStatus(v.status));
+        const isDirectPendingVendor = (v) => {
+            if (!v) return false;
+            const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+            if (isAgentOnboarded) return false;
+            return isPendingStatus(v.status);
+        };
+
+        const pendingUserVendors = allUserVendors.filter(isDirectPendingVendor);
+        const pendingLegacy = allLegacyVendors.filter(isDirectPendingVendor);
 
         const formatVId = (v, index) => {
             if (v && v.registrationId && /^ven-fic-/i.test(v.registrationId)) return String(v.registrationId).toLowerCase();

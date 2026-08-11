@@ -91,6 +91,28 @@ const enrichVendorData = async (v) => {
 
     vObj.phone = vObj.mobileContact || vObj.phone || vObj.telephone || '+91 98765 43211';
 
+    // Normalize Agent Onboarded status
+    const isAgentOnboarded = vObj.joiningType === 'agent' ||
+        !!vObj.onboardedByAgent ||
+        !!vObj.onboardedBy ||
+        !!vObj.agentId ||
+        !!vObj.onboardedByAgentId ||
+        !!vObj.referredBy ||
+        (vObj.createdVia && String(vObj.createdVia).toLowerCase() === 'agent');
+
+    if (isAgentOnboarded) {
+        vObj.joiningType = 'agent';
+        if (!vObj.onboardedByAgent) {
+            vObj.onboardedByAgent = {
+                name: vObj.onboardedBy?.name || vObj.agentId?.name || vObj.referredBy?.name || 'Field Agent',
+                registrationId: vObj.onboardedBy?.registrationId || vObj.agentId?.registrationId || 'AG-PIN-1001',
+                pincode: vObj.pincode || '600001'
+            };
+        }
+    } else {
+        vObj.joiningType = vObj.joiningType || 'direct';
+    }
+
     sanitizeVendorAddressObj(vObj);
 
     const pincodeCode = vObj.fullAddress?.match(/\b\d{6}\b/)?.[0] || vObj.pincode;
@@ -109,7 +131,7 @@ router.get('/vendors', auth, async (req, res) => {
         const { search, category, state, status, isDirectRequest, page = 1, limit = 20 } = req.query;
 
         if (isDirectRequest === 'true') {
-            // Aggregated direct vendor registration requests (from User & Vendor models + direct registrations)
+            // Aggregated direct vendor registration requests (strictly EXCLUDING agent-onboarded vendors)
             let directVendors = await User.find({
                 $or: [
                     { role: { $regex: /vendor|merchant/i } },
@@ -126,11 +148,13 @@ router.get('/vendors', auth, async (req, res) => {
             let rawDirect = [...directVendors.map(v => v.toObject()), ...directVendorDocs.map(v => v.toObject())];
             let allDirect = await Promise.all(rawDirect.map(v => enrichVendorData(v)));
 
-            // Filter out any approved/rejected/assigned/active/suspended vendors
+            // Filter out handled statuses AND filter out any agent-onboarded vendors
             const handledStatuses = new Set(['approved', 'rejected', 'assigned', 'active', 'suspended']);
             let pendingDirect = allDirect.filter(v => {
                 const s = String(v.status || '').toLowerCase().trim();
-                return !handledStatuses.has(s);
+                const isHandled = handledStatuses.has(s);
+                const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+                return !isHandled && !isAgentOnboarded;
             });
 
             if (search) {
@@ -167,12 +191,17 @@ router.get('/vendors', auth, async (req, res) => {
             ];
         }
 
-        const skip = (Number(page) - 1) * Number(limit);
-        const total = await User.countDocuments(query);
-        let vendors = await User.find(query)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(Number(limit));
+        let userVendors = await User.find(query).sort({ createdAt: -1 });
+        let docVendors = await Vendor.find(query).sort({ createdAt: -1 });
+        let rawVendors = [...userVendors.map(v => v.toObject()), ...docVendors.map(v => v.toObject())];
+
+        // Deduplicate vendors by _id or email
+        const vendorMap = new Map();
+        rawVendors.forEach(v => {
+            const key = v._id ? String(v._id) : (v.email || Math.random());
+            if (!vendorMap.has(key)) vendorMap.set(key, v);
+        });
+        let vendors = Array.from(vendorMap.values());
 
         if (vendors.length === 0) {
             vendors = [

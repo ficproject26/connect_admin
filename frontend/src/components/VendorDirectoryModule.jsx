@@ -221,10 +221,11 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         list = data.vendors || [];
       }
       
-      // Filter out already approved/rejected/assigned/active/suspended vendors — each request is shown ONCE
+      // Filter out already approved/rejected/assigned/active/suspended vendors AND agent-onboarded vendors
       const pendingOnly = list.filter(v => {
         const s = (v.status || '').toLowerCase().trim();
-        return s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended');
+        const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+        return !isAgentOnboarded && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
       });
       setDirectRequests(pendingOnly);
     } catch (err) {
@@ -631,7 +632,8 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
           {/* Agent Onboarded Vendors Button */}
           {(() => {
-            const agentCount = vendors.filter(v => v.joiningType === 'agent' || v.onboardedByAgent).length;
+            const isAgentVendor = (v) => v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+            const agentCount = vendors.filter(isAgentVendor).length;
             return (
               <button
                 onClick={() => setShowAgentOnboardedModal(true)}
@@ -1346,7 +1348,8 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
       {/* 8. AGENT ONBOARDED VENDORS MODAL */}
       {showAgentOnboardedModal && (() => {
-        const agentVendors = vendors.filter(v => v.joiningType === 'agent' || v.onboardedByAgent);
+        const isAgentVendor = (v) => v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+        const agentVendors = vendors.filter(isAgentVendor);
         const q = agentOnboardSearch.toLowerCase().trim();
         const filtered = agentVendors.filter(v =>
           !q ||
