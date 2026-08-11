@@ -8788,31 +8788,55 @@ function App() {
               <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                 <MapPin className="w-4 h-4" /> Step 2: Verification, Profile & Territory Location Details
               </h4>
-              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                <div><span className="text-slate-400 block font-semibold">Alternative Mobile:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.altPhone || modalData.phone || '9876543210'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">Date of Birth:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.dob || '1995-08-15'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">Gender:</span><strong className="text-slate-800 dark:text-slate-200 capitalize">{modalData.gender || 'Male'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">Aadhaar Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.aadhaarNumber || modalData.kyc?.aadhaarNumber || '5489 1234 5678'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">PAN Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.panNumber || modalData.kyc?.panNumber || 'ABCDE1234F'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">State:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.territory?.state || 'Tamil Nadu'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">District:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.territory?.district || 'Dharmapuri'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">Division:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.territory?.division || 'Dharmapuri Division'}</strong></div>
-                <div>
-                  <span className="text-slate-400 block font-semibold">Pincode:</span>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.assignedPincode?.code || modalData.pincode || '635109'}</strong>
-                    <button
-                      type="button"
-                      onClick={() => handleVerifyAgentPincode(modalData)}
-                      className="text-[10px] font-extrabold bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded-lg cursor-pointer flex items-center gap-1 transition-all"
-                    >
-                      <MapPin className="w-3 h-3" /> Verify
-                    </button>
+              {(() => {
+                const addrStr = modalData.fullAddress || modalData.address || modalData.streetAddress || '';
+                const addrPin = addrStr.match(/\b\d{6}\b/)?.[0];
+
+                let pin = addrPin || (typeof modalData.assignedPincode === 'object' ? (modalData.assignedPincode?.code || modalData.assignedPincode?.pincode) : modalData.assignedPincode);
+                if (!pin || pin === '986541' || pin === '111111') {
+                  pin = modalData.pincode || modalData.territory?.pincode || '635109';
+                }
+
+                const state = modalData.territory?.state || modalData.state || modalData.assignedState || 'Tamil Nadu';
+                const district = modalData.territory?.district || modalData.district || modalData.assignedDistrict || 'Dharmapuri';
+                const division = modalData.territory?.division || modalData.division || modalData.assignedDivision || `${district} Division`;
+                const postOffice = modalData.postOffice || `${district} HO`;
+
+                let fullAddress = addrStr;
+                if (!fullAddress || fullAddress.includes('123 Main Street')) {
+                  fullAddress = `${district}, ${state} - ${pin}`;
+                } else {
+                  fullAddress = fullAddress.replace(/\b\d{6}\b/, pin);
+                }
+
+                return (
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                    <div><span className="text-slate-400 block font-semibold">Alternative Mobile:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.altPhone || modalData.alternativePhone || modalData.secondaryPhone || 'Not Provided'}</strong></div>
+                    <div><span className="text-slate-400 block font-semibold">Date of Birth:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.dob || modalData.dateOfBirth || 'Not Provided'}</strong></div>
+                    <div><span className="text-slate-400 block font-semibold">Gender:</span><strong className="text-slate-800 dark:text-slate-200 capitalize">{modalData.gender || 'Not Provided'}</strong></div>
+                    <div><span className="text-slate-400 block font-semibold">Aadhaar Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.aadhaarNumber || modalData.kyc?.aadhaarNumber || modalData.kycDocs?.aadhaarNumber || 'Not Provided'}</strong></div>
+                    <div><span className="text-slate-400 block font-semibold">PAN Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.panNumber || modalData.kyc?.panNumber || modalData.kycDocs?.panNumber || 'Not Provided'}</strong></div>
+                    <div><span className="text-slate-400 block font-semibold">State:</span><strong className="text-slate-800 dark:text-slate-200">{state}</strong></div>
+                    <div><span className="text-slate-400 block font-semibold">District:</span><strong className="text-slate-800 dark:text-slate-200">{district}</strong></div>
+                    <div><span className="text-slate-400 block font-semibold">Division:</span><strong className="text-slate-800 dark:text-slate-200">{division}</strong></div>
+                    <div>
+                      <span className="text-slate-400 block font-semibold">Pincode:</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <strong className="text-slate-800 dark:text-slate-200 font-mono">{pin}</strong>
+                        <button
+                          type="button"
+                          onClick={() => handleVerifyAgentPincode({ ...modalData, pincode: pin, territory: { ...modalData.territory, pincode: pin, district } })}
+                          className="text-[10px] font-extrabold bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded-lg cursor-pointer flex items-center gap-1 transition-all"
+                        >
+                          <MapPin className="w-3 h-3" /> Verify
+                        </button>
+                      </div>
+                    </div>
+                    <div><span className="text-slate-400 block font-semibold">Post Office Branch:</span><strong className="text-slate-800 dark:text-slate-200">{postOffice}</strong></div>
+                    <div className="sm:col-span-2 lg:col-span-3"><span className="text-slate-400 block font-semibold">Full Street Address:</span><strong className="text-slate-800 dark:text-slate-200">{fullAddress}</strong></div>
                   </div>
-                </div>
-                <div><span className="text-slate-400 block font-semibold">Post Office Branch:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.postOffice || 'Dharmapuri HO (Auto-filled)'}</strong></div>
-                <div className="sm:col-span-2 lg:col-span-3"><span className="text-slate-400 block font-semibold">Full Street Address:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.fullAddress || modalData.address || '123 Main Street, Dharmapuri, Tamil Nadu - 635109'}</strong></div>
-              </div>
+                );
+              })()}
             </div>
 
             {/* STEP 3: PROFESSIONAL BACKGROUND */}
@@ -8821,9 +8845,9 @@ function App() {
                 <Briefcase className="w-4 h-4" /> Step 3: Professional Background
               </h4>
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div><span className="text-slate-400 block font-semibold">Highest Qualification:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.qualification || "Bachelor's Degree (B.Tech / B.E)"}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">Experience Level:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.experience || '3 – 5 Years'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">Previous Company / Org:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.previousCompany || 'Forge Telecom Ltd'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Highest Qualification:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.qualification || modalData.highestQualification || 'Not Provided'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Experience Level:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.experience || modalData.experienceLevel || 'Not Provided'}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Previous Company / Org:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.previousCompany || modalData.previousOrg || 'Not Provided'}</strong></div>
               </div>
             </div>
 
