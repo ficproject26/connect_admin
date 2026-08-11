@@ -200,19 +200,9 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         ];
       }
 
-      const mergedList = list.map(v => {
-        const storedOverride = (v._id && localStorage.getItem(`connect_vendor_status_override_${v._id}`)) ||
-                               (v.registrationId && localStorage.getItem(`connect_vendor_status_override_${v.registrationId}`)) ||
-                               (v.email && localStorage.getItem(`connect_vendor_status_override_${v.email.toLowerCase()}`));
-        if (storedOverride) {
-          return { ...v, status: storedOverride, isActive: ['Active', 'Approved'].includes(storedOverride) };
-        }
-        return v;
-      });
-
-      setVendors(mergedList);
-      setTotal(mergedList.length);
-      setPages(Math.ceil(mergedList.length / 12));
+      setVendors(list);
+      setTotal(list.length);
+      setPages(Math.ceil(list.length / 12));
     } catch (err) {
       console.error('Fetch vendor directory error:', err);
     } finally {
@@ -233,13 +223,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       
       // Filter out already approved/rejected/assigned/active/suspended vendors — each request is shown ONCE
       const pendingOnly = list.filter(v => {
-        const vId = v._id || v.registrationId;
-        const em = v.email ? v.email.toLowerCase() : '';
-        const storedOverride = (vId && localStorage.getItem(`connect_vendor_status_override_${vId}`)) ||
-                               (v.registrationId && localStorage.getItem(`connect_vendor_status_override_${v.registrationId}`)) ||
-                               (em && localStorage.getItem(`connect_vendor_status_override_${em}`));
-
-        const s = (storedOverride || v.status || '').toLowerCase().trim();
+        const s = (v.status || '').toLowerCase().trim();
         return s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended');
       });
       setDirectRequests(pendingOnly);
@@ -252,6 +236,24 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
   useEffect(() => {
     fetchVendors();
     fetchDirectRequests();
+
+    // Multi-device real-time sync: poll backend every 10 seconds
+    const interval = setInterval(() => {
+      fetchVendors();
+      fetchDirectRequests();
+    }, 10000);
+
+    // Sync state immediately when user switches back to this window tab
+    const handleFocus = () => {
+      fetchVendors();
+      fetchDirectRequests();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [search, category, stateFilter, statusFilter, isDirectRequest, page]);
 
   useEffect(() => {
@@ -291,13 +293,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : directRequests.find(v => v._id === vendorId);
     const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
     const registrationId = targetVendor?.registrationId || '';
-
-    // Save status in localStorage to ensure persistence across reloads
-    try {
-      if (vendorId) localStorage.setItem(`connect_vendor_status_override_${vendorId}`, 'Approved');
-      if (registrationId) localStorage.setItem(`connect_vendor_status_override_${registrationId}`, 'Approved');
-      if (email) localStorage.setItem(`connect_vendor_status_override_${email}`, 'Approved');
-    } catch (e) {}
 
     // Instantly remove approved vendor from direct requests list
     setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
@@ -398,13 +393,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : vendors.find(v => v._id === vendorId);
     const email = targetVendor?.email || (typeof vendorObj === 'object' ? vendorObj.email : '');
     const regId = targetVendor?.registrationId || '';
-
-    // Save status in localStorage to ensure 100% persistence on UI refresh
-    try {
-      if (vendorId) localStorage.setItem(`connect_vendor_status_override_${vendorId}`, newStatus);
-      if (regId) localStorage.setItem(`connect_vendor_status_override_${regId}`, newStatus);
-      if (email) localStorage.setItem(`connect_vendor_status_override_${email.toLowerCase()}`, newStatus);
-    } catch (e) {}
 
     // Immediately update local state so UI responds instantly
     const isCurrentlyActive = ['Active', 'Approved'].includes(newStatus);
@@ -1005,13 +993,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
             <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
               {directRequests.filter(dr => {
-                const drId = dr._id || dr.registrationId;
-                const em = dr.email ? dr.email.toLowerCase() : '';
-                const storedOverride = (drId && localStorage.getItem(`connect_vendor_status_override_${drId}`)) ||
-                                       (dr.registrationId && localStorage.getItem(`connect_vendor_status_override_${dr.registrationId}`)) ||
-                                       (em && localStorage.getItem(`connect_vendor_status_override_${em}`));
-
-                const s = (storedOverride || dr.status || '').toLowerCase().trim();
+                const s = (dr.status || '').toLowerCase().trim();
                 return s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended');
               }).map(dr => (
                 <div key={dr._id} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">

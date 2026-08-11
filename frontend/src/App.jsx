@@ -619,6 +619,24 @@ function App() {
 
   useEffect(() => {
     fetchData();
+
+    if (!token) return;
+
+    // Multi-device real-time sync: poll backend every 20 seconds
+    const interval = setInterval(() => {
+      fetchData();
+    }, 20000);
+
+    // Sync state immediately when user switches back to this browser window
+    const handleFocus = () => {
+      fetchData();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [token, reportType]);
 
   // Auth Handling
