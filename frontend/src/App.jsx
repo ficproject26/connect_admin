@@ -1051,7 +1051,7 @@ function App() {
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
 
         {/* HEADER BAR */}
-        <header className="h-20 glass sticky top-0 z-20 px-8 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80">
+        <header className="h-20 glass sticky top-0 z-20 px-4 sm:px-8 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80">
           <div className="flex items-center gap-4">
             <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-slate-500 dark:text-slate-400 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
               <Menu className="w-6 h-6" />
@@ -1157,7 +1157,7 @@ function App() {
         </header>
 
         {/* PAGE VIEWS */}
-        <main className="p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main className="px-3 py-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
 
 
 

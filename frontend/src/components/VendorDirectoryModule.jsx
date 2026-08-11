@@ -604,10 +604,10 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     <div className="space-y-6 pb-12">
 
       {/* 1. MODULE HEADER & TOOLBAR */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 sm:p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Vendor Directory</h2>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Vendor Directory</h2>
             <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               Enterprise Suite
             </span>
@@ -617,13 +617,13 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           {/* Direct Requests Button */}
           <button
             onClick={() => { setShowDirectModal(true); fetchDirectRequests(); }}
-            className="px-4 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+            className="flex-1 sm:flex-initial px-3.5 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
           >
-            <Clock className="w-4 h-4" /> Direct Vendor Requests
+            <Clock className="w-4 h-4 shrink-0" /> Direct Requests
             <span className="bg-white text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-black">
               {directRequests.length || '!'}
             </span>
@@ -635,9 +635,9 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             return (
               <button
                 onClick={() => setShowAgentOnboardedModal(true)}
-                className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+                className="flex-1 sm:flex-initial px-3.5 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
               >
-                <UserCheck className="w-4 h-4" /> Agent Onboarded Vendors
+                <UserCheck className="w-4 h-4 shrink-0" /> Agent Onboarded
                 <span className="bg-white text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-black">
                   {agentCount}
                 </span>
@@ -776,17 +776,17 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary-500/50 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group"
             >
               <div className="space-y-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-xl flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-all">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-lg sm:text-xl flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-all shrink-0">
                       {(v.businessName || v.name || 'V')[0].toUpperCase()}
                     </div>
-                    <div>
-                      <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all">{v.businessName || v.name}</h4>
-                      <p className="text-xs text-slate-400 font-semibold">{v.contactPerson || v.email}</p>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all truncate">{v.businessName || v.name}</h4>
+                      <p className="text-xs text-slate-400 font-semibold truncate">{v.contactPerson || v.email}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0" onClick={e => e.stopPropagation()}>
                     {renderStatusBadge(v.status)}
                     <select
                       value={normalizeStatusValue(v.status)}
