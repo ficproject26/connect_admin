@@ -955,6 +955,12 @@ function App() {
               >
                 <Activity className="w-4 h-4 text-emerald-400" /> Agent Performance
               </button>
+              <button
+                onClick={() => handleTabSelect('agent-payment')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'agent-payment' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <DollarSign className="w-4 h-4 text-cyan-400" /> Agent Payment
+              </button>
 
               {/* ── VENDOR ── */}
               <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Vendor</p>
@@ -1124,7 +1130,7 @@ function App() {
             </button>
             <div>
               <h2 className="text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight">
-                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab.replace('-', ' ')}
+                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : activeTab.replace('-', ' ')}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
                 {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -1669,6 +1675,121 @@ function App() {
           {/* AGENT PERFORMANCE MONITORING SYSTEM */}
           {activeTab === 'agent-performance' && (
             <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
+          )}
+
+          {/* AGENT PAYMENT - Vendor Payments Overview */}
+          {activeTab === 'agent-payment' && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 rounded-3xl shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Agent Payment</h2>
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                        Payment Suite
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 font-semibold mt-1">View all vendor payment details and process payments to agents.</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
+                      Total Vendors: <strong className="text-primary-600">{vendors.length}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Vendor Payment Table */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">#</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Vendor Name</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Business Name</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Contact</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Status</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-right">Payment Amount</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
+                      {vendors.length > 0 ? vendors.map((vendor, idx) => {
+                        const paymentAmount = vendor.totalPayment || vendor.paymentDue || vendor.commissionDue || vendor.pendingAmount || 0;
+                        const vendorStatus = (vendor.status || 'active').toLowerCase();
+                        return (
+                          <tr key={vendor._id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                            <td className="px-5 py-4 text-xs font-bold text-slate-400">{idx + 1}</td>
+                            <td className="px-5 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-primary-500/10 text-primary-600 dark:text-primary-400 font-black text-sm flex items-center justify-center border border-primary-500/20 shrink-0">
+                                  {(vendor.name || vendor.ownerName || 'V')[0].toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{vendor.name || vendor.ownerName || 'Vendor'}</p>
+                                  <p className="text-[11px] text-slate-400 font-medium">{vendor.email || '—'}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300">{vendor.businessName || vendor.shopName || '—'}</td>
+                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300">{vendor.phone || '—'}</td>
+                            <td className="px-5 py-4">
+                              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg border ${
+                                vendorStatus === 'active' || vendorStatus === 'approved'
+                                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                  : vendorStatus === 'suspended'
+                                  ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
+                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                              }`}>
+                                {vendor.status || 'Active'}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-right">
+                              <span className="text-sm font-black text-slate-800 dark:text-slate-100">₹{Number(paymentAmount).toLocaleString('en-IN')}</span>
+                            </td>
+                            <td className="px-5 py-4 text-center">
+                              <button
+                                onClick={() => {
+                                  const confirmed = window.confirm(`Process payment of ₹${Number(paymentAmount).toLocaleString('en-IN')} for ${vendor.name || vendor.ownerName || 'Vendor'}?`);
+                                  if (confirmed) {
+                                    executeAction(`/admin/vendors/${vendor._id}/process-payment`, 'POST', { amount: paymentAmount, vendorId: vendor._id, vendorName: vendor.name || vendor.ownerName });
+                                  }
+                                }}
+                                className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 mx-auto whitespace-nowrap"
+                              >
+                                <DollarSign className="w-3.5 h-3.5" /> Process Payment
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      }) : (
+                        <tr>
+                          <td colSpan={7} className="px-5 py-16 text-center">
+                            <Store className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                            <p className="text-sm font-bold text-slate-400">No vendors found in the directory.</p>
+                            <p className="text-xs text-slate-400 mt-1">Vendors will appear here once they are registered and approved.</p>
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Footer */}
+                {vendors.length > 0 && (
+                  <div className="px-5 py-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-xs font-bold text-slate-500">
+                      Showing <strong className="text-slate-800 dark:text-slate-200">{vendors.length}</strong> vendors
+                    </p>
+                    <p className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">
+                      Total Payable: ₹{vendors.reduce((sum, v) => sum + Number(v.totalPayment || v.paymentDue || v.commissionDue || v.pendingAmount || 0), 0).toLocaleString('en-IN')}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           {/* ENTERPRISE VENDOR DIRECTORY */}
