@@ -2957,6 +2957,38 @@ router.get('/categories', async (req, res) => {
     }
 });
 
+// GET required vendor fields for a subcategory by subcategory name or subcategoryId
+router.get('/categories/subcategories/fields', async (req, res) => {
+    try {
+        const { name, subcategory, subcategoryId } = req.query;
+        let query = {};
+        if (subcategoryId) {
+            query._id = subcategoryId;
+        } else if (subcategory || name) {
+            const subName = (subcategory || name).trim();
+            query = {
+                level: 'sub',
+                $or: [
+                    { name: new RegExp(`^${subName}$`, 'i') },
+                    { subcategory: new RegExp(`^${subName}$`, 'i') }
+                ]
+            };
+        } else {
+            return res.json({ success: true, requiredVendorFields: [] });
+        }
+
+        const subDoc = await Category.findOne(query).select('name subcategory requiredVendorFields').lean();
+        return res.json({
+            success: true,
+            subcategory: subDoc?.subcategory || subDoc?.name || subcategory || name || '',
+            requiredVendorFields: subDoc?.requiredVendorFields || []
+        });
+    } catch (err) {
+        console.error('Error fetching subcategory required vendor fields:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // GET flat list of all categories (for admin table views)
 router.get('/categories-flat', async (req, res) => {
     try {
