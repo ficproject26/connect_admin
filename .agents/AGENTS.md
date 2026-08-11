@@ -55,3 +55,4 @@
    - A listing MUST appear on the Customer Website (`/api/public/products`, `/api/products`) ONLY when: `Vendor == ACTIVE` AND `Business Outlet == ACTIVE` AND `Listing == ACTIVE`.
    - If a specific business outlet of a vendor is suspended (`status: 'Suspended'`), ONLY items belonging to that suspended business outlet MUST be hidden. Other active business outlets of that same vendor and all other active vendors MUST remain completely unaffected and visible.
    - When a suspended business outlet is re-activated by Admin, its listings MUST immediately become visible on the Customer Website again.
+  
