@@ -989,22 +989,22 @@ function App() {
               {/* ── MANAGEMENT ── */}
               <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Management</p>
               <button
-                onClick={() => handleTabSelect('payment-enterprise')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payment-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <DollarSign className="w-4 h-4 text-emerald-400" /> Payment Dashboard
-              </button>
-              <button
                 onClick={() => handleTabSelect('payroll-enterprise')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payroll-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Award className="w-4 h-4 text-cyan-400" /> Payroll Management
               </button>
               <button
-                onClick={() => handleTabSelect('support-team-enterprise')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'support-team-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                onClick={() => handleTabSelect('payment-enterprise')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payment-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
-                <Headphones className="w-4 h-4 text-blue-400" /> Support Team
+                <DollarSign className="w-4 h-4 text-emerald-400" /> Payment Dashboard
+              </button>
+              <button
+                onClick={() => handleTabSelect('orders')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'orders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <ShoppingBag className="w-4 h-4" /> Total Orders
               </button>
               <button
                 onClick={() => handleTabSelect('kyc')}
@@ -1013,46 +1013,16 @@ function App() {
                 <FileText className="w-4 h-4" /> KYC Verification
               </button>
               <button
-                onClick={() => handleTabSelect('security')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'security' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                onClick={() => handleTabSelect('support-team-enterprise')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'support-team-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
-                <Shield className="w-4 h-4 text-emerald-400" /> Security Dashboard
+                <Headphones className="w-4 h-4 text-blue-400" /> Support Team
               </button>
-
-              {isSuperAdmin && (
-                <>
-                  <button
-                    onClick={() => handleTabSelect('commissions')}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'commissions' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-                  >
-                    <CreditCard className="w-4 h-4" /> Commissions Config
-                  </button>
-                  <button
-                    onClick={() => handleTabSelect('memberships')}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'memberships' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-                  >
-                    <Award className="w-4 h-4" /> Membership Plans
-                  </button>
-                  <button
-                    onClick={() => handleTabSelect('banners')}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'banners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-                  >
-                    <Image className="w-4 h-4" /> Banner Management
-                  </button>
-                </>
-              )}
-
               <button
                 onClick={() => handleTabSelect('reports')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'reports' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <BarChart3 className="w-4 h-4" /> Business Reports
-              </button>
-              <button
-                onClick={() => handleTabSelect('orders')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'orders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <ShoppingBag className="w-4 h-4" /> Total Orders
               </button>
               <button
                 onClick={() => handleTabSelect('bookings')}
@@ -1084,6 +1054,39 @@ function App() {
               >
                 <UserCheck className="w-4 h-4" /> Executives
               </button>
+
+              {/* ── SYSTEM ── */}
+              <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">System</p>
+              <button
+                onClick={() => handleTabSelect('security')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'security' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Shield className="w-4 h-4 text-emerald-400" /> Security Dashboard
+              </button>
+
+              {isSuperAdmin && (
+                <>
+                  <button
+                    onClick={() => handleTabSelect('commissions')}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'commissions' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <CreditCard className="w-4 h-4" /> Commissions Config
+                  </button>
+                  <button
+                    onClick={() => handleTabSelect('memberships')}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'memberships' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <Award className="w-4 h-4" /> Membership Plans
+                  </button>
+                  <button
+                    onClick={() => handleTabSelect('banners')}
+                    className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'banners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+                  >
+                    <Image className="w-4 h-4" /> Banner Management
+                  </button>
+                </>
+              )}
+
               <button
                 onClick={() => handleTabSelect('categories')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'categories' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
