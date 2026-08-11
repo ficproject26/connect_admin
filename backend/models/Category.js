@@ -28,8 +28,12 @@ const CategorySchema = new mongoose.Schema({
     banner: { type: String, default: '' },
     themeColor: { type: String, default: '' },
 
-    // Description
+    // Description & Service Details
     description: { type: String, default: '' },
+    price: { type: Number, default: 0 },
+    duration: { type: String, default: '' },
+    features: { type: String, default: '' },
+    vendorType: { type: String, default: '' },
 
     // Legacy hierarchy & deletion marker fields
     isDeleted: { type: Boolean, default: false },

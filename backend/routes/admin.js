@@ -2985,7 +2985,7 @@ router.get('/categories/:id', async (req, res) => {
 // POST create sub or child category (Admin only)
 router.post('/categories', [auth, adminAuth], async (req, res) => {
     try {
-        let { name, parentId, level, subcategory, subSubcategory, description, icon, banner, themeColor, isFeatured } = req.body;
+        let { name, parentId, level, subcategory, subSubcategory, description, icon, banner, themeColor, isFeatured, price, duration, features, vendorType } = req.body;
 
         // Auto-resolve level, name, and parentId if form-based subcategory / subSubcategory is passed
         let targetName = name;
@@ -3089,6 +3089,10 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
             isVisible: true,
             isFeatured: isFeatured || false,
             description: description || '',
+            price: Number(price) || 0,
+            duration: duration || '',
+            features: features || '',
+            vendorType: vendorType || '',
             icon: icon || '',
             banner: banner || '',
             themeColor: themeColor || '',

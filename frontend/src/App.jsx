@@ -8150,8 +8150,12 @@ function App() {
                 const name = addFirstCategory || e.target.name?.value || '';
                 const subcategory = categoryModalTier === 'sub' ? e.target.subcategory.value : (addSecondCategory || e.target.subcategory?.value || '');
                 const subSubcategory = categoryModalTier === 'child' ? (e.target.subSubcategory?.value || '') : '';
+                const price = e.target.price?.value || 0;
+                const duration = e.target.duration?.value || '';
+                const features = e.target.features?.value || '';
+                const vendorType = e.target.vendorType?.value || '';
                 const description = e.target.description.value;
-                await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level: categoryModalTier });
+                await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, price, duration, features, vendorType, level: categoryModalTier });
                 setShowModal(null);
               }}
               className="space-y-4"
@@ -8203,9 +8207,56 @@ function App() {
                 </div>
               )}
 
+              {/* Service & Pricing Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Service Base Price (₹)</label>
+                  <input
+                    name="price"
+                    type="number"
+                    placeholder="e.g. 499"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Estimated Duration</label>
+                  <input
+                    name="duration"
+                    type="text"
+                    placeholder="e.g. 45 Mins / 1 Hour"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vendor / Specialist Type</label>
+                  <select
+                    name="vendorType"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm font-semibold"
+                  >
+                    <option value="Retail Vendor">Retail Vendor</option>
+                    <option value="Store Vendor">Store Vendor</option>
+                    <option value="Technician / Service Specialist">Technician / Service Specialist</option>
+                    <option value="Hospital Vendor">Hospital Vendor</option>
+                    <option value="Hotel Vendor">Hotel Vendor</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Key Highlights / Features</label>
+                  <input
+                    name="features"
+                    type="text"
+                    placeholder="e.g. Free Inspection, Warranty"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
-                <textarea name="description" placeholder="Description of the category..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]" />
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description & Service Terms</label>
+                <textarea name="description" placeholder="Enter comprehensive service description and specifications..." className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[90px]" />
               </div>
 
               <div className="flex gap-2 justify-end pt-4">
@@ -8976,8 +9027,12 @@ function App() {
                 e.preventDefault();
                 const subcategory = e.target.subcategory.value;
                 const subSubcategory = e.target.subSubcategory.value;
+                const price = e.target.price?.value || 0;
+                const duration = e.target.duration?.value || '';
+                const features = e.target.features?.value || '';
+                const vendorType = e.target.vendorType?.value || '';
                 const description = e.target.description.value;
-                await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { subcategory, subSubcategory, description });
+                await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { subcategory, subSubcategory, description, price, duration, features, vendorType });
                 setShowModal(null);
               }}
               className="space-y-4"
@@ -9011,12 +9066,65 @@ function App() {
                   />
                 </div>
               </div>
+
+              {/* Service & Pricing Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Service Base Price (₹)</label>
+                  <input
+                    name="price"
+                    type="number"
+                    defaultValue={modalData.price || ''}
+                    placeholder="e.g. 499"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Estimated Duration</label>
+                  <input
+                    name="duration"
+                    type="text"
+                    defaultValue={modalData.duration || ''}
+                    placeholder="e.g. 45 Mins / 1 Hour"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Vendor / Specialist Type</label>
+                  <select
+                    name="vendorType"
+                    defaultValue={modalData.vendorType || 'Retail Vendor'}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm font-semibold"
+                  >
+                    <option value="Retail Vendor">Retail Vendor</option>
+                    <option value="Store Vendor">Store Vendor</option>
+                    <option value="Technician / Service Specialist">Technician / Service Specialist</option>
+                    <option value="Hospital Vendor">Hospital Vendor</option>
+                    <option value="Hotel Vendor">Hotel Vendor</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Key Highlights / Features</label>
+                  <input
+                    name="features"
+                    type="text"
+                    defaultValue={modalData.features || ''}
+                    placeholder="e.g. Free Inspection, Warranty"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description & Service Terms</label>
                 <textarea
                   name="description"
                   defaultValue={modalData.description || ''}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]"
+                  placeholder="Enter comprehensive service description and specifications..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[90px]"
                 />
               </div>
 
