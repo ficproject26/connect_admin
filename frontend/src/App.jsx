@@ -312,7 +312,14 @@ function App() {
   // Navigation
   const [activeTab, setActiveTab] = useState('dashboard');
   const [agentLevelFilter, setAgentLevelFilter] = useState('all');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
+
+  const handleTabSelect = (tabKey) => {
+    setActiveTab(tabKey);
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarOpen(false);
+    }
+  };
 
   // Default Fallback Stats for Instant 0ms Render
   const defaultDashboardStats = {
@@ -827,8 +834,16 @@ function App() {
   return (
     <div className="min-h-screen flex bg-slate-100 dark:bg-slate-950 transition-colors duration-200">
 
+      {/* MOBILE SIDEBAR OVERLAY BACKDROP */}
+      {sidebarOpen && (
+        <div 
+          onClick={() => setSidebarOpen(false)} 
+          className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs z-40 lg:hidden transition-opacity duration-300"
+        />
+      )}
+
       {/* SIDEBAR */}
-      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-white border-r border-slate-800 transition-transform duration-300 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-0 lg:-translate-x-full'} lg:sticky lg:top-0 lg:h-screen lg:translate-x-0`}>
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white border-r border-slate-800 transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:sticky lg:top-0 lg:h-screen lg:z-30 shrink-0`}>
         <div className="h-full flex flex-col justify-between py-6 px-4 overflow-hidden">
           <div className="flex flex-col flex-1 min-h-0">
             <div className="flex items-center gap-3 px-2 mb-8 shrink-0">
@@ -843,77 +858,77 @@ function App() {
 
             <nav className="space-y-1 overflow-y-auto flex-1 pr-1">
               <button
-                onClick={() => setActiveTab('dashboard')}
+                onClick={() => handleTabSelect('dashboard')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'dashboard' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Layers className="w-4 h-4" /> Dashboard
               </button>
 
               <button
-                onClick={() => setActiveTab('agents')}
+                onClick={() => handleTabSelect('agents')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'agents' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Users className="w-4 h-4" /> Agent Directory
               </button>
 
               <button
-                onClick={() => setActiveTab('agent-performance')}
+                onClick={() => handleTabSelect('agent-performance')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'agent-performance' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Activity className="w-4 h-4 text-emerald-400" /> Agent Performance
               </button>
 
               <button
-                onClick={() => setActiveTab('vendor-directory-enterprise')}
+                onClick={() => handleTabSelect('vendor-directory-enterprise')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'vendor-directory-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Store className="w-4 h-4 text-amber-400" /> Vendor Directory
               </button>
 
               <button
-                onClick={() => setActiveTab('membership-cards-enterprise')}
+                onClick={() => handleTabSelect('membership-cards-enterprise')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'membership-cards-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <CreditCard className="w-4 h-4 text-purple-400" /> Membership Cards
               </button>
 
               <button
-                onClick={() => setActiveTab('payment-enterprise')}
+                onClick={() => handleTabSelect('payment-enterprise')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payment-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <DollarSign className="w-4 h-4 text-emerald-400" /> Payment Dashboard
               </button>
 
               <button
-                onClick={() => setActiveTab('payroll-enterprise')}
+                onClick={() => handleTabSelect('payroll-enterprise')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payroll-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Award className="w-4 h-4 text-cyan-400" /> Payroll Management
               </button>
 
               <button
-                onClick={() => setActiveTab('support-team-enterprise')}
+                onClick={() => handleTabSelect('support-team-enterprise')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'support-team-enterprise' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Headphones className="w-4 h-4 text-blue-400" /> Support Team
               </button>
 
               <button
-                onClick={() => setActiveTab('customers')}
+                onClick={() => handleTabSelect('customers')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'customers' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Users className="w-4 h-4" /> Customers
               </button>
 
               <button
-                onClick={() => setActiveTab('kyc')}
+                onClick={() => handleTabSelect('kyc')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'kyc' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <FileText className="w-4 h-4" /> KYC Verification
               </button>
 
               <button
-                onClick={() => setActiveTab('security')}
+                onClick={() => handleTabSelect('security')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'security' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Shield className="w-4 h-4 text-emerald-400" /> Security Dashboard
@@ -922,21 +937,21 @@ function App() {
               {isSuperAdmin && (
                 <>
                   <button
-                    onClick={() => setActiveTab('commissions')}
+                    onClick={() => handleTabSelect('commissions')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'commissions' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
                   >
                     <CreditCard className="w-4 h-4" /> Commissions Config
                   </button>
 
                   <button
-                    onClick={() => setActiveTab('memberships')}
+                    onClick={() => handleTabSelect('memberships')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'memberships' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
                   >
                     <Award className="w-4 h-4" /> Membership Plans
                   </button>
 
                   <button
-                    onClick={() => setActiveTab('banners')}
+                    onClick={() => handleTabSelect('banners')}
                     className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'banners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
                   >
                     <Image className="w-4 h-4" /> Banner Management
@@ -945,84 +960,84 @@ function App() {
               )}
 
               <button
-                onClick={() => setActiveTab('reports')}
+                onClick={() => handleTabSelect('reports')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'reports' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <BarChart3 className="w-4 h-4" /> Business Reports
               </button>
 
               <button
-                onClick={() => setActiveTab('orders')}
+                onClick={() => handleTabSelect('orders')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'orders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <ShoppingBag className="w-4 h-4" /> Total Orders
               </button>
 
               <button
-                onClick={() => setActiveTab('bookings')}
+                onClick={() => handleTabSelect('bookings')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'bookings' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Calendar className="w-4 h-4" /> Bookings
               </button>
 
               <button
-                onClick={() => setActiveTab('jobs')}
+                onClick={() => handleTabSelect('jobs')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'jobs' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Briefcase className="w-4 h-4" /> Job Applied
               </button>
 
               <button
-                onClick={() => setActiveTab('delivery-partners')}
+                onClick={() => handleTabSelect('delivery-partners')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'delivery-partners' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Truck className="w-4 h-4" /> Delivery Partners
               </button>
 
               <button
-                onClick={() => setActiveTab('technicians')}
+                onClick={() => handleTabSelect('technicians')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'technicians' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Contact className="w-4 h-4" /> Technicians
               </button>
 
               <button
-                onClick={() => setActiveTab('executives')}
+                onClick={() => handleTabSelect('executives')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'executives' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <UserCheck className="w-4 h-4" /> Executives
               </button>
 
               <button
-                onClick={() => setActiveTab('categories')}
+                onClick={() => handleTabSelect('categories')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'categories' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Folder className="w-4 h-4" /> Category Management
               </button>
 
               <button
-                onClick={() => setActiveTab('queries')}
+                onClick={() => handleTabSelect('queries')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'queries' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <HelpCircle className="w-4 h-4" /> Queries
               </button>
 
               <button
-                onClick={() => setActiveTab('tickets')}
+                onClick={() => handleTabSelect('tickets')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'tickets' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <MessageSquare className="w-4 h-4" /> Support
               </button>
 
               <button
-                onClick={() => setActiveTab('announcements')}
+                onClick={() => handleTabSelect('announcements')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'announcements' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Megaphone className="w-4 h-4" /> Announcements
               </button>
 
               <button
-                onClick={() => setActiveTab('settings')}
+                onClick={() => handleTabSelect('settings')}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'settings' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Settings className="w-4 h-4" /> System Settings
