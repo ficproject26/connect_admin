@@ -1677,7 +1677,7 @@ function App() {
             <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
           )}
 
-          {/* AGENT PAYMENT - Vendor Payments Overview */}
+          {/* AGENT PAYMENT - Agent Payments Overview */}
           {activeTab === 'agent-payment' && (
             <div className="space-y-6">
               {/* Header */}
@@ -1690,25 +1690,26 @@ function App() {
                         Payment Suite
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 font-semibold mt-1">View all vendor payment details and process payments to agents.</p>
+                    <p className="text-xs text-slate-400 font-semibold mt-1">View all agent payment details, earnings, and process commission payouts to agents.</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
-                      Total Vendors: <strong className="text-primary-600">{vendors.length}</strong>
+                      Total Agents: <strong className="text-primary-600">{agents.length}</strong>
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Vendor Payment Table */}
+              {/* Agent Payment Table */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
                       <tr>
                         <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">#</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Vendor Name</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Business Name</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Agent Name</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Level / Role</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Territory / Area</th>
                         <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Contact</th>
                         <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Status</th>
                         <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-right">Payment Amount</th>
@@ -1716,34 +1717,44 @@ function App() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
-                      {vendors.length > 0 ? vendors.map((vendor, idx) => {
-                        const paymentAmount = vendor.totalPayment || vendor.paymentDue || vendor.commissionDue || vendor.pendingAmount || 0;
-                        const vendorStatus = (vendor.status || 'active').toLowerCase();
+                      {agents.length > 0 ? agents.map((agent, idx) => {
+                        const paymentAmount = agent.balance || agent.wallet || agent.commissionEarned || agent.pendingPayout || agent.totalEarnings || 0;
+                        const agentStatus = (agent.status || agent.kycStatus || 'approved').toLowerCase();
+                        const level = (agent.level || agent.role || 'pincode').toLowerCase();
+                        const territoryStr = getFormattedTerritory(agent);
+
                         return (
-                          <tr key={vendor._id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                          <tr key={agent._id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
                             <td className="px-5 py-4 text-xs font-bold text-slate-400">{idx + 1}</td>
                             <td className="px-5 py-4">
                               <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-primary-500/10 text-primary-600 dark:text-primary-400 font-black text-sm flex items-center justify-center border border-primary-500/20 shrink-0">
-                                  {(vendor.name || vendor.ownerName || 'V')[0].toUpperCase()}
+                                <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-black text-sm flex items-center justify-center border border-cyan-500/20 shrink-0">
+                                  {(agent.name || 'A')[0].toUpperCase()}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{vendor.name || vendor.ownerName || 'Vendor'}</p>
-                                  <p className="text-[11px] text-slate-400 font-medium">{vendor.email || '—'}</p>
+                                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{agent.name || 'Agent'}</p>
+                                  <p className="text-[11px] text-slate-400 font-medium">{agent.email || '—'}</p>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300">{vendor.businessName || vendor.shopName || '—'}</td>
-                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300">{vendor.phone || '—'}</td>
+                            <td className="px-5 py-4">
+                              <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                {level === 'division' ? 'Divisional Agent' : `${level.toUpperCase()} AGENT`}
+                              </span>
+                            </td>
+                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-xs truncate" title={territoryStr}>
+                              {territoryStr}
+                            </td>
+                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300">{agent.phone || '—'}</td>
                             <td className="px-5 py-4">
                               <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg border ${
-                                vendorStatus === 'active' || vendorStatus === 'approved'
+                                agentStatus === 'active' || agentStatus === 'approved'
                                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                                  : vendorStatus === 'suspended'
+                                  : agentStatus === 'suspended' || agentStatus === 'rejected'
                                   ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
                                   : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                               }`}>
-                                {vendor.status || 'Active'}
+                                {agent.status || agent.kycStatus || 'Approved'}
                               </span>
                             </td>
                             <td className="px-5 py-4 text-right">
@@ -1752,9 +1763,9 @@ function App() {
                             <td className="px-5 py-4 text-center">
                               <button
                                 onClick={() => {
-                                  const confirmed = window.confirm(`Process payment of ₹${Number(paymentAmount).toLocaleString('en-IN')} for ${vendor.name || vendor.ownerName || 'Vendor'}?`);
+                                  const confirmed = window.confirm(`Process payment of ₹${Number(paymentAmount).toLocaleString('en-IN')} for Agent ${agent.name || 'Agent'}?`);
                                   if (confirmed) {
-                                    executeAction(`/admin/vendors/${vendor._id}/process-payment`, 'POST', { amount: paymentAmount, vendorId: vendor._id, vendorName: vendor.name || vendor.ownerName });
+                                    executeAction(`/admin/agents/${agent._id}/payout`, 'POST', { amount: paymentAmount, agentId: agent._id, agentName: agent.name });
                                   }
                                 }}
                                 className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] px-4 py-2 rounded-xl shadow-sm transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 mx-auto whitespace-nowrap"
@@ -1766,10 +1777,10 @@ function App() {
                         );
                       }) : (
                         <tr>
-                          <td colSpan={7} className="px-5 py-16 text-center">
-                            <Store className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
-                            <p className="text-sm font-bold text-slate-400">No vendors found in the directory.</p>
-                            <p className="text-xs text-slate-400 mt-1">Vendors will appear here once they are registered and approved.</p>
+                          <td colSpan={8} className="px-5 py-16 text-center">
+                            <Users className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                            <p className="text-sm font-bold text-slate-400">No agents found in the directory.</p>
+                            <p className="text-xs text-slate-400 mt-1">Agents will appear here once registered.</p>
                           </td>
                         </tr>
                       )}
@@ -1778,13 +1789,13 @@ function App() {
                 </div>
 
                 {/* Footer */}
-                {vendors.length > 0 && (
+                {agents.length > 0 && (
                   <div className="px-5 py-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
                     <p className="text-xs font-bold text-slate-500">
-                      Showing <strong className="text-slate-800 dark:text-slate-200">{vendors.length}</strong> vendors
+                      Showing <strong className="text-slate-800 dark:text-slate-200">{agents.length}</strong> agents
                     </p>
                     <p className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">
-                      Total Payable: ₹{vendors.reduce((sum, v) => sum + Number(v.totalPayment || v.paymentDue || v.commissionDue || v.pendingAmount || 0), 0).toLocaleString('en-IN')}
+                      Total Payable: ₹{agents.reduce((sum, a) => sum + Number(a.balance || a.wallet || a.commissionEarned || a.pendingPayout || a.totalEarnings || 0), 0).toLocaleString('en-IN')}
                     </p>
                   </div>
                 )}
