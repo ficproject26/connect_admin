@@ -77,6 +77,65 @@ const getVendorPhone = (v) => {
   return v.mobileContact || v.phone || v.telephone || '+91 98765 43211';
 };
 
+const isVendorAgentOnboarded = (v) => {
+  if (!v) return false;
+  const jType = String(v.joiningType || '').toLowerCase();
+  const cVia = String(v.createdVia || '').toLowerCase();
+  const rSource = String(v.registrationSource || '').toLowerCase();
+  return (
+    jType === 'agent' ||
+    cVia === 'agent' ||
+    rSource === 'agent' ||
+    Boolean(v.onboardedByAgent) ||
+    Boolean(v.onboardedBy) ||
+    Boolean(v.agentId) ||
+    Boolean(v.onboardedByAgentId) ||
+    Boolean(v.referredBy) ||
+    Boolean(v.agentName)
+  );
+};
+
+const getAgentInfo = (v) => {
+  if (!v) return { name: 'Field Agent', registrationId: 'AG-PIN-1001', pincode: '600001' };
+
+  if (v.onboardedByAgent && typeof v.onboardedByAgent === 'object') {
+    return {
+      name: v.onboardedByAgent.name || v.assignedPincodeAgent?.name || 'Field Agent',
+      registrationId: v.onboardedByAgent.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
+      pincode: v.onboardedByAgent.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+    };
+  }
+  if (v.onboardedBy && typeof v.onboardedBy === 'object') {
+    return {
+      name: v.onboardedBy.name || v.assignedPincodeAgent?.name || 'Field Agent',
+      registrationId: v.onboardedBy.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
+      pincode: v.onboardedBy.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+    };
+  }
+  if (v.agentId && typeof v.agentId === 'object') {
+    return {
+      name: v.agentId.name || v.assignedPincodeAgent?.name || 'Field Agent',
+      registrationId: v.agentId.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
+      pincode: v.agentId.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+    };
+  }
+  if (v.referredBy && typeof v.referredBy === 'object') {
+    return {
+      name: v.referredBy.name || v.assignedPincodeAgent?.name || 'Field Agent',
+      registrationId: v.referredBy.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
+      pincode: v.referredBy.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+    };
+  }
+
+  const name = v.agentName || (typeof v.onboardedBy === 'string' ? v.onboardedBy : '') || (typeof v.referredBy === 'string' ? v.referredBy : '') || v.assignedPincodeAgent?.name || 'Field Agent';
+
+  return {
+    name,
+    registrationId: v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
+    pincode: v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+  };
+};
+
 export const VendorDirectoryModule = ({ token, API_BASE }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [loading, setLoading] = useState(false);
@@ -806,7 +865,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">Joining Type:</span>
-                    {v.joiningType === 'agent' || v.onboardedByAgent ? (
+                    {isVendorAgentOnboarded(v) ? (
                       <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
                         👤 Agent Onboarded
                       </span>
@@ -822,19 +881,19 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 </div>
 
                 {/* Agent Onboarded or Pincode Agent Status */}
-                {v.joiningType === 'agent' || v.onboardedByAgent ? (
+                {isVendorAgentOnboarded(v) ? (
                   <div className="p-3 bg-purple-500/5 border border-purple-500/15 rounded-2xl space-y-1 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="text-purple-700 dark:text-purple-300 font-extrabold flex items-center gap-1">
                         <UserCheck className="w-3.5 h-3.5" />
-                        Agent: {v.onboardedByAgent?.name || v.assignedPincodeAgent?.name || 'Karthik Raja'}
+                        Agent: {getAgentInfo(v).name}
                       </span>
                       <span className="text-[10px] font-bold text-slate-400 font-mono">
-                        Pin: {v.onboardedByAgent?.pincode || v.pincode || '635109'}
+                        Pin: {getAgentInfo(v).pincode}
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-400 font-mono font-medium">
-                      Agent ID: <strong className="text-slate-700 dark:text-slate-300">{v.onboardedByAgent?.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1042'}</strong>
+                      Agent ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong>
                     </div>
                   </div>
                 ) : (
@@ -904,7 +963,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     {getVendorAddress(v)}
                   </td>
                   <td className="py-3 px-4">
-                    {v.joiningType === 'agent' || v.onboardedByAgent ? (
+                    {isVendorAgentOnboarded(v) ? (
                       <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1 w-fit">
                         👤 Agent Onboarded
                       </span>
@@ -915,14 +974,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                     )}
                   </td>
                   <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                    {v.joiningType === 'agent' || v.onboardedByAgent ? (
+                    {isVendorAgentOnboarded(v) ? (
                       <div className="space-y-0.5">
                         <span className="text-xs font-extrabold text-purple-700 dark:text-purple-300 flex items-center gap-1">
                           <UserCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                          {v.onboardedByAgent?.name || v.assignedPincodeAgent?.name || 'Karthik Raja'}
+                          {getAgentInfo(v).name}
                         </span>
                         <div className="text-[11px] text-slate-500 font-mono font-medium">
-                          ID: <strong className="text-slate-700 dark:text-slate-300">{v.onboardedByAgent?.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1042'}</strong> • Pin: <strong className="text-slate-700 dark:text-slate-300">{v.onboardedByAgent?.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '635109'}</strong>
+                          ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong> • Pin: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).pincode}</strong>
                         </div>
                       </div>
                     ) : v.assignedPincodeAgent ? (
@@ -1229,8 +1288,12 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                   <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold text-amber-600 dark:text-amber-400">{getVendorCategory(selectedVendorDetails)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Vendor Type:</span><span className="font-bold">{selectedVendorDetails.baseVendorType || selectedVendorDetails.vendorType || 'Retail Vendor'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Joining Method:</span>
-                    <span className="font-extrabold uppercase text-[10px] px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                      {selectedVendorDetails.joiningType === 'agent' || selectedVendorDetails.onboardedByAgent ? '👤 Agent Onboarded' : '🌐 Direct Website'}
+                    <span className={`font-extrabold uppercase text-[10px] px-2 py-0.5 rounded-md border ${
+                      isVendorAgentOnboarded(selectedVendorDetails)
+                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                        : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
+                    }`}>
+                      {isVendorAgentOnboarded(selectedVendorDetails) ? '👤 Agent Onboarded' : '🌐 Direct Website'}
                     </span>
                   </div>
                   <div className="flex justify-between"><span className="text-slate-400">Operating Hours:</span><span className="font-bold">{selectedVendorDetails.operatingHours || '9:00 AM - 9:00 PM'}</span></div>
@@ -1260,9 +1323,9 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                   <span>Agent & Onboarding</span>
                 </div>
                 <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
-                  <div className="flex justify-between"><span className="text-slate-400">Assigned Agent:</span><span className="font-bold text-purple-600 dark:text-purple-400">{selectedVendorDetails.onboardedByAgent?.name || selectedVendorDetails.assignedPincodeAgent?.name || 'Unassigned'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Agent Reg ID:</span><span className="font-mono font-bold">{selectedVendorDetails.onboardedByAgent?.registrationId || selectedVendorDetails.assignedPincodeAgent?.registrationId || 'AG-PIN-1042'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Agent Pincode:</span><span className="font-mono font-bold">{selectedVendorDetails.onboardedByAgent?.pincode || selectedVendorDetails.assignedPincodeAgent?.pincode || selectedVendorDetails.pincode || '635109'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Assigned Agent:</span><span className="font-bold text-purple-600 dark:text-purple-400">{getAgentInfo(selectedVendorDetails).name}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Agent Reg ID:</span><span className="font-mono font-bold">{getAgentInfo(selectedVendorDetails).registrationId}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Agent Pincode:</span><span className="font-mono font-bold">{getAgentInfo(selectedVendorDetails).pincode}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Assigned Territory:</span><span className="font-bold">{selectedVendorDetails.assignedArea || 'Tamil Nadu / Dharmapuri'}</span></div>
                 </div>
               </div>
@@ -1478,16 +1541,16 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                           <UserCheck className="w-3 h-3" /> Onboarded By Agent
                         </p>
                         <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                          {v.onboardedByAgent?.name || v.assignedPincodeAgent?.name || 'Field Agent'}
+                          {getAgentInfo(v).name}
                         </p>
                         <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                           ID: <strong className="text-slate-700 dark:text-slate-300">
-                            {v.onboardedByAgent?.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-XXXX'}
+                            {getAgentInfo(v).registrationId}
                           </strong>
                         </p>
                         <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                           Pincode: <strong className="text-slate-700 dark:text-slate-300">
-                            {v.onboardedByAgent?.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'}
+                            {getAgentInfo(v).pincode}
                           </strong>
                         </p>
                       </div>

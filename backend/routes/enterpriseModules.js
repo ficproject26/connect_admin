@@ -98,17 +98,30 @@ const enrichVendorData = async (v) => {
         !!vObj.agentId ||
         !!vObj.onboardedByAgentId ||
         !!vObj.referredBy ||
-        (vObj.createdVia && String(vObj.createdVia).toLowerCase() === 'agent');
+        !!vObj.agentName ||
+        (vObj.createdVia && String(vObj.createdVia).toLowerCase() === 'agent') ||
+        (vObj.registrationSource && String(vObj.registrationSource).toLowerCase() === 'agent');
 
     if (isAgentOnboarded) {
         vObj.joiningType = 'agent';
-        if (!vObj.onboardedByAgent) {
-            vObj.onboardedByAgent = {
-                name: vObj.onboardedBy?.name || vObj.agentId?.name || vObj.referredBy?.name || 'Field Agent',
-                registrationId: vObj.onboardedBy?.registrationId || vObj.agentId?.registrationId || 'AG-PIN-1001',
-                pincode: vObj.pincode || '600001'
-            };
+        
+        let agentDoc = null;
+        const possibleAgentId = vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId;
+        if (possibleAgentId && mongoose.Types.ObjectId.isValid(possibleAgentId)) {
+            agentDoc = await User.findById(possibleAgentId).select('name registrationId pincode assignedArea level').lean();
         }
+
+        const agentName = agentDoc?.name || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.name : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.name : null) || (typeof vObj.referredBy === 'object' ? vObj.referredBy?.name : null) || (typeof vObj.onboardedBy === 'string' ? vObj.onboardedBy : null) || vObj.agentName || 'Field Agent';
+
+        const regId = agentDoc?.registrationId || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.registrationId : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.registrationId : null) || `AG-${(agentDoc?.level || 'PIN').slice(0,4).toUpperCase()}-${String(agentDoc?._id || '1001').slice(-4)}`;
+
+        const pinCode = agentDoc?.pincode || vObj.pincode || '600001';
+
+        vObj.onboardedByAgent = {
+            name: agentName,
+            registrationId: regId,
+            pincode: pinCode
+        };
     } else {
         vObj.joiningType = vObj.joiningType || 'direct';
     }
