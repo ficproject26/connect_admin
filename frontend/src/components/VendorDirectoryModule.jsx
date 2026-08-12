@@ -361,6 +361,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         setTotal(prev => prev + 1);
       }
       fetchVendors();
+      fetchAgentOnboardedVendors();
     }
   };
 
@@ -1480,48 +1481,45 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        {['pending', 'pending review', 'pending_approval', 'under_verification', 'in_review', 'requested'].includes(String(v.status || '').toLowerCase().trim()) ? (
-                          <>
-                            <button
-                              onClick={() => handleApproveVendor(v)}
-                              className="px-3.5 py-2 text-[11px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-none"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5" /> Approve
-                            </button>
-                            <button
-                              onClick={() => handleRejectVendor(v)}
-                              className="px-3.5 py-2 text-[11px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                            >
-                              <XCircle className="w-3.5 h-3.5" /> Reject
-                            </button>
-                            <button
-                              onClick={() => { setShowAgentOnboardedModal(false); setSelectedVendorDetails(v); }}
-                              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer border-none bg-transparent"
-                              title="View Details"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => { setShowAgentOnboardedModal(false); setSelectedVendorDetails(v); }}
-                              className="px-3 py-2 text-[11px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-600 hover:text-white border border-blue-500/20 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                            >
-                              <Eye className="w-3.5 h-3.5" /> View
-                            </button>
-                            <select
-                              value={normalizeStatusValue(v.status)}
-                              onChange={e => handleUpdateVendorStatus(v, e.target.value)}
-                              onClick={e => e.stopPropagation()}
-                              className="text-[10px] font-extrabold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-2 cursor-pointer focus:outline-none"
-                            >
-                              <option value="Active">🟢 Active</option>
-                              <option value="Suspended">⚫ Suspend</option>
-                            </select>
-                          </>
-                        )}
+                      <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => handleApproveVendor(v)}
+                          className="px-3 py-1.5 text-[11px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95 border-none"
+                          title="Approve Vendor Onboarding"
+                        >
+                          <CheckCircle className="w-3.5 h-3.5" /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleRejectVendor(v)}
+                          className="px-3 py-1.5 text-[11px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                          title="Reject Vendor Onboarding"
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Reject
+                        </button>
+                        <button
+                          onClick={() => { setShowAgentOnboardedModal(false); setSelectedVendorDetails(v); }}
+                          className="px-3 py-1.5 text-[11px] font-black text-purple-700 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-600 hover:text-white border border-purple-500/20 rounded-xl flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                          title="View Vendor Profile & KYC Documents"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> View KYC
+                        </button>
+                        <button
+                          onClick={() => handleAutoAssignPincodeAgent(v)}
+                          className="px-3 py-1.5 text-[11px] font-black text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-600 hover:text-white border border-amber-500/20 rounded-xl flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                          title="Verify Pincode & Assign Agent"
+                        >
+                          <MapPin className="w-3.5 h-3.5" /> Verify Pincode
+                        </button>
+                        <select
+                          value={normalizeStatusValue(v.status)}
+                          onChange={e => handleUpdateVendorStatus(v, e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          className="text-[10px] font-extrabold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1.5 cursor-pointer focus:outline-none"
+                        >
+                          <option value="Active">🟢 Active</option>
+                          <option value="Suspended">⚫ Suspend</option>
+                          <option value="Rejected">🔴 Reject</option>
+                        </select>
                       </div>
                     </div>
                   ))
