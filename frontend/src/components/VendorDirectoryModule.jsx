@@ -1429,97 +1429,100 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                   filtered.map((v, idx) => (
                     <div
                       key={v._id || idx}
-                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:border-purple-400/40 hover:bg-purple-500/3 transition-all"
+                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 space-y-4 hover:border-purple-400/50 hover:shadow-md transition-all"
                     >
-                      {/* Vendor Info */}
-                      <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="w-11 h-11 shrink-0 rounded-xl bg-purple-500/10 text-purple-700 dark:text-purple-400 font-black text-lg flex items-center justify-center border border-purple-500/20">
-                          {(v.businessName || v.name || 'V')[0].toUpperCase()}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm truncate">
-                              {v.businessName || v.name}
-                            </span>
-                            {renderStatusBadge(v.status)}
+                      {/* Top Row: Vendor Info & Agent Info side-by-side */}
+                      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                        {/* Vendor Main Details */}
+                        <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                          <div className="w-12 h-12 shrink-0 rounded-2xl bg-purple-500/10 text-purple-700 dark:text-purple-400 font-black text-xl flex items-center justify-center border border-purple-500/20 shadow-xs">
+                            {(v.businessName || v.name || 'V')[0].toUpperCase()}
                           </div>
-                          <p className="text-[11px] text-slate-400 font-medium mt-0.5 truncate">
-                            {v.email || 'No email'} &nbsp;•&nbsp; {getVendorPhone(v)}
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h4 className="font-black text-slate-850 dark:text-slate-100 text-base truncate">
+                                {v.businessName || v.name}
+                              </h4>
+                              {renderStatusBadge(v.status)}
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold truncate">
+                              {v.email || 'No email'} &nbsp;•&nbsp; {getVendorPhone(v)}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                {getVendorCategory(v)}
+                              </span>
+                              <span className="text-[10px] font-mono text-slate-400 font-bold">
+                                {formatVendorId(v.registrationId || v.vendorId || v._id, idx)}
+                              </span>
+                              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                                📍 {getVendorAddress(v)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Agent Info Panel */}
+                        <div className="shrink-0 bg-purple-500/8 border border-purple-500/15 rounded-2xl px-4 py-2.5 space-y-0.5 min-w-[210px] w-full lg:w-auto">
+                          <p className="text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider flex items-center gap-1">
+                            <UserCheck className="w-3.5 h-3.5" /> Onboarded By Agent
                           </p>
-                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                              {getVendorCategory(v)}
-                            </span>
-                            <span className="text-[10px] font-mono text-slate-400">
-                              {formatVendorId(v.registrationId || v.vendorId || v._id, idx)}
-                            </span>
-                            <span className="text-[10px] font-medium text-slate-400">
-                              📍 {getVendorAddress(v)}
-                            </span>
+                          <p className="text-xs font-black text-slate-800 dark:text-slate-100">
+                            {getAgentInfo(v).name}
+                          </p>
+                          <div className="flex items-center justify-between gap-3 text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-0.5">
+                            <span>ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong></span>
+                            <span>Pin: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).pincode}</strong></span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Agent Info Panel */}
-                      <div className="shrink-0 bg-purple-500/8 border border-purple-500/15 rounded-xl px-4 py-3 space-y-1 min-w-[190px]">
-                        <p className="text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider flex items-center gap-1">
-                          <UserCheck className="w-3 h-3" /> Onboarded By Agent
-                        </p>
-                        <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100">
-                          {getAgentInfo(v).name}
-                        </p>
-                        <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                          ID: <strong className="text-slate-700 dark:text-slate-300">
-                            {getAgentInfo(v).registrationId}
-                          </strong>
-                        </p>
-                        <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                          Pincode: <strong className="text-slate-700 dark:text-slate-300">
-                            {getAgentInfo(v).pincode}
-                          </strong>
-                        </p>
-                      </div>
+                      {/* Bottom Row: Actions Bar */}
+                      <div className="pt-3 border-t border-slate-200/60 dark:border-slate-850 flex flex-wrap items-center justify-between gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => handleApproveVendor(v)}
+                            className="px-3.5 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-none"
+                            title="Approve Vendor Onboarding"
+                          >
+                            <CheckCircle className="w-4 h-4" /> Approve
+                          </button>
+                          <button
+                            onClick={() => handleRejectVendor(v)}
+                            className="px-3.5 py-2 text-xs font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                            title="Reject Vendor Onboarding"
+                          >
+                            <XCircle className="w-4 h-4" /> Reject
+                          </button>
+                          <button
+                            onClick={() => { setShowAgentOnboardedModal(false); setSelectedVendorDetails(v); }}
+                            className="px-3.5 py-2 text-xs font-black text-purple-700 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-600 hover:text-white border border-purple-500/20 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                            title="View Vendor Profile & KYC Documents"
+                          >
+                            <Eye className="w-4 h-4" /> View KYC
+                          </button>
+                          <button
+                            onClick={() => handleAutoAssignPincodeAgent(v)}
+                            className="px-3.5 py-2 text-xs font-black text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-600 hover:text-white border border-amber-500/20 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                            title="Verify Pincode & Assign Agent"
+                          >
+                            <MapPin className="w-4 h-4" /> Verify Pincode
+                          </button>
+                        </div>
 
-                      {/* Actions */}
-                      <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={() => handleApproveVendor(v)}
-                          className="px-3 py-1.5 text-[11px] font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1 cursor-pointer transition-all active:scale-95 border-none"
-                          title="Approve Vendor Onboarding"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" /> Approve
-                        </button>
-                        <button
-                          onClick={() => handleRejectVendor(v)}
-                          className="px-3 py-1.5 text-[11px] font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                          title="Reject Vendor Onboarding"
-                        >
-                          <XCircle className="w-3.5 h-3.5" /> Reject
-                        </button>
-                        <button
-                          onClick={() => { setShowAgentOnboardedModal(false); setSelectedVendorDetails(v); }}
-                          className="px-3 py-1.5 text-[11px] font-black text-purple-700 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-600 hover:text-white border border-purple-500/20 rounded-xl flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                          title="View Vendor Profile & KYC Documents"
-                        >
-                          <Eye className="w-3.5 h-3.5" /> View KYC
-                        </button>
-                        <button
-                          onClick={() => handleAutoAssignPincodeAgent(v)}
-                          className="px-3 py-1.5 text-[11px] font-black text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-600 hover:text-white border border-amber-500/20 rounded-xl flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                          title="Verify Pincode & Assign Agent"
-                        >
-                          <MapPin className="w-3.5 h-3.5" /> Verify Pincode
-                        </button>
-                        <select
-                          value={normalizeStatusValue(v.status)}
-                          onChange={e => handleUpdateVendorStatus(v, e.target.value)}
-                          onClick={e => e.stopPropagation()}
-                          className="text-[10px] font-extrabold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1.5 cursor-pointer focus:outline-none"
-                        >
-                          <option value="Active">🟢 Active</option>
-                          <option value="Suspended">⚫ Suspend</option>
-                          <option value="Rejected">🔴 Reject</option>
-                        </select>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-bold text-slate-400">Status:</span>
+                          <select
+                            value={normalizeStatusValue(v.status)}
+                            onChange={e => handleUpdateVendorStatus(v, e.target.value)}
+                            onClick={e => e.stopPropagation()}
+                            className="text-xs font-extrabold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 cursor-pointer focus:outline-none shadow-2xs"
+                          >
+                            <option value="Active">🟢 Active</option>
+                            <option value="Suspended">⚫ Suspend</option>
+                            <option value="Rejected">🔴 Reject</option>
+                          </select>
+                        </div>
                       </div>
                     </div>
                   ))
