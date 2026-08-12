@@ -74,7 +74,7 @@ const getVendorAddress = (v) => {
 };
 
 const getVendorPhone = (v) => {
-  return v.mobileContact || v.phone || v.telephone || '+91 98765 43211';
+  return v.mobileContact || v.phone || v.telephone || v.mobile || '—';
 };
 
 const isVendorAgentOnboarded = (v) => {
@@ -96,43 +96,43 @@ const isVendorAgentOnboarded = (v) => {
 };
 
 const getAgentInfo = (v) => {
-  if (!v) return { name: 'Field Agent', registrationId: 'AG-PIN-1001', pincode: '600001' };
+  if (!v) return { name: '—', registrationId: '—', pincode: '—' };
 
   if (v.onboardedByAgent && typeof v.onboardedByAgent === 'object') {
     return {
-      name: v.onboardedByAgent.name || v.assignedPincodeAgent?.name || 'Field Agent',
-      registrationId: v.onboardedByAgent.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
-      pincode: v.onboardedByAgent.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+      name: v.onboardedByAgent.name || v.assignedPincodeAgent?.name || '—',
+      registrationId: v.onboardedByAgent.registrationId || v.assignedPincodeAgent?.registrationId || '—',
+      pincode: v.onboardedByAgent.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'
     };
   }
   if (v.onboardedBy && typeof v.onboardedBy === 'object') {
     return {
-      name: v.onboardedBy.name || v.assignedPincodeAgent?.name || 'Field Agent',
-      registrationId: v.onboardedBy.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
-      pincode: v.onboardedBy.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+      name: v.onboardedBy.name || v.assignedPincodeAgent?.name || '—',
+      registrationId: v.onboardedBy.registrationId || v.assignedPincodeAgent?.registrationId || '—',
+      pincode: v.onboardedBy.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'
     };
   }
   if (v.agentId && typeof v.agentId === 'object') {
     return {
-      name: v.agentId.name || v.assignedPincodeAgent?.name || 'Field Agent',
-      registrationId: v.agentId.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
-      pincode: v.agentId.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+      name: v.agentId.name || v.assignedPincodeAgent?.name || '—',
+      registrationId: v.agentId.registrationId || v.assignedPincodeAgent?.registrationId || '—',
+      pincode: v.agentId.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'
     };
   }
   if (v.referredBy && typeof v.referredBy === 'object') {
     return {
-      name: v.referredBy.name || v.assignedPincodeAgent?.name || 'Field Agent',
-      registrationId: v.referredBy.registrationId || v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
-      pincode: v.referredBy.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+      name: v.referredBy.name || v.assignedPincodeAgent?.name || '—',
+      registrationId: v.referredBy.registrationId || v.assignedPincodeAgent?.registrationId || '—',
+      pincode: v.referredBy.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'
     };
   }
 
-  const name = v.agentName || (typeof v.onboardedBy === 'string' ? v.onboardedBy : '') || (typeof v.referredBy === 'string' ? v.referredBy : '') || v.assignedPincodeAgent?.name || 'Field Agent';
+  const name = v.agentName || (typeof v.onboardedBy === 'string' ? v.onboardedBy : '') || (typeof v.referredBy === 'string' ? v.referredBy : '') || v.assignedPincodeAgent?.name || '—';
 
   return {
     name,
-    registrationId: v.assignedPincodeAgent?.registrationId || 'AG-PIN-1001',
-    pincode: v.assignedPincodeAgent?.pincode || v.pincode || '600001'
+    registrationId: v.assignedPincodeAgent?.registrationId || '—',
+    pincode: v.assignedPincodeAgent?.pincode || v.pincode || '—'
   };
 };
 
@@ -187,81 +187,18 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         headers: { 'x-auth-token': token }
       });
       let list = [];
+      let totalCount = 0;
+      let totalPages = 1;
       if (res.ok) {
         const data = await res.json();
         list = data.vendors || [];
-      }
-
-      if (list.length === 0) {
-        list = [
-          {
-            _id: 'vnd-dir-dhanu-101',
-            businessName: 'Dhanushya Sri Enterprises',
-            contactPerson: 'Dhanushya Sri',
-            email: 'dhanushiyasri@gmail.com',
-            phone: '+91 98765 43211',
-            category: 'Retail & Stores',
-            assignedArea: 'Tamil Nadu / Dharmapuri',
-            pincode: '635109',
-            status: 'Approved',
-            joiningType: 'direct',
-            registrationId: 'VND-DIR-8821'
-          },
-          {
-            _id: 'vnd-201',
-            businessName: 'Global Supermarket & Fresh Supplies',
-            contactPerson: 'Ramesh Kumar',
-            email: 'ramesh@globalsupermarket.com',
-            phone: '+91 98421 88990',
-            category: 'Store Vendor',
-            assignedArea: 'Tamil Nadu / Chennai',
-            pincode: '600001',
-            status: 'Approved',
-            joiningType: 'agent',
-            onboardedByAgent: {
-              name: 'Karthik Raja',
-              registrationId: 'AG-PIN-1042',
-              pincode: '600001'
-            },
-            registrationId: 'VND-STORE-4412'
-          },
-          {
-            _id: 'vnd-202',
-            businessName: 'Apollo Care Multi-Specialty Clinic',
-            contactPerson: 'Dr. S. K. Sundaram',
-            email: 'admin@apollocare.org',
-            phone: '+91 97890 12345',
-            category: 'Hospital Vendor',
-            assignedArea: 'Tamil Nadu / Salem',
-            pincode: '636001',
-            status: 'Approved',
-            joiningType: 'agent',
-            onboardedByAgent: {
-              name: 'Suresh Kumar',
-              registrationId: 'AG-PIN-3091',
-              pincode: '636001'
-            },
-            registrationId: 'VND-[#3619]'
-          },
-          {
-            _id: 'vnd-203',
-            businessName: 'Grand Palace Hotel & Suites',
-            contactPerson: 'K. Venkatesh',
-            email: 'contact@grandpalace.in',
-            phone: '+91 94432 55667',
-            category: 'Hotel Vendor',
-            assignedArea: 'Tamil Nadu / Coimbatore',
-            pincode: '641001',
-            status: 'Approved',
-            joiningType: 'direct',
-            registrationId: 'VND-[#9923]'
-          }
-        ];
+        totalCount = data.total || list.length;
+        totalPages = data.pages || Math.ceil(list.length / 12);
       }
 
       setVendors(list);
-      setTotal(list.length);
-      setPages(Math.ceil(list.length / 12));
+      setTotal(totalCount);
+      setPages(totalPages);
     } catch (err) {
       console.error('Fetch vendor directory error:', err);
     } finally {
@@ -803,10 +740,13 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3 py-2 font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
           >
             <option value="all">All Categories</option>
-            <option value="Store Vendor">Store Vendor</option>
-            <option value="Hospital Vendor">Hospital Vendor</option>
-            <option value="Hotel Vendor">Hotel Vendor</option>
-            <option value="Service Provider Vendor">Service Provider</option>
+            <option value="Service">Service</option>
+            <option value="Product">Product</option>
+            <option value="Daily Needs">Daily Needs</option>
+            <option value="Food">Food</option>
+            <option value="Stay">Stay</option>
+            <option value="Travel">Travel</option>
+            <option value="Job">Job</option>
           </select>
 
           {/* Status Filter */}
@@ -817,8 +757,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           >
             <option value="all">All Statuses</option>
             <option value="Active">🟢 Active</option>
-            <option value="Inactive">🔴 Inactive</option>
-            <option value="Pending">🟡 Pending Approval</option>
             <option value="Suspended">⚫ Suspended</option>
             <option value="Rejected">🔴 Rejected</option>
           </select>
@@ -983,7 +921,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                           {v.assignedPincodeAgent.name}
                         </span>
                         <div className="text-[11px] text-slate-500 font-mono">
-                          ID: {v.assignedPincodeAgent.registrationId || 'AG-PIN-2088'} • Pin: {v.pincode || '635109'}
+                          ID: {v.assignedPincodeAgent.registrationId || '—'} {v.pincode ? `• Pin: ${v.pincode}` : ''}
                         </div>
                       </div>
                     ) : (
