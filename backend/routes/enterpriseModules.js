@@ -138,10 +138,64 @@ const enrichVendorData = async (v) => {
     return vObj;
 };
 
-// GET Vendor Directory with filters, pagination, and direct requests
+// GET Vendor Directory with filters, pagination, and direct requests / agent-onboarded requests
 router.get('/vendors', auth, async (req, res) => {
     try {
-        const { search, category, state, status, isDirectRequest, page = 1, limit = 20 } = req.query;
+        const { search, category, state, status, isDirectRequest, isAgentOnboarded, page = 1, limit = 20 } = req.query;
+
+        if (isAgentOnboarded === 'true') {
+            let agentVendorsFromUser = await User.find({
+                $or: [
+                    { joiningType: 'agent' },
+                    { createdVia: 'agent' },
+                    { registrationSource: 'agent' },
+                    { onboardedBy: { $exists: true, $ne: null } },
+                    { agentId: { $exists: true, $ne: null } },
+                    { onboardedByAgentId: { $exists: true, $ne: null } },
+                    { referredBy: { $exists: true, $ne: null } }
+                ]
+            }).sort({ createdAt: -1 });
+
+            let agentVendorsFromVendor = await Vendor.find({
+                $or: [
+                    { joiningType: 'agent' },
+                    { createdVia: 'agent' },
+                    { registrationSource: 'agent' },
+                    { onboardedBy: { $exists: true, $ne: null } },
+                    { agentId: { $exists: true, $ne: null } },
+                    { onboardedByAgentId: { $exists: true, $ne: null } },
+                    { referredBy: { $exists: true, $ne: null } }
+                ]
+            }).sort({ createdAt: -1 });
+
+            let rawAgent = [...agentVendorsFromUser.map(v => v.toObject()), ...agentVendorsFromVendor.map(v => v.toObject())];
+            
+            const vendorMap = new Map();
+            rawAgent.forEach(v => {
+                const key = v._id ? String(v._id) : (v.email || Math.random());
+                if (!vendorMap.has(key)) vendorMap.set(key, v);
+            });
+
+            let enriched = await Promise.all(Array.from(vendorMap.values()).map(v => enrichVendorData(v)));
+
+            if (search) {
+                const s = search.toLowerCase();
+                enriched = enriched.filter(v =>
+                    (v.businessName || v.name || '').toLowerCase().includes(s) ||
+                    (v.onboardedByAgent?.name || v.agentName || '').toLowerCase().includes(s) ||
+                    (v.onboardedByAgent?.registrationId || '').toLowerCase().includes(s) ||
+                    (v.pincode || '').includes(s) ||
+                    (v.email || '').toLowerCase().includes(s)
+                );
+            }
+
+            return res.json({
+                vendors: enriched,
+                total: enriched.length,
+                page: 1,
+                pages: 1
+            });
+        }
 
         if (isDirectRequest === 'true') {
             // Aggregated direct vendor registration requests (strictly EXCLUDING agent-onboarded vendors)
@@ -295,6 +349,96 @@ router.get('/vendors', auth, async (req, res) => {
     } catch (err) {
         console.error('Vendor directory error:', err);
         res.status(500).send('Server error');
+    }
+});
+
+// POST Agent Onboard New Vendor (Creates Pending Vendor linked to Agent and Territory)
+router.post('/vendors/agent-onboard', auth, async (req, res) => {
+    try {
+        const {
+            businessName, name, contactPerson, email, phone, category, subCategory,
+            assignedState, assignedDistrict, assignedDivision, pincode, assignedArea,
+            address, kycDocs, agentId
+        } = req.body;
+
+        const targetAgentId = agentId || req.user?.id;
+        let agentDoc = null;
+        if (targetAgentId && mongoose.Types.ObjectId.isValid(targetAgentId)) {
+            agentDoc = await User.findById(targetAgentId).lean();
+        }
+
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randDigits = Math.floor(1000 + Math.random() * 9000);
+        const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
+
+        const lowerEmail = (email || `vendor_${randDigits}@connect.app`).toLowerCase().trim();
+        const cleanPhone = (phone || '').replace(/\D/g, '');
+
+        const territoryParts = [
+            assignedState || agentDoc?.state || agentDoc?.assignedState || '',
+            assignedDistrict || agentDoc?.district || agentDoc?.assignedDistrict || '',
+            assignedDivision || agentDoc?.division || agentDoc?.assignedDivision || '',
+            pincode || agentDoc?.pincode || ''
+        ].filter(Boolean);
+
+        const territoryStr = assignedArea || (territoryParts.length > 0 ? territoryParts.join(' / ') : (agentDoc?.assignedArea || ''));
+
+        const vendorData = {
+            name: name || contactPerson || businessName || 'Vendor Merchant',
+            businessName: businessName || name || 'Vendor Business',
+            contactPerson: contactPerson || name || businessName || 'Contact Person',
+            email: lowerEmail,
+            phone: cleanPhone || '9876543210',
+            role: 'Vendor',
+            vendorType: category || 'General Store',
+            category: category || 'General Store',
+            subCategory: subCategory || '',
+            status: 'pending',
+            kycStatus: 'Pending KYC',
+            joiningType: 'agent',
+            createdVia: 'agent',
+            registrationSource: 'agent',
+            onboardedBy: targetAgentId,
+            agentId: targetAgentId,
+            onboardedByAgentId: targetAgentId,
+            agentName: agentDoc?.name || 'Field Agent',
+            agentRegistrationId: agentDoc?.registrationId || `AG-${(agentDoc?.level || 'PIN').slice(0, 4).toUpperCase()}-1001`,
+            assignedArea: territoryStr,
+            assignedState: assignedState || agentDoc?.state || agentDoc?.assignedState || '',
+            assignedDistrict: assignedDistrict || agentDoc?.district || agentDoc?.assignedDistrict || '',
+            assignedDivision: assignedDivision || agentDoc?.division || agentDoc?.assignedDivision || '',
+            pincode: pincode || agentDoc?.pincode || '',
+            address: address || territoryStr,
+            registrationId,
+            createdAt: new Date()
+        };
+
+        const newVendorUser = new User(vendorData);
+        await newVendorUser.save();
+
+        const newVendorDoc = new Vendor({
+            ...vendorData,
+            _id: newVendorUser._id
+        });
+        await newVendorDoc.save().catch(() => {});
+
+        const enriched = await enrichVendorData(newVendorUser);
+
+        // Real-time Socket.IO emission to admin room
+        const io = req.app.get('io');
+        if (io) {
+            io.to('admin').emit('vendor_onboarded_by_agent', enriched);
+            io.emit('vendor_onboarded_by_agent', enriched);
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Vendor onboarded successfully by agent and submitted for Admin approval',
+            vendor: enriched
+        });
+    } catch (err) {
+        console.error('Agent vendor onboarding error:', err);
+        res.status(500).json({ success: false, message: 'Server error onboarding vendor', error: err.message });
     }
 });
 

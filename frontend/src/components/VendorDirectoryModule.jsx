@@ -144,6 +144,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
   // Agent Onboarded Vendors Modal
   const [showAgentOnboardedModal, setShowAgentOnboardedModal] = useState(false);
   const [agentOnboardSearch, setAgentOnboardSearch] = useState('');
+  const [agentOnboardedVendorsList, setAgentOnboardedVendorsList] = useState([]);
   const [directRequests, setDirectRequests] = useState([]);
 
   // Enterprise Status Change Confirmation Modal
@@ -217,20 +218,38 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     }
   };
 
+  const fetchAgentOnboardedVendors = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500`, {
+        headers: { 'x-auth-token': token }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAgentOnboardedVendorsList(data.vendors || []);
+      }
+    } catch (err) {
+      console.error('Fetch agent onboarded vendors error:', err);
+      setAgentOnboardedVendorsList([]);
+    }
+  };
+
   useEffect(() => {
     fetchVendors();
     fetchDirectRequests();
+    fetchAgentOnboardedVendors();
 
     // Multi-device real-time sync: poll backend every 10 seconds
     const interval = setInterval(() => {
       fetchVendors();
       fetchDirectRequests();
+      fetchAgentOnboardedVendors();
     }, 10000);
 
     // Sync state immediately when user switches back to this window tab
     const handleFocus = () => {
       fetchVendors();
       fetchDirectRequests();
+      fetchAgentOnboardedVendors();
     };
     window.addEventListener('focus', handleFocus);
 
@@ -614,21 +633,15 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
           </button>
 
           {/* Agent Onboarded Vendors Button */}
-          {(() => {
-            const isAgentVendor = (v) => v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-            const agentCount = vendors.filter(isAgentVendor).length;
-            return (
-              <button
-                onClick={() => setShowAgentOnboardedModal(true)}
-                className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
-              >
-                <UserCheck className="w-4 h-4 shrink-0" /> Agent Onboarded
-                <span className="bg-white text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-black">
-                  {agentCount}
-                </span>
-              </button>
-            );
-          })()}
+          <button
+            onClick={() => { setShowAgentOnboardedModal(true); fetchAgentOnboardedVendors(); }}
+            className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
+          >
+            <UserCheck className="w-4 h-4 shrink-0" /> Agent Onboarded
+            <span className="bg-white text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-black">
+              {agentOnboardedVendorsList.length}
+            </span>
+          </button>
 
           {/* Export CSV */}
           <button
@@ -1323,14 +1336,13 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
       {/* 8. AGENT ONBOARDED VENDORS MODAL */}
       {showAgentOnboardedModal && (() => {
-        const isAgentVendor = (v) => v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-        const agentVendors = vendors.filter(isAgentVendor);
+        const agentVendors = agentOnboardedVendorsList;
         const q = agentOnboardSearch.toLowerCase().trim();
         const filtered = agentVendors.filter(v =>
           !q ||
           (v.businessName || v.name || '').toLowerCase().includes(q) ||
-          (v.onboardedByAgent?.name || '').toLowerCase().includes(q) ||
-          (v.onboardedByAgent?.registrationId || '').toLowerCase().includes(q) ||
+          (v.onboardedByAgent?.name || v.agentName || '').toLowerCase().includes(q) ||
+          (v.onboardedByAgent?.registrationId || v.agentRegistrationId || '').toLowerCase().includes(q) ||
           (v.pincode || '').includes(q) ||
           (v.email || '').toLowerCase().includes(q)
         );
