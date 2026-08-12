@@ -902,14 +902,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       <UserCheck className="w-4 h-4" />
                       <span>Agent: <strong>{v.assignedPincodeAgent?.name || 'Unassigned'}</strong></span>
                     </div>
-                    {!v.assignedPincodeAgent && (
-                      <button
-                        onClick={e => { e.stopPropagation(); handleAutoAssignPincodeAgent(v._id); }}
-                        className="text-[10px] font-black uppercase px-2 py-1 rounded-lg bg-blue-600 text-white shadow-xs hover:bg-blue-700 transition-all cursor-pointer"
-                      >
-                        Auto Assign
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
@@ -995,12 +987,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                         </div>
                       </div>
                     ) : (
-                      <button
-                        onClick={e => { e.stopPropagation(); handleAutoAssignPincodeAgent(v._id); }}
-                        className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 cursor-pointer shadow-xs transition-all active:scale-95"
-                      >
-                        Auto Assign Agent
-                      </button>
+                      <span className="text-xs font-semibold text-slate-400">Unassigned</span>
                     )}
                   </td>
                   <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
