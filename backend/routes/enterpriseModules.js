@@ -96,6 +96,7 @@ const enrichVendorData = async (v) => {
         !!vObj.onboardedByAgent ||
         !!vObj.onboardedBy ||
         !!vObj.agentId ||
+        !!vObj.assignedAgent ||
         !!vObj.onboardedByAgentId ||
         !!vObj.referredBy ||
         !!vObj.agentName ||
@@ -106,16 +107,30 @@ const enrichVendorData = async (v) => {
         vObj.joiningType = 'agent';
         
         let agentDoc = null;
-        const possibleAgentId = vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId;
-        if (possibleAgentId && mongoose.Types.ObjectId.isValid(possibleAgentId)) {
-            agentDoc = await User.findById(possibleAgentId).select('name registrationId pincode assignedArea level').lean();
+        const possibleAgentId = (vObj.assignedAgent && typeof vObj.assignedAgent === 'object' ? (vObj.assignedAgent._id || vObj.assignedAgent) : vObj.assignedAgent) || vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId;
+
+        if (possibleAgentId) {
+            if (mongoose.Types.ObjectId.isValid(possibleAgentId)) {
+                agentDoc = await User.findById(possibleAgentId).select('name registrationId pincode assignedArea level role').lean();
+            }
+            if (!agentDoc) {
+                const db = mongoose.connection.db;
+                if (db) {
+                    try {
+                        const filter = mongoose.Types.ObjectId.isValid(possibleAgentId)
+                            ? { _id: new mongoose.Types.ObjectId(possibleAgentId) }
+                            : { $or: [{ registrationId: possibleAgentId }, { email: possibleAgentId }] };
+                        agentDoc = await db.collection('agents').findOne(filter);
+                    } catch (e) {}
+                }
+            }
         }
 
-        const agentName = agentDoc?.name || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.name : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.name : null) || (typeof vObj.referredBy === 'object' ? vObj.referredBy?.name : null) || (typeof vObj.onboardedBy === 'string' ? vObj.onboardedBy : null) || vObj.agentName || 'Field Agent';
+        const agentName = agentDoc?.name || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.name : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.name : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.name : null) || (typeof vObj.referredBy === 'object' ? vObj.referredBy?.name : null) || (typeof vObj.onboardedBy === 'string' ? vObj.onboardedBy : null) || vObj.agentName || 'Field Agent';
 
-        const regId = agentDoc?.registrationId || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.registrationId : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.registrationId : null) || `AG-${(agentDoc?.level || 'PIN').slice(0,4).toUpperCase()}-${String(agentDoc?._id || '1001').slice(-4)}`;
+        const regId = agentDoc?.registrationId || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.registrationId : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.registrationId : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.registrationId : null) || `AG-${(agentDoc?.level || agentDoc?.role || 'PIN').slice(0,4).toUpperCase()}-${String(agentDoc?._id || '1001').slice(-4)}`;
 
-        const pinCode = agentDoc?.pincode || vObj.pincode || '600001';
+        const pinCode = agentDoc?.pincode || (agentDoc?.territory && typeof agentDoc.territory === 'object' ? agentDoc.territory.pincode : null) || vObj.pincode || '600001';
 
         vObj.onboardedByAgent = {
             name: agentName,
@@ -151,6 +166,7 @@ router.get('/vendors', auth, async (req, res) => {
                     { registrationSource: 'agent' },
                     { onboardedBy: { $exists: true, $ne: null } },
                     { agentId: { $exists: true, $ne: null } },
+                    { assignedAgent: { $exists: true, $ne: null } },
                     { onboardedByAgentId: { $exists: true, $ne: null } },
                     { referredBy: { $exists: true, $ne: null } }
                 ]
@@ -163,6 +179,7 @@ router.get('/vendors', auth, async (req, res) => {
                     { registrationSource: 'agent' },
                     { onboardedBy: { $exists: true, $ne: null } },
                     { agentId: { $exists: true, $ne: null } },
+                    { assignedAgent: { $exists: true, $ne: null } },
                     { onboardedByAgentId: { $exists: true, $ne: null } },
                     { referredBy: { $exists: true, $ne: null } }
                 ]
