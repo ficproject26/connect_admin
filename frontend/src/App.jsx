@@ -4441,9 +4441,7 @@ function App() {
                           const vEmail = order.vendorId?.email || order.vendorEmail || '—';
                           const pDetails = order.serviceName || order.service || order.productDetails || order.product_details || order.productName || order.title || '—';
                           const custName = order.customerId?.name || order.customer_name || order.memberName || '—';
-                          const custPhone = (order.customerId?.phone && order.customerId?.phone !== 'N/A')
-                            ? order.customerId?.phone
-                            : ((order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.phone && order.phone !== 'N/A' ? order.phone : '—'));
+                          const custPhone = order.customerId?.phone || order.customerId?.mobile || order.customerId?.mobileNumber || order.customerId?.contactNumber || order.customer_phone || order.customerPhone || order.phone || order.mobile || '—';
                           return (
                             <tr key={order._id}>
                               <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{order.order_number || order.id || (order._id ? 'ORD-' + String(order._id).substring(18, 24).toUpperCase() : '—')}</td>

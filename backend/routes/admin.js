@@ -2294,72 +2294,48 @@ const resolveVendorAndCustomer = async (items) => {
         }
 
         // 2. Resolve Customer
-        let customer = doc.customerId;
-        if (!customer) {
-            const custName = doc.memberName || doc.customer_name;
-            if (custName) {
-                try {
-                    const dbCustomer = await Customer.findOne({
-                        $or: [
-                            { name: custName },
-                            { name: new RegExp('^' + custName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') },
-                            { name: new RegExp(custName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') }
-                        ]
-                    });
-                    if (dbCustomer) {
-                        customer = dbCustomer.toObject();
-                    } else {
-                        customer = {
-                            name: custName,
-                            phone: (doc.customer_phone && doc.customer_phone !== 'N/A') ? doc.customer_phone : (doc.phone || '—'),
-                            email: doc.customer_email || doc.email || '—'
-                        };
-                    }
-                } catch (err) {
-                    customer = {
-                        name: custName,
-                        phone: (doc.customer_phone && doc.customer_phone !== 'N/A') ? doc.customer_phone : (doc.phone || '—'),
-                        email: doc.customer_email || doc.email || '—'
-                    };
-                }
-            } else {
-                customer = {
-                    name: doc.customer_name || 'Customer',
-                    phone: doc.customer_phone || doc.phone || '—',
-                    email: doc.customer_email || doc.email || '—'
-                };
+        let customerObj = null;
+        let customerIdRef = doc.customerId;
+        const custName = doc.memberName || doc.customer_name || doc.customer?.name || (typeof customerIdRef === 'string' && !mongoose.Types.ObjectId.isValid(customerIdRef) ? customerIdRef : null);
+        const custEmail = doc.customer_email || doc.email || doc.customer?.email;
+
+        try {
+            if (customerIdRef && mongoose.Types.ObjectId.isValid(customerIdRef)) {
+                customerObj = await Customer.findById(customerIdRef) || await User.findById(customerIdRef);
             }
-        } else if (typeof customer === 'string') {
-            try {
-                let dbCustomer = null;
-                if (mongoose.Types.ObjectId.isValid(customer)) {
-                    dbCustomer = await Customer.findById(customer);
-                }
-                if (!dbCustomer) {
-                    dbCustomer = await Customer.findOne({
-                        $or: [
-                            { name: customer },
-                            { email: customer }
-                        ]
-                    });
-                }
-                if (dbCustomer) {
-                    customer = dbCustomer.toObject();
-                } else {
-                    customer = {
-                        name: customer,
-                        phone: doc.customer_phone || doc.phone || '—',
-                        email: doc.customer_email || doc.email || '—'
-                    };
-                }
-            } catch (err) {
-                customer = {
-                    name: customer,
-                    phone: doc.customer_phone || doc.phone || '—',
-                    email: doc.customer_email || doc.email || '—'
-                };
+            if (!customerObj && custName) {
+                const escapedName = custName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                customerObj = await Customer.findOne({
+                    $or: [
+                        { name: custName },
+                        { name: new RegExp('^' + escapedName, 'i') },
+                        { name: new RegExp(escapedName, 'i') }
+                    ]
+                }) || await User.findOne({
+                    $or: [
+                        { name: custName },
+                        { name: new RegExp('^' + escapedName, 'i') },
+                        { name: new RegExp(escapedName, 'i') }
+                    ]
+                });
             }
+            if (!customerObj && custEmail) {
+                customerObj = await Customer.findOne({ email: custEmail }) || await User.findOne({ email: custEmail });
+            }
+        } catch (err) {
+            console.error("Resolve customer error:", err);
         }
+
+        const phoneVal = (customerObj ? (customerObj.phone || customerObj.mobile || customerObj.mobileNumber || customerObj.contactNumber || customerObj.phoneNumber) : null) || doc.customer_phone || doc.customerPhone || doc.phone || doc.mobile || doc.contactNumber || doc.address?.phone || doc.deliveryAddress?.phone || doc.customer?.phone || '—';
+        const nameVal = (customerObj ? customerObj.name : null) || custName || (typeof customerIdRef === 'object' ? customerIdRef.name : null) || 'Customer';
+        const emailVal = (customerObj ? customerObj.email : null) || custEmail || (typeof customerIdRef === 'object' ? customerIdRef.email : null) || '—';
+
+        let customer = {
+            ...(customerObj ? (customerObj.toObject ? customerObj.toObject() : customerObj) : (typeof customerIdRef === 'object' ? customerIdRef : {})),
+            name: nameVal,
+            phone: phoneVal,
+            email: emailVal
+        };
 
         // Adjust amount and commission for dynamic orders
         const amount = doc.amount !== undefined ? doc.amount : (doc.finalAmount !== undefined ? doc.finalAmount : (doc.totalAmount !== undefined ? doc.totalAmount : 0));
