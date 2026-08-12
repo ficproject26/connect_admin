@@ -6,17 +6,17 @@ import {
 } from 'lucide-react';
 
 const formatVendorId = (rawId, index = 0) => {
-  if (!rawId) return `ven-fic-2026-v${String(index + 1).padStart(3, '0')}`;
+  if (!rawId) return `VND-${String(index + 1).padStart(4, '0')}`;
   const str = String(rawId).trim();
-  if (/^ven-fic-2026-v\d+$/i.test(str)) return str.toLowerCase();
-  const seq = String(index + 1).padStart(3, '0');
-  return `ven-fic-2026-v${seq}`;
+  if (str.startsWith('VND-') || str.startsWith('vnd-')) return str.toUpperCase();
+  if (str.length === 24) return `VND-${str.substring(18, 24).toUpperCase()}`;
+  return `VND-${str.toUpperCase()}`;
 };
 
 const getVendorCategory = (v) => {
   if (Array.isArray(v.categories) && v.categories.length > 0) return v.categories.join(', ');
   const cat = v.categories || v.category || v.vendorType || v.businessCategory || v.shopType || v.vendorCategory;
-  if (!cat) return 'Retail & Stores';
+  if (!cat) return '—';
   return cat;
 };
 
@@ -48,29 +48,16 @@ const getVendorAddress = (v) => {
     if (!city && parts[1] && !isPlaceholder(parts[1])) city = parts[1];
   }
 
-  if (street) {
-    const sLower = street.toLowerCase();
-    if (sLower.includes('thalaivasal')) {
-      if (!city) city = 'Salem';
-      if (!state) state = 'Tamil Nadu';
-      if (!pin) pin = '636112';
-    } else if (sLower.includes('sivasankarapuram')) {
-      if (!city) city = 'Kallakurichi';
-      if (!state) state = 'Tamil Nadu';
-      if (!pin) pin = '606202';
-    }
-  }
-
-  if (!state) state = 'Tamil Nadu';
-  if (!city) city = 'Dharmapuri';
-  if (!pin) pin = '635109';
-
   const addressParts = [];
   if (street) addressParts.push(street);
   if (city && city.toLowerCase() !== street.toLowerCase()) addressParts.push(city);
   if (state && state.toLowerCase() !== city.toLowerCase()) addressParts.push(state);
 
-  return `${addressParts.join(', ')} (${pin})`;
+  const baseAddress = addressParts.join(', ');
+  if (baseAddress && pin) return `${baseAddress} (${pin})`;
+  if (baseAddress) return baseAddress;
+  if (pin) return `Pincode: ${pin}`;
+  return '—';
 };
 
 const getVendorPhone = (v) => {
@@ -1234,10 +1221,10 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
                   <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.email || 'N/A'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Mobile Phone:</span><span className="font-bold">{getVendorPhone(selectedVendorDetails)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">District / City:</span><span className="font-bold">{selectedVendorDetails.city || 'Dharmapuri'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-bold">{selectedVendorDetails.state || 'Tamil Nadu'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-mono font-bold">{selectedVendorDetails.pincode || '635109'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-bold truncate max-w-[180px]" title={getVendorAddress(selectedVendorDetails)}>{getVendorAddress(selectedVendorDetails)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">District / City:</span><span className="font-bold">{selectedVendorDetails.city || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-bold">{selectedVendorDetails.state || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-bold">{selectedVendorDetails.pincode || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-bold truncate max-w-[180px]" title={selectedVendorDetails.address || 'Address not provided'}>{selectedVendorDetails.address || 'Address not provided'}</span></div>
                 </div>
               </div>
 

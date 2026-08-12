@@ -8818,22 +8818,14 @@ function App() {
                 const addrStr = modalData.fullAddress || modalData.address || modalData.streetAddress || '';
                 const addrPin = addrStr.match(/\b\d{6}\b/)?.[0];
 
-                let pin = addrPin || (typeof modalData.assignedPincode === 'object' ? (modalData.assignedPincode?.code || modalData.assignedPincode?.pincode) : modalData.assignedPincode);
-                if (!pin || pin === '986541' || pin === '111111') {
-                  pin = modalData.pincode || modalData.territory?.pincode || '635109';
-                }
+                let pin = addrPin || (typeof modalData.assignedPincode === 'object' ? (modalData.assignedPincode?.code || modalData.assignedPincode?.pincode) : modalData.assignedPincode) || modalData.pincode || modalData.territory?.pincode || '—';
 
-                const state = modalData.territory?.state || modalData.state || modalData.assignedState || 'Tamil Nadu';
-                const district = modalData.territory?.district || modalData.district || modalData.assignedDistrict || 'Dharmapuri';
-                const division = modalData.territory?.division || modalData.division || modalData.assignedDivision || `${district} Division`;
-                const postOffice = modalData.postOffice || `${district} HO`;
+                const state = modalData.territory?.state || modalData.state || modalData.assignedState || '—';
+                const district = modalData.territory?.district || modalData.district || modalData.assignedDistrict || '—';
+                const division = modalData.territory?.division || modalData.division || modalData.assignedDivision || (district !== '—' ? `${district} Division` : '—');
+                const postOffice = modalData.postOffice || (district !== '—' ? `${district} HO` : '—');
 
-                let fullAddress = addrStr;
-                if (!fullAddress || fullAddress.includes('123 Main Street')) {
-                  fullAddress = `${district}, ${state} - ${pin}`;
-                } else {
-                  fullAddress = fullAddress.replace(/\b\d{6}\b/, pin);
-                }
+                let fullAddress = addrStr || (district !== '—' && state !== '—' ? `${district}, ${state} - ${pin}` : 'Address not provided');
 
                 return (
                   <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
