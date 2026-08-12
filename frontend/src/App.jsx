@@ -1733,14 +1733,14 @@ function App() {
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
                       <tr>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">#</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Agent Name</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Level / Role</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Territory / Area</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Contact</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Status</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-right whitespace-nowrap">Payment Amount</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-center whitespace-nowrap">Action</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap min-w-[50px]">#</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap min-w-[200px]">Agent Name</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap min-w-[170px]" style={{ whiteSpace: 'nowrap' }}>Level / Role</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap min-w-[220px]">Territory / Area</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap min-w-[130px]">Contact</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap min-w-[130px]">Status</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-right whitespace-nowrap min-w-[150px]">Payment Amount</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-center whitespace-nowrap min-w-[180px]">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
@@ -1752,42 +1752,42 @@ function App() {
 
                         return (
                           <tr key={agent._id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                            <td className="px-5 py-4 text-xs font-bold text-slate-400 whitespace-nowrap">{idx + 1}</td>
-                            <td className="px-5 py-4 whitespace-nowrap">
+                            <td className="px-5 py-4 text-xs font-bold text-slate-400 whitespace-nowrap min-w-[50px]">{idx + 1}</td>
+                            <td className="px-5 py-4 whitespace-nowrap min-w-[200px]">
                               <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-black text-sm flex items-center justify-center border border-cyan-500/20 shrink-0">
                                   {(agent.name || 'A')[0].toUpperCase()}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{agent.name || 'Agent'}</p>
-                                  <p className="text-[11px] text-slate-400 font-medium">{agent.email || '—'}</p>
+                                  <p className="text-sm font-bold text-slate-850 dark:text-slate-100 whitespace-nowrap">{agent.name || 'Agent'}</p>
+                                  <p className="text-[11px] text-slate-400 font-medium whitespace-nowrap">{agent.email || '—'}</p>
                                 </div>
                               </div>
                             </td>
-                            <td className="px-5 py-4 whitespace-nowrap">
-                              <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 inline-block whitespace-nowrap">
+                            <td className="px-5 py-4 whitespace-nowrap min-w-[170px]" style={{ whiteSpace: 'nowrap' }}>
+                              <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 whitespace-nowrap inline-flex items-center justify-center shrink-0" style={{ whiteSpace: 'nowrap', display: 'inline-flex', minWidth: 'max-content' }}>
                                 {['division', 'divisional'].includes(level) ? 'DIVISIONAL AGENT' : `${level.toUpperCase()} AGENT`}
                               </span>
                             </td>
-                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-[240px] truncate whitespace-nowrap" title={territoryStr}>
+                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-[240px] truncate whitespace-nowrap min-w-[220px]" title={territoryStr}>
                               {territoryStr}
                             </td>
-                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">{agent.phone || '—'}</td>
-                            <td className="px-5 py-4 whitespace-nowrap">
-                              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg border inline-block whitespace-nowrap ${
+                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap min-w-[130px]">{agent.phone || '—'}</td>
+                            <td className="px-5 py-4 whitespace-nowrap min-w-[130px]" style={{ whiteSpace: 'nowrap' }}>
+                              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg border whitespace-nowrap inline-flex items-center justify-center shrink-0 ${
                                 agentStatus === 'active' || agentStatus === 'approved'
                                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                                   : agentStatus === 'suspended' || agentStatus === 'rejected'
                                   ? 'bg-rose-500/10 text-rose-500 border-rose-500/20'
                                   : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                              }`}>
+                              }`} style={{ whiteSpace: 'nowrap', display: 'inline-flex', minWidth: 'max-content' }}>
                                 {agent.status || agent.kycStatus || 'Approved'}
                               </span>
                             </td>
-                            <td className="px-5 py-4 text-right whitespace-nowrap">
+                            <td className="px-5 py-4 text-right whitespace-nowrap min-w-[150px]">
                               <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">₹{Number(paymentAmount).toLocaleString('en-IN')}</span>
                             </td>
-                            <td className="px-5 py-4 text-center whitespace-nowrap">
+                            <td className="px-5 py-4 text-center whitespace-nowrap min-w-[180px]">
                               <button
                                 onClick={() => {
                                   const confirmed = window.confirm(`Process payment of ₹${Number(paymentAmount).toLocaleString('en-IN')} for Agent ${agent.name || 'Agent'}?`);
