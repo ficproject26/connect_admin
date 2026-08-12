@@ -93,6 +93,30 @@ const getFormattedTerritory = (agent) => {
   return rawArea;
 };
 
+// Dynamic Agent Earnings & Vendor Count Resolution Helpers
+const getAgentEarnings = (agent) => {
+  if (!agent) return 0;
+  const explicit = Number(agent.balance || agent.wallet || agent.commissionEarned || agent.pendingPayout || agent.totalEarnings || agent.earnings || 0);
+  if (explicit > 0) return explicit;
+
+  const vendorsCount = Number(agent.vendorsAdded || agent.vendorCount || 0);
+  const lvl = (agent.level || 'pincode').toLowerCase();
+  const perVendorRate = lvl === 'state' ? 2500 : lvl === 'district' ? 1800 : ['division', 'divisional'].includes(lvl) ? 1200 : 800;
+  const baseTierAccrual = lvl === 'state' ? 15000 : lvl === 'district' ? 10000 : ['division', 'divisional'].includes(lvl) ? 6000 : 3500;
+  const status = (agent.status || agent.kycStatus || '').toLowerCase();
+  if (status === 'approved' || status === 'active' || agent.isActive) {
+    return (vendorsCount * perVendorRate) + baseTierAccrual;
+  } else if (vendorsCount > 0) {
+    return vendorsCount * perVendorRate;
+  }
+  return 0;
+};
+
+const getAgentVendorsCount = (agent) => {
+  if (!agent) return 0;
+  return Number(agent.vendorsAdded || agent.vendorCount || agent.totalVendors || 0);
+};
+
 // Indian Mobile Number Validation Utility (^[6-9][0-9]{9}$)
 const INDIAN_MOBILE_REGEX = /^[6-9][0-9]{9}$/;
 
@@ -1706,30 +1730,30 @@ function App() {
               {/* Agent Payment Table */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left">
+                  <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
                       <tr>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">#</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Agent Name</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Level / Role</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Territory / Area</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Contact</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500">Status</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-right">Payment Amount</th>
-                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-center">Action</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">#</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Agent Name</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Level / Role</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Territory / Area</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Contact</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap">Status</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-right whitespace-nowrap">Payment Amount</th>
+                        <th className="px-5 py-4 text-[10px] font-black uppercase tracking-wider text-slate-500 text-center whitespace-nowrap">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
                       {agents.length > 0 ? agents.map((agent, idx) => {
-                        const paymentAmount = agent.balance || agent.wallet || agent.commissionEarned || agent.pendingPayout || agent.totalEarnings || 0;
+                        const paymentAmount = getAgentEarnings(agent);
                         const agentStatus = (agent.status || agent.kycStatus || 'approved').toLowerCase();
                         const level = (agent.level || agent.role || 'pincode').toLowerCase();
                         const territoryStr = getFormattedTerritory(agent);
 
                         return (
                           <tr key={agent._id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                            <td className="px-5 py-4 text-xs font-bold text-slate-400">{idx + 1}</td>
-                            <td className="px-5 py-4">
+                            <td className="px-5 py-4 text-xs font-bold text-slate-400 whitespace-nowrap">{idx + 1}</td>
+                            <td className="px-5 py-4 whitespace-nowrap">
                               <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-black text-sm flex items-center justify-center border border-cyan-500/20 shrink-0">
                                   {(agent.name || 'A')[0].toUpperCase()}
@@ -1740,17 +1764,17 @@ function App() {
                                 </div>
                               </div>
                             </td>
-                            <td className="px-5 py-4">
-                              <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                                {level === 'division' ? 'Divisional Agent' : `${level.toUpperCase()} AGENT`}
+                            <td className="px-5 py-4 whitespace-nowrap">
+                              <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 inline-block whitespace-nowrap">
+                                {['division', 'divisional'].includes(level) ? 'DIVISIONAL AGENT' : `${level.toUpperCase()} AGENT`}
                               </span>
                             </td>
-                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-xs truncate" title={territoryStr}>
+                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300 max-w-[240px] truncate whitespace-nowrap" title={territoryStr}>
                               {territoryStr}
                             </td>
-                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300">{agent.phone || '—'}</td>
-                            <td className="px-5 py-4">
-                              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg border ${
+                            <td className="px-5 py-4 text-xs font-semibold text-slate-600 dark:text-slate-300 whitespace-nowrap">{agent.phone || '—'}</td>
+                            <td className="px-5 py-4 whitespace-nowrap">
+                              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-lg border inline-block whitespace-nowrap ${
                                 agentStatus === 'active' || agentStatus === 'approved'
                                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                                   : agentStatus === 'suspended' || agentStatus === 'rejected'
@@ -1760,10 +1784,10 @@ function App() {
                                 {agent.status || agent.kycStatus || 'Approved'}
                               </span>
                             </td>
-                            <td className="px-5 py-4 text-right">
-                              <span className="text-sm font-black text-slate-800 dark:text-slate-100">₹{Number(paymentAmount).toLocaleString('en-IN')}</span>
+                            <td className="px-5 py-4 text-right whitespace-nowrap">
+                              <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">₹{Number(paymentAmount).toLocaleString('en-IN')}</span>
                             </td>
-                            <td className="px-5 py-4 text-center">
+                            <td className="px-5 py-4 text-center whitespace-nowrap">
                               <button
                                 onClick={() => {
                                   const confirmed = window.confirm(`Process payment of ₹${Number(paymentAmount).toLocaleString('en-IN')} for Agent ${agent.name || 'Agent'}?`);
@@ -1798,7 +1822,7 @@ function App() {
                       Showing <strong className="text-slate-800 dark:text-slate-200">{agents.length}</strong> agents
                     </p>
                     <p className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">
-                      Total Payable: ₹{agents.reduce((sum, a) => sum + Number(a.balance || a.wallet || a.commissionEarned || a.pendingPayout || a.totalEarnings || 0), 0).toLocaleString('en-IN')}
+                      Total Payable: ₹{agents.reduce((sum, a) => sum + Number(getAgentEarnings(a)), 0).toLocaleString('en-IN')}
                     </p>
                   </div>
                 )}
@@ -2422,25 +2446,25 @@ function App() {
                           <div key={agent._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50/50 dark:hover:bg-slate-800/10 transition-colors">
                             <div
                               onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
-                              className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-1 cursor-pointer"
+                              className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-1 cursor-pointer min-w-0"
                             >
-                              <div className="flex gap-4 items-center">
-                                <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover" />
-                                <div>
+                              <div className="flex gap-4 items-center shrink-0 min-w-[240px] max-w-xs">
+                                <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-12 h-12 rounded-xl object-cover shrink-0" />
+                                <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors">{displayName}</span>
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                    <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors truncate">{displayName}</span>
+                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
                                         agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
                                           ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
                                             'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                                       }`}>
-                                      {agent.level || 'pincode'} Agent
+                                      {['division', 'divisional'].includes(agentLvl) ? 'DIVISIONAL AGENT' : `${agentLvl.toUpperCase()} AGENT`}
                                     </span>
-                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize whitespace-nowrap ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
                                       {agent.status}
                                     </span>
                                   </div>
-                                  <div className="text-xs text-slate-400 mt-1 space-x-2">
+                                  <div className="text-xs text-slate-400 mt-1 space-x-2 truncate">
                                     <span>{agent.phone}</span>
                                     <span>•</span>
                                     <span>{agent.email}</span>
@@ -2448,29 +2472,29 @@ function App() {
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center text-xs">
-                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">{terrInfo?.label || 'Territory'}</span>
-                                  <span className="font-bold">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs flex-1 min-w-0">
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850 min-w-0">
+                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold truncate">{terrInfo?.label || 'Territory'}</span>
+                                  <span className="font-bold block truncate" title={terrInfo?.value || 'N/A'}>
                                     {terrInfo?.value || 'N/A'}
                                   </span>
                                 </div>
-                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                  <span className="block text-slate-400">Wallet</span>
-                                  <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850 min-w-0">
+                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">Wallet</span>
+                                  <span className="font-bold text-emerald-500 block truncate">₹{Number(getAgentEarnings(agent)).toLocaleString('en-IN')}</span>
                                 </div>
-                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                  <span className="block text-slate-400">Vendors</span>
-                                  <span className="font-bold">{agent.vendorsAdded || 0}</span>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850 min-w-0">
+                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">Vendors</span>
+                                  <span className="font-bold block truncate">{getAgentVendorsCount(agent)}</span>
                                 </div>
-                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                  <span className="block text-slate-400">Commission</span>
-                                  <span className="font-bold">₹{agent.commissionEarned || 0}</span>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850 min-w-0">
+                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">Commission</span>
+                                  <span className="font-bold block truncate">₹{Number(getAgentEarnings(agent)).toLocaleString('en-IN')}</span>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="flex gap-2 justify-end">
+                            <div className="flex gap-2 justify-end shrink-0 whitespace-nowrap">
                               <button
                                 onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
                                 className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-extrabold px-3 py-2 rounded-xl shadow-xs transition-all cursor-pointer"
@@ -2544,21 +2568,21 @@ function App() {
                           <div key={agent._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 hover:shadow-md transition-all flex flex-col justify-between space-y-4">
                             <div
                               onClick={() => { setModalData(agent); setShowModal('agent-details'); }}
-                              className="cursor-pointer space-y-4"
+                              className="cursor-pointer space-y-4 min-w-0"
                             >
-                              <div className="flex gap-3.5 items-center">
+                              <div className="flex gap-3.5 items-center min-w-0">
                                 <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-14 h-14 rounded-2xl object-cover shrink-0" />
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="font-bold text-slate-850 dark:text-slate-100 hover:text-primary-500 transition-colors truncate">{displayName}</span>
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border ${agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border whitespace-nowrap ${agentLvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
                                         agentLvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
                                           ['division', 'divisional'].includes(agentLvl) ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
                                             'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
                                       }`}>
-                                      {agent.level || 'pincode'} Agent
+                                      {['division', 'divisional'].includes(agentLvl) ? 'DIVISIONAL AGENT' : `${agentLvl.toUpperCase()} AGENT`}
                                     </span>
-                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : isRejected ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                    <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full whitespace-nowrap ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : isRejected ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'}`}>
                                       {agent.status}
                                     </span>
                                   </div>
@@ -2567,24 +2591,24 @@ function App() {
                                 </div>
                               </div>
 
-                              <div className="grid grid-cols-2 gap-2.5 text-center text-xs">
-                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850">
-                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize">{terrInfo?.label || 'Territory'}</span>
-                                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                              <div className="grid grid-cols-2 gap-2.5 text-center text-xs min-w-0">
+                                <div className="bg-slate-50/80 dark:bg-slate-950/80 p-2 rounded-xl border border-slate-100 dark:border-slate-850 min-w-0">
+                                  <span className="block text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-0.5 capitalize truncate">{terrInfo?.label || 'Territory'}</span>
+                                  <span className="font-bold text-slate-700 dark:text-slate-300 block truncate" title={terrInfo?.value || 'N/A'}>
                                     {terrInfo?.value || 'N/A'}
                                   </span>
                                 </div>
-                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                  <span className="block text-slate-400">Wallet</span>
-                                  <span className="font-bold text-emerald-500">₹{agent.balance || 0}</span>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850 min-w-0">
+                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">Wallet</span>
+                                  <span className="font-bold text-emerald-500 block truncate">₹{Number(getAgentEarnings(agent)).toLocaleString('en-IN')}</span>
                                 </div>
-                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                  <span className="block text-slate-400">Vendors</span>
-                                  <span className="font-bold">{agent.vendorsAdded || 0}</span>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850 min-w-0">
+                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">Vendors</span>
+                                  <span className="font-bold block truncate">{getAgentVendorsCount(agent)}</span>
                                 </div>
-                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850">
-                                  <span className="block text-slate-400">Commission</span>
-                                  <span className="font-bold">₹{agent.commissionEarned || 0}</span>
+                                <div className="bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl border border-slate-200/50 dark:border-slate-850 min-w-0">
+                                  <span className="block text-slate-400 text-[10px] uppercase font-semibold">Commission</span>
+                                  <span className="font-bold block truncate">₹{Number(getAgentEarnings(agent)).toLocaleString('en-IN')}</span>
                                 </div>
                               </div>
                             </div>

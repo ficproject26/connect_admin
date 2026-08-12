@@ -509,9 +509,94 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             .sort({ createdAt: -1 })
             .lean();
 
-        res.json(agents);
+        // Fetch vendor lists to accurately calculate onboarded vendor counts per agent
+        const Vendor = require('../models/Vendor');
+        const userVendorsList = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('_id email referredBy agentId onboardedBy').lean();
+        const vendorModelList = await Vendor.find({}).select('_id agentId email').lean();
+
+        const enrichedAgents = agents.map(agent => {
+            const agentIdStr = String(agent._id);
+
+            // Count vendors onboarded by this agent across both collections
+            let vCount = 0;
+            if (typeof agent.vendorsAdded === 'number' && agent.vendorsAdded > 0) {
+                vCount = agent.vendorsAdded;
+            } else {
+                const userV = userVendorsList.filter(v => 
+                    (v.referredBy && String(v.referredBy) === agentIdStr) ||
+                    (v.agentId && String(v.agentId) === agentIdStr) ||
+                    (v.onboardedBy && String(v.onboardedBy) === agentIdStr)
+                ).length;
+                const modelV = vendorModelList.filter(v => v.agentId && String(v.agentId) === agentIdStr).length;
+                vCount = Math.max(userV, modelV);
+            }
+
+            const level = (agent.level || 'pincode').toLowerCase();
+            const perVendorRate = level === 'state' ? 2500 : level === 'district' ? 1800 : ['division', 'divisional'].includes(level) ? 1200 : 800;
+            const baseTierAccrual = level === 'state' ? 15000 : level === 'district' ? 10000 : ['division', 'divisional'].includes(level) ? 6000 : 3500;
+            const isApproved = (agent.status || '').toLowerCase() === 'approved' || agent.isActive;
+
+            // Compute dynamic earnings
+            let calcEarnings = 0;
+            if (typeof agent.balance === 'number' && agent.balance > 0) {
+                calcEarnings = agent.balance;
+            } else if (typeof agent.commissionEarned === 'number' && agent.commissionEarned > 0) {
+                calcEarnings = agent.commissionEarned;
+            } else if (typeof agent.wallet === 'number' && agent.wallet > 0) {
+                calcEarnings = agent.wallet;
+            } else {
+                const vendorEarnings = vCount * perVendorRate;
+                calcEarnings = isApproved ? (vendorEarnings + baseTierAccrual) : vendorEarnings;
+            }
+
+            return {
+                ...agent,
+                vendorsAdded: vCount,
+                balance: (agent.balance !== undefined && agent.balance > 0) ? agent.balance : calcEarnings,
+                commissionEarned: (agent.commissionEarned !== undefined && agent.commissionEarned > 0) ? agent.commissionEarned : calcEarnings,
+                wallet: (agent.wallet !== undefined && agent.wallet > 0) ? agent.wallet : calcEarnings,
+                totalEarnings: (agent.totalEarnings !== undefined && agent.totalEarnings > 0) ? agent.totalEarnings : calcEarnings,
+                pendingPayout: (agent.pendingPayout !== undefined && agent.pendingPayout > 0) ? agent.pendingPayout : calcEarnings
+            };
+        });
+
+        res.json(enrichedAgents);
     } catch (err) {
         console.error('Error fetching agents:', err);
+        res.status(500).send('Server error');
+    }
+});
+
+router.post('/agents/:id/payout', [auth, adminAuth], async (req, res) => {
+    try {
+        const agentId = req.params.id;
+        const { amount } = req.body;
+
+        const agent = await User.findById(agentId);
+        if (!agent) {
+            return res.status(404).json({ msg: 'Agent not found' });
+        }
+
+        const payoutAmt = Number(amount) || 0;
+        agent.balance = Math.max(0, (agent.balance || 0) - payoutAmt);
+        agent.commissionEarned = Math.max(0, (agent.commissionEarned || 0) - payoutAmt);
+        agent.pendingPayout = 0;
+        agent.isPaid = true;
+        await agent.save();
+
+        const Transaction = require('../models/Transaction');
+        const transaction = new Transaction({
+            userId: agent._id,
+            title: `Payout Settled by Admin - ₹${payoutAmt}`,
+            amount: payoutAmt,
+            type: 'debit',
+            status: 'completed'
+        });
+        await transaction.save();
+
+        res.json({ msg: `Payout of ₹${payoutAmt.toLocaleString('en-IN')} processed successfully`, agent });
+    } catch (err) {
+        console.error('Error processing agent payout:', err);
         res.status(500).send('Server error');
     }
 });
