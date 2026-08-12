@@ -436,7 +436,7 @@ router.post('/login', async (req, res) => {
         }
 
         // For vendors: enforce status check
-        if (['vendor', 'Vendor', 'merchant', 'Merchant'].includes(user.role) || user.email?.toLowerCase() === 'dhanushiyasri@gmail.com') {
+        if (['vendor', 'Vendor', 'merchant', 'Merchant'].includes(user.role)) {
             const userStatus = (user.status || '').toLowerCase().trim();
             if (userStatus === 'inactive') {
                 return res.status(403).json({
@@ -452,11 +452,13 @@ router.post('/login', async (req, res) => {
                     status: 'suspended'
                 });
             }
-            if (userStatus === 'pending' || userStatus === 'unapproved' || (!user.isActive && userStatus !== 'approved' && userStatus !== 'active')) {
+            if (userStatus === 'pending' || userStatus === 'pending_approval' || userStatus === 'pending approval' || userStatus === 'under_verification' || userStatus === 'under verification' || userStatus === 'in_review' || userStatus === 'unapproved' || (!user.isActive && userStatus !== 'approved' && userStatus !== 'active')) {
                 return res.status(403).json({
-                    message: 'Your account is pending approval by the Admin. Please try again later.',
-                    msg: 'Your account is pending approval by the Admin. Please try again later.',
-                    status: 'pending'
+                    message: 'Your profile is currently under verification. Please contact the Administration for further assistance.',
+                    msg: 'Your profile is currently under verification. Please contact the Administration for further assistance.',
+                    error: 'Profile Under Verification',
+                    status: 'under_verification',
+                    isUnderVerification: true
                 });
             }
             if (userStatus === 'rejected') {
