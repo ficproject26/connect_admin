@@ -76,7 +76,6 @@ router.get('/dashboard-stats', auth, async (req, res) => {
         const tasks = await Task.find({ assignedTo: req.user.id });
         const tieUps = await TieUp.find({ agentId: req.user.id });
         
-        // Mocking downline stats for now
         const downlineCount = await User.countDocuments({ referredBy: req.user.id });
 
         res.json({

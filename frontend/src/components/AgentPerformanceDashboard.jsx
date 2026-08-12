@@ -26,35 +26,10 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
   const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
 
   const defaultChartsData = {
-    lineChartData: [
-      { period: 'Mon', Performance: 68, Targets: 80 },
-      { period: 'Tue', Performance: 74, Targets: 80 },
-      { period: 'Wed', Performance: 85, Targets: 80 },
-      { period: 'Thu', Performance: 79, Targets: 80 },
-      { period: 'Fri', Performance: 91, Targets: 80 },
-      { period: 'Sat', Performance: 88, Targets: 80 },
-      { period: 'Sun', Performance: 82, Targets: 80 }
-    ],
-    barChartRevenue: [
-      { category: 'State', Revenue: 185000 },
-      { category: 'District', Revenue: 240000 },
-      { category: 'Division', Revenue: 110000 },
-      { category: 'Pincode', Revenue: 65000 }
-    ],
-    pieChartCategory: [
-      { name: 'State Agents', value: 2 },
-      { name: 'District Agents', value: 4 },
-      { name: 'Divisional Agents', value: 3 },
-      { name: 'Pincode Agents', value: 5 }
-    ],
-    areaChartRegistrations: [
-      { month: 'Jan', Registrations: 25 },
-      { month: 'Feb', Registrations: 42 },
-      { month: 'Mar', Registrations: 68 },
-      { month: 'Apr', Registrations: 95 },
-      { month: 'May', Registrations: 120 },
-      { month: 'Jun', Registrations: 154 }
-    ]
+    lineChartData: [],
+    barChartRevenue: [],
+    pieChartCategory: [],
+    areaChartRegistrations: []
   };
 
   // Loading & Data States

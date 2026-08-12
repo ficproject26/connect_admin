@@ -4788,16 +4788,12 @@ function App() {
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {filteredJobs.map((job, idx) => {
-                          const samplePositions = ['Senior Software Engineer', 'Full Stack Developer', 'UI/UX Designer', 'Product Manager', 'HR Executive', 'Marketing Lead', 'Data Analyst'];
-                          const sampleCompanies = ['Forge India Tech', 'Global Systems Inc.', 'Apex Digital Solutions', 'Innovate Soft', 'Connect Enterprises'];
-                          const sampleHRs = ['Rajesh Kumar', 'Ananya Sharma', 'Priya Nair', 'Suresh V', 'Talent Team'];
-
-                          const posVal = (!job.position || job.position === 'Job Application') ? samplePositions[idx % samplePositions.length] : job.position;
-                          const compVal = (!job.companyName || job.companyName === 'Krishna' || job.companyName === 'Connect Portal Inc.') ? sampleCompanies[idx % sampleCompanies.length] : job.companyName;
-                          const hrVal = (!job.hrName || job.hrName === 'Krishna' || job.hrName.includes('Krishna')) ? sampleHRs[idx % sampleHRs.length] : job.hrName;
-                          const candPhone = (!job.phone || job.phone === 'N/A') ? '9876543210' : job.phone;
-                          const isValidResumeUrl = (url) => url && (url.startsWith('http://') || url.startsWith('https://')) && !url.includes('unsplash');
-                          const resumeVal = isValidResumeUrl(job.resumeUrl) ? job.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf';
+                          const posVal = job.position || '—';
+                          const compVal = job.companyName || '—';
+                          const hrVal = job.hrName || '—';
+                          const candPhone = job.phone || '—';
+                          const isValidResumeUrl = (url) => url && (url.startsWith('http://') || url.startsWith('https://')) && !url.includes('unsplash') && !url.includes('dummy');
+                          const resumeVal = isValidResumeUrl(job.resumeUrl) ? job.resumeUrl : null;
 
                           return (
                             <tr key={job._id}>
@@ -8378,14 +8374,20 @@ function App() {
                   </select>
                 </div>
 
-                <a
-                  href={modalData.resumeVal || (modalData.resumeUrl && !modalData.resumeUrl.includes('unsplash') ? modalData.resumeUrl : 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf')}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2"
-                >
-                  <FileText className="w-4 h-4" /> View / Download Resume
-                </a>
+                {(modalData.resumeUrl && (modalData.resumeUrl.startsWith('http://') || modalData.resumeUrl.startsWith('https://')) && !modalData.resumeUrl.includes('dummy') && !modalData.resumeUrl.includes('unsplash')) ? (
+                  <a
+                    href={modalData.resumeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2"
+                  >
+                    <FileText className="w-4 h-4" /> View / Download Resume
+                  </a>
+                ) : (
+                  <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold text-xs rounded-xl">
+                    No Resume Uploaded
+                  </span>
+                )}
               </div>
             </div>
 

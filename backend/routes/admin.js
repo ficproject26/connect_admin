@@ -2693,16 +2693,12 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
         // Resolve vendor and customer for custom jobs
         const resolvedCustomJobs = await resolveVendorAndCustomer(customJobs);
 
-        const samplePositions = ['Senior Software Engineer', 'Full Stack Developer', 'UI/UX Designer', 'Product Manager', 'HR Executive', 'Marketing Lead', 'Data Analyst'];
-        const sampleCompanies = ['Forge India Tech', 'Global Systems Inc.', 'Apex Digital Solutions', 'Innovate Soft', 'Connect Enterprises'];
-        const sampleHRs = ['Rajesh Kumar', 'Ananya Sharma', 'Priya Nair', 'Suresh V', 'Talent Team'];
-
         const mappedDbJobs = dbJobs.map((j, idx) => {
             const obj = j.toObject ? j.toObject() : j;
             const custIdVal = obj.customerId || 'CUST-' + String(obj._id).substring(18, 24).toUpperCase();
-            const posVal = obj.position || obj.title || obj.jobTitle || 'Job Position';
-            const compVal = obj.companyName || obj.vendorName || obj.businessName || 'Verified Enterprise';
-            const hrVal = obj.hrName || obj.contactPerson || obj.hr || 'Talent Team';
+            const posVal = obj.position || obj.title || obj.jobTitle || '—';
+            const compVal = obj.companyName || obj.vendorName || obj.businessName || '—';
+            const hrVal = obj.hrName || obj.contactPerson || obj.hr || '—';
             const resumeVal = obj.resumeUrl || '';
             return {
                 ...obj,
