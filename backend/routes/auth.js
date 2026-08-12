@@ -121,25 +121,52 @@ router.post('/register', async (req, res) => {
 
         const kDocs = req.body.kycDocs || req.body.kyc || {};
         const kycMapped = {
-            aadhaarNumber: kDocs.aadhaarNumber || '',
+            aadhaarNumber: kDocs.aadhaarNumber || req.body.aadhaarNumber || '',
             aadhaarImage: kDocs.aadhaarCard || kDocs.aadhaarImage || '',
-            panNumber: kDocs.panNumber || '',
+            panNumber: kDocs.panNumber || req.body.panNumber || '',
             panImage: kDocs.panCard || kDocs.panImage || '',
             selfie: kDocs.passportPhoto || kDocs.selfie || '',
-            businessProofImage: kDocs.signature || kDocs.businessProofImage || ''
+            businessProofImage: kDocs.signature || kDocs.businessProofImage || '',
+            educationalCertificates: kDocs.educationalCertificates || kDocs.educationCert || '',
+            cancelledCheque: kDocs.cancelledCheque || kDocs.bankCheque || ''
+        };
+
+        const cleanTerritory = {
+            state: territory.state || req.body.state || req.body.assignedState || '',
+            district: territory.district || req.body.district || req.body.assignedDistrict || '',
+            division: territory.division || req.body.division || req.body.assignedDivision || '',
+            pincode: territory.pincode || req.body.pincode || ''
         };
 
         user = new User({ 
             name, 
             email: lowerEmail, 
             phone: req.body.phone,
+            altPhone: req.body.altPhone || req.body.alternativePhone || req.body.secondaryPhone || '',
+            dob: req.body.dob || req.body.dateOfBirth || '',
+            gender: req.body.gender || '',
+            qualification: req.body.qualification || req.body.highestQualification || '',
+            experience: req.body.experience || req.body.experienceLevel || '',
+            previousCompany: req.body.previousCompany || req.body.previousOrg || '',
             password, 
             role: 'agent', 
             level: agentRole,
+            territory: cleanTerritory,
             assignedArea: territoryStr,
+            assignedState: cleanTerritory.state,
+            assignedDistrict: cleanTerritory.district,
+            assignedDivision: cleanTerritory.division,
+            state: cleanTerritory.state,
+            district: cleanTerritory.district,
+            division: cleanTerritory.division,
+            pincode: cleanTerritory.pincode,
+            postOffice: req.body.postOffice || req.body.postOfficeBranch || '',
+            address: req.body.address || req.body.fullAddress || territoryStr,
+            fullAddress: req.body.fullAddress || req.body.address || territoryStr,
             registrationId,
             status: 'pending',
             isActive: false,
+            kycDocs: kDocs,
             kyc: kycMapped,
             assignedPincode: pincodeId || null,
             createdAt: new Date()

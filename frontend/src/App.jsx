@@ -8874,14 +8874,14 @@ function App() {
               </h4>
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 space-y-4 text-xs">
                 {(() => {
-                  const kycData = modalData.kyc || modalData.kycDocs || {};
+                  const kycData = { ...(modalData.kyc || {}), ...(modalData.kycDocs || {}) };
                   const docItems = [
-                    { title: 'Aadhaar Card', url: kycData.aadhaarImage || kycData.aadhaarDoc || kycData.aadhaarCard || kycData.aadhaar || '', type: 'Document' },
-                    { title: 'PAN Card', url: kycData.panImage || kycData.panDoc || kycData.panCard || kycData.pan || '', type: 'Document' },
-                    { title: 'Passport Photo / Selfie', url: kycData.selfie || kycData.passportPhoto || '', type: 'Image' },
+                    { title: 'Aadhaar Card', url: kycData.aadhaarCard || kycData.aadhaarImage || kycData.aadhaarDoc || kycData.aadhaar || '', type: 'Document' },
+                    { title: 'PAN Card', url: kycData.panCard || kycData.panImage || kycData.panDoc || kycData.pan || '', type: 'Document' },
+                    { title: 'Passport Photo / Selfie', url: kycData.passportPhoto || kycData.selfie || '', type: 'Image' },
                     { title: 'Digital Signature / Proof', url: kycData.signature || kycData.businessProofImage || '', type: 'Signature' },
-                    { title: 'Educational Certificate', url: kycData.educationCert || kycData.degree || '', type: 'Certificate' },
-                    { title: 'Bank Proof / Cheque', url: kycData.bankCheque || kycData.cheque || '', type: 'Bank Proof' },
+                    { title: 'Educational Certificate', url: kycData.educationalCertificates || kycData.educationCert || kycData.degree || '', type: 'Certificate' },
+                    { title: 'Bank Proof / Cheque', url: kycData.cancelledCheque || kycData.bankCheque || kycData.cheque || '', type: 'Bank Proof' },
                   ];
 
                   return (

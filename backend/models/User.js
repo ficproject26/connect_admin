@@ -16,6 +16,24 @@ const UserSchema = new mongoose.Schema({
     adminRole: { type: String, enum: ['super-admin', 'branch-admin', 'staff'], default: 'staff' },
     registrationId: { type: String },
 
+    // Agent extended profile fields
+    altPhone: { type: String },
+    dob: { type: mongoose.Schema.Types.Mixed },
+    gender: { type: String },
+    qualification: { type: String },
+    experience: { type: String },
+    previousCompany: { type: String },
+    territory: { type: mongoose.Schema.Types.Mixed },
+    state: { type: String },
+    district: { type: String },
+    division: { type: String },
+    pincode: { type: String },
+    assignedState: { type: String },
+    assignedDivision: { type: String },
+    postOffice: { type: String },
+    fullAddress: { type: String },
+    kycDocs: { type: mongoose.Schema.Types.Mixed },
+
     // Vendor profile fields
     vendorType: { type: String },
     category: { type: String },
@@ -34,7 +52,9 @@ const UserSchema = new mongoose.Schema({
         panNumber: { type: String },
         panImage: { type: String },
         selfie: { type: String },
-        businessProofImage: { type: String }
+        businessProofImage: { type: String },
+        educationalCertificates: { type: String },
+        cancelledCheque: { type: String }
     },
 
     status: { type: String, default: 'pending' }, // 'pending', 'approved', 'rejected', 'Pending', 'Approved', 'Rejected'
@@ -54,7 +74,7 @@ const UserSchema = new mongoose.Schema({
     refreshToken: { type: String, default: '' },
 
     createdAt: { type: Date, default: Date.now }
-}, { strictPopulate: false });
+}, { strict: false, strictPopulate: false });
 
 const castIdToObjectId = (val) => {
     if (val && typeof val === 'object' && (val.$in || val.$eq || val.$nin || val.$ne)) {
