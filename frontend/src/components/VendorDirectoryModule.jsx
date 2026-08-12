@@ -896,14 +896,14 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                       Agent ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong>
                     </div>
                   </div>
-                ) : (
+                ) : v.assignedPincodeAgent ? (
                   <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
                       <UserCheck className="w-4 h-4" />
-                      <span>Agent: <strong>{v.assignedPincodeAgent?.name || 'Unassigned'}</strong></span>
+                      <span>Agent: <strong>{v.assignedPincodeAgent.name}</strong></span>
                     </div>
                   </div>
-                )}
+                ) : null}
               </div>
 
               <div className="pt-2 flex items-center justify-between">
