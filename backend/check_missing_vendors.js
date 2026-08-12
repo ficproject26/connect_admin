@@ -1,54 +1,78 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
 
-async function checkMissingVendors() {
+async function verifyAgentOnboardedQuery() {
   await mongoose.connect(process.env.MONGODB_URI);
-  const User = require('./models/User');
-  const Vendor = require('./models/Vendor');
+  const db = mongoose.connection.db;
 
-  const userDocs = await User.find({}).lean();
-  const vendorDocs = await Vendor.find({}).lean();
+  // This replicates the exact query the Admin backend uses for isAgentOnboarded=true
+  const agentVendorsFromUsers = await db.collection('users').find({
+    $or: [
+      { joiningType: 'agent' },
+      { createdVia: 'agent' },
+      { registrationSource: 'agent' },
+      { onboardedBy: { $exists: true, $ne: null } },
+      { agentId: { $exists: true, $ne: null } },
+      { assignedAgent: { $exists: true, $ne: null } },
+      { onboardedByAgentId: { $exists: true, $ne: null } },
+      { referredBy: { $exists: true, $ne: null } }
+    ]
+  }).sort({ createdAt: -1 }).toArray();
 
-  console.log(`=== ALL USERS IN DB (${userDocs.length}) ===`);
-  userDocs.forEach(u => {
-    if (u.businessName || u.name?.includes('Ammu') || u.email?.includes('ammu') || u.role?.toLowerCase().includes('vendor')) {
-      console.log("User doc:", {
-        _id: u._id,
-        name: u.name,
-        businessName: u.businessName,
-        email: u.email,
-        phone: u.phone,
-        role: u.role,
-        status: u.status,
-        joiningType: u.joiningType,
-        createdVia: u.createdVia,
-        agentId: u.agentId,
-        assignedAgent: u.assignedAgent,
-        onboardedBy: u.onboardedBy,
-        referredBy: u.referredBy
-      });
-    }
+  console.log(`\n=== AGENT ONBOARDED VENDORS FROM USERS COLLECTION (${agentVendorsFromUsers.length}) ===`);
+  agentVendorsFromUsers.forEach(v => {
+    console.log({
+      _id: v._id,
+      name: v.name,
+      businessName: v.businessName,
+      email: v.email,
+      phone: v.phone,
+      role: v.role,
+      status: v.status,
+      joiningType: v.joiningType,
+      createdVia: v.createdVia,
+      registrationSource: v.registrationSource,
+      agentId: v.agentId,
+      assignedAgent: v.assignedAgent,
+      onboardedBy: v.onboardedBy,
+      registrationId: v.registrationId,
+      pincode: v.pincode
+    });
   });
 
-  console.log(`\n=== ALL VENDORS IN VENDOR COLLECTION (${vendorDocs.length}) ===`);
-  vendorDocs.forEach(v => {
-    console.log("Vendor collection doc:", {
+  const agentVendorsFromVendors = await db.collection('vendors').find({
+    $or: [
+      { joiningType: 'agent' },
+      { createdVia: 'agent' },
+      { registrationSource: 'agent' },
+      { onboardedBy: { $exists: true, $ne: null } },
+      { agentId: { $exists: true, $ne: null } },
+      { assignedAgent: { $exists: true, $ne: null } },
+      { onboardedByAgentId: { $exists: true, $ne: null } },
+      { referredBy: { $exists: true, $ne: null } }
+    ]
+  }).sort({ createdAt: -1 }).toArray();
+
+  console.log(`\n=== AGENT ONBOARDED VENDORS FROM VENDORS COLLECTION (${agentVendorsFromVendors.length}) ===`);
+  agentVendorsFromVendors.forEach(v => {
+    console.log({
       _id: v._id,
-      name: v.businessName || v.name || v.storeName,
-      ownerName: v.ownerName,
+      name: v.name || v.businessName,
       email: v.email,
       phone: v.phone,
       status: v.status,
       joiningType: v.joiningType,
       createdVia: v.createdVia,
+      registrationSource: v.registrationSource,
       agentId: v.agentId,
       assignedAgent: v.assignedAgent,
       onboardedBy: v.onboardedBy,
-      referredBy: v.referredBy
+      registrationId: v.registrationId,
+      pincode: v.pincode
     });
   });
 
   process.exit(0);
 }
 
-checkMissingVendors().catch(console.error);
+verifyAgentOnboardedQuery().catch(console.error);

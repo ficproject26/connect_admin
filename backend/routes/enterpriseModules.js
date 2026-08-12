@@ -189,8 +189,16 @@ router.get('/vendors', auth, async (req, res) => {
             
             const vendorMap = new Map();
             rawAgent.forEach(v => {
-                const key = v._id ? String(v._id) : (v.email || Math.random());
-                if (!vendorMap.has(key)) vendorMap.set(key, v);
+                const emailKey = (v.email || '').toLowerCase().trim();
+                const phoneKey = (v.phone || '').replace(/\D/g, '');
+                const regKey = (v.registrationId || '').trim();
+                const key = emailKey || phoneKey || regKey || (v._id ? String(v._id) : String(Math.random()));
+                if (!vendorMap.has(key)) {
+                    vendorMap.set(key, v);
+                } else {
+                    const existing = vendorMap.get(key);
+                    vendorMap.set(key, { ...existing, ...v });
+                }
             });
 
             let enriched = await Promise.all(Array.from(vendorMap.values()).map(v => enrichVendorData(v)));
@@ -370,7 +378,7 @@ router.get('/vendors', auth, async (req, res) => {
 });
 
 // POST Agent Onboard New Vendor (Creates Pending Vendor linked to Agent and Territory)
-router.post('/vendors/agent-onboard', auth, async (req, res) => {
+router.post('/vendors/agent-onboard', async (req, res) => {
     try {
         const {
             businessName, name, contactPerson, email, phone, category, subCategory,
