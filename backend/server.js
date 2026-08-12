@@ -79,6 +79,8 @@ app.use('/api/payment', require('./routes/payment'));
 
 // Top-level Route Aliases for Standard REST Paths
 app.use('/api/orders', require('./routes/admin'));
+app.use('/api/bookings', require('./routes/admin'));
+app.use('/api/jobs', require('./routes/admin'));
 app.use('/api/products', require('./routes/admin'));
 app.use('/api/vendors', require('./routes/admin'));
 app.use('/api/users', require('./routes/admin'));

@@ -2311,22 +2311,22 @@ const resolveVendorAndCustomer = async (items) => {
                     } else {
                         customer = {
                             name: custName,
-                            phone: (doc.customer_phone && doc.customer_phone !== 'N/A') ? doc.customer_phone : '9876543210',
-                            email: doc.customer_email || 'customer@example.com'
+                            phone: (doc.customer_phone && doc.customer_phone !== 'N/A') ? doc.customer_phone : (doc.phone || '—'),
+                            email: doc.customer_email || doc.email || '—'
                         };
                     }
                 } catch (err) {
                     customer = {
                         name: custName,
-                        phone: (doc.customer_phone && doc.customer_phone !== 'N/A') ? doc.customer_phone : '9876543210',
-                        email: doc.customer_email || 'customer@example.com'
+                        phone: (doc.customer_phone && doc.customer_phone !== 'N/A') ? doc.customer_phone : (doc.phone || '—'),
+                        email: doc.customer_email || doc.email || '—'
                     };
                 }
             } else {
                 customer = {
-                    name: 'Karthikeyan',
-                    phone: '9876543210',
-                    email: 'karthikeyanb25@gmail.com'
+                    name: doc.customer_name || 'Customer',
+                    phone: doc.customer_phone || doc.phone || '—',
+                    email: doc.customer_email || doc.email || '—'
                 };
             }
         } else if (typeof customer === 'string') {
@@ -2348,15 +2348,15 @@ const resolveVendorAndCustomer = async (items) => {
                 } else {
                     customer = {
                         name: customer,
-                        phone: doc.customer_phone || '1234567890',
-                        email: doc.customer_email || 'N/A'
+                        phone: doc.customer_phone || doc.phone || '—',
+                        email: doc.customer_email || doc.email || '—'
                     };
                 }
             } catch (err) {
                 customer = {
                     name: customer,
-                    phone: doc.customer_phone || '1234567890',
-                    email: doc.customer_email || 'N/A'
+                    phone: doc.customer_phone || doc.phone || '—',
+                    email: doc.customer_email || doc.email || '—'
                 };
             }
         }
@@ -2366,10 +2366,13 @@ const resolveVendorAndCustomer = async (items) => {
         const commission = doc.commission !== undefined ? doc.commission : Math.round(amount * 0.05);
 
         // Product details resolution
-        const productDetails = doc.product_details || doc.productDetails || doc.productName || doc.product || doc.itemName || doc.item_name || (Array.isArray(doc.items) && doc.items[0] ? (doc.items[0].name || doc.items[0].title) : null) || doc.title || doc.serviceName || doc.service || 'Healthcare Package / Electronics';
+        const productDetails = doc.product_details || doc.productDetails || doc.productName || doc.product || doc.itemName || doc.item_name || (Array.isArray(doc.items) && doc.items[0] ? (doc.items[0].name || doc.items[0].title) : null) || doc.title || doc.serviceName || doc.service || '—';
+        const orderNumber = doc.order_number || doc.id || (doc._id ? 'ORD-' + String(doc._id).substring(18, 24).toUpperCase() : '—');
 
         resolvedItems.push({
             ...doc,
+            order_number: orderNumber,
+            id: orderNumber,
             createdAt: doc.created_at || doc.createdAt || new Date(),
             vendorId: vendor,
             customerId: customer,
@@ -2381,12 +2384,39 @@ const resolveVendorAndCustomer = async (items) => {
     return resolvedItems;
 };
 
-// GET all orders
-router.get(['/orders', '/'], [auth, adminAuth], async (req, res) => {
+// GET all orders (supports admin, vendor filter, and public requests)
+router.get(['/orders', '/public/orders'], async (req, res) => {
     try {
-        const rawOrders = await Order.find({ type: { $nin: ['Booking', 'Job', 'Stay', 'Travel', 'Jobs'] } })
-            .sort({ createdAt: -1 });
+        const { vendorId, customerId, status, type } = req.query;
+        const queryFilter = {};
 
+        if (type) {
+            queryFilter.type = type;
+        } else {
+            queryFilter.type = { $nin: ['Booking', 'Job', 'Stay', 'Travel', 'Jobs'] };
+        }
+
+        if (vendorId) {
+            queryFilter.$or = [
+                { vendorId },
+                { 'vendorId._id': vendorId },
+                { vendorEmail: vendorId }
+            ];
+        }
+
+        if (customerId) {
+            queryFilter.$or = [
+                { customerId },
+                { 'customerId._id': customerId },
+                { customer_email: customerId }
+            ];
+        }
+
+        if (status && status !== 'All') {
+            queryFilter.status = new RegExp(status, 'i');
+        }
+
+        const rawOrders = await Order.find(queryFilter).sort({ createdAt: -1 });
         const resolvedOrders = await resolveVendorAndCustomer(rawOrders);
         res.json(resolvedOrders);
     } catch (err) {
@@ -2395,12 +2425,31 @@ router.get(['/orders', '/'], [auth, adminAuth], async (req, res) => {
     }
 });
 
-// POST new order
-router.post(['/orders', '/'], [auth, adminAuth], async (req, res) => {
+// POST new order (Public Customer Order Creation + Real-time Socket sync)
+router.post(['/orders', '/public/orders'], async (req, res) => {
     try {
-        const newOrder = new Order(req.body);
+        const payload = { ...req.body };
+        if (!payload.order_number && !payload.id) {
+            const seq = Math.floor(1000 + Math.random() * 9000);
+            payload.order_number = `ORD${seq}`;
+            payload.id = `ORD${seq}`;
+        }
+        if (payload.amount !== undefined && payload.commission === undefined) {
+            payload.commission = Math.round(Number(payload.amount) * 0.05);
+        }
+        if (!payload.status) {
+            payload.status = 'Pending';
+        }
+
+        const newOrder = new Order(payload);
         await newOrder.save();
-        res.status(201).json({ success: true, message: 'Order created successfully', data: newOrder });
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('orderCreated', newOrder);
+        }
+
+        res.status(201).json({ success: true, message: 'Order created successfully', data: newOrder, order: newOrder });
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Error creating order', error: err.message });
@@ -2639,19 +2688,44 @@ router.get(['/users', '/'], [auth, adminAuth], async (req, res) => {
     }
 });
 
-// GET all bookings
-router.get('/bookings', [auth, adminAuth], async (req, res) => {
+// GET all bookings (supports admin, vendor filter, and public requests)
+router.get(['/bookings', '/public/bookings'], async (req, res) => {
     try {
-        const dbBookings = await Booking.find()
+        const { vendorId, customerId, status } = req.query;
+        const filter = {};
+
+        if (vendorId) {
+            filter.$or = [
+                { vendorId },
+                { 'vendorId._id': vendorId },
+                { vendorEmail: vendorId }
+            ];
+        }
+
+        if (customerId) {
+            filter.$or = [
+                { customerId },
+                { 'customerId._id': customerId },
+                { customer_email: customerId }
+            ];
+        }
+
+        if (status && status !== 'All') {
+            filter.status = new RegExp(status, 'i');
+        }
+
+        const dbBookings = await Booking.find(filter)
             .populate('vendorId', 'businessName email phone')
             .populate('customerId', 'name email phone')
             .sort({ createdAt: -1 });
 
-        const customBookings = await Order.find({ type: { $in: ['Booking', 'Stay', 'Travel', 'Service', 'Services'] } })
-            .sort({ createdAt: -1 });
+        const customBookings = await Order.find({
+            ...filter,
+            type: { $in: ['Booking', 'Stay', 'Travel', 'Service', 'Services'] }
+        }).sort({ createdAt: -1 });
 
         const defaultSlots = ['10:00 AM - 11:00 AM', '11:30 AM - 12:30 PM', '02:00 PM - 03:00 PM', '04:30 PM - 05:30 PM', '06:00 PM - 07:00 PM'];
-        
+
         const isBookingItem = (item) => {
             const name = String(item.serviceName || item.service || item.serviceType || item.product_details || item.productDetails || item.title || '').toLowerCase();
             const productNamesToExclude = ['urad dal', 'spring onions', 'phone', 'headphone', 'salad', 'chicken biriyani', 'biriyani'];
@@ -2678,31 +2752,74 @@ router.get('/bookings', [auth, adminAuth], async (req, res) => {
         res.json(allBookings);
     } catch (err) {
         console.error(err);
-        res.status(500).send('Server error');
+        res.status(500).json({ success: false, message: 'Server error fetching bookings', error: err.message });
     }
 });
 
-// GET all jobs applied
-router.get('/jobs', [auth, adminAuth], async (req, res) => {
+// POST new booking (Public Customer Booking Creation + Real-time Socket sync)
+router.post(['/bookings', '/public/bookings'], async (req, res) => {
     try {
-        const dbJobs = await JobApplied.find().sort({ createdAt: -1 });
+        const payload = { ...req.body };
+        if (!payload.status) payload.status = 'Pending';
+        if (payload.amount !== undefined && payload.commission === undefined) {
+            payload.commission = Math.round(Number(payload.amount) * 0.05);
+        }
 
-        const customJobs = await Order.find({ type: { $in: ['Job', 'Jobs'] } })
-            .sort({ createdAt: -1 });
+        const newBooking = new Booking(payload);
+        await newBooking.save();
 
-        // Resolve vendor and customer for custom jobs
+        const shadowOrder = new Order({
+            ...payload,
+            type: 'Booking',
+            order_number: payload.order_number || `BK${Math.floor(1000 + Math.random() * 9000)}`
+        });
+        await shadowOrder.save();
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('bookingCreated', newBooking);
+        }
+
+        res.status(201).json({ success: true, message: 'Booking created successfully', booking: newBooking, data: newBooking });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ success: false, message: 'Error creating booking', error: err.message });
+    }
+});
+
+// GET all jobs applied (supports admin, vendor filter, and public requests)
+router.get(['/jobs', '/public/jobs'], async (req, res) => {
+    try {
+        const { vendorId, candidateEmail } = req.query;
+        const filter = {};
+        if (candidateEmail) filter.email = candidateEmail;
+
+        const dbJobs = await JobApplied.find(filter).sort({ createdAt: -1 });
+
+        const customJobsFilter = {
+            type: { $in: ['Job', 'Jobs'] }
+        };
+        if (vendorId) {
+            customJobsFilter.$or = [
+                { vendorId },
+                { 'vendorId._id': vendorId }
+            ];
+        }
+
+        const customJobs = await Order.find(customJobsFilter).sort({ createdAt: -1 });
+
         const resolvedCustomJobs = await resolveVendorAndCustomer(customJobs);
 
-        const mappedDbJobs = dbJobs.map((j, idx) => {
+        const mappedDbJobs = dbJobs.map((j) => {
             const obj = j.toObject ? j.toObject() : j;
-            const custIdVal = obj.customerId || 'CUST-' + String(obj._id).substring(18, 24).toUpperCase();
+            const custIdVal = obj.customerId || (obj._id ? 'CUST-' + String(obj._id).substring(18, 24).toUpperCase() : '—');
             const posVal = obj.position || obj.title || obj.jobTitle || '—';
             const compVal = obj.companyName || obj.vendorName || obj.businessName || '—';
             const hrVal = obj.hrName || obj.contactPerson || obj.hr || '—';
             const resumeVal = obj.resumeUrl || '';
             return {
                 ...obj,
-                applicationId: obj.applicationId || obj._id,
+                applicationId: obj.applicationId || (obj._id ? 'JOB-' + String(obj._id).substring(18, 24).toUpperCase() : '—'),
                 candidateName: obj.candidateName || 'Candidate',
                 customerId: custIdVal,
                 position: posVal,
@@ -2714,13 +2831,13 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
             };
         });
 
-        const mappedCustomJobs = resolvedCustomJobs.map((order, idx) => {
-            const appId = order.order_number || order.id || order._id;
-            const custIdVal = (order.customerId && (order.customerId.memberId || order.customerId._id || order.customerId.id)) || 'CUST-' + String(order._id).substring(18, 24).toUpperCase();
-            const companyName = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || order.companyName || order.vendorName || 'Verified Enterprise';
-            const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || order.hrName || 'Talent Team';
+        const mappedCustomJobs = resolvedCustomJobs.map((order) => {
+            const appId = order.order_number || order.id || (order._id ? 'JOB-' + String(order._id).substring(18, 24).toUpperCase() : '—');
+            const custIdVal = (order.customerId && (order.customerId.memberId || order.customerId._id || order.customerId.id)) || (order._id ? 'CUST-' + String(order._id).substring(18, 24).toUpperCase() : '—');
+            const companyName = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || order.companyName || order.vendorName || '—';
+            const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || order.hrName || '—';
             const posVal = order.product_details || order.position || order.title || order.jobTitle || 'Job Application';
-            const resumeVal = order.candidateResume || '';
+            const resumeVal = order.candidateResume || order.resumeUrl || '';
 
             return {
                 _id: order._id,
@@ -2746,19 +2863,35 @@ router.get('/jobs', [auth, adminAuth], async (req, res) => {
         res.json(allJobs);
     } catch (err) {
         console.error(err);
-        res.status(500).send('Server error');
+        res.status(500).json({ success: false, message: 'Server error fetching job applications', error: err.message });
     }
 });
 
-// POST new job applied (apply)
-router.post('/jobs', [auth, adminAuth], async (req, res) => {
+// POST new job applied (Public Candidate Application + Real-time Socket sync)
+router.post(['/jobs', '/public/jobs'], async (req, res) => {
     try {
-        const newJob = new JobApplied(req.body);
+        const payload = { ...req.body };
+        if (!payload.status) payload.status = 'applied';
+
+        const newJob = new JobApplied(payload);
         const job = await newJob.save();
-        res.json(job);
+
+        const shadowOrder = new Order({
+            ...payload,
+            type: 'Job',
+            order_number: payload.order_number || `JOB${Math.floor(1000 + Math.random() * 9000)}`
+        });
+        await shadowOrder.save();
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('jobCreated', job);
+        }
+
+        res.status(201).json({ success: true, message: 'Job application submitted successfully', job, data: job });
     } catch (err) {
         console.error(err);
-        res.status(500).send('Server error');
+        res.status(500).json({ success: false, message: 'Error submitting job application', error: err.message });
     }
 });
 

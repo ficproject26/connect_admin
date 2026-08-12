@@ -4437,18 +4437,19 @@ function App() {
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {filteredOrders.map((order) => {
-                          const vName = order.vendorId?.businessName || order.vendorName || order.vendorId?.name || 'Apollo City Hospital';
-                          const pDetails = order.serviceName || order.service || order.productDetails || order.product_details || order.productName || 'General Product';
-                          const custName = order.customerId?.name || order.customer_name || 'Karthikeyan';
+                          const vName = order.vendorId?.businessName || order.vendorName || order.vendorId?.name || '—';
+                          const vEmail = order.vendorId?.email || order.vendorEmail || '—';
+                          const pDetails = order.serviceName || order.service || order.productDetails || order.product_details || order.productName || order.title || '—';
+                          const custName = order.customerId?.name || order.customer_name || order.memberName || '—';
                           const custPhone = (order.customerId?.phone && order.customerId?.phone !== 'N/A')
                             ? order.customerId?.phone
-                            : ((order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.phone && order.phone !== 'N/A' ? order.phone : '9876543210'));
+                            : ((order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.phone && order.phone !== 'N/A' ? order.phone : '—'));
                           return (
                             <tr key={order._id}>
-                              <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{order.order_number || order.id || 'N/A'}</td>
+                              <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{order.order_number || order.id || (order._id ? 'ORD-' + String(order._id).substring(18, 24).toUpperCase() : '—')}</td>
                               <td className="px-6 py-4">
                                 <span className="block font-semibold text-slate-850 dark:text-slate-100">{vName}</span>
-                                <span className="text-xs text-slate-400">{order.vendorId?.email || 'vendor@example.com'}</span>
+                                <span className="text-xs text-slate-400">{vEmail}</span>
                               </td>
                               <td className="px-6 py-4">
                                 <span className="block font-semibold text-slate-800 dark:text-slate-200">{custName}</span>
@@ -4600,20 +4601,19 @@ function App() {
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {filteredBookings.map((booking, idx) => {
-                          const vName = booking.vendorId?.businessName || booking.vendorName || booking.vendorId?.name || 'Express Repair Services';
-                          const cName = booking.customerId?.name || booking.customer_name || 'Karthikeyan';
+                          const vName = booking.vendorId?.businessName || booking.vendorName || booking.vendorId?.name || '—';
+                          const vEmail = booking.vendorId?.email || booking.vendorEmail || '—';
+                          const cName = booking.customerId?.name || booking.customer_name || booking.memberName || '—';
                           const cPhone = (booking.customerId?.phone && booking.customerId?.phone !== 'N/A')
                             ? booking.customerId?.phone
-                            : ((booking.customer_phone && booking.customer_phone !== 'N/A') ? booking.customer_phone : (booking.phone && booking.phone !== 'N/A' ? booking.phone : '9876543210'));
-                          const serviceVal = booking.serviceName || booking.service || booking.serviceType || booking.product_details || booking.productDetails || booking.category || 'AC Repair & Maintenance Service';
-                          const defaultSlots = ['10:00 AM - 11:00 AM', '11:30 AM - 12:30 PM', '02:00 PM - 03:00 PM', '04:30 PM - 05:30 PM', '06:00 PM - 07:00 PM'];
-                          const rawSlot = String(booking.appointmentTimeSlot || '').toLowerCase();
-                          const slotVal = (!booking.appointmentTimeSlot || rawSlot.includes('standard')) ? defaultSlots[idx % defaultSlots.length] : booking.appointmentTimeSlot;
+                            : ((booking.customer_phone && booking.customer_phone !== 'N/A') ? booking.customer_phone : (booking.phone && booking.phone !== 'N/A' ? booking.phone : '—'));
+                          const serviceVal = booking.serviceName || booking.service || booking.serviceType || booking.product_details || booking.productDetails || booking.category || booking.title || '—';
+                          const slotVal = booking.appointmentTimeSlot || 'Standard Slot';
                           return (
                             <tr key={booking._id}>
                               <td className="px-6 py-4">
                                 <span className="block font-semibold text-slate-850 dark:text-slate-100">{vName}</span>
-                                <span className="text-xs text-slate-400">{booking.vendorId?.email || 'vendor@example.com'}</span>
+                                <span className="text-xs text-slate-400">{vEmail}</span>
                               </td>
                               <td className="px-6 py-4">
                                 <span className="block font-semibold text-slate-800 dark:text-slate-200">{cName}</span>
