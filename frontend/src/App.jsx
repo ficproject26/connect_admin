@@ -22,7 +22,13 @@ import { PayrollManagement } from './components/PayrollManagement';
 import { CustomerSupportTeamManagement } from './components/CustomerSupportTeamManagement';
 
 const getBackendUrl = () => {
-  if (typeof window === 'undefined') return 'http://localhost:5001/api';
+  const envApiUrl =
+    (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL)) ||
+    'http://13.232.157.132:5001';
+
+  const baseUrl = envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+
+  if (typeof window === 'undefined') return baseUrl;
   const hostname = window.location.hostname;
   // Local development: point to local backend server
   if (
@@ -35,8 +41,8 @@ const getBackendUrl = () => {
   ) {
     return `http://${hostname || 'localhost'}:5001/api`;
   }
-  // Production: use environment variable or production server URL
-  return import.meta.env.VITE_API_BASE || 'http://13.232.157.132:5001/api';
+  // Production: use NEXT_PUBLIC_API_URL / VITE_API_BASE or fallback server URL
+  return baseUrl;
 };
 
 const API_BASE = getBackendUrl();
