@@ -14,12 +14,20 @@ const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./midd
 app.use(applySecurityHeaders);
 app.use(sanitizeInput);
 app.use(express.json({ limit: '100mb', extended: true }));
-app.use(cors({
-    origin: true,
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
+        return callback(null, origin);
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires', 'expires', 'x-requested-with']
-}));
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires', 'expires', 'x-requested-with', 'Accept', 'Origin'],
+    optionsSuccessStatus: 204
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Apply Auth Rate Limiter to Auth Endpoints
 app.use('/api/auth/login', authRateLimiter({ windowMs: 60 * 1000, max: 5 }));
@@ -35,8 +43,8 @@ app.use((req, res, next) => {
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: '*',
-        methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+        origin: (origin, callback) => callback(null, true),
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization'],
         credentials: true
     },
@@ -85,12 +93,22 @@ app.use('/api/products', require('./routes/admin'));
 app.use('/api/vendors', require('./routes/admin'));
 app.use('/api/users', require('./routes/admin'));
 
+const setCorsHeaders = (req, res) => {
+    const origin = req.headers.origin;
+    if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    const reqHeaders = req.headers['access-control-request-headers'];
+    res.setHeader('Access-Control-Allow-Headers', reqHeaders || 'x-auth-token, Content-Type, Authorization, Cache-Control, Pragma, Expires, expires, x-requested-with, Accept, Origin');
+};
+
 // 404 Handler for unmapped API routes
 app.use('/api', (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'x-auth-token, Content-Type, Authorization, Cache-Control, Pragma, Expires, expires, x-requested-with');
+    setCorsHeaders(req, res);
     res.status(404).json({
         success: false,
         message: `API route not found: ${req.method} ${req.originalUrl}`,
@@ -101,10 +119,7 @@ app.use('/api', (req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error('Global Error Handler:', err);
-    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'x-auth-token, Content-Type, Authorization, Cache-Control, Pragma, Expires, expires, x-requested-with');
+    setCorsHeaders(req, res);
     res.status(err.status || 500).json({
         success: false,
         message: err.message || 'Internal Server Error',
@@ -183,14 +198,13 @@ const PORT = process.env.PORT || 5000;
 
 // Connect Database, seed admin, then start server
 const startServer = async () => {
+    server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
     try {
         await connectDB();
         await seedAdminUser();
         await seedMainCategoriesIfNeeded();
-        server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
     } catch (err) {
-        console.error('Failed to start server:', err.message);
-        process.exit(1);
+        console.error('Initialization warning (DB/Seed):', err.message);
     }
 };
 
