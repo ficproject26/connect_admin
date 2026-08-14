@@ -35,8 +35,8 @@ const getBackendUrl = () => {
   ) {
     return `http://${hostname || 'localhost'}:5001/api`;
   }
-  // Production: use environment variable or relative API path
-  return import.meta.env.VITE_API_BASE || '/api';
+  // Production: use environment variable or production server URL
+  return import.meta.env.VITE_API_BASE || 'http://13.232.157.132:5001/api';
 };
 
 const API_BASE = getBackendUrl();

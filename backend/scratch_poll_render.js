@@ -1,6 +1,6 @@
 const poll = async () => {
-    const url = 'https://connect-admin-backend.onrender.com/api/auth/login';
-    console.log('Polling Render backend to check for new deployment...');
+    const url = 'http://13.232.157.132:5001/api/auth/login';
+    console.log('Polling backend to check for new deployment...');
     
     for (let i = 0; i < 15; i++) {
         try {
