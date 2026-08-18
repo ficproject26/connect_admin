@@ -195,6 +195,91 @@ const seedMainCategoriesIfNeeded = async () => {
     }
 };
 
+// Auto-sync product status for all suspended vendors on server boot
+const syncSuspendedVendorProductsOnBoot = async () => {
+    try {
+        const db = mongoose.connection.db;
+        if (!db) return;
+
+        const suspendedUsers = await db.collection('users').find({
+            $or: [
+                { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
+                { isActive: false },
+                { isApproved: false }
+            ]
+        }).toArray();
+
+        const suspendedVendors = await db.collection('vendors').find({
+            $or: [
+                { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
+                { isActive: false }
+            ]
+        }).toArray();
+
+        const validObjectIds = [];
+        const stringKeys = [];
+
+        [...suspendedUsers, ...suspendedVendors].forEach(v => {
+            if (v._id) {
+                const idStr = v._id.toString();
+                stringKeys.push(idStr);
+                if (mongoose.Types.ObjectId.isValid(idStr)) validObjectIds.push(new mongoose.Types.ObjectId(idStr));
+            }
+            if (v.registrationId) stringKeys.push(v.registrationId.toString());
+            if (v.vendorId) stringKeys.push(v.vendorId.toString());
+            if (v.primaryBusinessId) {
+                const pIdStr = v.primaryBusinessId.toString();
+                stringKeys.push(pIdStr);
+                if (mongoose.Types.ObjectId.isValid(pIdStr)) validObjectIds.push(new mongoose.Types.ObjectId(pIdStr));
+            }
+            if (Array.isArray(v.businesses)) {
+                v.businesses.forEach(b => {
+                    if (b._id) {
+                        const bIdStr = b._id.toString();
+                        stringKeys.push(bIdStr);
+                        if (mongoose.Types.ObjectId.isValid(bIdStr)) validObjectIds.push(new mongoose.Types.ObjectId(bIdStr));
+                    }
+                });
+            }
+            if (v.email) stringKeys.push(v.email.toLowerCase().trim());
+            if (v.phone) stringKeys.push(v.phone.replace(/\D/g, ''));
+            if (v.mobileNumber) stringKeys.push(v.mobileNumber.replace(/\D/g, ''));
+            if (v.businessName) stringKeys.push(v.businessName.toLowerCase().trim());
+            if (v.name) stringKeys.push(v.name.toLowerCase().trim());
+        });
+
+        if (stringKeys.length > 0) {
+            const rawProductColl = db.collection('products');
+            const res = await rawProductColl.updateMany(
+                {
+                    $or: [
+                        { vendorId: { $in: [...validObjectIds, ...stringKeys] } },
+                        { vendor: { $in: [...validObjectIds, ...stringKeys] } },
+                        { businessId: { $in: [...validObjectIds, ...stringKeys] } },
+                        { vendorEmail: { $in: stringKeys.map(e => e.toLowerCase()) } },
+                        { vendorPhone: { $in: stringKeys } },
+                        { vendorName: { $in: stringKeys } }
+                    ]
+                },
+                {
+                    $set: {
+                        isActive: false,
+                        isAvailable: false,
+                        vendorStatus: 'Suspended',
+                        isVendorSuspended: true,
+                        isSuspended: true
+                    }
+                }
+            );
+            if (res.modifiedCount > 0) {
+                console.log(`✅ Synced ${res.modifiedCount} products for suspended vendors on boot`);
+            }
+        }
+    } catch (err) {
+        console.error('Suspended vendor product sync warning:', err.message);
+    }
+};
+
 const PORT = process.env.PORT || 5000;
 
 // Connect Database, seed admin, then start server
@@ -204,6 +289,7 @@ const startServer = async () => {
         await connectDB();
         await seedAdminUser();
         await seedMainCategoriesIfNeeded();
+        await syncSuspendedVendorProductsOnBoot();
     } catch (err) {
         console.error('Initialization warning (DB/Seed):', err.message);
     }
