@@ -2444,14 +2444,14 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
                 ]
             }
         ]
-    }).select('_id email phone businessName name registrationId vendorId');
+    }).select('_id email phone businessName name registrationId vendorId primaryBusinessId businesses');
 
     const suspendedVendors = await Vendor.find({
         $or: [
             { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
             { isActive: false }
         ]
-    }).select('_id email phone businessName registrationId vendorId');
+    }).select('_id email phone businessName registrationId vendorId primaryBusinessId businesses');
 
     const suspendedVendorIds = new Set();
     const suspendedVendorEmails = new Set();
@@ -2467,6 +2467,12 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
         }
         if (v.registrationId) suspendedVendorIds.add(v.registrationId.toString());
         if (v.vendorId) suspendedVendorIds.add(v.vendorId.toString());
+        if (v.primaryBusinessId) suspendedVendorIds.add(v.primaryBusinessId.toString());
+        if (Array.isArray(v.businesses)) {
+            v.businesses.forEach(b => {
+                if (b._id) suspendedVendorIds.add(b._id.toString());
+            });
+        }
         if (v.email) suspendedVendorEmails.add(v.email.toLowerCase().trim());
         if (v.phone) suspendedVendorPhones.add(v.phone.replace(/\D/g, ''));
         if (v.businessName) suspendedVendorNames.add(v.businessName.toLowerCase().trim());

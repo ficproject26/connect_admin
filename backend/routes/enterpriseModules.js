@@ -564,46 +564,67 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         await Vendor.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
 
         // 2b. Update all products associated with this vendor across all matching identifiers
-        const matchedVendors = await User.find(updateFilter).select('_id email phone registrationId businessName name');
-        const matchedVendorCols = await Vendor.find(updateFilter).select('_id email phone registrationId businessName');
+        const matchedVendors = await User.find(updateFilter).select('_id email phone registrationId businessName name primaryBusinessId businesses');
+        const matchedVendorCols = await Vendor.find(updateFilter).select('_id email phone registrationId businessName primaryBusinessId businesses');
 
-        const vendorIdentifiers = new Set();
-        if (targetId) vendorIdentifiers.add(targetId.toString());
-        if (registrationId) vendorIdentifiers.add(registrationId.toString());
-        if (targetEmail) vendorIdentifiers.add(targetEmail.toLowerCase().trim());
+        const validObjectIds = [];
+        const stringKeys = [];
+
+        if (targetId) {
+            stringKeys.push(targetId.toString());
+            if (mongoose.Types.ObjectId.isValid(targetId)) validObjectIds.push(new mongoose.Types.ObjectId(targetId));
+        }
+        if (registrationId) stringKeys.push(registrationId.toString());
+        if (targetEmail) stringKeys.push(targetEmail.toLowerCase().trim());
 
         [...matchedVendors, ...matchedVendorCols].forEach(v => {
-            if (v._id) vendorIdentifiers.add(v._id.toString());
-            if (v.registrationId) vendorIdentifiers.add(v.registrationId.toString());
-            if (v.vendorId) vendorIdentifiers.add(v.vendorId.toString());
-            if (v.email) vendorIdentifiers.add(v.email.toLowerCase().trim());
-            if (v.phone) vendorIdentifiers.add(v.phone.replace(/\D/g, ''));
-            if (v.businessName) vendorIdentifiers.add(v.businessName.toLowerCase().trim());
-            if (v.name) vendorIdentifiers.add(v.name.toLowerCase().trim());
+            if (v._id) {
+                const idStr = v._id.toString();
+                stringKeys.push(idStr);
+                if (mongoose.Types.ObjectId.isValid(idStr)) validObjectIds.push(new mongoose.Types.ObjectId(idStr));
+            }
+            if (v.registrationId) stringKeys.push(v.registrationId.toString());
+            if (v.vendorId) stringKeys.push(v.vendorId.toString());
+            if (v.primaryBusinessId) {
+                const pIdStr = v.primaryBusinessId.toString();
+                stringKeys.push(pIdStr);
+                if (mongoose.Types.ObjectId.isValid(pIdStr)) validObjectIds.push(new mongoose.Types.ObjectId(pIdStr));
+            }
+            if (Array.isArray(v.businesses)) {
+                v.businesses.forEach(b => {
+                    if (b._id) {
+                        const bIdStr = b._id.toString();
+                        stringKeys.push(bIdStr);
+                        if (mongoose.Types.ObjectId.isValid(bIdStr)) validObjectIds.push(new mongoose.Types.ObjectId(bIdStr));
+                    }
+                });
+            }
+            if (v.email) stringKeys.push(v.email.toLowerCase().trim());
+            if (v.phone) stringKeys.push(v.phone.replace(/\D/g, ''));
+            if (v.businessName) stringKeys.push(v.businessName.toLowerCase().trim());
+            if (v.name) stringKeys.push(v.name.toLowerCase().trim());
         });
 
-        const vIdArr = Array.from(vendorIdentifiers);
-
-        const productSyncQuery = {
-            $or: [
-                { vendorId: { $in: vIdArr } },
-                { vendor: { $in: vIdArr } },
-                { vendorEmail: { $in: vIdArr.map(e => e.toLowerCase()) } },
-                { vendorPhone: { $in: vIdArr } },
-                { vendorName: { $in: vIdArr } }
-            ]
-        };
-
-        await Product.updateMany(
-            productSyncQuery,
-            { 
-                $set: { 
+        const rawProductColl = mongoose.connection.db.collection('products');
+        await rawProductColl.updateMany(
+            {
+                $or: [
+                    { vendorId: { $in: [...validObjectIds, ...stringKeys] } },
+                    { vendor: { $in: [...validObjectIds, ...stringKeys] } },
+                    { businessId: { $in: [...validObjectIds, ...stringKeys] } },
+                    { vendorEmail: { $in: stringKeys.map(e => e.toLowerCase()) } },
+                    { vendorPhone: { $in: stringKeys } },
+                    { vendorName: { $in: stringKeys } }
+                ]
+            },
+            {
+                $set: {
                     isActive: isCurrentlyActive,
                     isAvailable: isCurrentlyActive,
                     vendorStatus: formattedStatus,
                     isVendorSuspended: !isCurrentlyActive,
                     isSuspended: !isCurrentlyActive
-                } 
+                }
             }
         ).catch(e => console.error('Product updateMany error on vendor status change:', e));
 
