@@ -61,7 +61,12 @@ const getVendorAddress = (v) => {
 };
 
 const getVendorPhone = (v) => {
-  return v.mobileContact || v.phone || v.telephone || v.mobile || '—';
+  if (!v) return '—';
+  const raw = v.mobileContact || v.mobile || v.phone || v.phoneNumber || v.contactNumber || v.telephone || v.contactPersonPhone || '';
+  if (raw && raw !== '+91 98765 43211' && raw !== '9876543211') {
+    return raw;
+  }
+  return (raw && raw !== '+91 98765 43211') ? raw : '—';
 };
 
 const isVendorAgentOnboarded = (v) => {
@@ -85,41 +90,48 @@ const isVendorAgentOnboarded = (v) => {
 const getAgentInfo = (v) => {
   if (!v) return { name: '—', registrationId: '—', pincode: '—' };
 
-  if (v.onboardedByAgent && typeof v.onboardedByAgent === 'object') {
+  if (v.onboardedByAgent && typeof v.onboardedByAgent === 'object' && (v.onboardedByAgent.name || v.onboardedByAgent.registrationId)) {
     return {
-      name: v.onboardedByAgent.name || v.assignedPincodeAgent?.name || '—',
-      registrationId: v.onboardedByAgent.registrationId || v.assignedPincodeAgent?.registrationId || '—',
-      pincode: v.onboardedByAgent.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'
+      name: v.onboardedByAgent.name || '—',
+      registrationId: v.onboardedByAgent.registrationId || '—',
+      pincode: v.onboardedByAgent.pincode || '—'
     };
   }
-  if (v.onboardedBy && typeof v.onboardedBy === 'object') {
+  if (v.onboardedBy && typeof v.onboardedBy === 'object' && (v.onboardedBy.name || v.onboardedBy.registrationId)) {
     return {
-      name: v.onboardedBy.name || v.assignedPincodeAgent?.name || '—',
-      registrationId: v.onboardedBy.registrationId || v.assignedPincodeAgent?.registrationId || '—',
-      pincode: v.onboardedBy.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'
+      name: v.onboardedBy.name || '—',
+      registrationId: v.onboardedBy.registrationId || '—',
+      pincode: v.onboardedBy.pincode || '—'
     };
   }
-  if (v.agentId && typeof v.agentId === 'object') {
+  if (v.agentId && typeof v.agentId === 'object' && (v.agentId.name || v.agentId.registrationId)) {
     return {
-      name: v.agentId.name || v.assignedPincodeAgent?.name || '—',
-      registrationId: v.agentId.registrationId || v.assignedPincodeAgent?.registrationId || '—',
-      pincode: v.agentId.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'
+      name: v.agentId.name || '—',
+      registrationId: v.agentId.registrationId || '—',
+      pincode: v.agentId.pincode || '—'
     };
   }
-  if (v.referredBy && typeof v.referredBy === 'object') {
+  if (v.assignedPincodeAgent && typeof v.assignedPincodeAgent === 'object' && (v.assignedPincodeAgent.name || v.assignedPincodeAgent.registrationId)) {
     return {
-      name: v.referredBy.name || v.assignedPincodeAgent?.name || '—',
-      registrationId: v.referredBy.registrationId || v.assignedPincodeAgent?.registrationId || '—',
-      pincode: v.referredBy.pincode || v.assignedPincodeAgent?.pincode || v.pincode || '—'
+      name: v.assignedPincodeAgent.name || '—',
+      registrationId: v.assignedPincodeAgent.registrationId || '—',
+      pincode: v.assignedPincodeAgent.pincode || '—'
     };
   }
 
-  const name = v.agentName || (typeof v.onboardedBy === 'string' ? v.onboardedBy : '') || (typeof v.referredBy === 'string' ? v.referredBy : '') || v.assignedPincodeAgent?.name || '—';
+  const name = v.agentName || (typeof v.onboardedBy === 'string' ? v.onboardedBy : '') || (typeof v.referredBy === 'string' ? v.referredBy : '');
+  if (name) {
+    return {
+      name,
+      registrationId: '—',
+      pincode: '—'
+    };
+  }
 
   return {
-    name,
-    registrationId: v.assignedPincodeAgent?.registrationId || '—',
-    pincode: v.assignedPincodeAgent?.pincode || v.pincode || '—'
+    name: '—',
+    registrationId: '—',
+    pincode: '—'
   };
 };
 
@@ -1242,10 +1254,10 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
                   <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.email || 'N/A'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Mobile Phone:</span><span className="font-bold">{getVendorPhone(selectedVendorDetails)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">District / City:</span><span className="font-bold">{selectedVendorDetails.city || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">District / City:</span><span className="font-bold">{selectedVendorDetails.city || selectedVendorDetails.district || '—'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-bold">{selectedVendorDetails.state || '—'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-bold">{selectedVendorDetails.pincode || '—'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-bold truncate max-w-[180px]" title={selectedVendorDetails.address || 'Address not provided'}>{selectedVendorDetails.address || 'Address not provided'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-bold">{selectedVendorDetails.pincode || selectedVendorDetails.postalCode || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-bold truncate max-w-[180px]" title={selectedVendorDetails.address || selectedVendorDetails.businessAddress || 'Address not provided'}>{selectedVendorDetails.address || selectedVendorDetails.businessAddress || 'Address not provided'}</span></div>
                 </div>
               </div>
 
@@ -1259,7 +1271,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                   <div className="flex justify-between"><span className="text-slate-400">Assigned Agent:</span><span className="font-bold text-purple-600 dark:text-purple-400">{getAgentInfo(selectedVendorDetails).name}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Agent Reg ID:</span><span className="font-mono font-bold">{getAgentInfo(selectedVendorDetails).registrationId}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Agent Pincode:</span><span className="font-mono font-bold">{getAgentInfo(selectedVendorDetails).pincode}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Assigned Territory:</span><span className="font-bold">{selectedVendorDetails.assignedArea || 'Tamil Nadu / Dharmapuri'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Assigned Territory:</span><span className="font-bold">{getAgentInfo(selectedVendorDetails).name !== '—' ? (selectedVendorDetails.assignedArea || `${selectedVendorDetails.state || ''} / ${selectedVendorDetails.city || selectedVendorDetails.district || ''}`) : '—'}</span></div>
                 </div>
               </div>
 
@@ -1272,7 +1284,21 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
                 <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
                   <div className="flex justify-between"><span className="text-slate-400">GST Number:</span><span className="font-mono font-bold">{selectedVendorDetails.gstNumber || selectedVendorDetails.gstin || 'Not Provided'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">PAN Number:</span><span className="font-mono font-bold">{selectedVendorDetails.panNumber || selectedVendorDetails.kyc?.panNumber || 'Verified'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">License Number:</span><span className="font-mono font-bold">{selectedVendorDetails.businessLicense || selectedVendorDetails.licenseNumber || 'LIC-2026-8891'}</span></div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">License Number:</span>
+                    {(() => {
+                      const lic = selectedVendorDetails.businessLicense || selectedVendorDetails.licenseNumber || '';
+                      if (!lic) return <span className="font-mono font-bold text-slate-400">Not Provided</span>;
+                      if (lic.startsWith('/uploads') || lic.startsWith('http') || /\.(jpg|jpeg|png|pdf|webp)$/i.test(lic)) {
+                        return (
+                          <a href={lic.startsWith('http') ? lic : `${API_BASE.replace(/\/api$/, '')}${lic}`} target="_blank" rel="noopener noreferrer" className="font-bold text-purple-600 dark:text-purple-400 underline hover:text-purple-800">
+                            📄 View License Doc
+                          </a>
+                        );
+                      }
+                      return <span className="font-mono font-bold">{lic}</span>;
+                    })()}
+                  </div>
                   <div className="flex justify-between"><span className="text-slate-400">KYC Status:</span><span className="font-bold text-emerald-600">Verified Partner</span></div>
                 </div>
               </div>

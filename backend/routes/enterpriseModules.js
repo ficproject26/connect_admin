@@ -32,8 +32,8 @@ const sanitizeVendorAddressObj = (vObj) => {
     };
 
     let street = (vObj.businessAddress || vObj.street || vObj.address || vObj.streetAddress || '').trim();
-    let city = (vObj.city || vObj.district || '').trim();
-    let state = (vObj.state || '').trim();
+    let city = (vObj.city || vObj.district || vObj.addressCity || '').trim();
+    let state = (vObj.state || vObj.addressState || '').trim();
     let pin = (vObj.postalCode || vObj.pincode || vObj.zipCode || '').trim();
     let area = (vObj.assignedArea || '').trim();
 
@@ -42,39 +42,24 @@ const sanitizeVendorAddressObj = (vObj) => {
     if (isPlaceholder(state)) state = '';
     if (isPlaceholder(pin)) pin = '';
 
-    if (area && area.includes('/')) {
+    if (area && area.includes('/') && (!state || !city)) {
         const parts = area.split('/').map(p => p.trim());
         if (!state && parts[0] && !isPlaceholder(parts[0])) state = parts[0];
         if (!city && parts[1] && !isPlaceholder(parts[1])) city = parts[1];
     }
-
-    if (street) {
-        const sLower = street.toLowerCase();
-        if (sLower.includes('thalaivasal')) {
-            if (!city) city = 'Salem';
-            if (!state) state = 'Tamil Nadu';
-            if (!pin) pin = '636112';
-        } else if (sLower.includes('sivasankarapuram')) {
-            if (!city) city = 'Kallakurichi';
-            if (!state) state = 'Tamil Nadu';
-            if (!pin) pin = '606202';
-        }
-    }
-
-    if (!state) state = 'Tamil Nadu';
-    if (!city) city = 'Dharmapuri';
-    if (!pin) pin = '635109';
 
     const addressParts = [];
     if (street) addressParts.push(street);
     if (city && city.toLowerCase() !== street.toLowerCase()) addressParts.push(city);
     if (state && state.toLowerCase() !== city.toLowerCase()) addressParts.push(state);
 
-    vObj.fullAddress = `${addressParts.join(', ')} (${pin})`;
-    vObj.assignedArea = `${state} / ${city}`;
-    vObj.pincode = pin;
-    vObj.city = city;
-    vObj.state = state;
+    const baseAddr = addressParts.join(', ');
+    vObj.fullAddress = baseAddr ? (pin ? `${baseAddr} (${pin})` : baseAddr) : (pin ? `Pincode: ${pin}` : '—');
+    vObj.assignedArea = (state && city) ? `${state} / ${city}` : (state || city || '—');
+    vObj.pincode = pin || '—';
+    vObj.city = city || '—';
+    vObj.state = state || '—';
+    vObj.address = street || baseAddr || 'Address not provided';
     return vObj;
 };
 
@@ -89,7 +74,7 @@ const enrichVendorData = async (v) => {
         vObj.category = vObj.vendorType || vObj.businessCategory || vObj.shopType || 'Retail & Stores';
     }
 
-    vObj.phone = vObj.mobileContact || vObj.phone || vObj.telephone || '+91 98765 43211';
+    vObj.phone = vObj.mobileContact || vObj.mobile || vObj.phone || vObj.phoneNumber || vObj.contactNumber || vObj.telephone || vObj.contactPersonPhone || '—';
 
     // Normalize Agent Onboarded status
     const isAgentOnboarded = vObj.joiningType === 'agent' ||
@@ -130,7 +115,7 @@ const enrichVendorData = async (v) => {
 
         const regId = agentDoc?.registrationId || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.registrationId : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.registrationId : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.registrationId : null) || `AG-${(agentDoc?.level || agentDoc?.role || 'PIN').slice(0,4).toUpperCase()}-${String(agentDoc?._id || '1001').slice(-4)}`;
 
-        const pinCode = agentDoc?.pincode || (agentDoc?.territory && typeof agentDoc.territory === 'object' ? agentDoc.territory.pincode : null) || vObj.pincode || '600001';
+        const pinCode = agentDoc?.pincode || (agentDoc?.territory && typeof agentDoc.territory === 'object' ? agentDoc.territory.pincode : null) || '—';
 
         vObj.onboardedByAgent = {
             name: agentName,
