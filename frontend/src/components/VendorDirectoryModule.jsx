@@ -225,7 +225,11 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       });
       if (res.ok) {
         const data = await res.json();
-        setAgentOnboardedVendorsList(data.vendors || []);
+        const pendingOnly = (data.vendors || []).filter(v => {
+          const s = (v.status || '').toLowerCase().trim();
+          return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
+        });
+        setAgentOnboardedVendorsList(pendingOnly);
       }
     } catch (err) {
       console.error('Fetch agent onboarded vendors error:', err);
@@ -282,6 +286,7 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
       console.error('Auto assign error:', err);
     } finally {
       setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
+      setAgentOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
       if (targetVendor) {
         const updated = { ...targetVendor, status: 'Assigned' };
         setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email))]);
@@ -293,12 +298,13 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
   const handleApproveVendor = async (vendorObj) => {
     const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
-    const targetVendor = typeof vendorObj === 'object' ? vendorObj : directRequests.find(v => v._id === vendorId);
+    const targetVendor = typeof vendorObj === 'object' ? vendorObj : (directRequests.find(v => v._id === vendorId) || agentOnboardedVendorsList.find(v => v._id === vendorId));
     const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
     const registrationId = targetVendor?.registrationId || '';
 
-    // Instantly remove approved vendor from direct requests list
+    // Instantly remove approved vendor from direct requests and onboarding review lists
     setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
+    setAgentOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
 
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/approve`, {
@@ -330,11 +336,12 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
   const handleRejectVendor = async (vendorObj) => {
     const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
-    const targetVendor = typeof vendorObj === 'object' ? vendorObj : directRequests.find(v => v._id === vendorId);
+    const targetVendor = typeof vendorObj === 'object' ? vendorObj : (directRequests.find(v => v._id === vendorId) || agentOnboardedVendorsList.find(v => v._id === vendorId));
     const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
 
-    // Instantly remove rejected vendor from direct requests list
+    // Instantly remove rejected vendor from direct requests and onboarding review lists
     setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
+    setAgentOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
 
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/reject`, {
@@ -361,7 +368,6 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
         setTotal(prev => prev + 1);
       }
       fetchVendors();
-      fetchAgentOnboardedVendors();
     }
   };
 
@@ -408,7 +414,8 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
     };
 
     setVendors(prev => prev.map(updateVendorObj));
-    setDirectRequests(prev => prev.map(v => (v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase())) ? { ...v, status: newStatus } : v));
+    setDirectRequests(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
+    setAgentOnboardedVendorsList(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
     setSelectedVendorDetails(prev => prev ? updateVendorObj(prev) : null);
 
     try {
@@ -1337,7 +1344,10 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
       {/* 8. AGENT ONBOARDED VENDORS MODAL */}
       {showAgentOnboardedModal && (() => {
-        const agentVendors = agentOnboardedVendorsList;
+        const agentVendors = agentOnboardedVendorsList.filter(v => {
+          const s = (v.status || '').toLowerCase().trim();
+          return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
+        });
         const q = agentOnboardSearch.toLowerCase().trim();
         const filtered = agentVendors.filter(v =>
           !q ||
