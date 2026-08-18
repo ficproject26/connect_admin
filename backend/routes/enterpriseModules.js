@@ -563,20 +563,48 @@ router.post('/vendors/update-status', auth, async (req, res) => {
         await Vendor.collection.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
         await Vendor.updateMany(updateFilter, { $set: { status: formattedStatus, isActive: isCurrentlyActive } }).catch(() => {});
 
-        // 2b. Update all products associated with this vendor
-        const matchedVendors = await User.find(updateFilter).select('_id');
-        const matchedVendorCols = await Vendor.find(updateFilter).select('_id');
-        const vendorIdsToSync = [
-            ...(targetId ? [targetId, targetId.toString()] : []),
-            ...matchedVendors.map(v => v._id),
-            ...matchedVendors.map(v => v._id.toString()),
-            ...matchedVendorCols.map(v => v._id),
-            ...matchedVendorCols.map(v => v._id.toString())
-        ];
+        // 2b. Update all products associated with this vendor across all matching identifiers
+        const matchedVendors = await User.find(updateFilter).select('_id email phone registrationId businessName name');
+        const matchedVendorCols = await Vendor.find(updateFilter).select('_id email phone registrationId businessName');
+
+        const vendorIdentifiers = new Set();
+        if (targetId) vendorIdentifiers.add(targetId.toString());
+        if (registrationId) vendorIdentifiers.add(registrationId.toString());
+        if (targetEmail) vendorIdentifiers.add(targetEmail.toLowerCase().trim());
+
+        [...matchedVendors, ...matchedVendorCols].forEach(v => {
+            if (v._id) vendorIdentifiers.add(v._id.toString());
+            if (v.registrationId) vendorIdentifiers.add(v.registrationId.toString());
+            if (v.vendorId) vendorIdentifiers.add(v.vendorId.toString());
+            if (v.email) vendorIdentifiers.add(v.email.toLowerCase().trim());
+            if (v.phone) vendorIdentifiers.add(v.phone.replace(/\D/g, ''));
+            if (v.businessName) vendorIdentifiers.add(v.businessName.toLowerCase().trim());
+            if (v.name) vendorIdentifiers.add(v.name.toLowerCase().trim());
+        });
+
+        const vIdArr = Array.from(vendorIdentifiers);
+
+        const productSyncQuery = {
+            $or: [
+                { vendorId: { $in: vIdArr } },
+                { vendor: { $in: vIdArr } },
+                { vendorEmail: { $in: vIdArr.map(e => e.toLowerCase()) } },
+                { vendorPhone: { $in: vIdArr } },
+                { vendorName: { $in: vIdArr } }
+            ]
+        };
 
         await Product.updateMany(
-            { vendorId: { $in: vendorIdsToSync } },
-            { $set: { isActive: isCurrentlyActive, isAvailable: isCurrentlyActive, vendorStatus: formattedStatus } }
+            productSyncQuery,
+            { 
+                $set: { 
+                    isActive: isCurrentlyActive,
+                    isAvailable: isCurrentlyActive,
+                    vendorStatus: formattedStatus,
+                    isVendorSuspended: !isCurrentlyActive,
+                    isSuspended: !isCurrentlyActive
+                } 
+            }
         ).catch(e => console.error('Product updateMany error on vendor status change:', e));
 
         // 3. Update nested businesses array with arrayFilters for documents where businesses array is non-empty
