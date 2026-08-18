@@ -23,12 +23,15 @@ import { CustomerSupportTeamManagement } from './components/CustomerSupportTeamM
 
 const getBackendUrl = () => {
   const envApiUrl =
-    (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL)) ||
-    'http://13.232.157.132:5001';
+    typeof import.meta !== 'undefined' && import.meta.env
+      ? import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL
+      : null;
 
-  const baseUrl = envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+  if (envApiUrl && envApiUrl.startsWith('http')) {
+    return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+  }
 
-  if (typeof window === 'undefined') return baseUrl;
+  if (typeof window === 'undefined') return '/api';
   const hostname = window.location.hostname;
   // Local development: point to local backend server
   if (
@@ -41,8 +44,8 @@ const getBackendUrl = () => {
   ) {
     return `http://${hostname || 'localhost'}:5001/api`;
   }
-  // Production: use NEXT_PUBLIC_API_URL / VITE_API_BASE or fallback server URL
-  return baseUrl;
+  // Production (Vercel / deployed domain): use relative /api path so Vercel proxy rewrites requests to http://13.232.157.132:5001/api without mixed content errors
+  return '/api';
 };
 
 const API_BASE = getBackendUrl();
