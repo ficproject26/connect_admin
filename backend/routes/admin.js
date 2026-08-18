@@ -1538,10 +1538,13 @@ router.delete('/memberships/plans/:id', [auth, adminAuth], async (req, res) => {
 // ==========================================
 // 11. BANNERS & ADVERTISEMENTS
 // ==========================================
+// PUBLIC BANNERS & ADS API ENDPOINTS (Master Vendor Status Filtered)
+// ==========================================
 router.get('/public-banners', async (req, res) => {
     try {
         const banners = await Banner.find({ isActive: true });
-        res.json(banners);
+        const activeBanners = await filterActiveVendorItems(banners);
+        res.json(activeBanners);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -1551,7 +1554,8 @@ router.get('/public-banners', async (req, res) => {
 router.get('/banners/public', async (req, res) => {
     try {
         const banners = await Banner.find({ isActive: true });
-        res.json(banners);
+        const activeBanners = await filterActiveVendorItems(banners);
+        res.json(activeBanners);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -1614,7 +1618,8 @@ router.post('/ads', [auth, adminAuth], async (req, res) => {
 router.get('/public/ads', async (req, res) => {
     try {
         const ads = await Advertisement.find().sort({ createdAt: -1 });
-        res.json(ads);
+        const activeAds = await filterActiveVendorItems(ads);
+        res.json(activeAds);
     } catch (err) {
         console.error('Error fetching public ads:', err);
         res.status(500).json({ error: err.message || 'Server error' });
@@ -1624,7 +1629,8 @@ router.get('/public/ads', async (req, res) => {
 router.get('/ads/public', async (req, res) => {
     try {
         const ads = await Advertisement.find().sort({ createdAt: -1 });
-        res.json(ads);
+        const activeAds = await filterActiveVendorItems(ads);
+        res.json(activeAds);
     } catch (err) {
         console.error('Error fetching public ads:', err);
         res.status(500).json({ error: err.message || 'Server error' });
@@ -1645,11 +1651,12 @@ router.delete('/ads/:id', [auth, adminAuth], async (req, res) => {
 // EXCLUSIVE OFFERS API ENDPOINTS
 // ==========================================
 
-// GET public exclusive offers for customer app
+// GET public exclusive offers for customer app (Master Vendor Status Filtered)
 router.get('/public/exclusive-offers', async (req, res) => {
     try {
         const offers = await ExclusiveOffer.find({ isActive: true }).sort({ createdAt: -1 });
-        res.json(offers);
+        const activeOffers = await filterActiveVendorItems(offers);
+        res.json(activeOffers);
     } catch (err) {
         console.error('Error fetching public exclusive offers:', err);
         res.status(500).json({ error: err.message || 'Server error' });
@@ -1659,7 +1666,8 @@ router.get('/public/exclusive-offers', async (req, res) => {
 router.get('/exclusive-offers/public', async (req, res) => {
     try {
         const offers = await ExclusiveOffer.find({ isActive: true }).sort({ createdAt: -1 });
-        res.json(offers);
+        const activeOffers = await filterActiveVendorItems(offers);
+        res.json(activeOffers);
     } catch (err) {
         console.error('Error fetching public exclusive offers:', err);
         res.status(500).json({ error: err.message || 'Server error' });
