@@ -991,18 +991,32 @@ router.post('/vendors', [auth, adminAuth], async (req, res) => {
 
 const buildProductVendorQuery = (v) => {
     if (!v) return { _id: null };
-    const vIdStr = (v._id || '').toString();
-    const vPrefix = vIdStr.length >= 16 ? vIdStr.substring(0, 16) : vIdStr;
-    const idRegex = new RegExp('^' + vPrefix);
-    const orConds = [
-        { vendorId: v._id },
-        { vendorId: vIdStr },
-        { vendorId: idRegex }
-    ];
+    const idSet = new Set();
+    if (v._id) idSet.add(v._id.toString());
+    if (v.registrationId) idSet.add(v.registrationId.toString());
+    if (v.vendorId) idSet.add(v.vendorId.toString());
+    if (v.primaryBusinessId) idSet.add(v.primaryBusinessId.toString());
+    if (Array.isArray(v.businesses)) {
+        v.businesses.forEach(b => {
+            if (b._id) idSet.add(b._id.toString());
+        });
+    }
+
+    const orConds = [];
+    idSet.forEach(id => {
+        orConds.push({ vendorId: id });
+        orConds.push({ businessId: id });
+        if (id.length >= 16) {
+            orConds.push({ vendorId: new RegExp('^' + id.substring(0, 16)) });
+        }
+    });
+
     if (v.email) orConds.push({ vendorEmail: v.email.toLowerCase().trim() });
-    if (v.phone) orConds.push({ vendorPhone: v.phone.replace(/\D/g, '') });
+    const phone = (v.phone || v.mobileNumber || '').replace(/\D/g, '');
+    if (phone) orConds.push({ vendorPhone: phone });
     const name = v.businessName || v.name;
     if (name) orConds.push({ vendorName: new RegExp('^' + name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'i') });
+
     return { $or: orConds };
 };
 
