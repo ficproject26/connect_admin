@@ -1818,13 +1818,22 @@ router.get('/ads/public', async (req, res) => {
     }
 });
 
-router.delete('/ads/:id', [auth, adminAuth], async (req, res) => {
+router.delete(['/ads/:id', '/ads/delete/:id'], [auth, adminAuth], async (req, res) => {
     try {
-        await Advertisement.findByIdAndDelete(req.params.id);
-        res.json({ msg: 'Ad deleted' });
+        const id = req.params.id;
+        await Advertisement.findByIdAndDelete(id).catch(() => {});
+        await Advertisement.deleteOne({ _id: id }).catch(() => {});
+        const db = mongoose.connection.db;
+        if (db) {
+            if (mongoose.Types.ObjectId.isValid(id)) {
+                await db.collection('advertisements').deleteOne({ _id: new mongoose.Types.ObjectId(id) }).catch(() => {});
+            }
+            await db.collection('advertisements').deleteOne({ _id: id }).catch(() => {});
+        }
+        res.json({ msg: 'Ad campaign deleted successfully', success: true });
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
+        console.error('Error deleting ad:', err);
+        res.status(500).json({ error: 'Server error deleting ad campaign', message: err.message });
     }
 });
 
