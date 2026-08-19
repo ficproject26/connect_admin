@@ -8837,7 +8837,16 @@ function App() {
                 return (
                   <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
                     <div><span className="text-slate-400 block font-semibold">Alternative Mobile:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.altPhone || modalData.alternativePhone || modalData.secondaryPhone || 'Not Provided'}</strong></div>
-                    <div><span className="text-slate-400 block font-semibold">Date of Birth:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.dob || modalData.dateOfBirth || 'Not Provided'}</strong></div>
+                    <div>
+                      <span className="text-slate-400 block font-semibold">Date of Birth:</span>
+                      <strong className="text-slate-800 dark:text-slate-200">
+                        {(() => {
+                          const rawDob = modalData.dob || modalData.dateOfBirth;
+                          if (!rawDob) return 'Not Provided';
+                          return String(rawDob).includes('T') ? String(rawDob).split('T')[0] : String(rawDob);
+                        })()}
+                      </strong>
+                    </div>
                     <div><span className="text-slate-400 block font-semibold">Gender:</span><strong className="text-slate-800 dark:text-slate-200 capitalize">{modalData.gender || 'Not Provided'}</strong></div>
                     <div><span className="text-slate-400 block font-semibold">Aadhaar Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.aadhaarNumber || modalData.kyc?.aadhaarNumber || modalData.kycDocs?.aadhaarNumber || 'Not Provided'}</strong></div>
                     <div><span className="text-slate-400 block font-semibold">PAN Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.panNumber || modalData.kyc?.panNumber || modalData.kycDocs?.panNumber || 'Not Provided'}</strong></div>
