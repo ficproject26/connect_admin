@@ -495,29 +495,109 @@ router.delete('/admins/:id', [auth, adminAuth], async (req, res) => {
 // ==========================================
 router.get('/agents', [auth, adminAuth], async (req, res) => {
     try {
-        const filter = { role: { $in: ['agent', 'Agent'] } };
+        const db = mongoose.connection.db;
+
+        // 1. Fetch agents from User collection with flexible role / level queries
+        const userAgentFilter = {
+            $and: [
+                { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] } },
+                {
+                    $or: [
+                        { role: { $regex: /agent/i } },
+                        { role: { $in: ['agent', 'Agent', 'state_agent', 'district_agent', 'division_agent', 'pincode_agent', 'State Agent', 'District Agent', 'Divisional Agent', 'Pincode Agent', 'state', 'district', 'division', 'pincode'] } }
+                    ]
+                }
+            ]
+        };
+
         if (req.adminUser && req.adminUser.adminRole !== 'super-admin') {
-            filter.$or = [
-                { branchId: req.adminUser.branchId },
-                { branchId: null },
-                { branchId: { $exists: false } }
+            userAgentFilter.$and = [
+                {
+                    $or: [
+                        { branchId: req.adminUser.branchId },
+                        { branchId: null },
+                        { branchId: { $exists: false } }
+                    ]
+                }
             ];
         }
-        const agents = await User.find(filter)
+
+        const userAgents = await User.find(userAgentFilter)
             .populate('branchId', 'name')
             .populate('assignedPincode', 'code name district state division')
             .sort({ createdAt: -1 })
             .lean();
 
-        // Fetch vendor lists to accurately calculate onboarded vendor counts per agent
+        // 2. Fetch agents from raw 'agents' collection in MongoDB
+        let rawAgents = [];
+        if (db) {
+            try {
+                rawAgents = await db.collection('agents').find({}).toArray();
+            } catch (aErr) {
+                console.error("Error fetching raw agents collection:", aErr);
+            }
+        }
+
+        // 3. Merge & Deduplicate by registrationId, email, or _id
+        const agentMap = new Map();
+
+        userAgents.forEach(agent => {
+            const levelVal = (agent.level || agent.role || 'pincode').toLowerCase();
+            const cleanLevel = levelVal.includes('state') ? 'state' : levelVal.includes('district') ? 'district' : (levelVal.includes('divis') || levelVal.includes('division')) ? 'division' : 'pincode';
+            const key = (agent.registrationId || agent.email || (agent._id ? agent._id.toString() : '')).toLowerCase().trim();
+            if (key) {
+                agentMap.set(key, {
+                    ...agent,
+                    role: 'agent',
+                    level: cleanLevel
+                });
+            }
+        });
+
+        rawAgents.forEach(raw => {
+            const rawIdStr = raw._id ? raw._id.toString() : '';
+            const key = (raw.registrationId || raw.email || rawIdStr).toLowerCase().trim();
+            const levelVal = (raw.level || raw.role || 'pincode').toLowerCase();
+            const cleanLevel = levelVal.includes('state') ? 'state' : levelVal.includes('district') ? 'district' : (levelVal.includes('divis') || levelVal.includes('division')) ? 'division' : 'pincode';
+
+            if (key && !agentMap.has(key)) {
+                agentMap.set(key, {
+                    _id: raw._id || rawIdStr,
+                    name: raw.name || 'Agent',
+                    email: raw.email || '',
+                    phone: raw.phone || '',
+                    role: 'agent',
+                    level: cleanLevel,
+                    status: raw.status || raw.kycStatus || 'pending',
+                    kycStatus: raw.kycStatus || raw.status || 'pending',
+                    isActive: typeof raw.isActive !== 'undefined' ? raw.isActive : false,
+                    registrationId: raw.registrationId || '',
+                    territory: raw.territory || {},
+                    assignedArea: raw.assignedArea || (raw.territory ? Object.values(raw.territory).filter(Boolean).join(' / ') : ''),
+                    assignedState: raw.assignedState || raw.territory?.state || '',
+                    assignedDistrict: raw.assignedDistrict || raw.territory?.district || '',
+                    assignedDivision: raw.assignedDivision || raw.territory?.division || '',
+                    pincode: raw.pincode || raw.territory?.pincode || '',
+                    createdAt: raw.createdAt || new Date()
+                });
+            } else if (key && agentMap.has(key)) {
+                const existing = agentMap.get(key);
+                if (raw.status || raw.kycStatus) {
+                    existing.status = existing.status || raw.status || raw.kycStatus;
+                    existing.kycStatus = existing.kycStatus || raw.kycStatus || raw.status;
+                }
+            }
+        });
+
+        const mergedAgents = Array.from(agentMap.values());
+
+        // Fetch vendor lists to calculate onboarded vendor counts
         const Vendor = require('../models/Vendor');
         const userVendorsList = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('_id email referredBy agentId onboardedBy').lean();
         const vendorModelList = await Vendor.find({}).select('_id agentId email').lean();
 
-        const enrichedAgents = agents.map(agent => {
+        const enrichedAgents = mergedAgents.map(agent => {
             const agentIdStr = String(agent._id);
-
-            // Count vendors onboarded by this agent across both collections
             let vCount = 0;
             if (typeof agent.vendorsAdded === 'number' && agent.vendorsAdded > 0) {
                 vCount = agent.vendorsAdded;
@@ -536,7 +616,6 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             const baseTierAccrual = level === 'state' ? 15000 : level === 'district' ? 10000 : ['division', 'divisional'].includes(level) ? 6000 : 3500;
             const isApproved = (agent.status || '').toLowerCase() === 'approved' || agent.isActive;
 
-            // Compute dynamic earnings
             let calcEarnings = 0;
             if (typeof agent.balance === 'number' && agent.balance > 0) {
                 calcEarnings = agent.balance;
