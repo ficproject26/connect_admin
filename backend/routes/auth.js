@@ -314,7 +314,17 @@ router.post('/login', async (req, res) => {
 
     try {
         const lowerEmail = (email || '').toLowerCase().trim();
-        let user = await User.findOne({ email: lowerEmail });
+        let user = await User.findOne({
+            $or: [
+                { email: lowerEmail },
+                { phone: lowerEmail },
+                ...(cleanDigits ? [
+                    { phone: cleanDigits },
+                    { phone: `+91${cleanDigits}` },
+                    { phone: `91${cleanDigits}` }
+                ] : [])
+            ]
+        });
 
         if (!user) {
             await AuditLog.create({
@@ -323,9 +333,14 @@ router.post('/login', async (req, res) => {
                 ipAddress: clientIp,
                 userAgent,
                 status: 'failed',
-                details: 'Login attempt failed - Email not found'
+                details: 'Login attempt failed - Account not found'
             }).catch(() => {});
-            return res.status(401).json({ message: 'Invalid email or password', msg: 'Invalid Credentials' });
+            return res.status(404).json({
+                status: 'error',
+                notRegistered: true,
+                message: 'Account not found. Please register to continue.',
+                msg: 'Account not found. Please register to continue.'
+            });
         }
 
         // 1. Check Hard Lockout (10+ failed attempts)
@@ -553,14 +568,12 @@ router.post('/send-otp', async (req, res) => {
             ]
         });
 
-        // Allow common test accounts or existing registered accounts
-        const isKnownTestMobile = ['9876543210', '8220266311', '9176543210', '9443322110', '6379068721'].includes(cleanDigits);
-        if (!user && !isKnownTestMobile) {
+        if (!user) {
             return res.status(404).json({
                 status: 'error',
                 notRegistered: true,
-                message: 'Your mobile number is not registered. Please sign up first.',
-                msg: 'Your mobile number is not registered. Please sign up first.'
+                message: 'This mobile number is not registered. Please register to continue.',
+                msg: 'This mobile number is not registered. Please register to continue.'
             });
         }
 
