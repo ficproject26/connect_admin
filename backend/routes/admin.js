@@ -55,6 +55,39 @@ const getBranchFilter = (adminUser, defaultFilter = {}) => {
     return defaultFilter;
 };
 
+// HELPER: Filter active vendor items
+const filterActiveVendorItems = async (items) => {
+    if (!Array.isArray(items)) return [];
+    try {
+        const suspendedVendors = await User.find({
+            role: { $regex: /vendor/i },
+            $or: [
+                { status: { $in: ['suspended', 'inactive', 'rejected', 'Suspended', 'Inactive', 'Rejected'] } },
+                { isActive: false }
+            ]
+        }).select('_id registrationId email phone businessName').lean();
+
+        const suspendedIds = new Set();
+        suspendedVendors.forEach(v => {
+            if (v._id) suspendedIds.add(v._id.toString());
+            if (v.registrationId) suspendedIds.add(v.registrationId.toString());
+            if (v.email) suspendedIds.add(v.email.toLowerCase());
+            if (v.phone) suspendedIds.add(v.phone.toString());
+        });
+
+        return items.filter(item => {
+            if (!item) return false;
+            const vId = (item.vendorId || item.vendor_id || item.vendorEmail || item.vendorPhone || '').toString().toLowerCase();
+            if (vId && suspendedIds.has(vId)) return false;
+            if (item.isVendorSuspended || item.vendorStatus === 'suspended' || item.vendorStatus === 'inactive') return false;
+            return true;
+        });
+    } catch (err) {
+        console.error('Error filtering vendor items:', err);
+        return items;
+    }
+};
+
 // ==========================================
 // 1. DASHBOARD & KPI STATS
 // ==========================================
