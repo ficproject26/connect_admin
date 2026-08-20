@@ -659,72 +659,90 @@ function App() {
 
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
 
-      // Priority Task 1: Agents & Dashboard Stats (unblocks screen immediately)
-      const safeFetch = async (url, setter) => {
-        try {
-          const r = await fetch(url, { headers });
-          if (r.status === 401 || r.status === 403) {
-            handleLogout();
-            return null;
+      // Priority Task 1: Agents & Dashboard Stats (unblocks screen immediately with retry backoff & timeout)
+      const safeFetch = async (url, setter, retries = 2) => {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          return null;
+        }
+        for (let attempt = 0; attempt <= retries; attempt++) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 12000);
+            const r = await fetch(url, { headers, signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (r.status === 401 || r.status === 403) {
+              handleLogout();
+              return null;
+            }
+            if (r.ok) {
+              const data = await r.json();
+              if (setter) setter(data);
+              return data;
+            }
+          } catch (e) {
+            if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
+              await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
+            }
           }
-          if (r.ok) {
-            const data = await r.json();
-            if (setter) setter(data);
-            return data;
-          }
-        } catch (e) {
-          // Ignore network cancel or fetch errors silently
         }
         return null;
       };
 
       const priorityTasks = [
-        safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
+        () => safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
           apiCacheRef.current['stats'] = data;
           try { localStorage.setItem('cached_dashboard_stats', JSON.stringify(data)); } catch (e) {}
           setStats(data);
         }),
-        safeFetch(`${API_BASE}/admin/agents`, (data) => {
+        () => safeFetch(`${API_BASE}/admin/agents`, (data) => {
           apiCacheRef.current['agents'] = data;
           try { localStorage.setItem('cached_agents', JSON.stringify(data)); } catch (e) {}
           setAgents(data);
         }),
       ];
 
-      // Secondary Background Tasks
+      // Secondary Background Tasks (executed in staggered batches)
       const secondaryTasks = [
-        safeFetch(`${API_BASE}/admin/branches`, setBranches),
-        safeFetch(`${API_BASE}/admin/admins`, setAdmins),
-        safeFetch(`${API_BASE}/pincodes`, setPincodes),
-        safeFetch(`${API_BASE}/admin/vendors`, setVendors),
-        safeFetch(`${API_BASE}/admin/customers`, setCustomers),
-        safeFetch(`${API_BASE}/admin/wallet/withdrawals`, setWithdrawals),
-        safeFetch(`${API_BASE}/admin/commissions`, setCommissions),
-        safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans),
-        safeFetch(`${API_BASE}/admin/banners`, setBanners),
-        safeFetch(`${API_BASE}/admin/ads`, setAds),
-        safeFetch(`${API_BASE}/admin/reports?type=${reportType}`, setReports),
-        safeFetch(`${API_BASE}/admin/tie-ups`, setTieUps),
-        safeFetch(`${API_BASE}/admin/tasks`, setTasks),
-        safeFetch(`${API_BASE}/admin/orders`, setOrders),
-        safeFetch(`${API_BASE}/admin/bookings`, setBookings),
-        safeFetch(`${API_BASE}/admin/jobs`, setJobs),
-        safeFetch(`${API_BASE}/admin/card-holders`, setCardHolders),
-        safeFetch(`${API_BASE}/admin/payments`, setPayments),
-        safeFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners),
-        safeFetch(`${API_BASE}/admin/support-team`, setSupportTeam),
-        safeFetch(`${API_BASE}/admin/categories`, setCategories),
-        safeFetch(`${API_BASE}/admin/queries`, setQueries),
-        safeFetch(`${API_BASE}/admin/tickets`, setTickets),
-        safeFetch(`${API_BASE}/admin/announcements`, setAnnouncements),
-        safeFetch(`${API_BASE}/admin/exclusive-offers`, setExclusiveOffers),
+        () => safeFetch(`${API_BASE}/admin/branches`, setBranches),
+        () => safeFetch(`${API_BASE}/admin/admins`, setAdmins),
+        () => safeFetch(`${API_BASE}/pincodes`, setPincodes),
+        () => safeFetch(`${API_BASE}/admin/vendors`, setVendors),
+        () => safeFetch(`${API_BASE}/admin/customers`, setCustomers),
+        () => safeFetch(`${API_BASE}/admin/wallet/withdrawals`, setWithdrawals),
+        () => safeFetch(`${API_BASE}/admin/commissions`, setCommissions),
+        () => safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans),
+        () => safeFetch(`${API_BASE}/admin/banners`, setBanners),
+        () => safeFetch(`${API_BASE}/admin/ads`, setAds),
+        () => safeFetch(`${API_BASE}/admin/reports?type=${reportType}`, setReports),
+        () => safeFetch(`${API_BASE}/admin/tie-ups`, setTieUps),
+        () => safeFetch(`${API_BASE}/admin/tasks`, setTasks),
+        () => safeFetch(`${API_BASE}/admin/orders`, setOrders),
+        () => safeFetch(`${API_BASE}/admin/bookings`, setBookings),
+        () => safeFetch(`${API_BASE}/admin/jobs`, setJobs),
+        () => safeFetch(`${API_BASE}/admin/card-holders`, setCardHolders),
+        () => safeFetch(`${API_BASE}/admin/payments`, setPayments),
+        () => safeFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners),
+        () => safeFetch(`${API_BASE}/admin/support-team`, setSupportTeam),
+        () => safeFetch(`${API_BASE}/admin/categories`, setCategories),
+        () => safeFetch(`${API_BASE}/admin/queries`, setQueries),
+        () => safeFetch(`${API_BASE}/admin/tickets`, setTickets),
+        () => safeFetch(`${API_BASE}/admin/announcements`, setAnnouncements),
+        () => safeFetch(`${API_BASE}/admin/exclusive-offers`, setExclusiveOffers),
       ];
 
-      await Promise.allSettled(priorityTasks);
+      await Promise.allSettled(priorityTasks.map(fn => fn()));
       setLoading(false);
 
-      // Continue secondary fetches in background without blocking screen
-      Promise.allSettled(secondaryTasks).catch(() => {});
+      // Stagger background tasks in chunks to avoid browser socket exhaustion
+      const batchSize = 5;
+      for (let i = 0; i < secondaryTasks.length; i += batchSize) {
+        const chunk = secondaryTasks.slice(i, i + batchSize);
+        await Promise.allSettled(chunk.map(fn => fn())).catch(() => {});
+        if (i + batchSize < secondaryTasks.length) {
+          await new Promise(r => setTimeout(r, 80));
+        }
+      }
     } catch (err) {
       console.error("API Server not reachable:", err);
       setLoading(false);
@@ -736,20 +754,28 @@ function App() {
 
     if (!token) return;
 
-    // Multi-device real-time sync: poll backend every 20 seconds
+    // Real-time sync: poll backend every 30 seconds only when online and tab is active
     const interval = setInterval(() => {
-      fetchData();
-    }, 20000);
+      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
+        fetchData();
+      }
+    }, 30000);
 
-    // Sync state immediately when user switches back to this browser window
-    const handleFocus = () => {
-      fetchData();
+    const handleSyncTrigger = () => {
+      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
+        fetchData();
+      }
     };
-    window.addEventListener('focus', handleFocus);
+
+    window.addEventListener('focus', handleSyncTrigger);
+    window.addEventListener('online', handleSyncTrigger);
+    document.addEventListener('visibilitychange', handleSyncTrigger);
 
     return () => {
       clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('focus', handleSyncTrigger);
+      window.removeEventListener('online', handleSyncTrigger);
+      document.removeEventListener('visibilitychange', handleSyncTrigger);
     };
   }, [token, reportType]);
 
