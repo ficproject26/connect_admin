@@ -626,6 +626,10 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             const rawKycDocs = raw.kycDocs || raw.kyc || {};
             const rawKyc = raw.kyc || raw.kycDocs || {};
 
+            const rawStatus = (raw.status && String(raw.status) !== 'undefined') ? String(raw.status) : (raw.kycStatus || 'pending');
+            const rawKycStatus = (raw.kycStatus && String(raw.kycStatus) !== 'undefined') ? String(raw.kycStatus) : (raw.status || 'pending');
+            const rawIsActive = typeof raw.isActive !== 'undefined' ? !!raw.isActive : (rawStatus === 'approved' || rawKycStatus === 'approved');
+
             if (key && !agentMap.has(key)) {
                 agentMap.set(key, {
                     _id: raw._id || rawIdStr,
@@ -640,9 +644,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     previousCompany: raw.previousCompany || raw.previousOrg || '',
                     role: 'agent',
                     level: cleanLevel,
-                    status: raw.status || raw.kycStatus || 'pending',
-                    kycStatus: raw.kycStatus || raw.status || 'pending',
-                    isActive: typeof raw.isActive !== 'undefined' ? raw.isActive : false,
+                    status: rawStatus,
+                    kycStatus: rawKycStatus,
+                    isActive: rawIsActive,
                     registrationId: raw.registrationId || '',
                     territory: {
                         state: rawTerritory.state || raw.assignedState || raw.state || '',

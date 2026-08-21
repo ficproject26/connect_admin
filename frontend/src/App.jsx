@@ -150,29 +150,27 @@ const handlePhoneInput = (e) => {
 
 const isPendingAgent = (agent) => {
   if (!agent) return false;
-  const status = (agent.status || agent.kycStatus || '').toLowerCase().trim();
-  const kycStatus = (agent.kycStatus || agent.status || '').toLowerCase().trim();
+  const status = (agent.status || '').toLowerCase().trim();
+  const kycStatus = (agent.kycStatus || '').toLowerCase().trim();
 
-  // Explicitly approved, active, rejected or suspended agents are not pending onboarding requests
+  // Explicitly approved & active directory agents are not pending onboarding requests
   if (
-    ['approved', 'active', 'rejected', 'suspended'].includes(status) ||
-    ['approved', 'active', 'rejected', 'suspended'].includes(kycStatus)
+    (status === 'approved' || status === 'active' || kycStatus === 'approved' || kycStatus === 'active') &&
+    (agent.isActive === true || agent.isApproved === true)
   ) {
     return false;
   }
 
-  // Any pending status variant or inactive state
+  // Explicitly rejected or suspended agents are not pending onboarding requests
   if (
-    status.includes('pending') ||
-    kycStatus.includes('pending') ||
-    status.includes('review') ||
-    status.includes('verification') ||
-    !agent.isActive
+    ['rejected', 'suspended', 'deactivated', 'blocked'].includes(status) ||
+    ['rejected', 'suspended', 'deactivated', 'blocked'].includes(kycStatus)
   ) {
-    return true;
+    return false;
   }
 
-  return false;
+  // All other unapproved / pending / review / under-verification agents are pending onboarding requests
+  return true;
 };
 
 const isApprovedAgent = (agent) => {
