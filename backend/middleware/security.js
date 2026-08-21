@@ -20,12 +20,10 @@ const applySecurityHeaders = (req, res, next) => {
         return res.status(204).end();
     }
     // OWASP & Banking level HTTP Security Headers
-    res.setHeader('X-Frame-Options', 'DENY'); // Clickjacking Protection
-    res.setHeader('X-XSS-Protection', '1; mode=block'); // Cross Site Scripting Filter
-    res.setHeader('X-Content-Type-Options', 'nosniff'); // MIME Sniffing Guard
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN'); // Allow framed embedding if needed, protect clickjacking
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload'); // HSTS (1 year)
-    res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
     next();
 };
 

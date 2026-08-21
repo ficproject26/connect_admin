@@ -280,6 +280,33 @@ const syncSuspendedVendorProductsOnBoot = async () => {
     }
 };
 
+// Catch-all 404 handler for non-existent API routes
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.status(404).json({ status: 'error', message: `Route ${req.method} ${req.url} not found` });
+});
+
+// Global Express Error Handler with CORS headers
+app.use((err, req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    } else {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    console.error('Server Error:', err);
+    res.status(err.status || 500).json({ status: 'error', message: err.message || 'Internal Server Error' });
+});
+
 const PORT = process.env.PORT || 5000;
 
 // Connect Database, seed admin, then start server
