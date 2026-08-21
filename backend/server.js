@@ -307,7 +307,7 @@ app.use((err, req, res, next) => {
     res.status(err.status || 500).json({ status: 'error', message: err.message || 'Internal Server Error' });
 });
 
-const PORT = process.env.PORT || 5002;
+const PORT = process.env.PORT || 5001;
 
 // Connect Database, seed admin, then start server
 const startServer = async () => {
