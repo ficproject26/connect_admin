@@ -314,6 +314,7 @@ router.post('/login', async (req, res) => {
 
     try {
         const lowerEmail = (email || '').toLowerCase().trim();
+        const cleanDigits = lowerEmail.replace(/\D/g, '');
         let user = await User.findOne({
             $or: [
                 { email: lowerEmail },
