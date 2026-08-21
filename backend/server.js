@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
@@ -28,7 +29,6 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
 // Apply Auth Rate Limiter to Auth Endpoints
 app.use('/api/auth/login', authRateLimiter({ windowMs: 60 * 1000, max: 5 }));
