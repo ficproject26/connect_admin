@@ -42,9 +42,9 @@ const getBackendUrl = () => {
     hostname.startsWith('10.') ||
     hostname.startsWith('172.')
   ) {
-    return `http://${hostname || 'localhost'}:5001/api`;
+    return `http://${hostname || 'localhost'}:5002/api`;
   }
-  // Production (Vercel / deployed domain): use relative /api path so Vercel proxy rewrites requests to http://13.232.157.132:5001/api without mixed content errors
+  // Production (Vercel / deployed domain): use relative /api path so Vercel proxy rewrites requests to http://13.232.157.132:5002/api without mixed content errors
   return '/api';
 };
 
