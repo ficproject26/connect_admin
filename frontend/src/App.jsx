@@ -9446,18 +9446,18 @@ function App() {
                     <button
                       onClick={async () => {
                         await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { status: 'rejected' });
-                        fetchData();
+                        fetchData(true);
                       }}
-                      className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+                      className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                     >
                       Reject
                     </button>
                     <button
                       onClick={async () => {
                         await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { status: 'approved' });
-                        fetchData();
+                        fetchData(true);
                       }}
-                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow-md"
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow-md cursor-pointer"
                     >
                       Approve Agent
                     </button>
