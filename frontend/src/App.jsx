@@ -648,12 +648,21 @@ function App() {
   }, [darkMode]);
 
   // Fetch Dashboard Stats & Associated Data (SWR Caching & Revalidation)
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     if (!token) return;
     try {
-      // 1. Instantly populate from SWR Cache if available
-      if (apiCacheRef.current['stats']) setStats(apiCacheRef.current['stats']);
-      if (apiCacheRef.current['agents']) setAgents(apiCacheRef.current['agents']);
+      // 1. Instantly populate from SWR Cache if available (unless forceRefresh is requested)
+      if (forceRefresh) {
+        delete apiCacheRef.current['stats'];
+        delete apiCacheRef.current['agents'];
+        try {
+          localStorage.removeItem('cached_agents');
+          localStorage.removeItem('cached_dashboard_stats');
+        } catch (e) {}
+      } else {
+        if (apiCacheRef.current['stats']) setStats(apiCacheRef.current['stats']);
+        if (apiCacheRef.current['agents']) setAgents(apiCacheRef.current['agents']);
+      }
 
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
 
@@ -776,6 +785,13 @@ function App() {
       document.removeEventListener('visibilitychange', handleSyncTrigger);
     };
   }, [token, reportType]);
+
+  // Auto-fetch fresh agent and request data when onboarding request modals are opened
+  useEffect(() => {
+    if (token && (showOnboardingRequestsModal || showVendorRequestsModal)) {
+      fetchData(true);
+    }
+  }, [showOnboardingRequestsModal, showVendorRequestsModal, token]);
 
   // Auth Handling
   const handleLogin = async (e) => {
@@ -9382,8 +9398,8 @@ function App() {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={fetchData}
-                  className="flex items-center gap-1.5 text-xs font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 px-3 py-1.5 rounded-xl border border-primary-200 dark:border-primary-800 transition-all"
+                  onClick={() => fetchData(true)}
+                  className="flex items-center gap-1.5 text-xs font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 px-3 py-1.5 rounded-xl border border-primary-200 dark:border-primary-800 transition-all cursor-pointer"
                   title="Reload onboarding requests from server"
                 >
                   <RotateCcw className="w-3.5 h-3.5" /> Refresh List
