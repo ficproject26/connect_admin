@@ -33,7 +33,7 @@ const getBackendUrl = () => {
 
   if (typeof window === 'undefined') return '/api';
   const hostname = window.location.hostname;
-  // Local development: point to local backend server
+  // Local development: point to live backend server
   if (
     !hostname ||
     hostname === 'localhost' ||
@@ -42,7 +42,7 @@ const getBackendUrl = () => {
     hostname.startsWith('10.') ||
     hostname.startsWith('172.')
   ) {
-    return `http://${hostname || 'localhost'}:8004/api`;
+    return 'http://13.203.197.69:8004/api';
   }
   // Production (Vercel / deployed domain): use relative /api path so Vercel proxy rewrites requests to backend without mixed content errors
   return '/api';
