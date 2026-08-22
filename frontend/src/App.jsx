@@ -175,14 +175,22 @@ const isPendingAgent = (agent) => {
 
 const isApprovedAgent = (agent) => {
   if (!agent) return false;
-  const status = (agent.status || agent.kycStatus || '').toLowerCase().trim();
-  const kycStatus = (agent.kycStatus || agent.status || '').toLowerCase().trim();
+  const status = (agent.status || '').toLowerCase().trim();
+  const kycStatus = (agent.kycStatus || '').toLowerCase().trim();
 
-  if (['approved', 'active'].includes(status) || ['approved', 'active'].includes(kycStatus)) {
-    return true;
+  if (
+    ['rejected', 'suspended', 'deactivated', 'blocked'].includes(status) ||
+    ['rejected', 'suspended', 'deactivated', 'blocked'].includes(kycStatus)
+  ) {
+    return false;
   }
 
-  if (!status && agent.isActive === true) {
+  if (
+    ['approved', 'active'].includes(status) ||
+    ['approved', 'active'].includes(kycStatus) ||
+    agent.isActive === true ||
+    agent.isApproved === true
+  ) {
     return true;
   }
 
@@ -667,29 +675,40 @@ function App() {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
 
       // Priority Task 1: Agents & Dashboard Stats (unblocks screen immediately with retry backoff & timeout)
-      const safeFetch = async (url, setter, retries = 2) => {
+      const safeFetch = async (url, setter, retries = 1) => {
         if (typeof navigator !== 'undefined' && !navigator.onLine) {
           return null;
         }
-        for (let attempt = 0; attempt <= retries; attempt++) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 12000);
-            const r = await fetch(url, { headers, signal: controller.signal });
-            clearTimeout(timeoutId);
 
-            if (r.status === 401 || r.status === 403) {
-              handleLogout();
-              return null;
-            }
-            if (r.ok) {
-              const data = await r.json();
-              if (setter) setter(data);
-              return data;
-            }
-          } catch (e) {
-            if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
-              await new Promise(resolve => setTimeout(resolve, 600 * (attempt + 1)));
+        const targetUrls = [url];
+        if (url.startsWith('/api/')) {
+          targetUrls.push(`http://13.203.197.69:8004${url}`);
+        } else if (url.includes('/api/')) {
+          const path = url.substring(url.indexOf('/api/'));
+          targetUrls.push(`http://13.203.197.69:8004${path}`);
+        }
+
+        for (const targetUrl of [...new Set(targetUrls)]) {
+          for (let attempt = 0; attempt <= retries; attempt++) {
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 12000);
+              const r = await fetch(targetUrl, { headers, signal: controller.signal });
+              clearTimeout(timeoutId);
+
+              if (r.status === 401 || r.status === 403) {
+                handleLogout();
+                return null;
+              }
+              if (r.ok) {
+                const data = await r.json();
+                if (setter) setter(data);
+                return data;
+              }
+            } catch (e) {
+              if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
+                await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+              }
             }
           }
         }
