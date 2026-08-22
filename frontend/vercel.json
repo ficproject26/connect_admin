@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://13.232.157.132:5001/api/:path*"
+      "destination": "http://13.203.197.69:8004/api/:path*"
     },
     {
       "source": "/((?!assets/|.*\\.[a-zA-Z0-9]+$).*)",

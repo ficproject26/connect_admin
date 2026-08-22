@@ -801,8 +801,8 @@ function App() {
     try {
       const targets = [
         `${API_BASE}/auth/login`,
+        'http://13.203.197.69:8004/api/auth/login',
         'http://localhost:8004/api/auth/login',
-        'http://localhost:5001/api/auth/login',
         '/api/auth/login'
       ];
       const uniqueTargets = [...new Set(targets)];
