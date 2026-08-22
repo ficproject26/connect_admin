@@ -851,6 +851,7 @@ const handleAgentStatusUpdate = async (req, res) => {
                                 kycStatus: agent.status,
                                 status: agent.status,
                                 isActive: agent.isActive,
+                                isApproved: (agent.status === 'approved'),
                                 rejectionReason: rejectionReason || '',
                                 updatedAt: new Date()
                             }

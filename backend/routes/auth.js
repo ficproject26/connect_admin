@@ -177,6 +177,39 @@ router.post('/register', async (req, res) => {
         user.password = await bcrypt.hash(password, salt);
         await user.save();
 
+        // Sync document to raw 'agents' collection in MongoDB
+        try {
+            const db = mongoose.connection.db;
+            if (db) {
+                await db.collection('agents').updateOne(
+                    { registrationId: user.registrationId },
+                    {
+                        $set: {
+                            registrationId: user.registrationId,
+                            name: user.name,
+                            email: user.email,
+                            phone: user.phone,
+                            altPhone: user.altPhone || '',
+                            role: agentRole,
+                            level: agentRole,
+                            status: 'pending',
+                            kycStatus: 'pending',
+                            isActive: false,
+                            isApproved: false,
+                            territory: cleanTerritory,
+                            assignedArea: territoryStr,
+                            kyc: kycMapped,
+                            kycDocs: kDocs,
+                            createdAt: new Date()
+                        }
+                    },
+                    { upsert: true }
+                );
+            }
+        } catch (sErr) {
+            console.error('Error syncing raw agent document on registration:', sErr);
+        }
+
         // Audit Log
         const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
         await AuditLog.create({
