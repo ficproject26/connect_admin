@@ -544,15 +544,13 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         };
 
         if (req.adminUser && req.adminUser.adminRole !== 'super-admin') {
-            userAgentFilter.$and = [
-                {
-                    $or: [
-                        { branchId: req.adminUser.branchId },
-                        { branchId: null },
-                        { branchId: { $exists: false } }
-                    ]
-                }
-            ];
+            userAgentFilter.$and.push({
+                $or: [
+                    { branchId: req.adminUser.branchId },
+                    { branchId: null },
+                    { branchId: { $exists: false } }
+                ]
+            });
         }
 
         const userAgents = await User.find(userAgentFilter)
