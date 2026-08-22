@@ -42,9 +42,9 @@ const getBackendUrl = () => {
     hostname.startsWith('10.') ||
     hostname.startsWith('172.')
   ) {
-    return `http://${hostname || 'localhost'}:5001/api`;
+    return `http://${hostname || 'localhost'}:8004/api`;
   }
-  // Production (Vercel / deployed domain): use relative /api path so Vercel proxy rewrites requests to http://13.232.157.132:5001/api without mixed content errors
+  // Production (Vercel / deployed domain): use relative /api path so Vercel proxy rewrites requests to backend without mixed content errors
   return '/api';
 };
 
@@ -799,12 +799,36 @@ function App() {
     setLoading(true);
     setAuthError('');
     try {
-      const loginUrl = `${API_BASE}/auth/login`;
-      const res = await fetch(loginUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
+      const targets = [
+        `${API_BASE}/auth/login`,
+        'http://localhost:8004/api/auth/login',
+        'http://localhost:5001/api/auth/login',
+        '/api/auth/login'
+      ];
+      const uniqueTargets = [...new Set(targets)];
+
+      let res = null;
+      let lastError = null;
+
+      for (const targetUrl of uniqueTargets) {
+        try {
+          const r = await fetch(targetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+          });
+          if (r) {
+            res = r;
+            break;
+          }
+        } catch (fetchErr) {
+          lastError = fetchErr;
+        }
+      }
+
+      if (!res) {
+        throw lastError || new Error('Backend server is not reachable. Please start the backend server on port 8004.');
+      }
 
       const contentType = res.headers.get('content-type');
       let data = {};
@@ -812,7 +836,7 @@ function App() {
         data = await res.json();
       } else {
         const textResponse = await res.text();
-        throw new Error(`Server returned non-JSON response (URL: ${loginUrl}). Response: ${textResponse.substring(0, 100)}...`);
+        throw new Error(`Server returned non-JSON response. Response: ${textResponse.substring(0, 100)}...`);
       }
 
       if (!res.ok) {
@@ -826,13 +850,16 @@ function App() {
         localStorage.setItem('user', JSON.stringify(data.user));
       } catch (e) { }
 
-
       setToken(data.token);
       setUser(data.user);
       setActiveTab('dashboard');
     } catch (err) {
       console.error("API Login failed:", err.message);
-      setAuthError(err.message || 'Invalid Credentials or Connection Refused');
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        setAuthError('Backend connection failed. Please ensure backend server is running on port 8004.');
+      } else {
+        setAuthError(err.message || 'Invalid Credentials or Connection Refused');
+      }
     } finally {
       setLoading(false);
     }
