@@ -383,7 +383,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             },
             recent: {
                 latestVendors,
-                latestAgents,
+                latestAgents: (latestAgents || []).map(sanitizeHeavyFields),
                 latestOrders
             }
         });
@@ -770,7 +770,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 calcEarnings = isApproved ? (vendorEarnings + baseTierAccrual) : vendorEarnings;
             }
 
-            return {
+            return sanitizeHeavyFields({
                 ...agent,
                 vendorsAdded: vCount,
                 balance: (agent.balance !== undefined && agent.balance > 0) ? agent.balance : calcEarnings,
@@ -778,7 +778,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 wallet: (agent.wallet !== undefined && agent.wallet > 0) ? agent.wallet : calcEarnings,
                 totalEarnings: (agent.totalEarnings !== undefined && agent.totalEarnings > 0) ? agent.totalEarnings : calcEarnings,
                 pendingPayout: (agent.pendingPayout !== undefined && agent.pendingPayout > 0) ? agent.pendingPayout : calcEarnings
-            };
+            });
         });
 
         res.json(enrichedAgents);
@@ -787,6 +787,39 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         res.status(500).send('Server error');
     }
 });
+
+const sanitizeHeavyFields = (doc) => {
+    if (!doc || typeof doc !== 'object') return doc;
+    const clean = { ...doc };
+
+    if (clean.kyc && typeof clean.kyc === 'object') {
+        const cleanKyc = { ...clean.kyc };
+        for (const k of Object.keys(cleanKyc)) {
+            if (typeof cleanKyc[k] === 'string' && (cleanKyc[k].startsWith('data:') || cleanKyc[k].length > 500)) {
+                cleanKyc[k] = cleanKyc[k].startsWith('http') ? cleanKyc[k] : '[Uploaded Document]';
+            }
+        }
+        clean.kyc = cleanKyc;
+    }
+
+    if (clean.kycDocs && typeof clean.kycDocs === 'object') {
+        const cleanKycDocs = { ...clean.kycDocs };
+        for (const k of Object.keys(cleanKycDocs)) {
+            if (typeof cleanKycDocs[k] === 'string' && (cleanKycDocs[k].startsWith('data:') || cleanKycDocs[k].length > 500)) {
+                cleanKycDocs[k] = cleanKycDocs[k].startsWith('http') ? cleanKycDocs[k] : '[Uploaded Document]';
+            }
+        }
+        clean.kycDocs = cleanKycDocs;
+    }
+
+    for (const key of Object.keys(clean)) {
+        if (typeof clean[key] === 'string' && (clean[key].startsWith('data:') || (clean[key].length > 500 && (key.toLowerCase().includes('doc') || key.toLowerCase().includes('image') || key.toLowerCase().includes('photo'))))) {
+            clean[key] = clean[key].startsWith('http') ? clean[key] : '[Uploaded Document]';
+        }
+    }
+
+    return clean;
+};
 
 router.post('/agents/:id/payout', [auth, adminAuth], async (req, res) => {
     try {
