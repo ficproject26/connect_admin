@@ -5,6 +5,21 @@ const connectDB = async () => {
         const dbURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect_App:Connect123@cluster0.k1s5dbl.mongodb.net/connect_db?appName=Cluster0';
         await mongoose.connect(dbURI);
         console.log('MongoDB Connected...');
+
+        // Pre-register all models to prevent MissingSchemaError on populates
+        try {
+            require('../models/User');
+            require('../models/Pincode');
+            require('../models/Branch');
+            require('../models/Vendor');
+            require('../models/AgentTarget');
+            require('../models/AgentActivity');
+            require('../models/Customer');
+            require('../models/Order');
+        } catch (mErr) {
+            console.error('Model registration warning:', mErr.message);
+        }
+
         await ensureIndexes();
     } catch (err) {
         console.error(err.message);

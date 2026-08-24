@@ -628,11 +628,22 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             }
         }
 
-        const userAgents = await User.find(userAgentFilter)
-            .populate('branchId', 'name')
-            .populate('assignedPincode', 'code name district state division')
-            .sort({ createdAt: -1 })
-            .lean();
+        const BranchModel = require('../models/Branch');
+        const PincodeModel = require('../models/Pincode');
+
+        let userAgents = [];
+        try {
+            userAgents = await User.find(userAgentFilter)
+                .populate({ path: 'branchId', model: BranchModel, select: 'name' })
+                .populate({ path: 'assignedPincode', model: PincodeModel, select: 'code name district state division' })
+                .sort({ createdAt: -1 })
+                .lean();
+        } catch (popErr) {
+            console.error("Populate warning in GET /agents:", popErr.message);
+            userAgents = await User.find(userAgentFilter)
+                .sort({ createdAt: -1 })
+                .lean();
+        }
 
         // 2. Fetch agents from raw 'agents' collection in MongoDB
         let rawAgents = [];
@@ -4270,7 +4281,14 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
             agentFilter.$or = orConditions;
         }
 
-        const allAgents = await User.find(agentFilter).populate('assignedPincode');
+        const PincodeModelForPerf = require('../models/Pincode');
+        let allAgents = [];
+        try {
+            allAgents = await User.find(agentFilter).populate({ path: 'assignedPincode', model: PincodeModelForPerf });
+        } catch (popErr) {
+            console.error("Populate warning in performance overview:", popErr.message);
+            allAgents = await User.find(agentFilter);
+        }
         const agentIds = allAgents.map(a => a._id);
 
         // Fetch targets for these agents
