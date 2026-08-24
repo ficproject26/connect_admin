@@ -672,19 +672,23 @@ function App() {
     }
 
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+
     const targetUrls = [url];
-    if (url.startsWith('/api/')) {
-      targetUrls.push(`http://13.203.197.69:8004${url}`);
-    } else if (url.includes('/api/')) {
-      const path = url.substring(url.indexOf('/api/'));
-      targetUrls.push(`http://13.203.197.69:8004${path}`);
+    if (!isHttps) {
+      if (url.startsWith('/api/')) {
+        targetUrls.push(`http://13.203.197.69:8004${url}`);
+      } else if (url.includes('/api/')) {
+        const path = url.substring(url.indexOf('/api/'));
+        targetUrls.push(`http://13.203.197.69:8004${path}`);
+      }
     }
 
     for (const targetUrl of [...new Set(targetUrls)]) {
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const timeoutId = setTimeout(() => controller.abort(), 30000);
           const r = await fetch(targetUrl, { headers, signal: controller.signal });
           clearTimeout(timeoutId);
 
@@ -699,7 +703,7 @@ function App() {
           }
         } catch (e) {
           if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
-            await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
+            await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
           }
         }
       }
