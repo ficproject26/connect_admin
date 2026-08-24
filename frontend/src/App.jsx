@@ -752,7 +752,7 @@ function App() {
         } catch (e) {}
       } else {
         if (apiCacheRef.current['stats']) setStats(apiCacheRef.current['stats']);
-        if (apiCacheRef.current['agents']) setAgents(apiCacheRef.current['agents']);
+        if (Array.isArray(apiCacheRef.current['agents'])) setAgents(apiCacheRef.current['agents']);
       }
 
       const priorityTasks = [
@@ -761,11 +761,7 @@ function App() {
           try { localStorage.setItem('cached_dashboard_stats', JSON.stringify(data)); } catch (e) {}
           setStats(data);
         }),
-        () => safeFetch(`${API_BASE}/admin/agents`, (data) => {
-          apiCacheRef.current['agents'] = data;
-          try { localStorage.setItem('cached_agents', JSON.stringify(data)); } catch (e) {}
-          setAgents(data);
-        }),
+        () => safeFetch(`${API_BASE}/admin/agents`, handleSetAgents),
         () => safeFetch(`${API_BASE}/admin/vendors`, setVendors),
         () => safeFetch(`${API_BASE}/admin/customers`, setCustomers),
       ];
@@ -845,14 +841,19 @@ function App() {
   }, [token]);
 
   const handleSetAgents = useCallback((data) => {
+    if (!data) return;
+    let list = null;
     if (Array.isArray(data)) {
-      setAgents(data);
-      apiCacheRef.current['agents'] = data;
-      try { localStorage.setItem('cached_agents', JSON.stringify(data)); } catch (e) {}
+      list = data;
     } else if (data && Array.isArray(data.agents)) {
-      setAgents(data.agents);
-      apiCacheRef.current['agents'] = data.agents;
-      try { localStorage.setItem('cached_agents', JSON.stringify(data.agents)); } catch (e) {}
+      list = data.agents;
+    } else if (data && Array.isArray(data.data)) {
+      list = data.data;
+    }
+    if (Array.isArray(list)) {
+      setAgents(list);
+      apiCacheRef.current['agents'] = list;
+      try { localStorage.setItem('cached_agents', JSON.stringify(list)); } catch (e) {}
     }
   }, []);
 

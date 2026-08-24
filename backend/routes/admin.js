@@ -687,15 +687,10 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         let userAgents = [];
         try {
             userAgents = await User.find(userAgentFilter)
-                .populate({ path: 'branchId', model: BranchModel, select: 'name' })
-                .populate({ path: 'assignedPincode', model: PincodeModel, select: 'code name district state division' })
                 .sort({ createdAt: -1 })
                 .lean();
-        } catch (popErr) {
-            console.error("Populate warning in GET /agents:", popErr.message);
-            userAgents = await User.find(userAgentFilter)
-                .sort({ createdAt: -1 })
-                .lean();
+        } catch (err) {
+            console.error("Error querying userAgents:", err.message);
         }
 
         // 2. Fetch agents from raw 'agents' collection in MongoDB
