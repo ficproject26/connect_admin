@@ -2177,26 +2177,50 @@ function App() {
                     return rawName;
                   };
 
+                  const extractAgentTerritory = (ag) => {
+                    let state = (ag.assignedState || ag.state || '').trim();
+                    let district = (ag.assignedDistrict || ag.district || '').trim();
+                    let division = (ag.assignedDivision || ag.division || '').trim();
+                    let pincode = (ag.pincode || ag.assignedPincode?.code || (typeof ag.assignedPincode === 'string' ? ag.assignedPincode : '') || '').trim();
+
+                    if (ag.assignedArea && typeof ag.assignedArea === 'string') {
+                      const parts = ag.assignedArea.split('/').map(s => s.trim()).filter(Boolean);
+                      if (!state && parts[0]) state = parts[0];
+                      if (!district && parts[1]) district = parts[1];
+                      if (!division && parts[2]) division = parts[2];
+                      if (!pincode && parts[3] && /^\d{6}$/.test(parts[3])) pincode = parts[3];
+                    }
+
+                    if (ag.territory && typeof ag.territory === 'object') {
+                      if (!state && ag.territory.state) state = ag.territory.state.trim();
+                      if (!district && ag.territory.district) district = ag.territory.district.trim();
+                      if (!division && ag.territory.division) division = ag.territory.division.trim();
+                      if (!pincode && ag.territory.pincode) pincode = String(ag.territory.pincode).trim();
+                    }
+
+                    state = state || 'General State';
+                    district = district || 'General District';
+                    division = division || 'General Division';
+
+                    return { state, district, division, pincode };
+                  };
+
                   const getAgentTerritoryDetail = (agent) => {
                     if (!agent) return { label: 'Territory', value: 'General Territory' };
                     const lvl = (agent.level || 'pincode').toLowerCase();
+                    const terr = extractAgentTerritory(agent);
                     const area = agent.assignedArea || '';
-                    const pin = getAgentPincodeCode(agent);
+                    const pin = getAgentPincodeCode(agent) || terr.pincode;
 
                     if (lvl === 'state') {
-                      const name = area.split('/')[0]?.trim() || area || 'State Territory';
-                      return { label: 'State Territory', value: name };
+                      return { label: 'State Territory', value: terr.state };
                     } else if (lvl === 'district') {
-                      const parts = area.split('/');
-                      const name = parts.length > 1 ? parts[1].trim() : (parts[0]?.trim() || 'District Territory');
-                      return { label: 'District Territory', value: name };
+                      return { label: 'District Territory', value: terr.district };
                     } else if (lvl === 'division' || lvl === 'divisional') {
-                      const parts = area.split('/');
-                      const name = parts.length > 2 ? parts[2].trim() : (parts.length > 1 ? parts[1].trim() : (parts[0]?.trim() || 'Division Territory'));
-                      return { label: 'Division Territory', value: name };
+                      return { label: 'Division Territory', value: terr.division };
                     }
 
-                    const val = pin ? `${pin}${area ? ` (${area})` : ''}` : (area || 'Pincode Territory');
+                    const val = pin ? `${pin}${area ? ` (${area})` : ''}` : (area || terr.division || 'Pincode Territory');
                     return { label: 'Pincode Territory', value: val };
                   };
 
@@ -2206,35 +2230,10 @@ function App() {
 
                     filteredAgents.forEach((ag) => {
                       const lvl = (ag.level || 'pincode').toLowerCase();
-
-                      // Determine State
-                      let stateName = 'General State';
-                      if (ag.assignedState) stateName = ag.assignedState.trim();
-                      else if (ag.assignedArea) {
-                        const parts = ag.assignedArea.split('/').map(s => s.trim());
-                        if (parts[0]) stateName = parts[0];
-                      } else if (ag.assignedPincode?.state) {
-                        stateName = ag.assignedPincode.state.trim();
-                      }
-
-                      // Determine District
-                      let districtName = 'General District';
-                      if (ag.assignedDistrict) districtName = ag.assignedDistrict.trim();
-                      else if (ag.assignedArea) {
-                        const parts = ag.assignedArea.split('/').map(s => s.trim());
-                        if (parts.length > 1) districtName = parts[1];
-                      } else if (ag.assignedPincode?.district) {
-                        districtName = ag.assignedPincode.district.trim();
-                      }
-
-                      // Determine Division
-                      let divisionName = 'General Division';
-                      if (ag.assignedArea) {
-                        const parts = ag.assignedArea.split('/').map(s => s.trim());
-                        if (parts.length > 2) divisionName = parts[2];
-                      } else if (ag.assignedPincode?.division) {
-                        divisionName = ag.assignedPincode.division.trim();
-                      }
+                      const terr = extractAgentTerritory(ag);
+                      const stateName = terr.state;
+                      const districtName = terr.district;
+                      const divisionName = terr.division;
 
                       if (!hierarchyMap[stateName]) {
                         hierarchyMap[stateName] = { stateName, stateAgents: [], districts: {} };
@@ -2308,7 +2307,11 @@ function App() {
                             const stKey = stObj.stateName;
                             const isStExpanded = expandedAgents[stKey] !== false; // expanded by default
                             const districtList = Object.values(stObj.districts);
-                            const totalDistrictAgents = districtList.reduce((sum, d) => sum + d.districtAgents.length, 0);
+                            const totalDistrictAgents = districtList.reduce((sum, d) => {
+                              const dAgents = d.districtAgents.length;
+                              const childAgents = Object.values(d.divisions).reduce((dSum, v) => dSum + v.divisionAgents.length + v.pincodeAgents.length, 0);
+                              return sum + dAgents + childAgents;
+                            }, 0);
 
                             return (
                               <div key={stKey} className="bg-white dark:bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-5 shadow-sm space-y-4 transition-all">
@@ -2374,7 +2377,7 @@ function App() {
                                       const distKey = distObj.districtName;
                                       const isDistExpanded = expandedAgents[distKey] !== false; // expanded by default
                                       const divList = Object.values(distObj.divisions);
-                                      const totalDivisionalAgents = divList.reduce((sum, v) => sum + v.divisionAgents.length, 0);
+                                      const totalDivisionalAgents = divList.reduce((sum, v) => sum + v.divisionAgents.length + v.pincodeAgents.length, 0);
 
                                       return (
                                         <div key={distKey} className="bg-white dark:bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-4 shadow-sm space-y-3">
