@@ -655,6 +655,15 @@ function App() {
     }
   }, [darkMode]);
 
+  const handleLogout = useCallback(() => {
+    try {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    } catch (e) { }
+    setToken('');
+    setUser(null);
+  }, []);
+
   // Component-scoped safeFetch helper available across all component hooks
   const safeFetch = useCallback(async (url, setter, retries = 1) => {
     if (!token) return null;
@@ -906,14 +915,7 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
-    try {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-    } catch (e) { }
-    setToken('');
-    setUser(null);
-  };
+  // handleLogout is defined above safeFetch
 
   const [toasts, setToasts] = useState([]);
 
