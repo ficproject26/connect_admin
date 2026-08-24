@@ -56,7 +56,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
   const fetchOverview = async () => {
     setLoading(true);
     try {
-      const query = new URLSearchParams({
+      const queryParams = new URLSearchParams({
         period,
         agentType,
         status: statusFilter,
@@ -66,18 +66,35 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
         division: divisionFilter,
         pincode: pincodeFilter
       });
-      if (startDate) query.append('startDate', startDate);
-      if (endDate) query.append('endDate', endDate);
+      if (startDate) queryParams.append('startDate', startDate);
+      if (endDate) queryParams.append('endDate', endDate);
 
-      const res = await fetch(`${API_BASE}/admin/agent-performance/overview?${query.toString()}`, {
-        headers: { 'x-auth-token': token }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setCardsData(data.cards);
-        setLeaderboards(data.leaderboards);
-        setChartsData(data.charts);
-        setAgentsList(data.agents || []);
+      const queryString = queryParams.toString();
+      const primaryUrl = `${API_BASE}/admin/agent-performance/overview?${queryString}`;
+      const targetUrls = [primaryUrl];
+      if (!primaryUrl.includes('13.203.197.69:8004')) {
+        targetUrls.push(`http://13.203.197.69:8004/api/admin/agent-performance/overview?${queryString}`);
+      }
+      targetUrls.push(`/api/admin/agent-performance/overview?${queryString}`);
+
+      let successData = null;
+      for (const targetUrl of [...new Set(targetUrls)]) {
+        try {
+          const res = await fetch(targetUrl, {
+            headers: { 'x-auth-token': token, 'Content-Type': 'application/json' }
+          });
+          if (res.ok) {
+            successData = await res.json();
+            break;
+          }
+        } catch (e) { }
+      }
+
+      if (successData) {
+        setCardsData(successData.cards);
+        setLeaderboards(successData.leaderboards);
+        setChartsData(successData.charts);
+        setAgentsList(successData.agents || []);
       }
     } catch (err) {
       console.error('Fetch agent performance error:', err);
