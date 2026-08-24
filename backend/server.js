@@ -34,7 +34,7 @@ const isOriginAllowed = (origin) => {
     if (!origin) return true;
     const cleanOrigin = origin.replace(/\/$/, '');
     if (allowedOrigins.includes(cleanOrigin)) return true;
-    if (cleanOrigin.endsWith('.vercel.app')) return true;
+    if (cleanOrigin.endsWith('.vercel.app') || cleanOrigin.endsWith('.onrender.com')) return true;
     return false;
 };
 

@@ -8,9 +8,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://13.203.197.69:8004',
+        target: 'https://connect-admin-qlcy.onrender.com',
         changeOrigin: true,
-        secure: false
+        secure: true
       }
     }
   }

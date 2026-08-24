@@ -50,7 +50,7 @@ const getBackendUrl = () => {
       return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
     }
 
-    return 'http://13.203.197.69:8004/api';
+    return 'https://connect-admin-qlcy.onrender.com/api';
   }
 
   return '/api';
@@ -692,15 +692,15 @@ function App() {
     );
 
     if (isLocalDev) {
-      // Local dev: add EC2 direct URL as fallback
+      // Local dev: add Render direct URL as fallback
       if (url.startsWith('/api/')) {
-        targetUrls.push(`http://13.203.197.69:8004${url}`);
+        targetUrls.push(`https://connect-admin-qlcy.onrender.com${url}`);
       } else if (url.includes('/api/')) {
         const path = url.substring(url.indexOf('/api/'));
-        targetUrls.push(`http://13.203.197.69:8004${path}`);
+        targetUrls.push(`https://connect-admin-qlcy.onrender.com${path}`);
         targetUrls.push(path);
-      } else if (url.startsWith('http://13.203.197.69:8004')) {
-        const path = url.replace('http://13.203.197.69:8004', '');
+      } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
+        const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
         targetUrls.push(path);
       }
     } else {
@@ -914,7 +914,7 @@ function App() {
         `${API_BASE}/auth/login`,
         '/api/auth/login',
         ...(isLocalDev ? [
-          'http://13.203.197.69:8004/api/auth/login',
+          'https://connect-admin-qlcy.onrender.com/api/auth/login',
           'http://localhost:8004/api/auth/login'
         ] : [])
       ];

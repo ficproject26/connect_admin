@@ -75,8 +75,8 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       const isLocalDev = typeof window !== 'undefined' && (
         window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       );
-      if (isLocalDev && !primaryUrl.includes('13.203.197.69:8004')) {
-        targetUrls.push(`http://13.203.197.69:8004/api/admin/agent-performance/overview?${queryString}`);
+      if (isLocalDev && !primaryUrl.includes('connect-admin-qlcy.onrender.com')) {
+        targetUrls.push(`https://connect-admin-qlcy.onrender.com/api/admin/agent-performance/overview?${queryString}`);
       }
       targetUrls.push(`/api/admin/agent-performance/overview?${queryString}`);
 
