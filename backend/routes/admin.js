@@ -97,82 +97,111 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         const isBranchScoped = admin.adminRole !== 'super-admin';
         const branchId = admin.branchId;
 
-        // Filters based on role
-        const userFilter = isBranchScoped ? { branchId } : {};
-        const vendorFilter = isBranchScoped ? { branchId } : {};
-        const orderFilter = isBranchScoped ? { branchId } : {}; // Assumes branchId exists on Order/Vendor
-        
-        // Let's gather counts
-        const totalCustomers = await Customer.countDocuments(isBranchScoped ? { branchId } : {});
-        const userVendorsCount = await User.countDocuments({ role: { $regex: /vendor|merchant/i }, ...(isBranchScoped ? { branchId } : {}) });
-        const docVendorsCount = await Vendor.countDocuments(isBranchScoped ? { branchId } : {});
-        const totalVendors = Math.max(userVendorsCount + docVendorsCount, 3);
-        const totalAgents = await User.countDocuments({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) });
-        const totalDistrictAgents = await User.countDocuments({ role: 'agent', level: 'district', ...(isBranchScoped ? { branchId } : {}) });
-        const totalBranches = await Branch.countDocuments();
-        
-        // Orders & Bookings
-        let ordersCount = 0;
-        let bookingsCount = 0;
-        let totalRevenue = 0;
-
-        let completedOrders = [];
-        let completedBookings = [];
-        let vendorIds = [];
-
-        if (isBranchScoped) {
-            // Fetch vendors for branch first
-            const branchVendors = await Vendor.find({ branchId }).select('_id');
-            vendorIds = branchVendors.map(v => v._id);
-            ordersCount = await Order.countDocuments({ vendorId: { $in: vendorIds } });
-            bookingsCount = await Booking.countDocuments({ vendorId: { $in: vendorIds } });
-
-            completedOrders = await Order.find({ vendorId: { $in: vendorIds }, status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
-            completedBookings = await Booking.find({ vendorId: { $in: vendorIds }, status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
-        } else {
-            ordersCount = await Order.countDocuments();
-            bookingsCount = await Booking.countDocuments();
-            completedOrders = await Order.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
-            completedBookings = await Booking.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
-        }
-        totalRevenue = completedOrders.reduce((sum, o) => sum + Number(o.finalAmount || o.totalAmount || o.amount || 0), 0) + completedBookings.reduce((sum, b) => sum + Number(b.finalAmount || b.totalAmount || b.amount || 0), 0);
-
-        // Specific category counts
-        const totalHospitals = await Vendor.countDocuments({ category: 'Hospitals', ...(isBranchScoped ? { branchId } : {}) });
-        const totalHotels = await Vendor.countDocuments({ category: 'Hotels', ...(isBranchScoped ? { branchId } : {}) });
-        const totalServices = await Vendor.countDocuments({ category: 'Services', ...(isBranchScoped ? { branchId } : {}) });
-        
         const agentBranchFilter = isBranchScoped ? { $or: [{ branchId }, { branchId: null }, { branchId: { $exists: false } }] } : {};
         const pendingStatusFilter = { status: { $in: ['pending', 'Pending'] } };
 
-        const activeMembershipPlans = await MembershipPlan.countDocuments({ isActive: true });
-        const userPendingVendors = await User.countDocuments({
-            role: { $regex: /vendor|merchant/i },
-            status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'active', 'Active', 'ACTIVE'] },
-            ...(isBranchScoped ? { branchId } : {})
-        });
-        const docPendingVendors = await Vendor.countDocuments({
-            status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'active', 'Active', 'ACTIVE'] },
-            ...(isBranchScoped ? { branchId } : {})
-        });
+        // Execute all independent database queries concurrently in parallel
+        const [
+            totalCustomers,
+            userVendorsCount,
+            docVendorsCount,
+            totalAgents,
+            totalDistrictAgents,
+            totalBranches,
+            totalHospitals,
+            totalHotels,
+            totalServices,
+            activeMembershipPlans,
+            userPendingVendors,
+            docPendingVendors,
+            pendingAgentApprovals,
+            pendingVendorKYC,
+            stateAgents,
+            districtAgents,
+            subDistrictAgents,
+            pincodeAgents,
+            subAdmins,
+            allVendors,
+            branchesList,
+            agentsList,
+            latestVendors,
+            latestAgents,
+            latestOrders
+        ] = await Promise.all([
+            Customer.countDocuments(isBranchScoped ? { branchId } : {}),
+            User.countDocuments({ role: { $in: ['vendor', 'Vendor', 'merchant', 'Merchant'] }, ...(isBranchScoped ? { branchId } : {}) }),
+            Vendor.countDocuments(isBranchScoped ? { branchId } : {}),
+            User.countDocuments({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) }),
+            User.countDocuments({ role: 'agent', level: 'district', ...(isBranchScoped ? { branchId } : {}) }),
+            Branch.countDocuments(),
+            Vendor.countDocuments({ category: 'Hospitals', ...(isBranchScoped ? { branchId } : {}) }),
+            Vendor.countDocuments({ category: 'Hotels', ...(isBranchScoped ? { branchId } : {}) }),
+            Vendor.countDocuments({ category: 'Services', ...(isBranchScoped ? { branchId } : {}) }),
+            MembershipPlan.countDocuments({ isActive: true }),
+            User.countDocuments({
+                role: { $in: ['vendor', 'Vendor', 'merchant', 'Merchant'] },
+                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'active', 'Active', 'ACTIVE'] },
+                ...(isBranchScoped ? { branchId } : {})
+            }),
+            Vendor.countDocuments({
+                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'active', 'Active', 'ACTIVE'] },
+                ...(isBranchScoped ? { branchId } : {})
+            }),
+            User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter }),
+            Vendor.countDocuments({ kycStatus: { $in: ['pending', 'Pending'] }, ...(isBranchScoped ? { branchId } : {}) }),
+            User.countDocuments({ role: 'agent', level: 'state', ...agentBranchFilter }),
+            User.countDocuments({ role: 'agent', level: 'district', ...agentBranchFilter }),
+            User.countDocuments({ role: 'agent', level: 'division', ...agentBranchFilter }),
+            User.countDocuments({ role: 'agent', level: 'pincode', ...agentBranchFilter }),
+            User.countDocuments({ role: 'admin', adminRole: { $in: ['branch-admin', 'staff'] }, ...(isBranchScoped ? { branchId } : {}) }),
+            Vendor.find(isBranchScoped ? { branchId } : {}).select('_id name businessName category branchId agentId vendorType').lean(),
+            Branch.find().select('_id name').lean(),
+            User.find({ role: 'agent' }).select('_id name').lean(),
+            Vendor.find(isBranchScoped ? { branchId } : {}).sort({ createdAt: -1 }).limit(5).populate('agentId', 'name').lean(),
+            User.find({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) }).sort({ createdAt: -1 }).limit(5).lean(),
+            Order.find().sort({ createdAt: -1 }).limit(5).populate('vendorId', 'businessName').populate('customerId', 'name').lean()
+        ]);
+
+        const totalVendors = Math.max(userVendorsCount + docVendorsCount, 3);
         const pendingVendorApprovals = userPendingVendors + docPendingVendors;
-        const pendingAgentApprovals = await User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter });
-        const pendingKYCRequests = await User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter });
+        const pendingKYCRequests = pendingAgentApprovals;
+        const pendingAgentKYC = pendingAgentApprovals;
 
-        // Requested extra KPIs
-        const pendingAgentKYC = await User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter });
-        const pendingVendorKYC = await Vendor.countDocuments({ kycStatus: { $in: ['pending', 'Pending'] }, ...(isBranchScoped ? { branchId } : {}) });
-        const stateAgents = await User.countDocuments({ role: 'agent', level: 'state', ...agentBranchFilter });
-        const districtAgents = await User.countDocuments({ role: 'agent', level: 'district', ...agentBranchFilter });
-        const subDistrictAgents = await User.countDocuments({ role: 'agent', level: 'division', ...agentBranchFilter });
-        const pincodeAgents = await User.countDocuments({ role: 'agent', level: 'pincode', ...agentBranchFilter });
-        const subAdmins = await User.countDocuments({ role: 'admin', adminRole: { $in: ['branch-admin', 'staff'] }, ...(isBranchScoped ? { branchId } : {}) });
+        // Fetch Orders & Bookings for revenue calculation
+        let ordersCount = 0;
+        let bookingsCount = 0;
+        let completedOrders = [];
+        let completedBookings = [];
 
+        if (isBranchScoped) {
+            const vendorIds = allVendors.map(v => v._id);
+            const [oCount, bCount, cOrders, cBookings] = await Promise.all([
+                Order.countDocuments({ vendorId: { $in: vendorIds } }),
+                Booking.countDocuments({ vendorId: { $in: vendorIds } }),
+                Order.find({ vendorId: { $in: vendorIds }, status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } }).select('finalAmount totalAmount amount vendorId createdAt').lean(),
+                Booking.find({ vendorId: { $in: vendorIds }, status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } }).select('finalAmount totalAmount amount vendorId createdAt').lean()
+            ]);
+            ordersCount = oCount;
+            bookingsCount = bCount;
+            completedOrders = cOrders;
+            completedBookings = cBookings;
+        } else {
+            const [oCount, bCount, cOrders, cBookings] = await Promise.all([
+                Order.countDocuments(),
+                Booking.countDocuments(),
+                Order.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } }).select('finalAmount totalAmount amount vendorId createdAt').lean(),
+                Booking.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } }).select('finalAmount totalAmount amount vendorId createdAt').lean()
+            ]);
+            ordersCount = oCount;
+            bookingsCount = bCount;
+            completedOrders = cOrders;
+            completedBookings = cBookings;
+        }
 
-        // 1. Dynamic Month-Wise Revenue Trends (last 6 months)
         const getItemAmount = (item) => Number(item.finalAmount || item.totalAmount || item.amount || item.price || item.total || 0);
+        const totalRevenue = completedOrders.reduce((sum, o) => sum + getItemAmount(o), 0) + completedBookings.reduce((sum, b) => sum + getItemAmount(b), 0);
 
-        // 1. Dynamic Month-Wise Revenue Trends (last 6 months)
+        // Dynamic Month-Wise Revenue Trends (last 6 months)
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const last6Months = [];
         for (let i = 5; i >= 0; i--) {
@@ -203,7 +232,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             revenue: totalCalcRev > 0 ? m.revenue : Math.round(45000 + (idx * 22000) + (Math.sin(idx) * 8000))
         }));
 
-        // 2. Category Wise Revenue
+        // Category Wise Revenue
         const categoryMap = {
             'Daily Needs': 0,
             'Food & Dining': 0,
@@ -211,7 +240,6 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             'Retail & Stores': 0,
             'Hospitality': 0
         };
-        const allVendors = await Vendor.find(isBranchScoped ? { branchId } : {}).lean();
         const vendorMap = {};
         allVendors.forEach(v => {
             if (v && v._id) {
@@ -245,9 +273,8 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             value: catTotal > 0 ? categoryMap[cat] : (cat === 'Daily Needs' ? 45000 : cat === 'Food & Dining' ? 35000 : cat === 'Services' ? 28000 : cat === 'Retail & Stores' ? 22000 : 15000)
         })).filter(c => c.value > 0);
 
-        // 3. Branch / District Wise Revenue Comparison
+        // Branch / District Wise Revenue Comparison
         const branchMap = {};
-        const branchesList = await Branch.find().lean();
         const branchIdToName = {};
         branchesList.forEach(b => {
             if (b && b._id) {
@@ -281,7 +308,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             ];
         }
 
-        // 4. Vendor Wise Revenue Performance
+        // Vendor Wise Revenue Performance
         const vendorRevMap = {};
         completedOrders.forEach(o => {
             const vIdStr = o.vendorId?._id ? o.vendorId._id.toString() : (o.vendorId ? o.vendorId.toString() : null);
@@ -296,9 +323,8 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             revenue: vendorRevMap[vName]
         })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
-        // 5. Agent Wise Revenue performance
+        // Agent Wise Revenue Performance
         const agentRevMap = {};
-        const agentsList = await User.find({ role: 'agent' }).lean();
         const agentIdToName = {};
         agentsList.forEach(a => {
             if (a && a._id) {
@@ -322,11 +348,6 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             revenue: agentRevMap[aName]
         })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
-        // Recent Activities
-        const latestVendors = await Vendor.find(isBranchScoped ? { branchId } : {}).sort({ createdAt: -1 }).limit(5).populate('agentId', 'name');
-        const latestAgents = await User.find({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) }).sort({ createdAt: -1 }).limit(5);
-        const latestOrders = await Order.find().sort({ createdAt: -1 }).limit(5).populate('vendorId', 'businessName').populate('customerId', 'name');
-
         res.json({
             kpis: {
                 totalUsers: totalCustomers + totalVendors + totalAgents,
@@ -345,7 +366,6 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
                 pendingVendorApprovals,
                 pendingAgentApprovals,
                 pendingKYCRequests,
-                // Extra KPIs
                 pendingAgentKYC,
                 pendingVendorKYC,
                 stateAgents,
@@ -353,7 +373,6 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
                 subDistrictAgents,
                 pincodeAgents,
                 subAdmins,
-                totalBranches
             },
             charts: {
                 revenueOverview,

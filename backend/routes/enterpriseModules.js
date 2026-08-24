@@ -63,7 +63,88 @@ const sanitizeVendorAddressObj = (vObj) => {
     return vObj;
 };
 
-const enrichVendorData = async (v) => {
+const batchEnrichVendors = async (vendorsList = []) => {
+    if (!Array.isArray(vendorsList) || vendorsList.length === 0) return [];
+
+    const agentIdsSet = new Set();
+    const pincodeCodesSet = new Set();
+
+    vendorsList.forEach(v => {
+        const vObj = typeof v.toObject === 'function' ? v.toObject() : v;
+        const possibleAgentId = (vObj.assignedAgent && typeof vObj.assignedAgent === 'object' ? (vObj.assignedAgent._id || vObj.assignedAgent) : vObj.assignedAgent) || vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId;
+        if (possibleAgentId) {
+            agentIdsSet.add(possibleAgentId.toString());
+        }
+
+        sanitizeVendorAddressObj(vObj);
+        const pinCode = vObj.fullAddress?.match(/\b\d{6}\b/)?.[0] || vObj.pincode;
+        if (pinCode && /^\d{6}$/.test(pinCode)) {
+            pincodeCodesSet.add(pinCode);
+        }
+    });
+
+    const agentIdsArr = Array.from(agentIdsSet);
+    const validObjectIds = agentIdsArr.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+    const stringKeys = agentIdsArr;
+
+    const agentDocsMap = new Map();
+    const pincodeMap = new Map();
+
+    const db = mongoose.connection.db;
+    const fetchPromises = [];
+
+    if (validObjectIds.length > 0 || stringKeys.length > 0) {
+        fetchPromises.push(
+            User.find({
+                $or: [
+                    ...(validObjectIds.length > 0 ? [{ _id: { $in: validObjectIds } }] : []),
+                    ...(stringKeys.length > 0 ? [{ registrationId: { $in: stringKeys } }, { email: { $in: stringKeys } }] : [])
+                ]
+            }).select('name registrationId pincode assignedArea level role').lean().then(users => {
+                users.forEach(u => {
+                    if (u._id) agentDocsMap.set(u._id.toString(), u);
+                    if (u.registrationId) agentDocsMap.set(u.registrationId.toString(), u);
+                    if (u.email) agentDocsMap.set(u.email.toLowerCase().trim(), u);
+                });
+            })
+        );
+
+        if (db) {
+            fetchPromises.push(
+                db.collection('agents').find({
+                    $or: [
+                        ...(validObjectIds.length > 0 ? [{ _id: { $in: validObjectIds } }] : []),
+                        ...(stringKeys.length > 0 ? [{ registrationId: { $in: stringKeys } }, { email: { $in: stringKeys } }] : [])
+                    ]
+                }).toArray().then(rawAgents => {
+                    rawAgents.forEach(a => {
+                        if (a._id && !agentDocsMap.has(a._id.toString())) agentDocsMap.set(a._id.toString(), a);
+                        if (a.registrationId && !agentDocsMap.has(a.registrationId.toString())) agentDocsMap.set(a.registrationId.toString(), a);
+                    });
+                }).catch(() => {})
+            );
+        }
+    }
+
+    if (pincodeCodesSet.size > 0) {
+        fetchPromises.push(
+            Pincode.find({ code: { $in: Array.from(pincodeCodesSet) } })
+                .populate('activeAgentId', 'name phone email level')
+                .lean()
+                .then(pins => {
+                    pins.forEach(p => {
+                        if (p.code) pincodeMap.set(p.code.toString(), p);
+                    });
+                })
+        );
+    }
+
+    await Promise.all(fetchPromises);
+
+    return Promise.all(vendorsList.map(v => enrichVendorData(v, agentDocsMap, pincodeMap)));
+};
+
+const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap = null) => {
     const vObj = typeof v.toObject === 'function' ? v.toObject() : v;
 
     if (Array.isArray(vObj.categories) && vObj.categories.length > 0) {
@@ -95,7 +176,10 @@ const enrichVendorData = async (v) => {
         const possibleAgentId = (vObj.assignedAgent && typeof vObj.assignedAgent === 'object' ? (vObj.assignedAgent._id || vObj.assignedAgent) : vObj.assignedAgent) || vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId;
 
         if (possibleAgentId) {
-            if (mongoose.Types.ObjectId.isValid(possibleAgentId)) {
+            const keyStr = possibleAgentId.toString();
+            if (preloadedAgentMap && preloadedAgentMap.has(keyStr)) {
+                agentDoc = preloadedAgentMap.get(keyStr);
+            } else if (mongoose.Types.ObjectId.isValid(possibleAgentId)) {
                 agentDoc = await User.findById(possibleAgentId).select('name registrationId pincode assignedArea level role').lean();
             }
             if (!agentDoc) {
@@ -130,9 +214,16 @@ const enrichVendorData = async (v) => {
 
     const pincodeCode = vObj.fullAddress?.match(/\b\d{6}\b/)?.[0] || vObj.pincode;
     if (pincodeCode) {
-        const pinDoc = await Pincode.findOne({ code: pincodeCode }).populate('activeAgentId', 'name phone email level');
-        if (pinDoc && pinDoc.activeAgentId) {
-            vObj.assignedPincodeAgent = pinDoc.activeAgentId;
+        if (preloadedPincodeMap && preloadedPincodeMap.has(pincodeCode.toString())) {
+            const pinDoc = preloadedPincodeMap.get(pincodeCode.toString());
+            if (pinDoc && pinDoc.activeAgentId) {
+                vObj.assignedPincodeAgent = pinDoc.activeAgentId;
+            }
+        } else {
+            const pinDoc = await Pincode.findOne({ code: pincodeCode }).populate('activeAgentId', 'name phone email level').lean();
+            if (pinDoc && pinDoc.activeAgentId) {
+                vObj.assignedPincodeAgent = pinDoc.activeAgentId;
+            }
         }
     }
     return vObj;
@@ -186,7 +277,7 @@ router.get('/vendors', auth, async (req, res) => {
                 }
             });
 
-            let enriched = await Promise.all(Array.from(vendorMap.values()).map(v => enrichVendorData(v)));
+            let enriched = await batchEnrichVendors(Array.from(vendorMap.values()));
 
             if (search) {
                 const s = search.toLowerCase();
@@ -223,7 +314,7 @@ router.get('/vendors', auth, async (req, res) => {
             }).sort({ createdAt: -1 });
 
             let rawDirect = [...directVendors.map(v => v.toObject()), ...directVendorDocs.map(v => v.toObject())];
-            let allDirect = await Promise.all(rawDirect.map(v => enrichVendorData(v)));
+            let allDirect = await batchEnrichVendors(rawDirect);
 
             // Filter out handled statuses AND filter out any agent-onboarded vendors
             const handledStatuses = new Set(['approved', 'rejected', 'assigned', 'active', 'suspended']);
@@ -348,7 +439,7 @@ router.get('/vendors', auth, async (req, res) => {
         }
 
         // Attach Pincode Agent information & normalize profile fields
-        const enrichedVendors = await Promise.all(vendors.map(async (v) => enrichVendorData(v)));
+        const enrichedVendors = await batchEnrichVendors(vendors);
 
         res.json({
             vendors: enrichedVendors,

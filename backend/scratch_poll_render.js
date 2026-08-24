@@ -1,5 +1,5 @@
 const poll = async () => {
-    const url = 'http://13.232.157.132:5001/api/auth/login';
+    const url = 'http://13.203.197.69:8004/api/auth/login';
     console.log('Polling backend to check for new deployment...');
     
     for (let i = 0; i < 15; i++) {

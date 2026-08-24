@@ -31,20 +31,20 @@ const getBackendUrl = () => {
     return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
   }
 
-  if (typeof window === 'undefined') return '/api';
-  const hostname = window.location.hostname;
-  // Local development: point to live backend server
-  if (
-    !hostname ||
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname.startsWith('192.168.') ||
-    hostname.startsWith('10.') ||
-    hostname.startsWith('172.')
-  ) {
-    return 'http://13.203.197.69:8004/api';
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (
+      !hostname ||
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.startsWith('192.168.') ||
+      hostname.startsWith('10.') ||
+      hostname.startsWith('172.')
+    ) {
+      return 'http://13.203.197.69:8004/api';
+    }
   }
-  // Production (Vercel / deployed domain): use relative /api path so Vercel proxy rewrites requests to backend without mixed content errors
+
   return '/api';
 };
 
@@ -692,7 +692,7 @@ function App() {
           for (let attempt = 0; attempt <= retries; attempt++) {
             try {
               const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 12000);
+              const timeoutId = setTimeout(() => controller.abort(), 6000);
               const r = await fetch(targetUrl, { headers, signal: controller.signal });
               clearTimeout(timeoutId);
 
@@ -707,7 +707,7 @@ function App() {
               }
             } catch (e) {
               if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
-                await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+                await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
               }
             }
           }
@@ -726,15 +726,15 @@ function App() {
           try { localStorage.setItem('cached_agents', JSON.stringify(data)); } catch (e) {}
           setAgents(data);
         }),
+        () => safeFetch(`${API_BASE}/admin/vendors`, setVendors),
+        () => safeFetch(`${API_BASE}/admin/customers`, setCustomers),
       ];
 
-      // Secondary Background Tasks (executed in staggered batches)
+      // Secondary Background Tasks (executed asynchronously without blocking screen)
       const secondaryTasks = [
         () => safeFetch(`${API_BASE}/admin/branches`, setBranches),
         () => safeFetch(`${API_BASE}/admin/admins`, setAdmins),
         () => safeFetch(`${API_BASE}/pincodes`, setPincodes),
-        () => safeFetch(`${API_BASE}/admin/vendors`, setVendors),
-        () => safeFetch(`${API_BASE}/admin/customers`, setCustomers),
         () => safeFetch(`${API_BASE}/admin/wallet/withdrawals`, setWithdrawals),
         () => safeFetch(`${API_BASE}/admin/commissions`, setCommissions),
         () => safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans),
@@ -760,15 +760,8 @@ function App() {
       await Promise.allSettled(priorityTasks.map(fn => fn()));
       setLoading(false);
 
-      // Stagger background tasks in chunks to avoid browser socket exhaustion
-      const batchSize = 5;
-      for (let i = 0; i < secondaryTasks.length; i += batchSize) {
-        const chunk = secondaryTasks.slice(i, i + batchSize);
-        await Promise.allSettled(chunk.map(fn => fn())).catch(() => {});
-        if (i + batchSize < secondaryTasks.length) {
-          await new Promise(r => setTimeout(r, 80));
-        }
-      }
+      // Fire secondary tasks asynchronously in background
+      Promise.allSettled(secondaryTasks.map(fn => fn())).catch(() => {});
     } catch (err) {
       console.error("API Server not reachable:", err);
       setLoading(false);
