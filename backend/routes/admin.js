@@ -848,7 +848,8 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             });
         });
 
-        res.json(enrichedAgents);
+        res.setHeader('Content-Type', 'application/json');
+        return res.status(200).json(enrichedAgents);
     } catch (err) {
         console.error('Error fetching agents:', err);
         res.status(500).send('Server error');
