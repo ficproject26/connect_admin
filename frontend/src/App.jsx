@@ -811,30 +811,50 @@ function App() {
     };
   }, [token]);
 
+  const handleSetAgents = useCallback((data) => {
+    if (Array.isArray(data)) {
+      setAgents(data);
+      apiCacheRef.current['agents'] = data;
+      try { localStorage.setItem('cached_agents', JSON.stringify(data)); } catch (e) {}
+    } else if (data && Array.isArray(data.agents)) {
+      setAgents(data.agents);
+      apiCacheRef.current['agents'] = data.agents;
+      try { localStorage.setItem('cached_agents', JSON.stringify(data.agents)); } catch (e) {}
+    }
+  }, []);
+
   // Selective On-Demand Tab Data Loading
   useEffect(() => {
     if (!token) return;
 
-    if (activeTab === 'agents' || activeTab === 'agent-directory') {
-      safeFetch(`${API_BASE}/admin/agents`, setAgents);
-    } else if (activeTab === 'vendors' || activeTab === 'vendor-directory') {
+    if (activeTab === 'agents' || activeTab === 'agent-directory' || agents.length === 0) {
+      safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+    }
+    if (activeTab === 'vendors' || activeTab === 'vendor-directory' || activeTab === 'vendor-directory-enterprise') {
       safeFetch(`${API_BASE}/admin/vendors`, setVendors);
-    } else if (activeTab === 'customers' || activeTab === 'customer-directory') {
+    }
+    if (activeTab === 'customers' || activeTab === 'customer-directory') {
       safeFetch(`${API_BASE}/admin/customers`, setCustomers);
-    } else if (activeTab === 'payroll' || activeTab === 'payroll-management') {
+    }
+    if (activeTab === 'payroll' || activeTab === 'payroll-enterprise' || activeTab === 'payroll-management') {
       safeFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals);
-    } else if (activeTab === 'memberships' || activeTab === 'membership-cards') {
+    }
+    if (activeTab === 'memberships' || activeTab === 'membership-cards-enterprise' || activeTab === 'membership-cards') {
       safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans);
-    } else if (activeTab === 'payments' || activeTab === 'enterprise-payments') {
+    }
+    if (activeTab === 'payments' || activeTab === 'payment-enterprise' || activeTab === 'enterprise-payments') {
       safeFetch(`${API_BASE}/admin/payments`, setPayments);
-    } else if (activeTab === 'categories' || activeTab === 'category-management') {
+    }
+    if (activeTab === 'categories' || activeTab === 'category-management') {
       safeFetch(`${API_BASE}/admin/categories`, setCategories);
-    } else if (activeTab === 'queries' || activeTab === 'customer-queries') {
+    }
+    if (activeTab === 'queries' || activeTab === 'customer-queries') {
       safeFetch(`${API_BASE}/admin/queries`, setQueries);
-    } else if (activeTab === 'tickets' || activeTab === 'support-tickets') {
+    }
+    if (activeTab === 'tickets' || activeTab === 'support-tickets') {
       safeFetch(`${API_BASE}/admin/tickets`, setTickets);
     }
-  }, [activeTab, token]);
+  }, [activeTab, token, agents.length]);
 
   // Selective revalidation when request modals open
   useEffect(() => {
