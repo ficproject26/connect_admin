@@ -10,25 +10,88 @@ require('dotenv').config();
 const app = express();
 app.set('trust proxy', 1);
 
-const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./middleware/security');
+const allowedOrigins = [
+    'https://connect-admin-roan.vercel.app',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'http://127.0.0.1:5173'
+];
 
-// Init Security Middleware
+if (process.env.ADMIN_FRONTEND_URL) {
+    allowedOrigins.push(process.env.ADMIN_FRONTEND_URL.replace(/\/$/, ''));
+}
+if (process.env.FRONTEND_URL) {
+    allowedOrigins.push(process.env.FRONTEND_URL.replace(/\/$/, ''));
+}
+if (process.env.ALLOWED_ORIGINS) {
+    process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).forEach(o => allowedOrigins.push(o.replace(/\/$/, '')));
+}
+
+const isOriginAllowed = (origin) => {
+    if (!origin) return true;
+    const cleanOrigin = origin.replace(/\/$/, '');
+    if (allowedOrigins.includes(cleanOrigin)) return true;
+    if (cleanOrigin.endsWith('.vercel.app')) return true;
+    return false;
+};
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (isOriginAllowed(origin)) {
+            callback(null, true);
+        } else {
+            console.warn(`[CORS Blocked] Origin not allowed: ${origin}`);
+            callback(new Error('Not allowed by CORS policy'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+        'x-auth-token',
+        'Content-Type',
+        'Authorization',
+        'Cache-Control',
+        'Pragma',
+        'Expires',
+        'expires',
+        'x-requested-with',
+        'Accept',
+        'Origin'
+    ],
+    optionsSuccessStatus: 204
+};
+
+// 1. Centralized CORS Middleware & Preflight Options
+app.use(cors(corsOptions));
+
+// 2. Security Middleware
+const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./middleware/security');
 app.use(applySecurityHeaders);
 app.use(sanitizeInput);
 app.use(express.json({ limit: '100mb', extended: true }));
 
-const corsOptions = {
-    origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
-        return callback(null, origin);
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires', 'expires', 'x-requested-with', 'Accept', 'Origin'],
-    optionsSuccessStatus: 204
+// Health Check Endpoints
+const getHealthStatus = () => {
+    const isConnected = mongoose.connection.readyState === 1;
+    return {
+        status: 'ok',
+        database: {
+            status: isConnected ? 'connected' : 'disconnected',
+            connected: isConnected
+        }
+    };
 };
 
-app.use(cors(corsOptions));
+app.get('/api/health', (req, res) => {
+    res.json(getHealthStatus());
+});
+
+app.get('/health', (req, res) => {
+    res.json(getHealthStatus());
+});
 
 // Apply Auth Rate Limiter to Auth Endpoints
 app.use('/api/auth/login', authRateLimiter({ windowMs: 60 * 1000, max: 5 }));
@@ -44,9 +107,12 @@ app.use((req, res, next) => {
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: (origin, callback) => callback(null, true),
+        origin: (origin, callback) => {
+            if (isOriginAllowed(origin)) callback(null, true);
+            else callback(new Error('Not allowed by CORS'));
+        },
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-        allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization'],
+        allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires', 'expires', 'x-requested-with', 'Accept', 'Origin'],
         credentials: true
     },
     transports: ['websocket', 'polling'],
@@ -94,22 +160,8 @@ app.use('/api/products', require('./routes/admin'));
 app.use('/api/vendors', require('./routes/admin'));
 app.use('/api/users', require('./routes/admin'));
 
-const setCorsHeaders = (req, res) => {
-    const origin = req.headers.origin;
-    if (origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-    } else {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-    }
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    const reqHeaders = req.headers['access-control-request-headers'];
-    res.setHeader('Access-Control-Allow-Headers', reqHeaders || 'x-auth-token, Content-Type, Authorization, Cache-Control, Pragma, Expires, expires, x-requested-with, Accept, Origin');
-};
-
 // 404 Handler for unmapped API routes
 app.use('/api', (req, res) => {
-    setCorsHeaders(req, res);
     res.status(404).json({
         success: false,
         message: `API route not found: ${req.method} ${req.originalUrl}`,
@@ -120,7 +172,6 @@ app.use('/api', (req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error('Global Error Handler:', err);
-    setCorsHeaders(req, res);
     res.status(err.status || 500).json({
         success: false,
         message: err.message || 'Internal Server Error',
@@ -282,27 +333,11 @@ const syncSuspendedVendorProductsOnBoot = async () => {
 
 // Catch-all 404 handler for non-existent API routes
 app.use((req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-    } else {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-    }
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     res.status(404).json({ status: 'error', message: `Route ${req.method} ${req.url} not found` });
 });
 
-// Global Express Error Handler with CORS headers
+// Global Express Error Handler
 app.use((err, req, res, next) => {
-    const origin = req.headers.origin;
-    if (origin) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-    } else {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-    }
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
     console.error('Server Error:', err);
     res.status(err.status || 500).json({ status: 'error', message: err.message || 'Internal Server Error' });
 });
