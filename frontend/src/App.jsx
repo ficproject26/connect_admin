@@ -655,6 +655,49 @@ function App() {
     }
   }, [darkMode]);
 
+  // Component-scoped safeFetch helper available across all component hooks
+  const safeFetch = useCallback(async (url, setter, retries = 1) => {
+    if (!token) return null;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return null;
+    }
+
+    const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+    const targetUrls = [url];
+    if (url.startsWith('/api/')) {
+      targetUrls.push(`http://13.203.197.69:8004${url}`);
+    } else if (url.includes('/api/')) {
+      const path = url.substring(url.indexOf('/api/'));
+      targetUrls.push(`http://13.203.197.69:8004${path}`);
+    }
+
+    for (const targetUrl of [...new Set(targetUrls)]) {
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          const r = await fetch(targetUrl, { headers, signal: controller.signal });
+          clearTimeout(timeoutId);
+
+          if (r.status === 401 || r.status === 403) {
+            handleLogout();
+            return null;
+          }
+          if (r.ok) {
+            const data = await r.json();
+            if (setter) setter(data);
+            return data;
+          }
+        } catch (e) {
+          if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
+            await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
+          }
+        }
+      }
+    }
+    return null;
+  }, [token, handleLogout]);
+
   // Fetch Dashboard Stats & Associated Data (SWR Caching & Revalidation)
   const fetchData = async (forceRefresh = false) => {
     if (!token) return;
@@ -671,49 +714,6 @@ function App() {
         if (apiCacheRef.current['stats']) setStats(apiCacheRef.current['stats']);
         if (apiCacheRef.current['agents']) setAgents(apiCacheRef.current['agents']);
       }
-
-      const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-
-      // Priority Task 1: Agents & Dashboard Stats (unblocks screen immediately with retry backoff & timeout)
-      const safeFetch = async (url, setter, retries = 1) => {
-        if (typeof navigator !== 'undefined' && !navigator.onLine) {
-          return null;
-        }
-
-        const targetUrls = [url];
-        if (url.startsWith('/api/')) {
-          targetUrls.push(`http://13.203.197.69:8004${url}`);
-        } else if (url.includes('/api/')) {
-          const path = url.substring(url.indexOf('/api/'));
-          targetUrls.push(`http://13.203.197.69:8004${path}`);
-        }
-
-        for (const targetUrl of [...new Set(targetUrls)]) {
-          for (let attempt = 0; attempt <= retries; attempt++) {
-            try {
-              const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 6000);
-              const r = await fetch(targetUrl, { headers, signal: controller.signal });
-              clearTimeout(timeoutId);
-
-              if (r.status === 401 || r.status === 403) {
-                handleLogout();
-                return null;
-              }
-              if (r.ok) {
-                const data = await r.json();
-                if (setter) setter(data);
-                return data;
-              }
-            } catch (e) {
-              if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
-                await new Promise(resolve => setTimeout(resolve, 200 * (attempt + 1)));
-              }
-            }
-          }
-        }
-        return null;
-      };
 
       const priorityTasks = [
         () => safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
