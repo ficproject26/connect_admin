@@ -887,7 +887,7 @@ function App() {
   useEffect(() => {
     if (!token) return;
     if (showOnboardingRequestsModal) {
-      safeFetch(`${API_BASE}/admin/agents`, setAgents);
+      safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
     }
     if (showVendorRequestsModal) {
       safeFetch(`${API_BASE}/admin/vendors`, setVendors);
