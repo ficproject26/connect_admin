@@ -578,14 +578,18 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
     try {
         const db = mongoose.connection.db;
 
-        // 1. Fetch agents from User collection with flexible role / level queries
+        // 1. Fetch agents from User collection with flexible role / level / registration queries
         const userAgentFilter = {
             $and: [
                 { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] } },
                 {
                     $or: [
                         { role: { $regex: /agent/i } },
-                        { role: { $in: ['agent', 'Agent', 'state_agent', 'district_agent', 'division_agent', 'pincode_agent', 'State Agent', 'District Agent', 'Divisional Agent', 'Pincode Agent', 'state', 'district', 'division', 'pincode'] } }
+                        { role: { $in: ['agent', 'Agent', 'state_agent', 'district_agent', 'division_agent', 'pincode_agent', 'State Agent', 'District Agent', 'Divisional Agent', 'Pincode Agent', 'state', 'district', 'division', 'pincode'] } },
+                        { level: { $in: ['state', 'district', 'division', 'pincode', 'State', 'District', 'Division', 'Pincode'] } },
+                        { joiningType: 'agent' },
+                        { registrationSource: 'agent' },
+                        { registrationId: { $regex: /^AG-/i } }
                     ]
                 }
             ]
@@ -600,58 +604,78 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             const userDivision = activeUser.assignedDivision || activeUser.division || (activeUser.territory && activeUser.territory.division);
             const userPincode = activeUser.pincode || (activeUser.territory && activeUser.territory.pincode);
 
+            // Preserve all pending / unapproved agent applications so onboarding request modal can render them
+            const pendingOrUnapprovedCond = {
+                $or: [
+                    { status: { $in: ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'Pending'] } },
+                    { kycStatus: { $in: ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'Pending KYC', 'Pending'] } },
+                    { isActive: false },
+                    { isApproved: false }
+                ]
+            };
+
+            let territoryFilter = null;
             if (userLevel === 'state' || userRole.includes('state')) {
                 if (userState) {
                     const stRegex = new RegExp(userState, 'i');
-                    userAgentFilter.$and.push({
+                    territoryFilter = {
                         $or: [
                             { state: stRegex },
                             { assignedState: stRegex },
                             { assignedArea: stRegex },
                             { 'territory.state': stRegex }
                         ]
-                    });
+                    };
                 }
             } else if (userLevel === 'district' || userRole.includes('district')) {
                 if (userDistrict) {
                     const distRegex = new RegExp(userDistrict, 'i');
-                    userAgentFilter.$and.push({
+                    territoryFilter = {
                         $or: [
                             { district: distRegex },
                             { assignedDistrict: distRegex },
                             { assignedArea: distRegex },
                             { 'territory.district': distRegex }
                         ]
-                    });
+                    };
                 }
             } else if (userLevel === 'division' || userRole.includes('division')) {
                 if (userDivision) {
                     const divRegex = new RegExp(userDivision, 'i');
-                    userAgentFilter.$and.push({
+                    territoryFilter = {
                         $or: [
                             { division: divRegex },
                             { assignedDivision: divRegex },
                             { assignedArea: divRegex },
                             { 'territory.division': divRegex }
                         ]
-                    });
+                    };
                 }
             } else if (userLevel === 'pincode' || userRole.includes('pincode')) {
                 if (userPincode) {
                     const pinRegex = new RegExp(userPincode, 'i');
-                    userAgentFilter.$and.push({
+                    territoryFilter = {
                         $or: [
                             { pincode: pinRegex },
                             { 'territory.pincode': pinRegex }
                         ]
-                    });
+                    };
                 }
             } else if (activeUser.branchId) {
-                userAgentFilter.$and.push({
+                territoryFilter = {
                     $or: [
                         { branchId: activeUser.branchId },
                         { branchId: null },
                         { branchId: { $exists: false } }
+                    ]
+                };
+            }
+
+            if (territoryFilter) {
+                userAgentFilter.$and.push({
+                    $or: [
+                        pendingOrUnapprovedCond,
+                        territoryFilter
                     ]
                 });
             }
@@ -695,10 +719,20 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 const kycObj = agent.kyc || agent.kycDocs || {};
                 const kycDocsObj = agent.kycDocs || agent.kyc || {};
                 const territoryObj = agent.territory || {};
+
+                const statusVal = (agent.status && String(agent.status) !== 'undefined') ? String(agent.status) : (agent.kycStatus || 'pending');
+                const kycStatusVal = (agent.kycStatus && String(agent.kycStatus) !== 'undefined') ? String(agent.kycStatus) : (agent.status || 'pending');
+                const isActiveVal = typeof agent.isActive !== 'undefined' ? !!agent.isActive : (statusVal === 'approved' || statusVal === 'active');
+                const isApprovedVal = typeof agent.isApproved !== 'undefined' ? !!agent.isApproved : (statusVal === 'approved' || statusVal === 'active');
+
                 agentMap.set(key, {
                     ...agent,
                     role: 'agent',
                     level: cleanLevel,
+                    status: statusVal,
+                    kycStatus: kycStatusVal,
+                    isActive: isActiveVal,
+                    isApproved: isApprovedVal,
                     altPhone: agent.altPhone || agent.alternativePhone || agent.secondaryPhone || '',
                     dob: agent.dob || agent.dateOfBirth || '',
                     gender: agent.gender || '',
@@ -743,87 +777,83 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             const rawKycStatus = (raw.kycStatus && String(raw.kycStatus) !== 'undefined') ? String(raw.kycStatus) : (raw.status || 'pending');
             const rawIsActive = typeof raw.isActive !== 'undefined' ? !!raw.isActive : (rawStatus === 'approved' || rawKycStatus === 'approved');
 
-            if (key && !agentMap.has(key)) {
-                agentMap.set(key, {
-                    _id: raw._id || rawIdStr,
-                    name: raw.name || 'Agent',
-                    email: raw.email || '',
-                    phone: raw.phone || '',
-                    altPhone: raw.altPhone || raw.alternativePhone || raw.secondaryPhone || '',
-                    dob: raw.dob || raw.dateOfBirth || '',
-                    gender: raw.gender || '',
-                    qualification: raw.qualification || raw.highestQualification || '',
-                    experience: raw.experience || raw.experienceLevel || '',
-                    previousCompany: raw.previousCompany || raw.previousOrg || '',
-                    role: 'agent',
-                    level: cleanLevel,
-                    status: rawStatus,
-                    kycStatus: rawKycStatus,
-                    isActive: rawIsActive,
-                    registrationId: raw.registrationId || '',
-                    territory: {
-                        state: rawTerritory.state || raw.assignedState || raw.state || '',
-                        district: rawTerritory.district || raw.assignedDistrict || raw.district || '',
-                        division: rawTerritory.division || raw.assignedDivision || raw.division || '',
-                        pincode: rawTerritory.pincode || raw.pincode || ''
-                    },
-                    assignedArea: raw.assignedArea || (Object.values(rawTerritory).filter(Boolean).join(' / ')),
-                    assignedState: raw.assignedState || rawTerritory.state || raw.state || '',
-                    assignedDistrict: raw.assignedDistrict || rawTerritory.district || raw.district || '',
-                    assignedDivision: raw.assignedDivision || rawTerritory.division || raw.division || '',
-                    state: raw.state || raw.assignedState || rawTerritory.state || '',
-                    district: raw.district || raw.assignedDistrict || rawTerritory.district || '',
-                    division: raw.division || raw.assignedDivision || rawTerritory.division || '',
-                    pincode: raw.pincode || raw.assignedPincode || rawTerritory.pincode || '',
-                    postOffice: raw.postOffice || raw.postOfficeBranch || '',
-                    address: raw.address || raw.fullAddress || '',
-                    fullAddress: raw.fullAddress || raw.address || '',
-                    aadhaarNumber: raw.aadhaarNumber || rawKyc.aadhaarNumber || rawKycDocs.aadhaarNumber || '',
-                    panNumber: raw.panNumber || rawKyc.panNumber || rawKycDocs.panNumber || '',
-                    kycDocs: rawKycDocs,
-                    kyc: rawKyc,
-                    createdAt: raw.createdAt || new Date()
-                });
-            } else if (key && agentMap.has(key)) {
-                const existing = agentMap.get(key);
-                existing.status = existing.status || raw.status || raw.kycStatus;
-                existing.kycStatus = existing.kycStatus || raw.kycStatus || raw.status;
+            if (key) {
+                if (!agentMap.has(key)) {
+                    agentMap.set(key, {
+                        _id: raw._id || rawIdStr,
+                        name: raw.name || 'Agent',
+                        email: raw.email || '',
+                        phone: raw.phone || '',
+                        altPhone: raw.altPhone || raw.alternativePhone || raw.secondaryPhone || '',
+                        dob: raw.dob || raw.dateOfBirth || '',
+                        gender: raw.gender || '',
+                        qualification: raw.qualification || raw.highestQualification || '',
+                        experience: raw.experience || raw.experienceLevel || '',
+                        previousCompany: raw.previousCompany || raw.previousOrg || '',
+                        role: 'agent',
+                        level: cleanLevel,
+                        status: rawStatus,
+                        kycStatus: rawKycStatus,
+                        isActive: rawIsActive,
+                        isApproved: rawIsActive,
+                        registrationId: raw.registrationId || '',
+                        territory: {
+                            state: rawTerritory.state || raw.assignedState || raw.state || '',
+                            district: rawTerritory.district || raw.assignedDistrict || raw.district || '',
+                            division: rawTerritory.division || raw.assignedDivision || raw.division || '',
+                            pincode: rawTerritory.pincode || raw.pincode || ''
+                        },
+                        assignedArea: raw.assignedArea || (Object.values(rawTerritory).filter(Boolean).join(' / ')),
+                        assignedState: raw.assignedState || rawTerritory.state || raw.state || '',
+                        assignedDistrict: raw.assignedDistrict || rawTerritory.district || raw.district || '',
+                        assignedDivision: raw.assignedDivision || rawTerritory.division || raw.division || '',
+                        state: raw.state || raw.assignedState || rawTerritory.state || '',
+                        district: raw.district || raw.assignedDistrict || rawTerritory.district || '',
+                        division: raw.division || raw.assignedDivision || rawTerritory.division || '',
+                        pincode: raw.pincode || raw.assignedPincode || rawTerritory.pincode || '',
+                        postOffice: raw.postOffice || raw.postOfficeBranch || '',
+                        address: raw.address || raw.fullAddress || '',
+                        fullAddress: raw.fullAddress || raw.address || '',
+                        aadhaarNumber: raw.aadhaarNumber || rawKyc.aadhaarNumber || rawKycDocs.aadhaarNumber || '',
+                        panNumber: raw.panNumber || rawKyc.panNumber || rawKycDocs.panNumber || '',
+                        kycDocs: rawKycDocs,
+                        kyc: rawKyc,
+                        createdAt: raw.createdAt || new Date()
+                    });
+                } else {
+                    const existing = agentMap.get(key);
+                    existing.status = existing.status || rawStatus;
+                    existing.kycStatus = existing.kycStatus || rawKycStatus;
+                    existing.altPhone = existing.altPhone || raw.altPhone || raw.alternativePhone || raw.secondaryPhone || '';
+                    existing.dob = existing.dob || raw.dob || raw.dateOfBirth || '';
+                    existing.gender = existing.gender || raw.gender || '';
+                    existing.qualification = existing.qualification || raw.qualification || raw.highestQualification || '';
+                    existing.experience = existing.experience || raw.experience || raw.experienceLevel || '';
+                    existing.previousCompany = existing.previousCompany || raw.previousCompany || raw.previousOrg || '';
 
-                // Deep merge profile, KYC and territory fields if missing in User doc
-                existing.altPhone = existing.altPhone || raw.altPhone || raw.alternativePhone || raw.secondaryPhone || '';
-                existing.dob = existing.dob || raw.dob || raw.dateOfBirth || '';
-                existing.gender = existing.gender || raw.gender || '';
-                existing.qualification = existing.qualification || raw.qualification || raw.highestQualification || '';
-                existing.experience = existing.experience || raw.experience || raw.experienceLevel || '';
-                existing.previousCompany = existing.previousCompany || raw.previousCompany || raw.previousOrg || '';
+                    existing.territory = {
+                        state: existing.territory?.state || existing.assignedState || existing.state || rawTerritory.state || raw.assignedState || raw.state || '',
+                        district: existing.territory?.district || existing.assignedDistrict || existing.district || rawTerritory.district || raw.assignedDistrict || raw.district || '',
+                        division: existing.territory?.division || existing.assignedDivision || existing.division || rawTerritory.division || raw.assignedDivision || raw.division || '',
+                        pincode: existing.territory?.pincode || existing.pincode || rawTerritory.pincode || raw.pincode || ''
+                    };
 
-                existing.territory = {
-                    state: existing.territory?.state || existing.assignedState || existing.state || rawTerritory.state || raw.assignedState || raw.state || '',
-                    district: existing.territory?.district || existing.assignedDistrict || existing.district || rawTerritory.district || raw.assignedDistrict || raw.district || '',
-                    division: existing.territory?.division || existing.assignedDivision || existing.division || rawTerritory.division || raw.assignedDivision || raw.division || '',
-                    pincode: existing.territory?.pincode || existing.pincode || rawTerritory.pincode || raw.pincode || ''
-                };
+                    existing.assignedState = existing.assignedState || existing.state || existing.territory.state;
+                    existing.assignedDistrict = existing.assignedDistrict || existing.district || existing.territory.district;
+                    existing.assignedDivision = existing.assignedDivision || existing.division || existing.territory.division;
+                    existing.state = existing.state || existing.assignedState || existing.territory.state;
+                    existing.district = existing.district || existing.assignedDistrict || existing.territory.district;
+                    existing.division = existing.division || existing.assignedDivision || existing.territory.division;
+                    existing.pincode = existing.pincode || existing.territory.pincode;
 
-                existing.assignedState = existing.assignedState || existing.state || existing.territory.state;
-                existing.assignedDistrict = existing.assignedDistrict || existing.district || existing.territory.district;
-                existing.assignedDivision = existing.assignedDivision || existing.division || existing.territory.division;
-                existing.state = existing.state || existing.assignedState || existing.territory.state;
-                existing.district = existing.district || existing.assignedDistrict || existing.territory.district;
-                existing.division = existing.division || existing.assignedDivision || existing.territory.division;
-                existing.pincode = existing.pincode || existing.territory.pincode;
+                    existing.assignedArea = existing.assignedArea || (Object.values(existing.territory).filter(Boolean).join(' / '));
+                    existing.postOffice = existing.postOffice || raw.postOffice || raw.postOfficeBranch || '';
+                    existing.address = existing.address || existing.fullAddress || raw.address || raw.fullAddress || '';
+                    existing.fullAddress = existing.fullAddress || existing.address || raw.fullAddress || raw.address || '';
 
-                existing.assignedArea = existing.assignedArea || (Object.values(existing.territory).filter(Boolean).join(' / '));
-                existing.postOffice = existing.postOffice || raw.postOffice || raw.postOfficeBranch || '';
-                existing.address = existing.address || existing.fullAddress || raw.address || raw.fullAddress || '';
-                existing.fullAddress = existing.fullAddress || existing.address || raw.fullAddress || raw.address || '';
-
-                const mergedKycDocs = { ...(rawKycDocs || {}), ...(existing.kycDocs || {}) };
-                const mergedKyc = { ...(rawKyc || {}), ...(existing.kyc || {}) };
-
-                existing.kycDocs = mergedKycDocs;
-                existing.kyc = mergedKyc;
-                existing.aadhaarNumber = existing.aadhaarNumber || mergedKyc.aadhaarNumber || mergedKycDocs.aadhaarNumber || raw.aadhaarNumber || '';
-                existing.panNumber = existing.panNumber || mergedKyc.panNumber || mergedKycDocs.panNumber || raw.panNumber || '';
+                    existing.aadhaarNumber = existing.aadhaarNumber || existing.kyc?.aadhaarNumber || existing.kycDocs?.aadhaarNumber || raw.aadhaarNumber || '';
+                    existing.panNumber = existing.panNumber || existing.kyc?.panNumber || existing.kycDocs?.panNumber || raw.panNumber || '';
+                }
             }
         });
 
