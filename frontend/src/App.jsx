@@ -891,7 +891,8 @@ function App() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password })
           });
-          if (r) {
+          const ct = (r.headers.get('content-type') || '').toLowerCase();
+          if (r.ok || ct.includes('application/json')) {
             res = r;
             break;
           }
