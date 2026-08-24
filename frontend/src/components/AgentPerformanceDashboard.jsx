@@ -72,7 +72,10 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       const queryString = queryParams.toString();
       const primaryUrl = `${API_BASE}/admin/agent-performance/overview?${queryString}`;
       const targetUrls = [primaryUrl];
-      if (!primaryUrl.includes('13.203.197.69:8004')) {
+      const isLocalDev = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      );
+      if (isLocalDev && !primaryUrl.includes('13.203.197.69:8004')) {
         targetUrls.push(`http://13.203.197.69:8004/api/admin/agent-performance/overview?${queryString}`);
       }
       targetUrls.push(`/api/admin/agent-performance/overview?${queryString}`);

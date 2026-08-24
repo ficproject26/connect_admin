@@ -22,27 +22,35 @@ import { PayrollManagement } from './components/PayrollManagement';
 import { CustomerSupportTeamManagement } from './components/CustomerSupportTeamManagement';
 
 const getBackendUrl = () => {
-  const envApiUrl =
-    typeof import.meta !== 'undefined' && import.meta.env
-      ? import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL
-      : null;
-
-  if (envApiUrl && envApiUrl.startsWith('http')) {
-    return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
-  }
-
+  // On production domains (Vercel), always use relative /api path.
+  // Vercel's rewrite proxy (vercel.json) routes /api/* to the EC2 backend server-side,
+  // which avoids CORS and Mixed Content (HTTPS→HTTP) issues entirely.
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    if (
+    const isLocalDev =
       !hostname ||
       hostname === 'localhost' ||
       hostname === '127.0.0.1' ||
       hostname.startsWith('192.168.') ||
       hostname.startsWith('10.') ||
-      hostname.startsWith('172.')
-    ) {
-      return 'http://13.203.197.69:8004/api';
+      hostname.startsWith('172.');
+
+    if (!isLocalDev) {
+      // Production: use relative URL → Vercel rewrite proxy handles it
+      return '/api';
     }
+
+    // Local development: use direct EC2 backend URL
+    const envApiUrl =
+      typeof import.meta !== 'undefined' && import.meta.env
+        ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
+        : null;
+
+    if (envApiUrl && envApiUrl.startsWith('http')) {
+      return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+    }
+
+    return 'http://13.203.197.69:8004/api';
   }
 
   return '/api';
@@ -673,15 +681,34 @@ function App() {
 
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     const targetUrls = [url];
-    if (url.startsWith('/api/')) {
-      targetUrls.push(`http://13.203.197.69:8004${url}`);
-    } else if (url.includes('/api/')) {
-      const path = url.substring(url.indexOf('/api/'));
-      targetUrls.push(`http://13.203.197.69:8004${path}`);
-      targetUrls.push(path);
-    } else if (url.startsWith('http://13.203.197.69:8004')) {
-      const path = url.replace('http://13.203.197.69:8004', '');
-      targetUrls.push(path);
+
+    // Only add direct EC2 fallback URLs on local development
+    const isLocalDev = typeof window !== 'undefined' && (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.startsWith('192.168.') ||
+      window.location.hostname.startsWith('10.') ||
+      window.location.hostname.startsWith('172.')
+    );
+
+    if (isLocalDev) {
+      // Local dev: add EC2 direct URL as fallback
+      if (url.startsWith('/api/')) {
+        targetUrls.push(`http://13.203.197.69:8004${url}`);
+      } else if (url.includes('/api/')) {
+        const path = url.substring(url.indexOf('/api/'));
+        targetUrls.push(`http://13.203.197.69:8004${path}`);
+        targetUrls.push(path);
+      } else if (url.startsWith('http://13.203.197.69:8004')) {
+        const path = url.replace('http://13.203.197.69:8004', '');
+        targetUrls.push(path);
+      }
+    } else {
+      // Production: ensure we use relative /api/ path only
+      if (url.startsWith('http')) {
+        const path = url.includes('/api/') ? url.substring(url.indexOf('/api/')) : url;
+        if (path.startsWith('/api/')) targetUrls.push(path);
+      }
     }
 
     for (const targetUrl of [...new Set(targetUrls)]) {
@@ -873,11 +900,17 @@ function App() {
     setLoading(true);
     setAuthError('');
     try {
+      const isLocalDev = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1'
+      );
       const targets = [
         `${API_BASE}/auth/login`,
-        'http://13.203.197.69:8004/api/auth/login',
-        'http://localhost:8004/api/auth/login',
-        '/api/auth/login'
+        '/api/auth/login',
+        ...(isLocalDev ? [
+          'http://13.203.197.69:8004/api/auth/login',
+          'http://localhost:8004/api/auth/login'
+        ] : [])
       ];
       const uniqueTargets = [...new Set(targets)];
 
