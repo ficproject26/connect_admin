@@ -859,10 +859,30 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
         const mergedAgents = Array.from(agentMap.values());
 
-        // Fetch vendor lists to calculate onboarded vendor counts
+        // Fetch vendor lists and pre-build O(1) vendor count map
         const Vendor = require('../models/Vendor');
         const userVendorsList = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('_id email referredBy agentId onboardedBy').lean();
         const vendorModelList = await Vendor.find({}).select('_id agentId email').lean();
+
+        const agentVendorCountMap = new Map();
+
+        userVendorsList.forEach(v => {
+            const keys = [
+                v.referredBy ? String(v.referredBy) : null,
+                v.agentId ? String(v.agentId) : null,
+                v.onboardedBy ? String(v.onboardedBy) : null
+            ].filter(Boolean);
+            keys.forEach(k => {
+                agentVendorCountMap.set(k, (agentVendorCountMap.get(k) || 0) + 1);
+            });
+        });
+
+        vendorModelList.forEach(v => {
+            if (v.agentId) {
+                const k = String(v.agentId);
+                agentVendorCountMap.set(k, Math.max(agentVendorCountMap.get(k) || 0, 1));
+            }
+        });
 
         const enrichedAgents = mergedAgents.map(agent => {
             const agentIdStr = String(agent._id);
@@ -870,13 +890,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             if (typeof agent.vendorsAdded === 'number' && agent.vendorsAdded > 0) {
                 vCount = agent.vendorsAdded;
             } else {
-                const userV = userVendorsList.filter(v => 
-                    (v.referredBy && String(v.referredBy) === agentIdStr) ||
-                    (v.agentId && String(v.agentId) === agentIdStr) ||
-                    (v.onboardedBy && String(v.onboardedBy) === agentIdStr)
-                ).length;
-                const modelV = vendorModelList.filter(v => v.agentId && String(v.agentId) === agentIdStr).length;
-                vCount = Math.max(userV, modelV);
+                vCount = agentVendorCountMap.get(agentIdStr) || 0;
             }
 
             const level = (agent.level || 'pincode').toLowerCase();
@@ -2885,14 +2899,14 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
                 ]
             }
         ]
-    }).select('_id email phone businessName name registrationId vendorId primaryBusinessId businesses');
+    }).select('_id email phone businessName name registrationId vendorId primaryBusinessId businesses').lean();
 
     const suspendedVendors = await Vendor.find({
         $or: [
             { status: { $in: ['suspended', 'Suspended', 'rejected', 'Rejected', 'inactive', 'Inactive', 'deactivated', 'Deactivated', 'blocked', 'Blocked'] } },
             { isActive: false }
         ]
-    }).select('_id email phone businessName registrationId vendorId primaryBusinessId businesses');
+    }).select('_id email phone businessName registrationId vendorId primaryBusinessId businesses').lean();
 
     const suspendedVendorIds = new Set();
     const suspendedVendorEmails = new Set();
@@ -2927,7 +2941,7 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
             { vendorType: { $exists: true } },
             { businesses: { $exists: true, $not: { $size: 0 } } }
         ]
-    }).select('_id email phone businessName name registrationId vendorId businesses');
+    }).select('_id email phone businessName name registrationId vendorId businesses').lean();
 
     const suspendedVendorBizKeys = new Set();
 
@@ -2966,7 +2980,7 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
         query.$or = [{ _id: reqProductId }, { id: reqProductId }];
     }
 
-    const allProducts = await Product.find(query).sort({ createdAt: -1 });
+    const allProducts = await Product.find(query).sort({ createdAt: -1 }).lean();
 
     const activeProducts = allProducts.filter(p => {
         // A. Product Listing must be Active

@@ -360,9 +360,9 @@ router.get('/vendors', auth, async (req, res) => {
             ];
         }
 
-        let userVendors = await User.find(query).sort({ createdAt: -1 });
-        let docVendors = await Vendor.find(query).sort({ createdAt: -1 });
-        let rawVendors = [...userVendors.map(v => v.toObject()), ...docVendors.map(v => v.toObject())];
+        let userVendors = await User.find(query).sort({ createdAt: -1 }).lean();
+        let docVendors = await Vendor.find(query).sort({ createdAt: -1 }).lean();
+        let rawVendors = [...userVendors, ...docVendors];
 
         // Deduplicate vendors by _id or email
         const vendorMap = new Map();

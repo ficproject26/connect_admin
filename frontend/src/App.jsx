@@ -800,8 +800,14 @@ function App() {
       await Promise.allSettled(priorityTasks.map(fn => fn()));
       setLoading(false);
 
-      // Fire secondary tasks asynchronously in background
-      Promise.allSettled(secondaryTasks.map(fn => fn())).catch(() => {});
+      // Fire secondary tasks in small non-blocking background batches of 3 to keep network queues fast
+      (async () => {
+        const chunkSize = 3;
+        for (let i = 0; i < secondaryTasks.length; i += chunkSize) {
+          const batch = secondaryTasks.slice(i, i + chunkSize);
+          await Promise.allSettled(batch.map(fn => fn()));
+        }
+      })().catch(() => {});
     } catch (err) {
       console.error("API Server not reachable:", err);
       setLoading(false);
