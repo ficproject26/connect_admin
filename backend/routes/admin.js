@@ -495,15 +495,32 @@ router.get('/admins', [auth, adminAuth], async (req, res) => {
 });
 
 router.post('/admins', [auth, adminAuth], async (req, res) => {
-    const { name, email, password, adminRole, branchId } = req.body;
+    const { name, email, phone, password, adminRole, branchId } = req.body;
     try {
         const bcrypt = require('bcryptjs');
-        let user = await User.findOne({ email });
-        if (user) return res.status(400).json({ msg: 'Admin user already exists' });
+        const lowerEmail = (email || '').toLowerCase().trim();
+        const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
+
+        const existingUser = await User.findOne({
+            $or: [
+                { email: lowerEmail },
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone: phone }] : [])
+            ]
+        });
+
+        if (existingUser) {
+            const isPhoneMatch = cleanPhone && (existingUser.phone === cleanPhone || existingUser.phone === phone);
+            return res.status(400).json({
+                success: false,
+                msg: isPhoneMatch ? 'A user with this phone number already exists.' : 'Admin user already exists with this email.',
+                message: isPhoneMatch ? 'A user with this phone number already exists.' : 'Admin user already exists with this email.'
+            });
+        }
 
         user = new User({
             name,
-            email,
+            email: lowerEmail,
+            phone: cleanPhone || undefined,
             password,
             role: 'admin',
             adminRole,
@@ -514,7 +531,19 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
 
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(password, salt);
-        await user.save();
+        try {
+            await user.save();
+        } catch (saveErr) {
+            if (saveErr.code === 11000 || (saveErr.message && saveErr.message.includes('E11000'))) {
+                const isPhoneDup = saveErr.message && (saveErr.message.includes('phone') || saveErr.message.includes('phone_1'));
+                return res.status(400).json({
+                    success: false,
+                    msg: isPhoneDup ? 'A user with this phone number already exists.' : 'Admin user already exists with this email.',
+                    message: isPhoneDup ? 'A user with this phone number already exists.' : 'Admin user already exists with this email.'
+                });
+            }
+            throw saveErr;
+        }
         res.json(user);
     } catch (err) {
         console.error(err);
@@ -2481,8 +2510,24 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
         }
 
         const bcrypt = require('bcryptjs');
-        let user = await User.findOne({ email });
-        if (user) return res.status(400).json({ msg: 'Agent user already exists' });
+        const lowerEmail = (email || '').toLowerCase().trim();
+        const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
+
+        const existingUser = await User.findOne({
+            $or: [
+                { email: lowerEmail },
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone: phone }] : [])
+            ]
+        });
+
+        if (existingUser) {
+            const isPhoneMatch = cleanPhone && (existingUser.phone === cleanPhone || existingUser.phone === phone);
+            return res.status(400).json({
+                success: false,
+                msg: isPhoneMatch ? 'A user with this phone number already exists.' : 'An agent with this email address already exists.',
+                message: isPhoneMatch ? 'A user with this phone number already exists.' : 'An agent with this email address already exists.'
+            });
+        }
 
         // Enforce Agent Area limitations
         const limitCheck = await checkAgentLimitation(level, assignedArea, pincode);
@@ -2507,8 +2552,8 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
 
         user = new User({
             name,
-            email,
-            phone,
+            email: lowerEmail,
+            phone: cleanPhone || undefined,
             password,
             role: 'agent',
             level: level || 'pincode',
@@ -2521,7 +2566,19 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
 
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(password, salt);
-        await user.save();
+        try {
+            await user.save();
+        } catch (saveErr) {
+            if (saveErr.code === 11000 || (saveErr.message && saveErr.message.includes('E11000'))) {
+                const isPhoneDup = saveErr.message && (saveErr.message.includes('phone') || saveErr.message.includes('phone_1'));
+                return res.status(400).json({
+                    success: false,
+                    msg: isPhoneDup ? 'A user with this phone number already exists.' : 'An agent with this email address already exists.',
+                    message: isPhoneDup ? 'A user with this phone number already exists.' : 'An agent with this email address already exists.'
+                });
+            }
+            throw saveErr;
+        }
 
         if (status === 'approved' && assignedPincode) {
             await Pincode.findByIdAndUpdate(assignedPincode, { activeAgentId: user._id });

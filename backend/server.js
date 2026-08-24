@@ -40,8 +40,9 @@ const isOriginAllowed = (origin) => {
 
 const corsOptions = {
     origin: function (origin, callback) {
+        if (!origin) return callback(null, true);
         if (isOriginAllowed(origin)) {
-            callback(null, true);
+            callback(null, origin);
         } else {
             console.warn(`[CORS Blocked] Origin not allowed: ${origin}`);
             callback(new Error('Not allowed by CORS policy'));

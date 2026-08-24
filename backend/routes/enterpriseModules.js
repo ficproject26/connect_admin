@@ -15,6 +15,7 @@ const SecuritySession = require('../models/SecuritySession');
 const UserSession = require('../models/UserSession');
 const AuditLog = require('../models/AuditLog');
 const Product = require('../models/Product');
+const Order = require('../models/Order');
 
 // Helper to get Socket.IO instance
 const getIo = (req) => req.app.get('io');
@@ -475,6 +476,22 @@ router.post('/vendors/agent-onboard', async (req, res) => {
         const lowerEmail = (email || `vendor_${randDigits}@connect.app`).toLowerCase().trim();
         const cleanPhone = (phone || '').replace(/\D/g, '');
 
+        const existingVendorUser = await User.findOne({
+            $or: [
+                { email: lowerEmail },
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone: phone }] : [])
+            ]
+        });
+
+        if (existingVendorUser) {
+            const isPhoneMatch = cleanPhone && (existingVendorUser.phone === cleanPhone || existingVendorUser.phone === phone);
+            return res.status(400).json({
+                success: false,
+                msg: isPhoneMatch ? 'A user with this phone number already exists.' : 'A vendor with this email address already exists.',
+                message: isPhoneMatch ? 'A user with this phone number already exists.' : 'A vendor with this email address already exists.'
+            });
+        }
+
         const territoryParts = [
             assignedState || agentDoc?.state || agentDoc?.assignedState || '',
             assignedDistrict || agentDoc?.district || agentDoc?.assignedDistrict || '',
@@ -489,7 +506,7 @@ router.post('/vendors/agent-onboard', async (req, res) => {
             businessName: businessName || name || 'Vendor Business',
             contactPerson: contactPerson || name || businessName || 'Contact Person',
             email: lowerEmail,
-            phone: cleanPhone || '9876543210',
+            phone: cleanPhone || undefined,
             role: 'Vendor',
             vendorType: category || 'General Store',
             category: category || 'General Store',
@@ -515,7 +532,19 @@ router.post('/vendors/agent-onboard', async (req, res) => {
         };
 
         const newVendorUser = new User(vendorData);
-        await newVendorUser.save();
+        try {
+            await newVendorUser.save();
+        } catch (saveErr) {
+            if (saveErr.code === 11000 || (saveErr.message && saveErr.message.includes('E11000'))) {
+                const isPhoneDup = saveErr.message && (saveErr.message.includes('phone') || saveErr.message.includes('phone_1'));
+                return res.status(400).json({
+                    success: false,
+                    msg: isPhoneDup ? 'A user with this phone number already exists.' : 'A vendor with this email address already exists.',
+                    message: isPhoneDup ? 'A user with this phone number already exists.' : 'A vendor with this email address already exists.'
+                });
+            }
+            throw saveErr;
+        }
 
         const newVendorDoc = new Vendor({
             ...vendorData,
@@ -1003,7 +1032,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
                 name: name || targetBizName || 'Vendor Partner',
                 businessName: targetBizName || name || 'Vendor Partner',
                 email: targetEmail || `vendor_${Date.now()}@connect.com`,
-                phone: '9876543211',
+                phone: (targetPhone || '').replace(/\D/g, '') || undefined,
                 password: hashedPassword,
                 role: 'vendor',
                 status: 'Approved',
@@ -1012,7 +1041,9 @@ router.post('/vendors/approve', auth, async (req, res) => {
                 isLocked: false,
                 createdAt: new Date()
             });
-            await user.save();
+            await user.save().catch((err) => {
+                console.error("Vendor auto-user creation warning:", err.message);
+            });
         }
 
         // Record Audit Log
