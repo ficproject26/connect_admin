@@ -562,14 +562,70 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             ]
         };
 
-        if (req.adminUser && req.adminUser.adminRole !== 'super-admin') {
-            userAgentFilter.$and.push({
-                $or: [
-                    { branchId: req.adminUser.branchId },
-                    { branchId: null },
-                    { branchId: { $exists: false } }
-                ]
-            });
+        const activeUser = req.adminUser || req.user;
+        if (activeUser && activeUser.adminRole !== 'super-admin') {
+            const userRole = (activeUser.role || activeUser.adminRole || '').toLowerCase();
+            const userLevel = (activeUser.level || '').toLowerCase();
+            const userState = activeUser.assignedState || activeUser.state || (activeUser.territory && activeUser.territory.state);
+            const userDistrict = activeUser.assignedDistrict || activeUser.district || (activeUser.territory && activeUser.territory.district);
+            const userDivision = activeUser.assignedDivision || activeUser.division || (activeUser.territory && activeUser.territory.division);
+            const userPincode = activeUser.pincode || (activeUser.territory && activeUser.territory.pincode);
+
+            if (userLevel === 'state' || userRole.includes('state')) {
+                if (userState) {
+                    const stRegex = new RegExp(userState, 'i');
+                    userAgentFilter.$and.push({
+                        $or: [
+                            { state: stRegex },
+                            { assignedState: stRegex },
+                            { assignedArea: stRegex },
+                            { 'territory.state': stRegex }
+                        ]
+                    });
+                }
+            } else if (userLevel === 'district' || userRole.includes('district')) {
+                if (userDistrict) {
+                    const distRegex = new RegExp(userDistrict, 'i');
+                    userAgentFilter.$and.push({
+                        $or: [
+                            { district: distRegex },
+                            { assignedDistrict: distRegex },
+                            { assignedArea: distRegex },
+                            { 'territory.district': distRegex }
+                        ]
+                    });
+                }
+            } else if (userLevel === 'division' || userRole.includes('division')) {
+                if (userDivision) {
+                    const divRegex = new RegExp(userDivision, 'i');
+                    userAgentFilter.$and.push({
+                        $or: [
+                            { division: divRegex },
+                            { assignedDivision: divRegex },
+                            { assignedArea: divRegex },
+                            { 'territory.division': divRegex }
+                        ]
+                    });
+                }
+            } else if (userLevel === 'pincode' || userRole.includes('pincode')) {
+                if (userPincode) {
+                    const pinRegex = new RegExp(userPincode, 'i');
+                    userAgentFilter.$and.push({
+                        $or: [
+                            { pincode: pinRegex },
+                            { 'territory.pincode': pinRegex }
+                        ]
+                    });
+                }
+            } else if (activeUser.branchId) {
+                userAgentFilter.$and.push({
+                    $or: [
+                        { branchId: activeUser.branchId },
+                        { branchId: null },
+                        { branchId: { $exists: false } }
+                    ]
+                });
+            }
         }
 
         const userAgents = await User.find(userAgentFilter)
@@ -4110,15 +4166,108 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         const agentFilter = { role: { $in: ['agent', 'Agent'] } };
         if (agentType && agentType !== 'all') agentFilter.level = agentType.toLowerCase();
         if (status && status !== 'all') agentFilter.status = status.toLowerCase();
-        if (state) agentFilter.assignedArea = { $regex: new RegExp(state, 'i') };
-        if (district) agentFilter.assignedArea = { $regex: new RegExp(district, 'i') };
-        if (division) agentFilter.assignedArea = { $regex: new RegExp(division, 'i') };
+
+        const orConditions = [];
+
         if (search) {
-            agentFilter.$or = [
+            orConditions.push(
                 { name: { $regex: new RegExp(search, 'i') } },
                 { email: { $regex: new RegExp(search, 'i') } },
                 { registrationId: { $regex: new RegExp(search, 'i') } }
-            ];
+            );
+        }
+
+        if (state) {
+            const stRegex = new RegExp(state, 'i');
+            orConditions.push(
+                { state: stRegex },
+                { assignedState: stRegex },
+                { assignedArea: stRegex },
+                { 'territory.state': stRegex }
+            );
+        }
+
+        if (district) {
+            const distRegex = new RegExp(district, 'i');
+            orConditions.push(
+                { district: distRegex },
+                { assignedDistrict: distRegex },
+                { assignedArea: distRegex },
+                { 'territory.district': distRegex }
+            );
+        }
+
+        if (division) {
+            const divRegex = new RegExp(division, 'i');
+            orConditions.push(
+                { division: divRegex },
+                { assignedDivision: divRegex },
+                { assignedArea: divRegex },
+                { 'territory.division': divRegex }
+            );
+        }
+
+        if (pincode) {
+            const pinRegex = new RegExp(pincode, 'i');
+            orConditions.push(
+                { pincode: pinRegex },
+                { 'territory.pincode': pinRegex }
+            );
+        }
+
+        // Role-based territory scoping for logged-in agent / branch admin users
+        const activePerfUser = req.adminUser || req.user;
+        if (activePerfUser && activePerfUser.adminRole !== 'super-admin') {
+            const userRole = (activePerfUser.role || activePerfUser.adminRole || '').toLowerCase();
+            const userLevel = (activePerfUser.level || '').toLowerCase();
+            const userState = activePerfUser.assignedState || activePerfUser.state || (activePerfUser.territory && activePerfUser.territory.state);
+            const userDistrict = activePerfUser.assignedDistrict || activePerfUser.district || (activePerfUser.territory && activePerfUser.territory.district);
+            const userDivision = activePerfUser.assignedDivision || activePerfUser.division || (activePerfUser.territory && activePerfUser.territory.division);
+            const userPincode = activePerfUser.pincode || (activePerfUser.territory && activePerfUser.territory.pincode);
+
+            if (userLevel === 'state' || userRole.includes('state')) {
+                if (userState) {
+                    const stRegex = new RegExp(userState, 'i');
+                    orConditions.push(
+                        { state: stRegex },
+                        { assignedState: stRegex },
+                        { assignedArea: stRegex },
+                        { 'territory.state': stRegex }
+                    );
+                }
+            } else if (userLevel === 'district' || userRole.includes('district')) {
+                if (userDistrict) {
+                    const distRegex = new RegExp(userDistrict, 'i');
+                    orConditions.push(
+                        { district: distRegex },
+                        { assignedDistrict: distRegex },
+                        { assignedArea: distRegex },
+                        { 'territory.district': distRegex }
+                    );
+                }
+            } else if (userLevel === 'division' || userRole.includes('division')) {
+                if (userDivision) {
+                    const divRegex = new RegExp(userDivision, 'i');
+                    orConditions.push(
+                        { division: divRegex },
+                        { assignedDivision: divRegex },
+                        { assignedArea: divRegex },
+                        { 'territory.division': divRegex }
+                    );
+                }
+            } else if (userLevel === 'pincode' || userRole.includes('pincode')) {
+                if (userPincode) {
+                    const pinRegex = new RegExp(userPincode, 'i');
+                    orConditions.push(
+                        { pincode: pinRegex },
+                        { 'territory.pincode': pinRegex }
+                    );
+                }
+            }
+        }
+
+        if (orConditions.length > 0) {
+            agentFilter.$or = orConditions;
         }
 
         const allAgents = await User.find(agentFilter).populate('assignedPincode');
