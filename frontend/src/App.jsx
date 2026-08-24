@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Users, UserCheck, ShieldAlert, FileText, CheckCircle, XCircle, X,
   MapPin, Settings, DollarSign, Award, Image, BarChart3,
