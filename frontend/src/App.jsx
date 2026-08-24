@@ -672,16 +672,16 @@ function App() {
     }
 
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-
     const targetUrls = [url];
-    if (!isHttps) {
-      if (url.startsWith('/api/')) {
-        targetUrls.push(`http://13.203.197.69:8004${url}`);
-      } else if (url.includes('/api/')) {
-        const path = url.substring(url.indexOf('/api/'));
-        targetUrls.push(`http://13.203.197.69:8004${path}`);
-      }
+    if (url.startsWith('/api/')) {
+      targetUrls.push(`http://13.203.197.69:8004${url}`);
+    } else if (url.includes('/api/')) {
+      const path = url.substring(url.indexOf('/api/'));
+      targetUrls.push(`http://13.203.197.69:8004${path}`);
+      targetUrls.push(path);
+    } else if (url.startsWith('http://13.203.197.69:8004')) {
+      const path = url.replace('http://13.203.197.69:8004', '');
+      targetUrls.push(path);
     }
 
     for (const targetUrl of [...new Set(targetUrls)]) {
