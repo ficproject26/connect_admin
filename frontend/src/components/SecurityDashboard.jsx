@@ -5,7 +5,7 @@ import {
   Terminal, Search, Eye, Filter, CheckCircle, XCircle
 } from 'lucide-react';
 
-export const SecurityDashboard = ({ token, API_BASE }) => {
+export const SecurityDashboard = React.memo(({ token, API_BASE }) => {
   const [stats, setStats] = useState({
     activeSessionsCount: 0,
     failedLogins24h: 0,
@@ -474,6 +474,6 @@ export const SecurityDashboard = ({ token, API_BASE }) => {
 
     </div>
   );
-};
+});
 
 export default SecurityDashboard;

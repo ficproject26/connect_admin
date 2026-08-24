@@ -4,7 +4,7 @@ import {
   CheckCircle, Clock, FileText, Calculator, ChevronRight, X
 } from 'lucide-react';
 
-export const PayrollManagement = ({ token, API_BASE }) => {
+export const PayrollManagement = React.memo(({ token, API_BASE }) => {
   const [loading, setLoading] = useState(false);
   const [payrolls, setPayrolls] = useState([]);
   const [kpi, setKpi] = useState({
@@ -323,4 +323,4 @@ export const PayrollManagement = ({ token, API_BASE }) => {
 
     </div>
   );
-};
+});

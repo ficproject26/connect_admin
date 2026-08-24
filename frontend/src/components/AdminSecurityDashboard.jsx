@@ -5,7 +5,7 @@ import {
   Clock, Eye, Server, Cpu
 } from 'lucide-react';
 
-export const AdminSecurityDashboard = ({ token, API_BASE }) => {
+export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
@@ -380,4 +380,4 @@ export const AdminSecurityDashboard = ({ token, API_BASE }) => {
 
     </div>
   );
-};
+});

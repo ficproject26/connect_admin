@@ -11,7 +11,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 
-export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
+export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
   // Filters & State
   const [period, setPeriod] = useState('monthly'); // today, weekly, monthly, quarterly, half-yearly, yearly, custom
   const [startDate, setStartDate] = useState('');
@@ -977,4 +977,4 @@ export const AgentPerformanceDashboard = ({ token, API_BASE }) => {
 
     </div>
   );
-};
+});

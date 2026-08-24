@@ -8,7 +8,7 @@ import {
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
 
-export const EnterprisePaymentDashboard = ({ token, API_BASE }) => {
+export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE }) => {
   const [loading, setLoading] = useState(false);
   const [kpi, setKpi] = useState({
     totalRevenue: 0,
@@ -183,4 +183,4 @@ export const EnterprisePaymentDashboard = ({ token, API_BASE }) => {
 
     </div>
   );
-};
+});

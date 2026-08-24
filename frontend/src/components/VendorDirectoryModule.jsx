@@ -135,7 +135,7 @@ const getAgentInfo = (v) => {
   };
 };
 
-export const VendorDirectoryModule = ({ token, API_BASE }) => {
+export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [loading, setLoading] = useState(false);
   const [vendors, setVendors] = useState([]);
@@ -1585,4 +1585,4 @@ export const VendorDirectoryModule = ({ token, API_BASE }) => {
 
     </div>
   );
-};
+});

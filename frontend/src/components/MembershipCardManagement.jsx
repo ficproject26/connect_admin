@@ -4,7 +4,7 @@ import {
   Eye, RefreshCw, Sparkles, Award, Shield, User
 } from 'lucide-react';
 
-export const MembershipCardManagement = ({ token, API_BASE }) => {
+export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState([]);
   const [selectedCard, setSelectedCard] = useState(null);
@@ -286,4 +286,4 @@ export const MembershipCardManagement = ({ token, API_BASE }) => {
 
     </div>
   );
-};
+});

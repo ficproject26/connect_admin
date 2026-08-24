@@ -773,16 +773,16 @@ function App() {
 
     if (!token) return;
 
-    // Real-time sync: poll backend every 30 seconds only when online and tab is active
+    // Lightweight KPI sync every 120s when tab is active
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
-        fetchData();
+        safeFetch(`${API_BASE}/admin/dashboard-stats`, setStats);
       }
-    }, 30000);
+    }, 120000);
 
     const handleSyncTrigger = () => {
       if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
-        fetchData();
+        safeFetch(`${API_BASE}/admin/dashboard-stats`, setStats);
       }
     };
 
@@ -796,12 +796,41 @@ function App() {
       window.removeEventListener('online', handleSyncTrigger);
       document.removeEventListener('visibilitychange', handleSyncTrigger);
     };
-  }, [token, reportType]);
+  }, [token]);
 
-  // Auto-fetch fresh agent and request data when onboarding request modals are opened
+  // Selective On-Demand Tab Data Loading
   useEffect(() => {
-    if (token && (showOnboardingRequestsModal || showVendorRequestsModal)) {
-      fetchData(true);
+    if (!token) return;
+
+    if (activeTab === 'agents' || activeTab === 'agent-directory') {
+      safeFetch(`${API_BASE}/admin/agents`, setAgents);
+    } else if (activeTab === 'vendors' || activeTab === 'vendor-directory') {
+      safeFetch(`${API_BASE}/admin/vendors`, setVendors);
+    } else if (activeTab === 'customers' || activeTab === 'customer-directory') {
+      safeFetch(`${API_BASE}/admin/customers`, setCustomers);
+    } else if (activeTab === 'payroll' || activeTab === 'payroll-management') {
+      safeFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals);
+    } else if (activeTab === 'memberships' || activeTab === 'membership-cards') {
+      safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans);
+    } else if (activeTab === 'payments' || activeTab === 'enterprise-payments') {
+      safeFetch(`${API_BASE}/admin/payments`, setPayments);
+    } else if (activeTab === 'categories' || activeTab === 'category-management') {
+      safeFetch(`${API_BASE}/admin/categories`, setCategories);
+    } else if (activeTab === 'queries' || activeTab === 'customer-queries') {
+      safeFetch(`${API_BASE}/admin/queries`, setQueries);
+    } else if (activeTab === 'tickets' || activeTab === 'support-tickets') {
+      safeFetch(`${API_BASE}/admin/tickets`, setTickets);
+    }
+  }, [activeTab, token]);
+
+  // Selective revalidation when request modals open
+  useEffect(() => {
+    if (!token) return;
+    if (showOnboardingRequestsModal) {
+      safeFetch(`${API_BASE}/admin/agents`, setAgents);
+    }
+    if (showVendorRequestsModal) {
+      safeFetch(`${API_BASE}/admin/vendors`, setVendors);
     }
   }, [showOnboardingRequestsModal, showVendorRequestsModal, token]);
 

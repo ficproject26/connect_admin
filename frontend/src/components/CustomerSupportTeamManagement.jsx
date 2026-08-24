@@ -4,7 +4,7 @@ import {
   Mail, Phone, Calendar, DollarSign, Award, Layers, X
 } from 'lucide-react';
 
-export const CustomerSupportTeamManagement = ({ token, API_BASE }) => {
+export const CustomerSupportTeamManagement = React.memo(({ token, API_BASE }) => {
   const [loading, setLoading] = useState(false);
   const [employees, setEmployees] = useState([]);
   const [hierarchy, setHierarchy] = useState({
@@ -283,4 +283,4 @@ export const CustomerSupportTeamManagement = ({ token, API_BASE }) => {
 
     </div>
   );
-};
+});
