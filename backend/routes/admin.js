@@ -162,7 +162,34 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             Order.find().sort({ createdAt: -1 }).limit(5).populate('vendorId', 'businessName').populate('customerId', 'name').lean()
         ]);
 
-        const totalVendors = Math.max(userVendorsCount + docVendorsCount, 3);
+        const db = mongoose.connection.db;
+        let rawAgents = [];
+        if (db) {
+            try {
+                rawAgents = await db.collection('agents').find({}).toArray();
+            } catch (aErr) {}
+        }
+
+        const agentMap = new Map();
+        (agentsList || []).forEach(a => {
+            const key = (a.registrationId || a.email || (a._id ? a._id.toString() : '')).toLowerCase().trim();
+            if (key) agentMap.set(key, a);
+        });
+        rawAgents.forEach(raw => {
+            const key = (raw.registrationId || raw.email || (raw._id ? raw._id.toString() : '')).toLowerCase().trim();
+            if (key && !agentMap.has(key)) {
+                agentMap.set(key, raw);
+            }
+        });
+
+        const combinedAgentList = Array.from(agentMap.values());
+        const combinedTotalAgents = Math.max(totalAgents, combinedAgentList.length);
+        const combinedStateAgents = Math.max(stateAgents, combinedAgentList.filter(a => ((a.level || a.role || '').toLowerCase()).includes('state')).length);
+        const combinedDistrictAgents = Math.max(districtAgents, combinedAgentList.filter(a => ((a.level || a.role || '').toLowerCase()).includes('district')).length);
+        const combinedSubDistrictAgents = Math.max(subDistrictAgents, combinedAgentList.filter(a => ((a.level || a.role || '').toLowerCase()).includes('divis')).length);
+        const combinedPincodeAgents = Math.max(pincodeAgents, combinedAgentList.filter(a => ((a.level || a.role || '').toLowerCase()).includes('pincode')).length);
+
+        const totalVendors = userVendorsCount + docVendorsCount;
         const pendingVendorApprovals = userPendingVendors + docPendingVendors;
         const pendingKYCRequests = pendingAgentApprovals;
         const pendingAgentKYC = pendingAgentApprovals;
@@ -344,11 +371,11 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
 
         res.json({
             kpis: {
-                totalUsers: totalCustomers + totalVendors + totalAgents,
+                totalUsers: totalCustomers + totalVendors + combinedTotalAgents,
                 totalCustomers,
                 totalVendors,
-                totalAgents,
-                totalDistrictAgents,
+                totalAgents: combinedTotalAgents,
+                totalDistrictAgents: combinedDistrictAgents,
                 totalBranches,
                 totalOrders: ordersCount,
                 totalBookings: bookingsCount,
@@ -362,10 +389,10 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
                 pendingKYCRequests,
                 pendingAgentKYC,
                 pendingVendorKYC,
-                stateAgents,
-                districtAgents,
-                subDistrictAgents,
-                pincodeAgents,
+                stateAgents: combinedStateAgents,
+                districtAgents: combinedDistrictAgents,
+                subDistrictAgents: combinedSubDistrictAgents,
+                pincodeAgents: combinedPincodeAgents,
                 subAdmins,
             },
             charts: {
@@ -4372,14 +4399,49 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
             agentFilter.$or = orConditions;
         }
 
-        const PincodeModelForPerf = require('../models/Pincode');
         let allAgents = [];
+        const db = mongoose.connection.db;
         try {
-            allAgents = await User.find(agentFilter).populate({ path: 'assignedPincode', model: PincodeModelForPerf });
+            const userAgents = await User.find(agentFilter).lean();
+            let rawAgents = [];
+            if (db) {
+                try {
+                    rawAgents = await db.collection('agents').find({}).toArray();
+                } catch (aErr) {}
+            }
+            const agentMap = new Map();
+            userAgents.forEach(a => {
+                const key = (a.registrationId || a.email || (a._id ? a._id.toString() : '')).toLowerCase().trim();
+                if (key) agentMap.set(key, a);
+            });
+            rawAgents.forEach(raw => {
+                const key = (raw.registrationId || raw.email || (raw._id ? raw._id.toString() : '')).toLowerCase().trim();
+                if (key && !agentMap.has(key)) {
+                    const levelVal = (raw.level || raw.role || 'pincode').toLowerCase();
+                    const cleanLevel = levelVal.includes('state') ? 'state' : levelVal.includes('district') ? 'district' : (levelVal.includes('divis') || levelVal.includes('division')) ? 'division' : 'pincode';
+                    agentMap.set(key, {
+                        ...raw,
+                        _id: raw._id || new mongoose.Types.ObjectId(),
+                        role: 'agent',
+                        level: cleanLevel,
+                        assignedArea: raw.assignedArea || (raw.territory ? Object.values(raw.territory).filter(Boolean).join(' / ') : ''),
+                        status: raw.status || raw.kycStatus || 'approved',
+                        isActive: raw.isActive !== false
+                    });
+                }
+            });
+            allAgents = Array.from(agentMap.values());
         } catch (popErr) {
-            console.error("Populate warning in performance overview:", popErr.message);
-            allAgents = await User.find(agentFilter);
+            console.error("Error fetching all agents for performance overview:", popErr.message);
         }
+
+        if (agentType && agentType !== 'all') {
+            allAgents = allAgents.filter(a => (a.level || '').toLowerCase() === agentType.toLowerCase());
+        }
+        if (status && status !== 'all') {
+            allAgents = allAgents.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
+        }
+
         const agentIds = allAgents.map(a => a._id);
 
         // Fetch targets for these agents
