@@ -45,6 +45,14 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE }) => {
 
   useEffect(() => {
     fetchPaymentKPIs();
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchPaymentKPIs();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   // Trend Chart Data dynamically calculated from real KPI

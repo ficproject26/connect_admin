@@ -100,7 +100,18 @@ export const SecurityDashboard = React.memo(({ token, API_BASE }) => {
 
   useEffect(() => {
     fetchSecurityStats();
-  }, []);
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchSecurityStats();
+        if (activeTab === 'audit-logs') fetchLogs();
+        if (activeTab === 'sessions') fetchActiveSessions();
+        if (activeTab === 'locked-accounts') fetchLockedAccounts();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab === 'audit-logs') fetchLogs();

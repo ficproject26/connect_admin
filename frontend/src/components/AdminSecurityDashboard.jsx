@@ -64,6 +64,16 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
     fetchSecurityData();
   }, [logActionFilter, logStatusFilter, logSearchQuery]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchSecurityData();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   // Unlock Account Handler
   const handleUnlockAccount = async (userId) => {
     try {

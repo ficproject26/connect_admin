@@ -45,6 +45,16 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
     fetchMembershipRequests();
   }, [search, membershipType, paymentMode, paymentStatus, status]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchMembershipRequests();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const handleAction = async (requestId, newStatus) => {
     try {
       const res = await fetch(`${API_BASE}/admin/enterprise/membership-requests/action`, {

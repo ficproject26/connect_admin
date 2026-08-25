@@ -20,6 +20,7 @@ import { MembershipCardManagement } from './components/MembershipCardManagement'
 import { EnterprisePaymentDashboard } from './components/EnterprisePaymentDashboard';
 import { PayrollManagement } from './components/PayrollManagement';
 import { CustomerSupportTeamManagement } from './components/CustomerSupportTeamManagement';
+import dataSyncManager from './utils/dataSyncManager';
 
 const getBackendUrl = () => {
   // On production domains (Vercel), always use relative /api path.
@@ -238,17 +239,17 @@ class ErrorBoundary extends React.Component {
             <button
               onClick={() => {
                 localStorage.clear();
-                window.location.reload();
+                this.setState({ hasError: false, error: null });
               }}
               className="bg-rose-600 hover:bg-rose-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md text-sm"
             >
-              Clear Session & Reload
+              Reset Session & Recover
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => this.setState({ hasError: false, error: null })}
               className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold px-5 py-2.5 rounded-xl transition-all text-sm"
             >
-              Reload Page
+              Reset UI
             </button>
           </div>
         </div>
@@ -813,6 +814,7 @@ function App() {
   };
 
   useEffect(() => {
+    dataSyncManager.setAuthConfig(token, API_BASE);
     fetchData();
 
     if (!token) return;

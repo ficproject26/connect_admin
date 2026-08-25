@@ -54,6 +54,16 @@ export const PayrollManagement = React.memo(({ token, API_BASE }) => {
     fetchPayrollData();
   }, [search, department, roleFilter, employeeType, status]);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchPayrollData();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   const handleGenerateSubmit = async (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);

@@ -37,6 +37,14 @@ export const CustomerSupportTeamManagement = React.memo(({ token, API_BASE }) =>
 
   useEffect(() => {
     fetchTeamData();
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchTeamData();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const handleOnboardSubmit = async (e) => {

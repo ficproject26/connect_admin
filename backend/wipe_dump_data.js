@@ -17,10 +17,7 @@ const wipeDumpData = async () => {
             if (name === 'users') {
                 // Delete all users except super admin
                 const res = await db.collection('users').deleteMany({
-                    $and: [
-                        { role: { $ne: 'admin' } },
-                        { email: { $ne: 'admin@example.com' } }
-                    ]
+                    email: { $ne: 'admin@example.com' }
                 });
                 console.log(`Cleared non-admin records in '${name}' collection. Deleted: ${res.deletedCount}`);
             } else if (name === 'categories') {
