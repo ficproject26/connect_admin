@@ -156,7 +156,31 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
         vObj.category = vObj.vendorType || vObj.businessCategory || vObj.shopType || 'Retail & Stores';
     }
 
-    vObj.phone = vObj.mobileContact || vObj.mobile || vObj.phone || vObj.phoneNumber || vObj.contactNumber || vObj.telephone || vObj.contactPersonPhone || '—';
+    vObj.phone = vObj.mobileNumber || vObj.mobileContact || vObj.mobile || vObj.phone || vObj.phoneNumber || vObj.contactNumber || vObj.telephone || vObj.contactPersonPhone || vObj.mobileNo || vObj.phoneNo || '—';
+    vObj.mobileNumber = vObj.mobileNumber || (vObj.phone !== '—' ? vObj.phone : '');
+
+    let city = vObj.city || vObj.district || '';
+    let state = vObj.state || '';
+    let pin = vObj.pincode || vObj.postalCode || '';
+    let addr = vObj.address || vObj.fullAddress || vObj.businessAddress || '';
+
+    if (!city || !state || city === '—' || state === '—') {
+        if (addr && addr.includes(',')) {
+            const parts = addr.split(',').map(p => p.trim());
+            if ((!city || city === '—') && parts[0] && !parts[0].match(/^\d+$/)) city = parts[0];
+            if ((!state || state === '—') && parts[1]) state = parts[1].replace(/\d{6}/g, '').trim();
+        }
+        if ((!state || state === '—') && vObj.assignedArea && vObj.assignedArea.includes('/')) {
+            const areaParts = vObj.assignedArea.split('/').map(p => p.trim());
+            if ((!state || state === '—') && areaParts[0]) state = areaParts[0];
+            if ((!city || city === '—') && areaParts[1]) city = areaParts[1];
+        }
+    }
+
+    if (city) { vObj.city = city; vObj.district = city; }
+    if (state) { vObj.state = state; }
+    if (pin) { vObj.pincode = pin; vObj.postalCode = pin; }
+    if (addr) { vObj.address = addr; }
 
     // Normalize Agent Onboarded status
     const isAgentOnboarded = vObj.joiningType === 'agent' ||

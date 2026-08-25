@@ -62,11 +62,42 @@ const getVendorAddress = (v) => {
 
 const getVendorPhone = (v) => {
   if (!v) return '—';
-  const raw = v.mobileContact || v.mobile || v.phone || v.phoneNumber || v.contactNumber || v.telephone || v.contactPersonPhone || '';
+  const raw = v.mobileNumber || v.mobileContact || v.mobile || v.phone || v.phoneNumber || v.contactNumber || v.telephone || v.contactPersonPhone || v.mobileNo || v.phoneNo || '';
   if (raw && raw !== '+91 98765 43211' && raw !== '9876543211') {
     return raw;
   }
   return (raw && raw !== '+91 98765 43211') ? raw : '—';
+};
+
+const getVendorCity = (v) => {
+  if (!v) return '—';
+  if (v.city && v.city !== '—') return v.city;
+  if (v.district && v.district !== '—') return v.district;
+  const fullAddr = v.address || v.fullAddress || v.businessAddress || '';
+  if (fullAddr && fullAddr.includes(',')) {
+    const parts = fullAddr.split(',').map(p => p.trim());
+    if (parts[0] && !parts[0].match(/^\d+$/)) return parts[0];
+  }
+  if (v.assignedArea && v.assignedArea.includes('/')) {
+    const areaParts = v.assignedArea.split('/').map(p => p.trim());
+    if (areaParts[1]) return areaParts[1];
+  }
+  return '—';
+};
+
+const getVendorState = (v) => {
+  if (!v) return '—';
+  if (v.state && v.state !== '—') return v.state;
+  const fullAddr = v.address || v.fullAddress || v.businessAddress || '';
+  if (fullAddr && fullAddr.includes(',')) {
+    const parts = fullAddr.split(',').map(p => p.trim());
+    if (parts[1]) return parts[1].replace(/\d{6}/g, '').trim();
+  }
+  if (v.assignedArea && v.assignedArea.includes('/')) {
+    const areaParts = v.assignedArea.split('/').map(p => p.trim());
+    if (areaParts[0]) return areaParts[0];
+  }
+  return '—';
 };
 
 const isVendorAgentOnboarded = (v) => {
@@ -1258,8 +1289,8 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                 <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
                   <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.email || 'N/A'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Mobile Phone:</span><span className="font-bold">{getVendorPhone(selectedVendorDetails)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">District / City:</span><span className="font-bold">{selectedVendorDetails.city || selectedVendorDetails.district || '—'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-bold">{selectedVendorDetails.state || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">District / City:</span><span className="font-bold">{getVendorCity(selectedVendorDetails)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-bold">{getVendorState(selectedVendorDetails)}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-bold">{selectedVendorDetails.pincode || selectedVendorDetails.postalCode || '—'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-bold truncate max-w-[180px]" title={selectedVendorDetails.address || selectedVendorDetails.businessAddress || 'Address not provided'}>{selectedVendorDetails.address || selectedVendorDetails.businessAddress || 'Address not provided'}</span></div>
                 </div>
