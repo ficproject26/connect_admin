@@ -667,6 +667,8 @@ function App() {
     try {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      localStorage.removeItem('cached_agents');
+      localStorage.removeItem('cached_dashboard_stats');
     } catch (e) { }
     setToken('');
     setUser(null);
