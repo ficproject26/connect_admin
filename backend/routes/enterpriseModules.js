@@ -159,28 +159,63 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
     vObj.phone = vObj.mobileNumber || vObj.mobileContact || vObj.mobile || vObj.phone || vObj.phoneNumber || vObj.contactNumber || vObj.telephone || vObj.contactPersonPhone || vObj.mobileNo || vObj.phoneNo || '—';
     vObj.mobileNumber = vObj.mobileNumber || (vObj.phone !== '—' ? vObj.phone : '');
 
-    let city = vObj.city || vObj.district || '';
-    let state = vObj.state || '';
-    let pin = vObj.pincode || vObj.postalCode || '';
-    let addr = vObj.address || vObj.fullAddress || vObj.businessAddress || '';
+    const isInvalidLoc = (val) => {
+        if (!val || typeof val !== 'string') return true;
+        const clean = val.trim().toLowerCase();
+        return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty'].includes(clean) || /^(.)\1+$/.test(clean);
+    };
 
-    if (!city || !state || city === '—' || state === '—') {
-        if (addr && addr.includes(',')) {
-            const parts = addr.split(',').map(p => p.trim());
-            if ((!city || city === '—') && parts[0] && !parts[0].match(/^\d+$/)) city = parts[0];
-            if ((!state || state === '—') && parts[1]) state = parts[1].replace(/\d{6}/g, '').trim();
-        }
-        if ((!state || state === '—') && vObj.assignedArea && vObj.assignedArea.includes('/')) {
-            const areaParts = vObj.assignedArea.split('/').map(p => p.trim());
-            if ((!state || state === '—') && areaParts[0]) state = areaParts[0];
-            if ((!city || city === '—') && areaParts[1]) city = areaParts[1];
+    let city = (!isInvalidLoc(vObj.city) ? vObj.city : !isInvalidLoc(vObj.district) ? vObj.district : '').trim();
+    let state = (!isInvalidLoc(vObj.state) ? vObj.state : '').trim();
+    let pin = (vObj.pincode || vObj.postalCode || '').trim();
+    let addr = (vObj.address || vObj.fullAddress || vObj.businessAddress || vObj.street || '').trim();
+
+    if ((!city || !state) && addr) {
+        const parts = addr.split(',').map(p => p.trim()).filter(p => p && !isInvalidLoc(p));
+        for (const part of parts) {
+            const INDIAN_STATES = [
+                "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+                "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
+                "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+                "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
+                "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
+            ];
+            const matchedState = INDIAN_STATES.find(s => s.toLowerCase() === part.toLowerCase() || part.toLowerCase().includes(s.toLowerCase()));
+            if (matchedState && !state) {
+                state = matchedState;
+                continue;
+            }
+
+            if (part.toUpperCase().includes('DISTRICT') || part.toUpperCase().includes('DIST')) {
+                const cleanDist = part.replace(/DISTRICT|DIST/gi, '').trim();
+                if (!city && cleanDist) city = cleanDist;
+            } else if (part.toUpperCase().includes('TALUK') || part.toUpperCase().includes('TK') || part.toUpperCase().includes('TOWN')) {
+                const cleanTaluk = part.replace(/TALUK|TK|TOWN/gi, '').trim();
+                if (!city && cleanTaluk) city = cleanTaluk;
+            } else if (!city && parts.length > 1 && part !== parts[0] && !part.match(/^\d+$/)) {
+                city = part;
+            }
         }
     }
 
-    if (city) { vObj.city = city; vObj.district = city; }
-    if (state) { vObj.state = state; }
-    if (pin) { vObj.pincode = pin; vObj.postalCode = pin; }
-    if (addr) { vObj.address = addr; }
+    if (pin && pin.length === 6) {
+        const prefix2 = pin.substring(0, 2);
+        if (!state) {
+            if (['60', '61', '62', '63', '64'].includes(prefix2)) state = "Tamil Nadu";
+            else if (['56', '57', '58', '59'].includes(prefix2)) state = "Karnataka";
+            else if (['50', '51', '52', '53'].includes(prefix2)) state = "Andhra Pradesh / Telangana";
+            else if (['67', '68', '69'].includes(prefix2)) state = "Kerala";
+            else if (['40', '41', '42', '43', '44'].includes(prefix2)) state = "Maharashtra";
+            else if (['11'].includes(prefix2)) state = "Delhi";
+        }
+    }
+
+    vObj.city = city || '—';
+    vObj.district = city || '—';
+    vObj.state = state || '—';
+    vObj.pincode = pin || '—';
+    vObj.postalCode = pin || '—';
+    if (addr) vObj.address = addr;
 
     // Normalize Agent Onboarded status
     const isAgentOnboarded = vObj.joiningType === 'agent' ||

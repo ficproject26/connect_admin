@@ -69,34 +69,75 @@ const getVendorPhone = (v) => {
   return (raw && raw !== '+91 98765 43211') ? raw : '—';
 };
 
+const isInvalidLocationVal = (val) => {
+  if (!val || typeof val !== 'string') return true;
+  const clean = val.trim().toLowerCase();
+  return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty'].includes(clean) || /^(.)\1+$/.test(clean);
+};
+
 const getVendorCity = (v) => {
   if (!v) return '—';
-  if (v.city && v.city !== '—') return v.city;
-  if (v.district && v.district !== '—') return v.district;
-  const fullAddr = v.address || v.fullAddress || v.businessAddress || '';
+  if (!isInvalidLocationVal(v.city)) return v.city;
+  if (!isInvalidLocationVal(v.district)) return v.district;
+
+  const fullAddr = v.address || v.fullAddress || v.businessAddress || v.street || '';
   if (fullAddr && fullAddr.includes(',')) {
-    const parts = fullAddr.split(',').map(p => p.trim());
+    const parts = fullAddr.split(',').map(p => p.trim()).filter(p => !isInvalidLocationVal(p));
+    for (const part of parts) {
+      if (part.toUpperCase().includes('DISTRICT') || part.toUpperCase().includes('DIST')) {
+        const cleanDist = part.replace(/DISTRICT|DIST/gi, '').trim();
+        if (cleanDist) return cleanDist;
+      }
+      if (part.toUpperCase().includes('TALUK') || part.toUpperCase().includes('TK') || part.toUpperCase().includes('TOWN')) {
+        const cleanTaluk = part.replace(/TALUK|TK|TOWN/gi, '').trim();
+        if (cleanTaluk) return cleanTaluk;
+      }
+    }
+    if (parts[1] && !parts[1].match(/^\d+$/)) return parts[1];
     if (parts[0] && !parts[0].match(/^\d+$/)) return parts[0];
   }
+
   if (v.assignedArea && v.assignedArea.includes('/')) {
     const areaParts = v.assignedArea.split('/').map(p => p.trim());
-    if (areaParts[1]) return areaParts[1];
+    if (areaParts[1] && !isInvalidLocationVal(areaParts[1])) return areaParts[1];
   }
   return '—';
 };
 
 const getVendorState = (v) => {
   if (!v) return '—';
-  if (v.state && v.state !== '—') return v.state;
-  const fullAddr = v.address || v.fullAddress || v.businessAddress || '';
-  if (fullAddr && fullAddr.includes(',')) {
-    const parts = fullAddr.split(',').map(p => p.trim());
-    if (parts[1]) return parts[1].replace(/\d{6}/g, '').trim();
+  if (!isInvalidLocationVal(v.state)) return v.state;
+
+  const fullAddr = v.address || v.fullAddress || v.businessAddress || v.street || '';
+  const INDIAN_STATES = [
+    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+    "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
+    "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+    "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
+    "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
+  ];
+
+  if (fullAddr) {
+    const matched = INDIAN_STATES.find(s => fullAddr.toLowerCase().includes(s.toLowerCase()));
+    if (matched) return matched;
   }
+
   if (v.assignedArea && v.assignedArea.includes('/')) {
     const areaParts = v.assignedArea.split('/').map(p => p.trim());
-    if (areaParts[0]) return areaParts[0];
+    if (areaParts[0] && !isInvalidLocationVal(areaParts[0])) return areaParts[0];
   }
+
+  const pin = (v.pincode || v.postalCode || '').trim();
+  if (pin && pin.length === 6) {
+    const prefix2 = pin.substring(0, 2);
+    if (['60', '61', '62', '63', '64'].includes(prefix2)) return "Tamil Nadu";
+    if (['56', '57', '58', '59'].includes(prefix2)) return "Karnataka";
+    if (['50', '51', '52', '53'].includes(prefix2)) return "Andhra Pradesh / Telangana";
+    if (['67', '68', '69'].includes(prefix2)) return "Kerala";
+    if (['40', '41', '42', '43', '44'].includes(prefix2)) return "Maharashtra";
+    if (['11'].includes(prefix2)) return "Delhi";
+  }
+
   return '—';
 };
 
