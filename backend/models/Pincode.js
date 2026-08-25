@@ -14,4 +14,7 @@ const PincodeSchema = new mongoose.Schema({
     isBlocked: { type: Boolean, default: false }
 });
 
+PincodeSchema.index({ activeAgentId: 1 });
+PincodeSchema.index({ district: 1, state: 1 });
+
 module.exports = mongoose.model('Pincode', PincodeSchema);

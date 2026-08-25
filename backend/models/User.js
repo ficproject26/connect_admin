@@ -76,6 +76,12 @@ const UserSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 }, { strict: false, strictPopulate: false });
 
+UserSchema.index({ role: 1, status: 1, level: 1 });
+UserSchema.index({ registrationId: 1 });
+UserSchema.index({ email: 1, role: 1 });
+UserSchema.index({ assignedState: 1, assignedDistrict: 1, assignedDivision: 1 });
+UserSchema.index({ createdAt: -1 });
+
 const castIdToObjectId = (val) => {
     if (val && typeof val === 'object' && (val.$in || val.$eq || val.$nin || val.$ne)) {
         if (val.$ne && typeof val.$ne === 'string' && mongoose.Types.ObjectId.isValid(val.$ne)) {

@@ -23,4 +23,7 @@ const AgentActivitySchema = new mongoose.Schema({
     timestamp: { type: Date, default: Date.now }
 });
 
+AgentActivitySchema.index({ agentId: 1, actionType: 1 });
+AgentActivitySchema.index({ timestamp: -1 });
+
 module.exports = mongoose.model('AgentActivity', AgentActivitySchema);

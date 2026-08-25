@@ -30,4 +30,9 @@ const VendorSchema = new mongoose.Schema({
     createdAt: { type: Date, default: Date.now }
 }, { strictPopulate: false });
 
+VendorSchema.index({ status: 1, category: 1 });
+VendorSchema.index({ agentId: 1 });
+VendorSchema.index({ email: 1, phone: 1 });
+VendorSchema.index({ createdAt: -1 });
+
 module.exports = mongoose.model('Vendor', VendorSchema);

@@ -254,21 +254,23 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
     fetchDirectRequests();
     fetchAgentOnboardedVendors();
 
-    // Multi-device real-time sync: poll backend every 10 seconds
     const interval = setInterval(() => {
-      fetchVendors();
-      fetchDirectRequests();
-      fetchAgentOnboardedVendors();
-    }, 10000);
+      if (document.visibilityState === 'visible') {
+        fetchVendors();
+        fetchDirectRequests();
+        fetchAgentOnboardedVendors();
+      }
+    }, 5000);
 
-    // Sync state immediately when user switches back to this window tab
     const handleFocus = () => {
-      fetchVendors();
-      fetchDirectRequests();
-      fetchAgentOnboardedVendors();
+      if (document.visibilityState === 'visible') {
+        fetchVendors();
+        fetchDirectRequests();
+        fetchAgentOnboardedVendors();
+      }
     };
-    window.addEventListener('focus', handleFocus);
 
+    window.addEventListener('focus', handleFocus);
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);

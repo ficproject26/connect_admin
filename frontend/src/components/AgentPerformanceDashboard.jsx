@@ -108,6 +108,14 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
   useEffect(() => {
     fetchOverview();
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchOverview();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, [period, agentType, statusFilter, stateFilter, districtFilter, divisionFilter, pincodeFilter]);
 
   // Export handlers

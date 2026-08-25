@@ -817,16 +817,19 @@ function App() {
 
     if (!token) return;
 
-    // Lightweight KPI sync every 120s when tab is active
+    // Automatic real-time refresh every 5 seconds when tab is active
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
         safeFetch(`${API_BASE}/admin/dashboard-stats`, setStats);
+        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+        safeFetch(`${API_BASE}/admin/vendors`, setVendors);
+        safeFetch(`${API_BASE}/admin/customers`, setCustomers);
       }
-    }, 120000);
+    }, 5000);
 
     const handleSyncTrigger = () => {
       if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
-        safeFetch(`${API_BASE}/admin/dashboard-stats`, setStats);
+        fetchData();
       }
     };
 
