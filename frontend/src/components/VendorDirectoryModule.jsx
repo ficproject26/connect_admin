@@ -1266,6 +1266,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                   <div className="flex justify-between"><span className="text-slate-400">Business Name:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.businessName || selectedVendorDetails.name}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Contact Person:</span><span className="font-bold">{selectedVendorDetails.contactPerson || 'N/A'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold text-amber-600 dark:text-amber-400">{getVendorCategory(selectedVendorDetails)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Subcategory:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.subcategory || selectedVendorDetails.subCategory || 'General'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Vendor Type:</span><span className="font-bold">{selectedVendorDetails.baseVendorType || selectedVendorDetails.vendorType || 'Retail Vendor'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Joining Method:</span>
                     <span className={`font-extrabold uppercase text-[10px] px-2 py-0.5 rounded-md border ${
@@ -1317,12 +1318,12 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                   <span>Legal & Tax Verification</span>
                 </div>
                 <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
-                  <div className="flex justify-between"><span className="text-slate-400">GST Number:</span><span className="font-mono font-bold">{selectedVendorDetails.gstNumber || selectedVendorDetails.gstin || 'Not Provided'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">PAN Number:</span><span className="font-mono font-bold">{selectedVendorDetails.panNumber || selectedVendorDetails.kyc?.panNumber || 'Verified'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">GST Number:</span><span className="font-mono font-bold">{selectedVendorDetails.gstNumber || selectedVendorDetails.gstin || selectedVendorDetails.gstStatus || 'Not Provided'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">PAN Number:</span><span className="font-mono font-bold">{selectedVendorDetails.panNumber || selectedVendorDetails.panNo || selectedVendorDetails.kyc?.panNumber || 'Verified'}</span></div>
                   <div className="flex justify-between">
                     <span className="text-slate-400">License Number:</span>
                     {(() => {
-                      const lic = selectedVendorDetails.businessLicense || selectedVendorDetails.licenseNumber || '';
+                      const lic = selectedVendorDetails.businessLicense || selectedVendorDetails.licenseNumber || selectedVendorDetails.companyRegNo || '';
                       if (!lic) return <span className="font-mono font-bold text-slate-400">Not Provided</span>;
                       if (lic.startsWith('/uploads') || lic.startsWith('http') || /\.(jpg|jpeg|png|pdf|webp)$/i.test(lic)) {
                         return (
@@ -1334,7 +1335,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                       return <span className="font-mono font-bold">{lic}</span>;
                     })()}
                   </div>
-                  <div className="flex justify-between"><span className="text-slate-400">KYC Status:</span><span className="font-bold text-emerald-600">Verified Partner</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">MSME Status:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.msmeStatus || 'Non-MSME'}</span></div>
                 </div>
               </div>
 
