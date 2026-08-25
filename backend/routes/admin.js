@@ -299,13 +299,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         }));
 
         if (branchWiseRevenue.length === 0 || branchTotal === 0) {
-            branchWiseRevenue = [
-                { name: 'Dharmapuri', revenue: 185000 },
-                { name: 'Salem', revenue: 142000 },
-                { name: 'Chennai', revenue: 128000 },
-                { name: 'Kallakurichi', revenue: 95000 },
-                { name: 'Coimbatore', revenue: 78000 }
-            ];
+            branchWiseRevenue = [];
         }
 
         // Vendor Wise Revenue Performance
@@ -4469,14 +4463,14 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         const sortedByVendor = [...agentMetricsList].sort((a, b) => b.metrics.vendorOnboarding - a.metrics.vendorOnboarding);
 
         const leaderboards = {
-            topStateAgent: agentMetricsList.find(a => a.agent.level === 'state') || sortedByScore[0] || null,
-            topDistrictAgent: agentMetricsList.find(a => a.agent.level === 'district') || sortedByScore[0] || null,
-            topDivisionalAgent: agentMetricsList.find(a => ['division', 'divisional'].includes(a.agent.level)) || sortedByScore[0] || null,
-            topPincodeAgent: agentMetricsList.find(a => a.agent.level === 'pincode') || sortedByScore[0] || null,
-            topRevenueGenerator: sortedByRevenue[0] || null,
-            topMembershipSeller: sortedByMembership[0] || null,
-            topVendorCreator: sortedByVendor[0] || null,
-            topReferralAgent: sortedByScore[0] || null
+            topStateAgent: agentMetricsList.find(a => a.agent.level === 'state') || null,
+            topDistrictAgent: agentMetricsList.find(a => a.agent.level === 'district') || null,
+            topDivisionalAgent: agentMetricsList.find(a => ['division', 'divisional'].includes(a.agent.level)) || null,
+            topPincodeAgent: agentMetricsList.find(a => a.agent.level === 'pincode') || null,
+            topRevenueGenerator: sortedByRevenue[0] && sortedByRevenue[0].metrics.revenue > 0 ? sortedByRevenue[0] : null,
+            topMembershipSeller: sortedByMembership[0] && sortedByMembership[0].metrics.membershipSales > 0 ? sortedByMembership[0] : null,
+            topVendorCreator: sortedByVendor[0] && sortedByVendor[0].metrics.vendorOnboarding > 0 ? sortedByVendor[0] : null,
+            topReferralAgent: sortedByScore[0] && sortedByScore[0].score > 0 ? sortedByScore[0] : null
         };
 
         // Aggregated Card Metrics strictly from DB
@@ -4498,8 +4492,8 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
             weeklyPerformance: `${avgScore}% Achieved`,
             monthlyPerformance: `${avgScore}% Achieved`,
             yearlyPerformance: `${avgScore}% Achieved`,
-            highestPerformer: sortedByScore[0]?.agent?.name || 'N/A',
-            lowestPerformer: sortedByScore[sortedByScore.length - 1]?.agent?.name || 'N/A',
+            highestPerformer: sortedByScore[0] && sortedByScore[0].score > 0 ? sortedByScore[0].agent?.name : 'N/A',
+            lowestPerformer: sortedByScore.length > 1 && sortedByScore[sortedByScore.length - 1].score > 0 ? sortedByScore[sortedByScore.length - 1].agent?.name : 'N/A',
             pendingTasks: pendingTasksCount,
             totalRevenueGenerated: totalRevenue,
             totalLeads,
@@ -4507,28 +4501,27 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         };
 
         // Real Charts & Graph Data
-        const baseScore = avgScore > 0 ? avgScore : 72;
+        const baseScore = avgScore;
         const lineChartData = [
-            { period: 'Mon', Performance: Math.max(30, baseScore - 12), Targets: 80 },
-            { period: 'Tue', Performance: Math.max(35, baseScore - 5), Targets: 80 },
-            { period: 'Wed', Performance: Math.max(45, baseScore + 8), Targets: 80 },
-            { period: 'Thu', Performance: Math.max(40, baseScore + 2), Targets: 80 },
-            { period: 'Fri', Performance: Math.max(50, baseScore + 12), Targets: 80 },
-            { period: 'Sat', Performance: Math.max(48, baseScore + 6), Targets: 80 },
-            { period: 'Sun', Performance: baseScore, Targets: 80 }
+            { period: 'Mon', Performance: baseScore > 0 ? Math.max(0, baseScore - 12) : 0, Targets: totalAgents > 0 ? 80 : 0 },
+            { period: 'Tue', Performance: baseScore > 0 ? Math.max(0, baseScore - 5) : 0, Targets: totalAgents > 0 ? 80 : 0 },
+            { period: 'Wed', Performance: baseScore > 0 ? Math.max(0, baseScore + 8) : 0, Targets: totalAgents > 0 ? 80 : 0 },
+            { period: 'Thu', Performance: baseScore > 0 ? Math.max(0, baseScore + 2) : 0, Targets: totalAgents > 0 ? 80 : 0 },
+            { period: 'Fri', Performance: baseScore > 0 ? Math.max(0, baseScore + 12) : 0, Targets: totalAgents > 0 ? 80 : 0 },
+            { period: 'Sat', Performance: baseScore > 0 ? Math.max(0, baseScore + 6) : 0, Targets: totalAgents > 0 ? 80 : 0 },
+            { period: 'Sun', Performance: baseScore, Targets: totalAgents > 0 ? 80 : 0 }
         ];
 
         const stateRev = agentMetricsList.filter(a => a.agent.level === 'state').reduce((acc, c) => acc + c.metrics.revenue, 0);
         const distRev = agentMetricsList.filter(a => a.agent.level === 'district').reduce((acc, c) => acc + c.metrics.revenue, 0);
         const divRev = agentMetricsList.filter(a => ['division', 'divisional'].includes(a.agent.level)).reduce((acc, c) => acc + c.metrics.revenue, 0);
         const pinRev = agentMetricsList.filter(a => a.agent.level === 'pincode').reduce((acc, c) => acc + c.metrics.revenue, 0);
-        const tierRevTotal = stateRev + distRev + divRev + pinRev;
 
         const barChartRevenue = [
-            { category: 'State', Revenue: tierRevTotal > 0 ? stateRev : 185000 },
-            { category: 'District', Revenue: tierRevTotal > 0 ? distRev : 240000 },
-            { category: 'Division', Revenue: tierRevTotal > 0 ? divRev : 110000 },
-            { category: 'Pincode', Revenue: tierRevTotal > 0 ? pinRev : 65000 }
+            { category: 'State', Revenue: stateRev },
+            { category: 'District', Revenue: distRev },
+            { category: 'Division', Revenue: divRev },
+            { category: 'Pincode', Revenue: pinRev }
         ];
 
         const stateCount = allAgents.filter(a => a.level === 'state').length;
@@ -4537,13 +4530,13 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         const pinCount = allAgents.filter(a => a.level === 'pincode').length;
 
         const pieChartCategory = [
-            { name: 'State Agents', value: stateCount > 0 ? stateCount : 1 },
-            { name: 'District Agents', value: distCount > 0 ? distCount : 4 },
-            { name: 'Divisional Agents', value: divCount > 0 ? divCount : 2 },
-            { name: 'Pincode Agents', value: pinCount > 0 ? pinCount : 1 }
+            { name: 'State Agents', value: stateCount },
+            { name: 'District Agents', value: distCount },
+            { name: 'Divisional Agents', value: divCount },
+            { name: 'Pincode Agents', value: pinCount }
         ];
 
-        const baseReg = totalRegistrations > 0 ? totalRegistrations : 124;
+        const baseReg = totalRegistrations;
         const areaChartRegistrations = [
             { month: 'Jan', Registrations: Math.round(baseReg * 0.2) },
             { month: 'Feb', Registrations: Math.round(baseReg * 0.35) },
@@ -4682,43 +4675,8 @@ router.get('/queries', [auth, adminAuth], async (req, res) => {
             } catch (qErr) {}
         }
 
-        // Fallback default queries if database collection is empty
-        if (!queries || queries.length === 0) {
-            queries = [
-                {
-                    _id: 'q1',
-                    userName: 'Karthikeyan',
-                    userEmail: 'karthikeyanb25@gmail.com',
-                    userPhone: '6437182964',
-                    userType: 'Agent',
-                    subject: 'Pincode Expansion Request',
-                    message: 'Requesting permission for secondary pincode operations in Bangalore Urban territory.',
-                    status: 'Pending',
-                    createdAt: new Date(Date.now() - 2 * 3600 * 1000).toISOString()
-                },
-                {
-                    _id: 'q2',
-                    userName: 'Uma Agent',
-                    userEmail: 'uma.rj.a08@gmail.com',
-                    userPhone: '+91 98765 43211',
-                    userType: 'Agent',
-                    subject: 'Commission Payout Verification',
-                    message: 'Need clarification on June tier payout settlement for Tamil Nadu state territory.',
-                    status: 'Resolved',
-                    createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString()
-                },
-                {
-                    _id: 'q3',
-                    userName: 'Super Vendor Store',
-                    userEmail: 'vendor@superstore.com',
-                    userPhone: '9876543210',
-                    userType: 'Vendor',
-                    subject: 'Product Catalog Listing Support',
-                    message: 'Assistance required for bulk uploading daily need items to vendor portal.',
-                    status: 'In Progress',
-                    createdAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString()
-                }
-            ];
+        if (!queries) {
+            queries = [];
         }
 
         res.json(queries);

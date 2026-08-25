@@ -372,72 +372,7 @@ router.get('/vendors', auth, async (req, res) => {
         });
         let vendors = Array.from(vendorMap.values());
 
-        if (vendors.length === 0) {
-            vendors = [
-                {
-                    _id: 'vnd-dir-dhanu-101',
-                    businessName: 'Dhanushya Sri Enterprises',
-                    contactPerson: 'Dhanushya Sri',
-                    email: 'dhanushiyasri@gmail.com',
-                    phone: '+91 98765 43211',
-                    category: 'Retail & Stores',
-                    assignedArea: 'Tamil Nadu / Dharmapuri',
-                    pincode: '635109',
-                    status: 'Approved',
-                    joiningType: 'direct',
-                    registrationId: 'VND-DIR-8821'
-                },
-                {
-                    _id: 'vnd-201',
-                    businessName: 'Global Supermarket & Fresh Supplies',
-                    contactPerson: 'Ramesh Kumar',
-                    email: 'ramesh@globalsupermarket.com',
-                    phone: '+91 98421 88990',
-                    category: 'Store Vendor',
-                    assignedArea: 'Tamil Nadu / Chennai',
-                    pincode: '600001',
-                    status: 'Approved',
-                    joiningType: 'agent',
-                    onboardedByAgent: {
-                        name: 'Karthik Raja',
-                        registrationId: 'AG-PIN-1042',
-                        pincode: '600001'
-                    },
-                    registrationId: 'VND-STORE-4412'
-                },
-                {
-                    _id: 'vnd-202',
-                    businessName: 'Apollo Care Multi-Specialty Clinic',
-                    contactPerson: 'Dr. S. K. Sundaram',
-                    email: 'admin@apollocare.org',
-                    phone: '+91 97890 12345',
-                    category: 'Hospital Vendor',
-                    assignedArea: 'Tamil Nadu / Salem',
-                    pincode: '636001',
-                    status: 'Approved',
-                    joiningType: 'agent',
-                    onboardedByAgent: {
-                        name: 'Suresh Kumar',
-                        registrationId: 'AG-PIN-3091',
-                        pincode: '636001'
-                    },
-                    registrationId: 'VND-[#3619]'
-                },
-                {
-                    _id: 'vnd-203',
-                    businessName: 'Grand Palace Hotel & Suites',
-                    contactPerson: 'K. Venkatesh',
-                    email: 'contact@grandpalace.in',
-                    phone: '+91 94432 55667',
-                    category: 'Hotel Vendor',
-                    assignedArea: 'Tamil Nadu / Coimbatore',
-                    pincode: '641001',
-                    status: 'Approved',
-                    joiningType: 'direct',
-                    registrationId: 'VND-[#9923]'
-                }
-            ];
-        }
+        // Return empty array when no vendors are found in DB
 
         // Attach Pincode Agent information & normalize profile fields
         const enrichedVendors = await batchEnrichVendors(vendors);
