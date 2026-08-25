@@ -270,7 +270,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         const catTotal = Object.values(categoryMap).reduce((a, b) => a + b, 0);
         const categoryWiseRevenue = Object.keys(categoryMap).map(cat => ({
             category: cat,
-            value: catTotal > 0 ? categoryMap[cat] : (cat === 'Daily Needs' ? 45000 : cat === 'Food & Dining' ? 35000 : cat === 'Services' ? 28000 : cat === 'Retail & Stores' ? 22000 : 15000)
+            value: categoryMap[cat] || 0
         })).filter(c => c.value > 0);
 
         // Branch / District Wise Revenue Comparison

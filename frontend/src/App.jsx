@@ -1495,8 +1495,8 @@ function App() {
                     },
                     {
                       title: 'Total Vendors',
-                      value: stats?.kpis?.totalVendors || 3,
-                      change: `${stats?.kpis?.pendingVendorApprovals ?? 1} pending approval`,
+                      value: stats?.kpis?.totalVendors ?? 0,
+                      change: `${stats?.kpis?.pendingVendorApprovals ?? 0} pending approval`,
                       icon: Award,
                       cardBg: 'bg-amber-50 dark:bg-amber-950/20',
                       borderColor: 'border-amber-100 dark:border-amber-900/30',
@@ -9350,20 +9350,20 @@ function App() {
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 uppercase font-bold">Wallet Balance</span>
-                    <span className="font-extrabold text-emerald-500 block mt-0.5">₹{modalData.agentId?.balance || 7500}</span>
+                    <span className="font-extrabold text-emerald-500 block mt-0.5">₹{modalData.agentId?.balance ?? 0}</span>
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 uppercase font-bold">Commission Earned</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">₹{modalData.agentId?.commissionEarned || 3500}</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">₹{modalData.agentId?.commissionEarned ?? 0}</span>
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 uppercase font-bold">Vendors Added</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">{modalData.agentId?.vendorsAdded || 4} Vendors</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">{modalData.agentId?.vendorsAdded ?? 0} Vendors</span>
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 uppercase font-bold">Aadhaar / PAN</span>
                     <span className="font-mono text-[11px] text-slate-600 dark:text-slate-400 block mt-0.5">
-                      {modalData.agentId?.kyc?.aadhaarNumber || '123456789012'} | {modalData.agentId?.kyc?.panNumber || 'ABCDE1234F'}
+                      {modalData.agentId?.kyc?.aadhaarNumber || '—'} | {modalData.agentId?.kyc?.panNumber || '—'}
                     </span>
                   </div>
                 </div>

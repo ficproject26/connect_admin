@@ -77,9 +77,13 @@ const UserSchema = new mongoose.Schema({
 }, { strict: false, strictPopulate: false });
 
 UserSchema.index({ role: 1, status: 1, level: 1 });
+UserSchema.index({ role: 1, branchId: 1, status: 1 });
 UserSchema.index({ registrationId: 1 });
 UserSchema.index({ email: 1, role: 1 });
 UserSchema.index({ assignedState: 1, assignedDistrict: 1, assignedDivision: 1 });
+UserSchema.index({ assignedPincode: 1 });
+UserSchema.index({ pincode: 1 });
+UserSchema.index({ status: 1, createdAt: -1 });
 UserSchema.index({ createdAt: -1 });
 
 const castIdToObjectId = (val) => {

@@ -31,6 +31,9 @@ const VendorSchema = new mongoose.Schema({
 }, { strictPopulate: false });
 
 VendorSchema.index({ status: 1, category: 1 });
+VendorSchema.index({ status: 1, branchId: 1 });
+VendorSchema.index({ category: 1, branchId: 1 });
+VendorSchema.index({ kycStatus: 1 });
 VendorSchema.index({ agentId: 1 });
 VendorSchema.index({ email: 1, phone: 1 });
 VendorSchema.index({ createdAt: -1 });

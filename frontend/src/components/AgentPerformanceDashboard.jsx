@@ -108,7 +108,9 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
   useEffect(() => {
     fetchOverview();
+  }, [period, agentType, statusFilter, stateFilter, districtFilter, divisionFilter, pincodeFilter]);
 
+  useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchOverview();
@@ -116,7 +118,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [period, agentType, statusFilter, stateFilter, districtFilter, divisionFilter, pincodeFilter]);
+  }, []);
 
   // Export handlers
   const exportCSV = () => {

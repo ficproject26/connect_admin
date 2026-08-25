@@ -253,7 +253,9 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
     fetchVendors();
     fetchDirectRequests();
     fetchAgentOnboardedVendors();
+  }, [search, category, stateFilter, statusFilter, isDirectRequest, page]);
 
+  useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible') {
         fetchVendors();
@@ -275,7 +277,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
       clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
-  }, [search, category, stateFilter, statusFilter, isDirectRequest, page]);
+  }, []);
 
   useEffect(() => {
     if (showDirectModal) {
