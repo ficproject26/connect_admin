@@ -451,7 +451,34 @@ router.post('/login', async (req, res) => {
         }
 
         // For agents: enforce suspension and status check
-        if (user.role === 'agent' || user.role === 'Agent') {
+        if (user.role === 'agent' || user.role === 'Agent' || (user.registrationId && user.registrationId.startsWith('AG-'))) {
+            try {
+                const db = mongoose.connection.db;
+                if (db) {
+                    const rawAgent = await db.collection('agents').findOne({
+                        $or: [
+                            { email: user.email.toLowerCase() },
+                            { phone: user.phone },
+                            { registrationId: user.registrationId }
+                        ]
+                    });
+                    if (rawAgent) {
+                        const rawStatus = (rawAgent.status || rawAgent.kycStatus || '').toLowerCase();
+                        if (rawStatus === 'approved' || rawAgent.isApproved) {
+                            if (user.status !== 'approved' || user.kycStatus !== 'approved' || !user.isActive || !user.isApproved) {
+                                user.status = 'approved';
+                                user.kycStatus = 'approved';
+                                user.isActive = true;
+                                user.isApproved = true;
+                                await user.save();
+                            }
+                        }
+                    }
+                }
+            } catch (aSyncErr) {
+                console.error("Error syncing agent status during login:", aSyncErr);
+            }
+
             const userStatus = (user.status || 'pending').toLowerCase();
             if (userStatus === 'suspended' || (!user.isActive && userStatus !== 'approved')) {
                 return res.status(403).json({

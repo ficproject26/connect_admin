@@ -1031,6 +1031,7 @@ const handleAgentStatusUpdate = async (req, res) => {
         if (agent) {
             if (status) {
                 agent.status = status;
+                agent.kycStatus = status;
                 if (status === 'approved') {
                     agent.isPaid = true;
                     agent.isApproved = true;
@@ -1103,6 +1104,7 @@ const handleAgentStatusUpdate = async (req, res) => {
                             kycStatus: targetStatus,
                             status: targetStatus,
                             isActive: targetActive,
+                            isApproved: (targetStatus === 'approved'),
                             updatedAt: new Date()
                         }
                     }
@@ -1119,8 +1121,9 @@ const handleAgentStatusUpdate = async (req, res) => {
                             role: 'agent',
                             level: rawAgent.role || rawAgent.level || 'pincode',
                             status: targetStatus,
+                            kycStatus: targetStatus,
                             isActive: targetActive,
-                            isApproved: targetStatus === 'approved'
+                            isApproved: (targetStatus === 'approved')
                         }
                     },
                     { upsert: true, new: true }
