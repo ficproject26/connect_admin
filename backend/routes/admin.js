@@ -2835,27 +2835,6 @@ const resolveVendorAndCustomer = async (items) => {
 
     return resolvedItems;
 };
-        const amount = doc.amount !== undefined ? doc.amount : (doc.finalAmount !== undefined ? doc.finalAmount : (doc.totalAmount !== undefined ? doc.totalAmount : 0));
-        const commission = doc.commission !== undefined ? doc.commission : Math.round(amount * 0.05);
-
-        // Product details resolution
-        const productDetails = doc.product_details || doc.productDetails || doc.productName || doc.product || doc.itemName || doc.item_name || (Array.isArray(doc.items) && doc.items[0] ? (doc.items[0].name || doc.items[0].title) : null) || doc.title || doc.serviceName || doc.service || '—';
-        const orderNumber = doc.order_number || doc.id || (doc._id ? 'ORD-' + String(doc._id).substring(18, 24).toUpperCase() : '—');
-
-        resolvedItems.push({
-            ...doc,
-            order_number: orderNumber,
-            id: orderNumber,
-            createdAt: doc.created_at || doc.createdAt || new Date(),
-            vendorId: vendor,
-            customerId: customer,
-            amount,
-            commission,
-            productDetails
-        });
-    }
-    return resolvedItems;
-};
 
 // GET all orders (supports admin, vendor filter, and public requests)
 router.get(['/orders', '/public/orders'], async (req, res) => {
