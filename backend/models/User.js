@@ -77,6 +77,7 @@ const UserSchema = new mongoose.Schema({
 }, { strict: false, strictPopulate: false });
 
 UserSchema.index({ role: 1, status: 1, level: 1 });
+UserSchema.index({ role: 1, isApproved: 1, isActive: 1 });
 UserSchema.index({ role: 1, branchId: 1, status: 1 });
 UserSchema.index({ registrationId: 1 });
 UserSchema.index({ email: 1, role: 1 });
@@ -130,10 +131,7 @@ UserSchema.pre(/^update/, function() {
     }
 });
 
-UserSchema.index({ role: 1, status: 1, level: 1 });
-UserSchema.index({ role: 1, isApproved: 1, isActive: 1 });
-UserSchema.index({ role: 1, branchId: 1, status: 1 });
-UserSchema.index({ assignedState: 1, assignedDistrict: 1 });
+
 
 UserSchema.pre(/^delete/, function() {
     const query = this.getQuery();
