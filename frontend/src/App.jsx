@@ -9239,11 +9239,24 @@ function App() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                const subcategory = e.target.subcategory?.value || '';
-                const subSubcategory = e.target.subSubcategory?.value || '';
-                const description = e.target.description?.value || '';
+                const name = modalData.name || modalData.mainCategory || 'Products';
+                const subcategory = e.target.subcategory?.value?.trim() || '';
+                const subSubcategory = e.target.subSubcategory?.value?.trim() || '';
+                const description = e.target.description?.value?.trim() || '';
                 const requiredVendorFields = e.target.requiredVendorFields?.value !== undefined ? e.target.requiredVendorFields.value : undefined;
-                await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { subcategory, subSubcategory, description, requiredVendorFields });
+
+                const hasValidId = modalData._id && String(modalData._id).length === 24 && String(modalData._id) !== 'undefined';
+
+                if (hasValidId) {
+                  const res = await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { name, subcategory, subSubcategory, description, requiredVendorFields });
+                  if (!res || !res.success) {
+                    const level = subSubcategory ? 'child' : 'sub';
+                    await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
+                  }
+                } else {
+                  const level = subSubcategory ? 'child' : 'sub';
+                  await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
+                }
                 setShowModal(null);
               }}
               className="space-y-4"

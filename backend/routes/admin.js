@@ -3828,6 +3828,10 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
 // PUT update category (Admin only — rejects system-locked categories)
 router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
     try {
+        if (!req.params.id || req.params.id === 'undefined' || !mongoose.Types.ObjectId.isValid(req.params.id)) {
+            return res.status(404).json({ error: 'Invalid or missing Category ID' });
+        }
+
         const cat = await Category.findById(req.params.id);
         if (!cat) return res.status(404).json({ error: 'Category not found' });
 
@@ -3836,13 +3840,18 @@ router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
             return res.status(403).json({ error: '🔒 System-locked Main Categories cannot be modified' });
         }
 
-        // Prevent changing level or isSystem
         const updates = { ...req.body };
-        delete updates.level;
         delete updates.isSystem;
         delete updates.isDeletable;
         delete updates.isEditable;
         delete updates._id;
+
+        // Auto-resolve level if subSubcategory or subcategory is updated
+        if (updates.subSubcategory && updates.subSubcategory.trim()) {
+            updates.level = 'child';
+        } else if (updates.subcategory && updates.subcategory.trim()) {
+            updates.level = 'sub';
+        }
 
         // Dynamic Vendor Fields: Allowed for Subcategories and Child categories (non-main categories)
         if (!cat.isSystem && updates.requiredVendorFields !== undefined) {
