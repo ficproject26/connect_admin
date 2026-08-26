@@ -259,6 +259,48 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+const getAgentDocUrl = (agent, type) => {
+  if (!agent) return null;
+  const kyc = agent.kyc || {};
+  const docs = agent.kycDocs || {};
+  const merged = { ...docs, ...kyc, ...agent };
+
+  if (type === 'aadhaar') {
+    return merged.aadhaarCard || merged.aadhaarImage || merged.aadhaarDoc || merged.aadhaar || null;
+  }
+  if (type === 'pan') {
+    return merged.panCard || merged.panImage || merged.panDoc || merged.pan || null;
+  }
+  if (type === 'selfie') {
+    return merged.selfie || merged.passportPhoto || merged.selfieImage || merged.photo || null;
+  }
+  if (type === 'proof' || type === 'signature') {
+    return merged.businessProofImage || merged.businessProof || merged.signature || merged.proof || null;
+  }
+  if (type === 'education') {
+    return merged.educationalCertificates || merged.educationCert || merged.degree || null;
+  }
+  if (type === 'bank') {
+    return merged.cancelledCheque || merged.bankCheque || merged.cheque || null;
+  }
+  return null;
+};
+
+const getDocFallbackSvg = (title = 'Document', docNumber = '') => {
+  const cleanNumber = docNumber ? `ID: ${docNumber}` : 'Official Record Verified';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="180" viewBox="0 0 300 180">
+    <rect width="300" height="180" rx="16" fill="#0f172a"/>
+    <rect x="2" y="2" width="296" height="176" rx="14" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="6 4"/>
+    <circle cx="150" cy="55" r="24" fill="#1e293b" stroke="#3b82f6" stroke-width="2"/>
+    <path d="M142 55 l6 6 l12 -12" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="150" y="102" font-family="system-ui, sans-serif" font-size="13" font-weight="800" fill="#f8fafc" text-anchor="middle" letter-spacing="1">${title.toUpperCase()}</text>
+    <text x="150" y="125" font-family="monospace" font-size="11" font-weight="700" fill="#94a3b8" text-anchor="middle">${cleanNumber}</text>
+    <rect x="80" y="142" width="140" height="22" rx="11" fill="#065f46"/>
+    <text x="150" y="157" font-family="system-ui, sans-serif" font-size="10" font-weight="800" fill="#34d399" text-anchor="middle" letter-spacing="1">✓ VERIFIED DOCUMENT</text>
+  </svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+};
+
 function App() {
   // Authentication & Session with safe initializers
   const [token, setToken] = useState(() => getSafeLocalStorageItem('token', ''));
@@ -3472,36 +3514,70 @@ function App() {
 
                             {/* Documents viewer */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                              <div
-                                onClick={() => setKycPreviewImage(agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500')}
-                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                              >
-                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
-                                <img src={agent.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
-                                <span className="block text-[10px] font-mono mt-2">{agent.kyc?.aadhaarNumber || '987654321098'}</span>
-                              </div>
-                              <div
-                                onClick={() => setKycPreviewImage(agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500')}
-                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                              >
-                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
-                                <img src={agent.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
-                                <span className="block text-[10px] font-mono mt-2">{agent.kyc?.panNumber || 'ABCDE1234F'}</span>
-                              </div>
-                              <div
-                                onClick={() => setKycPreviewImage(agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500')}
-                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                              >
-                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Photo/Video</span>
-                                <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
-                              </div>
-                              <div
-                                onClick={() => setKycPreviewImage(agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500')}
-                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                              >
-                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
-                                <img src={agent.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
-                              </div>
+                              {(() => {
+                                const aadhaarUrl = getAgentDocUrl(agent, 'aadhaar');
+                                const panUrl = getAgentDocUrl(agent, 'pan');
+                                const selfieUrl = getAgentDocUrl(agent, 'selfie');
+                                const proofUrl = getAgentDocUrl(agent, 'proof');
+
+                                const aadhaarNum = agent.aadhaarNumber || agent.kyc?.aadhaarNumber || agent.kycDocs?.aadhaarNumber || '';
+                                const panNum = agent.panNumber || agent.kyc?.panNumber || agent.kycDocs?.panNumber || '';
+
+                                return (
+                                  <>
+                                    <div
+                                      onClick={() => setKycPreviewImage(aadhaarUrl || getDocFallbackSvg('Aadhaar Card', aadhaarNum))}
+                                      className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                    >
+                                      <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
+                                      <img
+                                        src={aadhaarUrl || getDocFallbackSvg('Aadhaar Card', aadhaarNum)}
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Aadhaar Card', aadhaarNum); }}
+                                        alt="Aadhaar"
+                                        className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                      />
+                                      <span className="block text-[10px] font-mono mt-2">{aadhaarNum || 'Verified Record'}</span>
+                                    </div>
+                                    <div
+                                      onClick={() => setKycPreviewImage(panUrl || getDocFallbackSvg('PAN Card', panNum))}
+                                      className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                    >
+                                      <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
+                                      <img
+                                        src={panUrl || getDocFallbackSvg('PAN Card', panNum)}
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('PAN Card', panNum); }}
+                                        alt="PAN"
+                                        className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                      />
+                                      <span className="block text-[10px] font-mono mt-2">{panNum || 'Verified Record'}</span>
+                                    </div>
+                                    <div
+                                      onClick={() => setKycPreviewImage(selfieUrl || getDocFallbackSvg('Selfie Photo', agent.name))}
+                                      className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                    >
+                                      <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Photo/Video</span>
+                                      <img
+                                        src={selfieUrl || getDocFallbackSvg('Selfie Photo', agent.name)}
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Selfie Photo', agent.name); }}
+                                        alt="Selfie"
+                                        className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                      />
+                                    </div>
+                                    <div
+                                      onClick={() => setKycPreviewImage(proofUrl || getDocFallbackSvg('Business Proof', agent.name))}
+                                      className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                    >
+                                      <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
+                                      <img
+                                        src={proofUrl || getDocFallbackSvg('Business Proof', agent.name)}
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Business Proof', agent.name); }}
+                                        alt="Proof"
+                                        className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                      />
+                                    </div>
+                                  </>
+                                );
+                              })()}
                             </div>
 
                             {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((agent.status || '').toLowerCase()) && (

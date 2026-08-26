@@ -1142,10 +1142,24 @@ const handleAgentStatusUpdate = async (req, res) => {
 };
 
 router.put('/agents/:id/status', [auth, adminAuth], handleAgentStatusUpdate);
-router.put('/approve-agent/:id', [auth, adminAuth], handleAgentStatusUpdate);
-router.put('/agents/:id/approve', [auth, adminAuth], (req, res, next) => { req.body.status = 'approved'; handleAgentStatusUpdate(req, res); });
-router.put('/agents/:id/suspend', [auth, adminAuth], (req, res, next) => { req.body.status = 'suspended'; req.body.isActive = false; handleAgentStatusUpdate(req, res); });
-router.put('/agents/:id/reject', [auth, adminAuth], (req, res, next) => { req.body.status = 'rejected'; req.body.isActive = false; handleAgentStatusUpdate(req, res); });
+router.put('/approve-agent/:id', [auth, adminAuth], (req, res, next) => {
+    if (!req.body.status) req.body.status = 'approved';
+    handleAgentStatusUpdate(req, res);
+});
+router.put('/agents/:id/approve', [auth, adminAuth], (req, res, next) => {
+    req.body.status = 'approved';
+    handleAgentStatusUpdate(req, res);
+});
+router.put('/agents/:id/suspend', [auth, adminAuth], (req, res, next) => {
+    req.body.status = 'suspended';
+    req.body.isActive = false;
+    handleAgentStatusUpdate(req, res);
+});
+router.put('/agents/:id/reject', [auth, adminAuth], (req, res, next) => {
+    req.body.status = 'rejected';
+    req.body.isActive = false;
+    handleAgentStatusUpdate(req, res);
+});
 
 // ==========================================
 // 5. PINCODE MANAGEMENT
