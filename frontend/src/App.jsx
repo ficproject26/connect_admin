@@ -187,23 +187,21 @@ const isApprovedAgent = (agent) => {
   const status = (agent.status || '').toLowerCase().trim();
   const kycStatus = (agent.kycStatus || '').toLowerCase().trim();
 
+  // Pending onboarding requests belong in the Onboarding Requests modal, not active directory
   if (
-    ['rejected', 'suspended', 'deactivated', 'blocked'].includes(status) ||
-    ['rejected', 'suspended', 'deactivated', 'blocked'].includes(kycStatus)
+    ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(status) ||
+    ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(kycStatus)
   ) {
     return false;
   }
 
-  if (
-    ['approved', 'active'].includes(status) ||
-    ['approved', 'active'].includes(kycStatus) ||
-    agent.isActive === true ||
-    agent.isApproved === true
-  ) {
-    return true;
+  // Explicitly rejected agents belong in the Rejected Agents tab
+  if (status === 'rejected' || kycStatus === 'rejected') {
+    return false;
   }
 
-  return false;
+  // All onboarded agents (approved, active, suspended, deactivated, blocked) render in Directory
+  return true;
 };
 
 // --- Error Boundary to prevent blank screens ---
