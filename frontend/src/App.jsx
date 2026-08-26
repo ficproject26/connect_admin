@@ -8372,7 +8372,7 @@ function App() {
                 const subcategory = categoryModalTier === 'sub' ? e.target.subcategory.value : (addSecondCategory || e.target.subcategory?.value || '');
                 const subSubcategory = categoryModalTier === 'child' ? (e.target.subSubcategory?.value || '') : '';
                 const description = e.target.description.value;
-                const requiredVendorFields = categoryModalTier === 'sub' ? (e.target.requiredVendorFields?.value || '') : '';
+                const requiredVendorFields = e.target.requiredVendorFields?.value || '';
                 await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level: categoryModalTier, requiredVendorFields });
                 setShowModal(null);
               }}
@@ -8390,49 +8390,49 @@ function App() {
               </div>
 
               {categoryModalTier === 'sub' ? (
-                <>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
-                    <input
-                      name="subcategory"
-                      placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
-                      required
-                      type="text"
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                    />
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
+                  <input
+                    name="subcategory"
+                    placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
+                    required
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Name)</label>
+                      <input
+                        name="subcategory"
+                        value={addSecondCategory}
+                        readOnly
+                        disabled
+                        className="w-full bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed font-semibold"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Child Name)</label>
+                      <input
+                        name="subSubcategory"
+                        placeholder="Enter child category (e.g. Laptop)"
+                        required
+                        type="text"
+                        className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Required Vendor Fields</label>
                     <input
                       name="requiredVendorFields"
-                      placeholder="e.g. Size, Color, Brand"
+                      placeholder="e.g. RAM, Display Size, Processor, Storage"
                       type="text"
                       className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
                     />
-                    <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields (e.g. Size, Color, Brand).</p>
-                  </div>
-                </>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Name)</label>
-                    <input
-                      name="subcategory"
-                      value={addSecondCategory}
-                      readOnly
-                      disabled
-                      className="w-full bg-slate-100 dark:bg-slate-800 border dark:border-slate-700 rounded-xl px-3.5 py-2 text-sm text-slate-500 dark:text-slate-400 cursor-not-allowed font-semibold"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Child Name)</label>
-                    <input
-                      name="subSubcategory"
-                      placeholder="Enter child category (e.g. Apple)"
-                      required
-                      type="text"
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields for this category (e.g. RAM, Display Size, Processor, Storage).</p>
                   </div>
                 </div>
               )}
@@ -9242,8 +9242,7 @@ function App() {
                 const subcategory = e.target.subcategory?.value || '';
                 const subSubcategory = e.target.subSubcategory?.value || '';
                 const description = e.target.description?.value || '';
-                const isSubCatModal = modalData.level === 'sub' || (modalData.subcategory && !modalData.subSubcategory);
-                const requiredVendorFields = isSubCatModal ? (e.target.requiredVendorFields?.value || '') : undefined;
+                const requiredVendorFields = e.target.requiredVendorFields?.value !== undefined ? e.target.requiredVendorFields.value : undefined;
                 await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { subcategory, subSubcategory, description, requiredVendorFields });
                 setShowModal(null);
               }}
@@ -9279,17 +9278,17 @@ function App() {
                 </div>
               </div>
 
-              {(modalData.level === 'sub' || (modalData.subcategory && !modalData.subSubcategory)) && (
+              {(modalData.level === 'sub' || modalData.level === 'child' || modalData.subcategory || modalData.subSubcategory) && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Required Vendor Fields</label>
                   <input
                     name="requiredVendorFields"
                     defaultValue={Array.isArray(modalData.requiredVendorFields) ? modalData.requiredVendorFields.join(', ') : (modalData.requiredVendorFields || '')}
-                    placeholder="e.g. Size, Color, Brand"
+                    placeholder="e.g. RAM, Display Size, Processor, Storage"
                     type="text"
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields (e.g. Size, Color, Brand).</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields for this category (e.g. RAM, Display Size, Processor, Storage).</p>
                 </div>
               )}
 

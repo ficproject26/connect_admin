@@ -3627,7 +3627,7 @@ router.get('/categories', async (req, res) => {
     }
 });
 
-// GET required vendor fields for a subcategory by subcategory name or subcategoryId
+// GET required vendor fields for a subcategory or child category by name or ID
 router.get('/categories/subcategories/fields', async (req, res) => {
     try {
         const { name, subcategory, subcategoryId } = req.query;
@@ -3635,26 +3635,27 @@ router.get('/categories/subcategories/fields', async (req, res) => {
         if (subcategoryId) {
             query._id = subcategoryId;
         } else if (subcategory || name) {
-            const subName = (subcategory || name).trim();
+            const catName = (subcategory || name).trim();
+            const escName = catName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             query = {
-                level: 'sub',
                 $or: [
-                    { name: new RegExp(`^${subName}$`, 'i') },
-                    { subcategory: new RegExp(`^${subName}$`, 'i') }
+                    { subSubcategory: new RegExp(`^${escName}$`, 'i') },
+                    { subcategory: new RegExp(`^${escName}$`, 'i') },
+                    { name: new RegExp(`^${escName}$`, 'i') }
                 ]
             };
         } else {
             return res.json({ success: true, requiredVendorFields: [] });
         }
 
-        const subDoc = await Category.findOne(query).select('name subcategory requiredVendorFields').lean();
+        const catDoc = await Category.findOne(query).sort({ level: -1 }).select('name subcategory subSubcategory requiredVendorFields').lean();
         return res.json({
             success: true,
-            subcategory: subDoc?.subcategory || subDoc?.name || subcategory || name || '',
-            requiredVendorFields: subDoc?.requiredVendorFields || []
+            category: catDoc?.subSubcategory || catDoc?.subcategory || catDoc?.name || subcategory || name || '',
+            requiredVendorFields: catDoc?.requiredVendorFields || []
         });
     } catch (err) {
-        console.error('Error fetching subcategory required vendor fields:', err);
+        console.error('Error fetching category required vendor fields:', err);
         return res.status(500).json({ success: false, error: err.message });
     }
 });
@@ -3777,9 +3778,9 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
         const maxOrder = await Category.findOne({ parentId: parentObjId }).sort({ sortOrder: -1 }).select('sortOrder');
         const nextOrder = (maxOrder?.sortOrder ?? -1) + 1;
 
-        // Parse requiredVendorFields EXCLUSIVELY for Subcategories (level === 'sub')
+        // Parse requiredVendorFields for Subcategories (level === 'sub') and Child categories (level === 'child')
         let parsedRequiredVendorFields = [];
-        if ((level === 'sub' || (!subSubcategory && subcategory)) && req.body.requiredVendorFields) {
+        if (req.body.requiredVendorFields) {
             if (typeof req.body.requiredVendorFields === 'string') {
                 parsedRequiredVendorFields = req.body.requiredVendorFields
                     .split(',')
@@ -3843,9 +3844,8 @@ router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
         delete updates.isEditable;
         delete updates._id;
 
-        // Dynamic Vendor Fields: ONLY allowed for Subcategories
-        const isSubCategory = cat.level === 'sub' || (cat.subcategory && !cat.subSubcategory);
-        if (isSubCategory && updates.requiredVendorFields !== undefined) {
+        // Dynamic Vendor Fields: Allowed for Subcategories and Child categories (non-main categories)
+        if (!cat.isSystem && updates.requiredVendorFields !== undefined) {
             if (typeof updates.requiredVendorFields === 'string') {
                 updates.requiredVendorFields = updates.requiredVendorFields
                     .split(',')
@@ -3856,8 +3856,7 @@ router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
                     .map(s => String(s).trim())
                     .filter(Boolean);
             }
-        } else {
-            // Strictly exclude requiredVendorFields for Main or Child categories
+        } else if (cat.isSystem) {
             delete updates.requiredVendorFields;
         }
 
