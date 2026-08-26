@@ -2252,10 +2252,10 @@ function App() {
                   };
 
                   const extractAgentTerritory = (ag) => {
-                    let state = (ag.assignedState || ag.state || '').trim();
-                    let district = (ag.assignedDistrict || ag.district || '').trim();
-                    let division = (ag.assignedDivision || ag.division || '').trim();
-                    let pincode = (ag.pincode || ag.assignedPincode?.code || (typeof ag.assignedPincode === 'string' ? ag.assignedPincode : '') || '').trim();
+                    let state = (ag.assignedState || ag.state || ag.territory?.state || '').trim();
+                    let district = (ag.assignedDistrict || ag.district || ag.territory?.district || '').trim();
+                    let division = (ag.assignedDivision || ag.division || ag.territory?.division || '').trim();
+                    let pincode = (ag.pincode || ag.assignedPincode?.code || (typeof ag.assignedPincode === 'string' ? ag.assignedPincode : '') || ag.territory?.pincode || '').trim();
 
                     if (ag.assignedArea && typeof ag.assignedArea === 'string') {
                       const parts = ag.assignedArea.split('/').map(s => s.trim()).filter(Boolean);
@@ -2266,9 +2266,9 @@ function App() {
                     }
 
                     if (ag.territory && typeof ag.territory === 'object') {
-                      if (!state && ag.territory.state) state = ag.territory.state.trim();
-                      if (!district && ag.territory.district) district = ag.territory.district.trim();
-                      if (!division && ag.territory.division) division = ag.territory.division.trim();
+                      if (!state && ag.territory.state) state = String(ag.territory.state).trim();
+                      if (!district && ag.territory.district) district = String(ag.territory.district).trim();
+                      if (!division && ag.territory.division) division = String(ag.territory.division).trim();
                       if (!pincode && ag.territory.pincode) pincode = String(ag.territory.pincode).trim();
                     }
 

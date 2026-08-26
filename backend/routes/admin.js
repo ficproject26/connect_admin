@@ -606,8 +606,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 {
                     $or: [
                         { role: { $regex: /agent/i } },
-                        { role: { $in: ['agent', 'Agent', 'state_agent', 'district_agent', 'division_agent', 'pincode_agent', 'State Agent', 'District Agent', 'Divisional Agent', 'Pincode Agent', 'state', 'district', 'division', 'pincode'] } },
-                        { level: { $in: ['state', 'district', 'division', 'pincode', 'State', 'District', 'Division', 'Pincode'] } },
+                        { role: { $in: ['agent', 'Agent', 'state_agent', 'district_agent', 'division_agent', 'divisional_agent', 'pincode_agent', 'State Agent', 'District Agent', 'Divisional Agent', 'Pincode Agent', 'state', 'district', 'division', 'divisional', 'pincode'] } },
+                        { level: { $in: ['state', 'district', 'division', 'divisional', 'pincode', 'State', 'District', 'Division', 'Divisional', 'Pincode'] } },
+                        { agentLevel: { $in: ['state', 'district', 'division', 'divisional', 'pincode', 'State', 'District', 'Division', 'Divisional', 'Pincode'] } },
                         { joiningType: 'agent' },
                         { registrationSource: 'agent' },
                         { registrationId: { $regex: /^AG-/i } }
@@ -728,9 +729,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         const agentMap = new Map();
 
         userAgents.forEach(agent => {
-            const levelVal = (agent.level || agent.role || 'pincode').toLowerCase();
+            const levelVal = (agent.level || agent.agentLevel || agent.role || 'pincode').toLowerCase();
             const cleanLevel = levelVal.includes('state') ? 'state' : levelVal.includes('district') ? 'district' : (levelVal.includes('divis') || levelVal.includes('division')) ? 'division' : 'pincode';
-            const key = (agent.registrationId || agent.email || (agent._id ? agent._id.toString() : '')).toLowerCase().trim();
+            const key = (agent._id ? agent._id.toString() : (agent.registrationId || agent.email || '')).toLowerCase().trim();
             if (key) {
                 const kycObj = agent.kyc || agent.kycDocs || {};
                 const kycDocsObj = agent.kycDocs || agent.kyc || {};
