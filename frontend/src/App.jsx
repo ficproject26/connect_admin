@@ -862,9 +862,31 @@ function App() {
       list = data.data;
     }
     if (Array.isArray(list)) {
-      setAgents(list);
-      apiCacheRef.current['agents'] = list;
-      try { localStorage.setItem('cached_agents', JSON.stringify(list)); } catch (e) {}
+      const seen = new Set();
+      const uniqueList = list.filter(ag => {
+        if (!ag) return false;
+        const regId = (ag.registrationId || ag.id || '').toString().toLowerCase().trim();
+        const email = (ag.email || '').toLowerCase().trim();
+        const phone = (ag.phone || ag.mobile || '').toString().replace(/\D/g, '');
+        const idStr = (ag._id || '').toString().toLowerCase().trim();
+
+        let primaryKey = null;
+        if (regId && regId !== 'undefined' && regId !== 'null') primaryKey = `reg_${regId}`;
+        else if (email && email !== 'undefined' && email !== 'null') primaryKey = `email_${email}`;
+        else if (phone && phone.length >= 7) primaryKey = `phone_${phone}`;
+        else if (idStr) primaryKey = `id_${idStr}`;
+
+        if (!primaryKey || seen.has(primaryKey)) return false;
+        if (regId) seen.add(`reg_${regId}`);
+        if (email) seen.add(`email_${email}`);
+        if (phone && phone.length >= 7) seen.add(`phone_${phone}`);
+        if (idStr) seen.add(`id_${idStr}`);
+        return true;
+      });
+
+      setAgents(uniqueList);
+      apiCacheRef.current['agents'] = uniqueList;
+      try { localStorage.setItem('cached_agents', JSON.stringify(uniqueList)); } catch (e) {}
     }
   }, []);
 

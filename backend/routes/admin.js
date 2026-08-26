@@ -752,7 +752,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         userAgents.forEach(agent => {
             const levelVal = (agent.level || agent.agentLevel || agent.role || 'pincode').toLowerCase();
             const cleanLevel = levelVal.includes('state') ? 'state' : levelVal.includes('district') ? 'district' : (levelVal.includes('divis') || levelVal.includes('division')) ? 'division' : 'pincode';
-            const key = (agent._id ? agent._id.toString() : (agent.registrationId || agent.email || '')).toLowerCase().trim();
+            const key = (agent.registrationId || agent.email || (agent._id ? agent._id.toString() : '')).toLowerCase().trim();
             if (key) {
                 const kycObj = agent.kyc || agent.kycDocs || {};
                 const kycDocsObj = agent.kycDocs || agent.kyc || {};
