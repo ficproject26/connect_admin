@@ -2257,7 +2257,9 @@ function App() {
                 </div>
 
                 {(() => {
+                  const seenKeysInFilter = new Set();
                   const filteredAgents = agents.filter(a => {
+                    if (!a) return false;
                     const query = debouncedSearchTerm.toLowerCase();
                     const matchesSearch = !query ||
                       (a.name || '').toLowerCase().includes(query) ||
@@ -2270,19 +2272,38 @@ function App() {
                     const lvl = (a.level || 'pincode').toLowerCase();
 
                     if (agentLevelFilter === 'rejected') {
-                      return matchesSearch && aStatus === 'rejected';
+                      if (!(matchesSearch && aStatus === 'rejected')) return false;
+                    } else {
+                      if (!isApprovedAgent(a)) return false;
+
+                      let matchesLevel = true;
+                      if (agentLevelFilter === 'state') matchesLevel = lvl === 'state';
+                      else if (agentLevelFilter === 'district') matchesLevel = lvl === 'district';
+                      else if (agentLevelFilter === 'division') matchesLevel = lvl === 'division' || lvl === 'divisional';
+                      else if (agentLevelFilter === 'pincode') matchesLevel = lvl === 'pincode';
+
+                      if (!(matchesSearch && matchesLevel)) return false;
                     }
 
-                    // Active directory level tabs MUST ONLY display approved agents
-                    if (!isApprovedAgent(a)) return false;
+                    // Strict Deduplication by registrationId, email, phone, or _id
+                    const regId = (a.registrationId || a.id || '').toString().toLowerCase().trim();
+                    const email = (a.email || '').toLowerCase().trim();
+                    const phone = (a.phone || a.mobile || '').toString().replace(/\D/g, '');
+                    const idStr = (a._id || '').toString().toLowerCase().trim();
 
-                    let matchesLevel = true;
-                    if (agentLevelFilter === 'state') matchesLevel = lvl === 'state';
-                    else if (agentLevelFilter === 'district') matchesLevel = lvl === 'district';
-                    else if (agentLevelFilter === 'division') matchesLevel = lvl === 'division' || lvl === 'divisional';
-                    else if (agentLevelFilter === 'pincode') matchesLevel = lvl === 'pincode';
+                    let primaryKey = null;
+                    if (regId && regId !== 'undefined' && regId !== 'null') primaryKey = `reg_${regId}`;
+                    else if (email && email !== 'undefined' && email !== 'null') primaryKey = `email_${email}`;
+                    else if (phone && phone.length >= 7) primaryKey = `phone_${phone}`;
+                    else if (idStr) primaryKey = `id_${idStr}`;
 
-                    return matchesSearch && matchesLevel;
+                    if (!primaryKey || seenKeysInFilter.has(primaryKey)) return false;
+                    if (regId) seenKeysInFilter.add(`reg_${regId}`);
+                    if (email) seenKeysInFilter.add(`email_${email}`);
+                    if (phone && phone.length >= 7) seenKeysInFilter.add(`phone_${phone}`);
+                    if (idStr) seenKeysInFilter.add(`id_${idStr}`);
+
+                    return true;
                   });
 
                   if (filteredAgents.length === 0) {
