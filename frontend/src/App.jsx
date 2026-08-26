@@ -1057,6 +1057,9 @@ function App() {
         return { success: false, data };
       }
       fetchData();
+      if (endpoint.toLowerCase().includes('categor')) {
+        safeFetch(`${API_BASE}/admin/categories`, setCategories);
+      }
       return { success: true, data };
     } catch (err) {
       console.error("API action failed:", err);
@@ -8444,7 +8447,11 @@ function App() {
                 const subSubcategory = categoryModalTier === 'child' ? (e.target.subSubcategory?.value || '') : '';
                 const description = e.target.description.value;
                 const requiredVendorFields = e.target.requiredVendorFields?.value || '';
-                await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level: categoryModalTier, requiredVendorFields });
+                const res = await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level: categoryModalTier, requiredVendorFields });
+                await safeFetch(`${API_BASE}/admin/categories`, setCategories);
+                if (res && res.success) {
+                  addToast(`New ${categoryModalTier === 'child' ? 'child' : 'sub'} category added successfully!`, 'success');
+                }
                 setShowModal(null);
               }}
               className="space-y-4"
