@@ -3664,35 +3664,62 @@ router.get('/categories', async (req, res) => {
 });
 
 // GET required vendor fields for a subcategory or child category by name or ID
-router.get('/categories/subcategories/fields', async (req, res) => {
+router.get([
+    '/categories/subcategories/fields',
+    '/public/categories/subcategories/fields',
+    '/admin/categories/subcategories/fields'
+], async (req, res) => {
     try {
-        const { name, subcategory, subcategoryId } = req.query;
+        const { name, subcategory, subSubcategory, childCategory, subcategoryId } = req.query;
         let query = {};
         if (subcategoryId) {
             query._id = subcategoryId;
-        } else if (subcategory || name) {
-            const catName = (subcategory || name).trim();
-            const escName = catName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            query = {
-                $or: [
-                    { subSubcategory: new RegExp(`^${escName}$`, 'i') },
-                    { subcategory: new RegExp(`^${escName}$`, 'i') },
-                    { name: new RegExp(`^${escName}$`, 'i') }
-                ]
-            };
         } else {
-            return res.json({ success: true, requiredVendorFields: [] });
+            const childName = (subSubcategory || childCategory || '').trim();
+            const subName = (subcategory || '').trim();
+            const mainName = (name || '').trim();
+
+            if (!childName && !subName && !mainName) {
+                return res.json({ success: true, requiredVendorFields: [] });
+            }
+
+            const queryOr = [];
+            if (childName) {
+                const escChild = childName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                queryOr.push({ subSubcategory: new RegExp(`^${escChild}$`, 'i') });
+                queryOr.push({ name: new RegExp(`^${escChild}$`, 'i'), level: 'child' });
+            }
+            if (subName) {
+                const escSub = subName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                queryOr.push({ subcategory: new RegExp(`^${escSub}$`, 'i') });
+                queryOr.push({ name: new RegExp(`^${escSub}$`, 'i'), level: 'sub' });
+            }
+            if (mainName) {
+                const escMain = mainName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                queryOr.push({ name: new RegExp(`^${escMain}$`, 'i') });
+            }
+
+            query = { $or: queryOr };
         }
 
-        const catDoc = await Category.findOne(query).sort({ level: -1 }).select('name subcategory subSubcategory requiredVendorFields').lean();
+        const catDoc = await Category.findOne(query)
+            .sort({ level: -1, requiredVendorFields: -1 })
+            .select('name subcategory subSubcategory requiredVendorFields')
+            .lean();
+
+        const rawFields = catDoc?.requiredVendorFields || [];
+        const requiredVendorFields = Array.isArray(rawFields)
+            ? rawFields.map(f => String(f).trim()).filter(Boolean)
+            : (typeof rawFields === 'string' ? rawFields.split(',').map(s => s.trim()).filter(Boolean) : []);
+
         return res.json({
             success: true,
-            category: catDoc?.subSubcategory || catDoc?.subcategory || catDoc?.name || subcategory || name || '',
-            requiredVendorFields: catDoc?.requiredVendorFields || []
+            category: catDoc?.subSubcategory || catDoc?.subcategory || catDoc?.name || '',
+            requiredVendorFields
         });
     } catch (err) {
         console.error('Error fetching category required vendor fields:', err);
-        return res.status(500).json({ success: false, error: err.message });
+        return res.status(500).json({ success: false, error: err.message, requiredVendorFields: [] });
     }
 });
 
