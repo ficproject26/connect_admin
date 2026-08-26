@@ -1,29 +1,47 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
-    try {
-        const dbURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect_App:Connect123@cluster0.k1s5dbl.mongodb.net/connect_db?appName=Cluster0';
-        await mongoose.connect(dbURI);
-        console.log('MongoDB Connected...');
+    const dbURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-app:Connect123@cluster0.fzj1k5l.mongodb.net/connect_db?retryWrites=true&w=majority&appName=Cluster0';
 
-        // Pre-register all models to prevent MissingSchemaError on populates
+    const options = {
+        serverSelectionTimeoutMS: 30000,
+        connectTimeoutMS: 30000,
+        family: 4
+    };
+
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
         try {
-            require('../models/User');
-            require('../models/Pincode');
-            require('../models/Branch');
-            require('../models/Vendor');
-            require('../models/AgentTarget');
-            require('../models/AgentActivity');
-            require('../models/Customer');
-            require('../models/Order');
-        } catch (mErr) {
-            console.error('Model registration warning:', mErr.message);
-        }
+            attempts++;
+            await mongoose.connect(dbURI, options);
+            console.log('MongoDB Connected successfully...');
 
-        await ensureIndexes();
-    } catch (err) {
-        console.error(err.message);
-        process.exit(1);
+            // Pre-register all models to prevent MissingSchemaError on populates
+            try {
+                require('../models/User');
+                require('../models/Pincode');
+                require('../models/Branch');
+                require('../models/Vendor');
+                require('../models/AgentTarget');
+                require('../models/AgentActivity');
+                require('../models/Customer');
+                require('../models/Order');
+            } catch (mErr) {
+                console.error('Model registration warning:', mErr.message);
+            }
+
+            await ensureIndexes();
+            return;
+        } catch (err) {
+            console.error(`[DB] Connection attempt ${attempts}/${maxAttempts} failed: ${err.message}`);
+            if (attempts >= maxAttempts) {
+                console.error('Fatal: MongoDB connection failed after maximum retries.');
+                process.exit(1);
+            }
+            await new Promise(res => setTimeout(res, 2000));
+        }
     }
 };
 
