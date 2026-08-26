@@ -783,11 +783,10 @@ function App() {
     return null;
   }, [token, handleLogout]);
 
-  // Fetch Dashboard Stats & Associated Data (SWR Caching & Revalidation)
+  // Fetch Dashboard Core Stats (Fast 0ms SWR Caching & Non-blocking Load)
   const fetchData = async (forceRefresh = false) => {
     if (!token) return;
     try {
-      // 1. Instantly populate from SWR Cache if available (unless forceRefresh is requested)
       if (forceRefresh) {
         delete apiCacheRef.current['stats'];
         delete apiCacheRef.current['agents'];
@@ -800,55 +799,18 @@ function App() {
         if (Array.isArray(apiCacheRef.current['agents'])) setAgents(apiCacheRef.current['agents']);
       }
 
-      const priorityTasks = [
-        () => safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
+      // Priority Core Dashboard Tasks
+      await Promise.allSettled([
+        safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
           apiCacheRef.current['stats'] = data;
           try { localStorage.setItem('cached_dashboard_stats', JSON.stringify(data)); } catch (e) {}
           setStats(data);
         }),
-        () => safeFetch(`${API_BASE}/admin/agents`, handleSetAgents),
-        () => safeFetch(`${API_BASE}/admin/vendors`, setVendors),
-        () => safeFetch(`${API_BASE}/admin/customers`, setCustomers),
-      ];
-
-      // Secondary Background Tasks (executed asynchronously without blocking screen)
-      const secondaryTasks = [
-        () => safeFetch(`${API_BASE}/admin/branches`, setBranches),
-        () => safeFetch(`${API_BASE}/admin/admins`, setAdmins),
-        () => safeFetch(`${API_BASE}/pincodes`, setPincodes),
-        () => safeFetch(`${API_BASE}/admin/wallet/withdrawals`, setWithdrawals),
-        () => safeFetch(`${API_BASE}/admin/commissions`, setCommissions),
-        () => safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans),
-        () => safeFetch(`${API_BASE}/admin/banners`, setBanners),
-        () => safeFetch(`${API_BASE}/admin/ads`, setAds),
-        () => safeFetch(`${API_BASE}/admin/reports?type=${reportType}`, setReports),
-        () => safeFetch(`${API_BASE}/admin/tie-ups`, setTieUps),
-        () => safeFetch(`${API_BASE}/admin/tasks`, setTasks),
-        () => safeFetch(`${API_BASE}/admin/orders`, setOrders),
-        () => safeFetch(`${API_BASE}/admin/bookings`, setBookings),
-        () => safeFetch(`${API_BASE}/admin/jobs`, setJobs),
-        () => safeFetch(`${API_BASE}/admin/card-holders`, setCardHolders),
-        () => safeFetch(`${API_BASE}/admin/payments`, setPayments),
-        () => safeFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners),
-        () => safeFetch(`${API_BASE}/admin/support-team`, setSupportTeam),
-        () => safeFetch(`${API_BASE}/admin/categories`, setCategories),
-        () => safeFetch(`${API_BASE}/admin/queries`, setQueries),
-        () => safeFetch(`${API_BASE}/admin/tickets`, setTickets),
-        () => safeFetch(`${API_BASE}/admin/announcements`, setAnnouncements),
-        () => safeFetch(`${API_BASE}/admin/exclusive-offers`, setExclusiveOffers),
-      ];
-
-      await Promise.allSettled(priorityTasks.map(fn => fn()));
+        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents),
+        safeFetch(`${API_BASE}/admin/vendors`, setVendors),
+        safeFetch(`${API_BASE}/admin/customers`, setCustomers),
+      ]);
       setLoading(false);
-
-      // Fire secondary tasks in small non-blocking background batches of 3 to keep network queues fast
-      (async () => {
-        const chunkSize = 3;
-        for (let i = 0; i < secondaryTasks.length; i += chunkSize) {
-          const batch = secondaryTasks.slice(i, i + chunkSize);
-          await Promise.allSettled(batch.map(fn => fn()));
-        }
-      })().catch(() => {});
     } catch (err) {
       console.error("API Server not reachable:", err);
       setLoading(false);
@@ -906,11 +868,11 @@ function App() {
     }
   }, []);
 
-  // Selective On-Demand Tab Data Loading
+  // Selective On-Demand Tab Data Loading (Lazily fetches ONLY when active tab changes)
   useEffect(() => {
     if (!token) return;
 
-    if (activeTab === 'agents' || activeTab === 'agent-directory' || agents.length === 0) {
+    if (activeTab === 'agents' || activeTab === 'agent-directory') {
       safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
     }
     if (activeTab === 'vendors' || activeTab === 'vendor-directory' || activeTab === 'vendor-directory-enterprise') {
@@ -918,6 +880,15 @@ function App() {
     }
     if (activeTab === 'customers' || activeTab === 'customer-directory') {
       safeFetch(`${API_BASE}/admin/customers`, setCustomers);
+    }
+    if (activeTab === 'branches') {
+      safeFetch(`${API_BASE}/admin/branches`, setBranches);
+    }
+    if (activeTab === 'admins') {
+      safeFetch(`${API_BASE}/admin/admins`, setAdmins);
+    }
+    if (activeTab === 'pincodes') {
+      safeFetch(`${API_BASE}/pincodes`, setPincodes);
     }
     if (activeTab === 'payroll' || activeTab === 'payroll-enterprise' || activeTab === 'payroll-management') {
       safeFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals);
@@ -937,7 +908,31 @@ function App() {
     if (activeTab === 'tickets' || activeTab === 'support-tickets') {
       safeFetch(`${API_BASE}/admin/tickets`, setTickets);
     }
-  }, [activeTab, token, agents.length]);
+    if (activeTab === 'banners') {
+      safeFetch(`${API_BASE}/admin/banners`, setBanners);
+    }
+    if (activeTab === 'reports') {
+      safeFetch(`${API_BASE}/admin/reports?type=${reportType}`, setReports);
+    }
+    if (activeTab === 'orders') {
+      safeFetch(`${API_BASE}/admin/orders`, setOrders);
+    }
+    if (activeTab === 'bookings') {
+      safeFetch(`${API_BASE}/admin/bookings`, setBookings);
+    }
+    if (activeTab === 'jobs') {
+      safeFetch(`${API_BASE}/admin/jobs`, setJobs);
+    }
+    if (activeTab === 'card-holders') {
+      safeFetch(`${API_BASE}/admin/card-holders`, setCardHolders);
+    }
+    if (activeTab === 'delivery-partners') {
+      safeFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners);
+    }
+    if (activeTab === 'support-team' || activeTab === 'support-team-enterprise') {
+      safeFetch(`${API_BASE}/admin/support-team`, setSupportTeam);
+    }
+  }, [activeTab, token]);
 
   // Selective revalidation when request modals open
   useEffect(() => {

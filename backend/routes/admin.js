@@ -3643,10 +3643,25 @@ const buildCategoryTree = async () => {
     return roots;
 };
 
-// GET all categories
+let categoryCache = null;
+let categoryCacheTime = 0;
+const CATEGORY_CACHE_TTL = 60000; // 60s TTL cache
+
+const invalidateCategoryCache = () => {
+    categoryCache = null;
+    categoryCacheTime = 0;
+};
+
+// GET all categories (Fast 0ms TTL cached)
 router.get('/categories', async (req, res) => {
     try {
+        const now = Date.now();
+        if (categoryCache && (now - categoryCacheTime < CATEGORY_CACHE_TTL)) {
+            return res.json(categoryCache);
+        }
         const categories = await Category.find().sort({ sortOrder: 1, name: 1 }).lean();
+        categoryCache = categories;
+        categoryCacheTime = now;
         res.json(categories);
     } catch (err) {
         console.error('Error fetching categories:', err);
@@ -3841,6 +3856,8 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
             sortOrder: nextOrder
         });
 
+        invalidateCategoryCache();
+
         // Emit real-time update
         const io = req.app.get('io');
         if (io) io.emit('categories:updated', { action: 'create', category: newCat });
@@ -3936,6 +3953,8 @@ router.put('/categories/:id/toggle', [auth, adminAuth], async (req, res) => {
         cat[field] = !cat[field];
         cat.updatedAt = new Date();
         await cat.save();
+
+        invalidateCategoryCache();
 
         // Emit real-time update
         const io = req.app.get('io');
