@@ -35,7 +35,7 @@ const adminAuth = async (req, res, next) => {
         if (mongoose.Types.ObjectId.isValid(userId)) {
             userId = new mongoose.Types.ObjectId(userId);
         }
-        const user = await User.findById(userId);
+        const user = await User.findById(userId).select('role adminRole level branchId status isActive email name').lean();
         if (!user || user.role !== 'admin') {
             return res.status(403).json({ msg: 'Access denied. Admins only.' });
         }
@@ -55,14 +55,20 @@ const getBranchFilter = (adminUser, defaultFilter = {}) => {
     return defaultFilter;
 };
 
-// HELPER: Filter active vendor items
-const filterActiveVendorItems = async (items) => {
-    if (!Array.isArray(items)) return [];
+let cachedSuspendedSet = null;
+let suspendedSetTime = 0;
+const SUSPENDED_TTL = 15000; // 15 seconds
+
+const getSuspendedVendorSet = async () => {
+    const now = Date.now();
+    if (cachedSuspendedSet && (now - suspendedSetTime < SUSPENDED_TTL)) {
+        return cachedSuspendedSet;
+    }
     try {
         const suspendedVendors = await User.find({
-            role: { $regex: /vendor/i },
+            role: { $in: ['vendor', 'Vendor', 'merchant', 'Merchant'] },
             $or: [
-                { status: { $in: ['suspended', 'inactive', 'rejected', 'Suspended', 'Inactive', 'Rejected'] } },
+                { status: { $in: ['suspended', 'inactive', 'rejected', 'Suspended', 'Inactive', 'Rejected', 'deactivated', 'Deactivated'] } },
                 { isActive: false }
             ]
         }).select('_id registrationId email phone businessName').lean();
@@ -71,9 +77,24 @@ const filterActiveVendorItems = async (items) => {
         suspendedVendors.forEach(v => {
             if (v._id) suspendedIds.add(v._id.toString());
             if (v.registrationId) suspendedIds.add(v.registrationId.toString());
-            if (v.email) suspendedIds.add(v.email.toLowerCase());
+            if (v.email) suspendedIds.add(v.email.toLowerCase().trim());
             if (v.phone) suspendedIds.add(v.phone.toString());
         });
+
+        cachedSuspendedSet = suspendedIds;
+        suspendedSetTime = now;
+        return suspendedIds;
+    } catch (err) {
+        console.error('Error fetching suspended vendor set:', err);
+        return cachedSuspendedSet || new Set();
+    }
+};
+
+// HELPER: Filter active vendor items
+const filterActiveVendorItems = async (items) => {
+    if (!Array.isArray(items)) return [];
+    try {
+        const suspendedIds = await getSuspendedVendorSet();
 
         return items.filter(item => {
             if (!item) return false;
@@ -2681,164 +2702,139 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
     }
 });
 
-// Helper to resolve Vendor and Customer information for dynamic / hybrid schemas
+// Helper to resolve Vendor and Customer information for dynamic / hybrid schemas (Batch Optimized)
 const resolveVendorAndCustomer = async (items) => {
-    const resolvedItems = [];
-    // Fetch a fallback vendor from database in case vendor is completely missing
+    if (!Array.isArray(items) || items.length === 0) return [];
+
     let fallbackVendorDoc = null;
     try {
-        fallbackVendorDoc = await Vendor.findOne();
+        fallbackVendorDoc = await Vendor.findOne().select('_id businessName email mobileNumber phone').lean();
     } catch (e) {}
 
-    for (const item of items) {
+    // Batch collect IDs & emails for single multi-item queries
+    const vendorIdsToFetch = new Set();
+    const customerIdsToFetch = new Set();
+    const customerEmailsToFetch = new Set();
+
+    items.forEach(item => {
         const doc = item.toObject ? item.toObject() : item;
-        
-        // 1. Resolve Vendor
+        const v = doc.vendorId;
+        if (v && typeof v === 'string' && mongoose.Types.ObjectId.isValid(v)) {
+            vendorIdsToFetch.add(v);
+        } else if (v && typeof v === 'object' && v._id) {
+            vendorIdsToFetch.add(v._id.toString());
+        }
+
+        const c = doc.customerId;
+        if (c && typeof c === 'string' && mongoose.Types.ObjectId.isValid(c)) {
+            customerIdsToFetch.add(c);
+        } else if (c && typeof c === 'object' && c._id) {
+            customerIdsToFetch.add(c._id.toString());
+        }
+
+        const custEmail = doc.customer_email || doc.email || doc.customer?.email;
+        if (custEmail) customerEmailsToFetch.add(custEmail.toLowerCase().trim());
+    });
+
+    const vendorObjIds = Array.from(vendorIdsToFetch).filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+    const customerObjIds = Array.from(customerIdsToFetch).filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+
+    // Execute 3 fast batch queries in parallel
+    const [fetchedVendorUsers, fetchedVendors, fetchedCustomers] = await Promise.all([
+        vendorObjIds.length > 0 ? User.find({ _id: { $in: vendorObjIds } }).select('_id name email mobileNumber phone businessName businesses').lean() : [],
+        vendorObjIds.length > 0 ? Vendor.find({ _id: { $in: vendorObjIds } }).select('_id name businessName email mobileNumber phone').lean() : [],
+        (customerObjIds.length > 0 || customerEmailsToFetch.size > 0)
+            ? Customer.find({
+                $or: [
+                    ...(customerObjIds.length > 0 ? [{ _id: { $in: customerObjIds } }] : []),
+                    ...(customerEmailsToFetch.size > 0 ? [{ email: { $in: Array.from(customerEmailsToFetch) } }] : [])
+                ]
+            }).select('_id name email phone mobile mobileNumber contactNumber').lean()
+            : []
+    ]);
+
+    const userVendorMap = new Map();
+    fetchedVendorUsers.forEach(u => userVendorMap.set(u._id.toString(), u));
+
+    const vendorDocMap = new Map();
+    fetchedVendors.forEach(v => vendorDocMap.set(v._id.toString(), v));
+
+    const customerMap = new Map();
+    fetchedCustomers.forEach(c => {
+        if (c._id) customerMap.set(c._id.toString(), c);
+        if (c.email) customerMap.set(c.email.toLowerCase().trim(), c);
+    });
+
+    const resolvedItems = items.map(item => {
+        const doc = item.toObject ? item.toObject() : item;
+
+        // Resolve Vendor
         let vendor = doc.vendorId;
         const explicitVendorName = doc.vendor_name || doc.vendorName || doc.businessName || doc.shop_name || doc.vendor;
 
         if (vendor && typeof vendor === 'object' && vendor.businessName) {
-            // Already an object with businessName
-        } else if (vendor) {
-            try {
-                let dbVendorUser = null;
-                if (mongoose.Types.ObjectId.isValid(vendor)) {
-                    dbVendorUser = await User.findOne({
-                        $or: [
-                            { _id: vendor },
-                            { 'businesses._id': vendor }
-                        ]
-                    });
-                } else if (typeof vendor === 'string') {
-                    if (vendor.match(/^[0-9a-fA-F]{24}$/)) {
-                        dbVendorUser = await User.findOne({
-                            $or: [
-                                { _id: new mongoose.Types.ObjectId(vendor) },
-                                { 'businesses._id': new mongoose.Types.ObjectId(vendor) }
-                            ]
-                        });
-                    }
-                    if (!dbVendorUser) {
-                        dbVendorUser = await User.findOne({
-                            $or: [
-                                { email: vendor },
-                                { mobileNumber: vendor },
-                                { businessName: vendor }
-                            ]
-                        });
-                    }
-                }
+            // Already resolved
+        } else {
+            const vKey = (vendor || '').toString();
+            const uObj = userVendorMap.get(vKey);
+            const vDoc = vendorDocMap.get(vKey);
 
-                if (dbVendorUser) {
-                    const matchedBiz = (dbVendorUser.businesses || []).find(b => b._id && b._id.toString() === vendor.toString());
-                    vendor = {
-                        _id: dbVendorUser._id,
-                        businessName: matchedBiz?.businessName || dbVendorUser.businessName || dbVendorUser.name || explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A'),
-                        name: dbVendorUser.name,
-                        email: dbVendorUser.email,
-                        mobileNumber: dbVendorUser.mobileNumber || 'N/A'
-                    };
-                } else {
-                    const dbVendor = await Vendor.findOne({
-                        $or: [
-                            { id: vendor },
-                            { _id: mongoose.Types.ObjectId.isValid(vendor) ? vendor : undefined }
-                        ].filter(Boolean)
-                    });
-                    if (dbVendor) {
-                        vendor = dbVendor.toObject();
-                    } else if (explicitVendorName) {
-                        vendor = {
-                            businessName: explicitVendorName,
-                            email: doc.vendorEmail || 'N/A',
-                            mobileNumber: doc.vendorPhone || 'N/A'
-                        };
-                    } else if (fallbackVendorDoc) {
-                        vendor = fallbackVendorDoc.toObject();
-                    } else {
-                        vendor = {
-                            businessName: 'N/A',
-                            email: 'N/A',
-                            mobileNumber: 'N/A'
-                        };
-                    }
-                }
-            } catch (e) {
-                console.error("Resolve vendor failed:", e);
+            if (uObj) {
+                const matchedBiz = (uObj.businesses || []).find(b => b._id && b._id.toString() === vKey);
+                vendor = {
+                    _id: uObj._id,
+                    businessName: matchedBiz?.businessName || uObj.businessName || uObj.name || explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A'),
+                    name: uObj.name,
+                    email: uObj.email,
+                    mobileNumber: uObj.mobileNumber || uObj.phone || 'N/A'
+                };
+            } else if (vDoc) {
+                vendor = vDoc;
+            } else {
                 vendor = {
                     businessName: explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A'),
-                    email: 'N/A',
-                    mobileNumber: 'N/A'
-                };
-            }
-        } else {
-            if (explicitVendorName) {
-                vendor = {
-                    businessName: explicitVendorName,
                     email: doc.vendorEmail || 'N/A',
                     mobileNumber: doc.vendorPhone || 'N/A'
                 };
-            } else if (fallbackVendorDoc) {
-                vendor = fallbackVendorDoc.toObject();
-            } else {
-                vendor = {
-                    businessName: 'N/A',
-                    email: 'N/A',
-                    mobileNumber: 'N/A'
-                };
             }
         }
 
-        // Ensure businessName is set
-        if (!vendor.businessName) {
-            vendor.businessName = explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A');
-        }
+        // Resolve Customer
+        let cKey = (doc.customerId || '').toString();
+        let custEmailKey = (doc.customer_email || doc.email || doc.customer?.email || '').toLowerCase().trim();
+        const customerObj = customerMap.get(cKey) || customerMap.get(custEmailKey);
 
-        // 2. Resolve Customer
-        let customerObj = null;
-        let customerIdRef = doc.customerId;
-        const custName = doc.memberName || doc.customer_name || doc.customer?.name || (typeof customerIdRef === 'string' && !mongoose.Types.ObjectId.isValid(customerIdRef) ? customerIdRef : null);
-        const custEmail = doc.customer_email || doc.email || doc.customer?.email;
+        const phoneVal = (customerObj ? (customerObj.phone || customerObj.mobile || customerObj.mobileNumber || customerObj.contactNumber) : null) || doc.customer_phone || doc.customerPhone || doc.phone || doc.mobile || '—';
+        const nameVal = (customerObj ? customerObj.name : null) || doc.memberName || doc.customer_name || doc.customer?.name || 'Customer';
+        const emailVal = (customerObj ? customerObj.email : null) || custEmailKey || '—';
 
-        try {
-            if (customerIdRef && mongoose.Types.ObjectId.isValid(customerIdRef)) {
-                customerObj = await Customer.findById(customerIdRef) || await User.findById(customerIdRef);
-            }
-            if (!customerObj && custName) {
-                const escapedName = custName.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                customerObj = await Customer.findOne({
-                    $or: [
-                        { name: custName },
-                        { name: new RegExp('^' + escapedName, 'i') },
-                        { name: new RegExp(escapedName, 'i') }
-                    ]
-                }) || await User.findOne({
-                    $or: [
-                        { name: custName },
-                        { name: new RegExp('^' + escapedName, 'i') },
-                        { name: new RegExp(escapedName, 'i') }
-                    ]
-                });
-            }
-            if (!customerObj && custEmail) {
-                customerObj = await Customer.findOne({ email: custEmail }) || await User.findOne({ email: custEmail });
-            }
-        } catch (err) {
-            console.error("Resolve customer error:", err);
-        }
-
-        const phoneVal = (customerObj ? (customerObj.phone || customerObj.mobile || customerObj.mobileNumber || customerObj.contactNumber || customerObj.phoneNumber) : null) || doc.customer_phone || doc.customerPhone || doc.phone || doc.mobile || doc.contactNumber || doc.address?.phone || doc.deliveryAddress?.phone || doc.customer?.phone || '—';
-        const nameVal = (customerObj ? customerObj.name : null) || custName || (typeof customerIdRef === 'object' ? customerIdRef.name : null) || 'Customer';
-        const emailVal = (customerObj ? customerObj.email : null) || custEmail || (typeof customerIdRef === 'object' ? customerIdRef.email : null) || '—';
-
-        let customer = {
-            ...(customerObj ? (customerObj.toObject ? customerObj.toObject() : customerObj) : (typeof customerIdRef === 'object' ? customerIdRef : {})),
+        const customer = {
+            ...(customerObj || {}),
             name: nameVal,
             phone: phoneVal,
             email: emailVal
         };
 
-        // Adjust amount and commission for dynamic orders
+        const amount = doc.amount !== undefined ? doc.amount : (doc.finalAmount !== undefined ? doc.finalAmount : (doc.totalAmount !== undefined ? doc.totalAmount : 0));
+        const commission = doc.commission !== undefined ? doc.commission : Math.round(amount * 0.05);
+        const productDetails = doc.product_details || doc.productDetails || doc.productName || doc.product || doc.itemName || (Array.isArray(doc.items) && doc.items[0] ? (doc.items[0].name || doc.items[0].title) : null) || doc.title || '—';
+        const orderNumber = doc.order_number || doc.id || (doc._id ? 'ORD-' + String(doc._id).substring(18, 24).toUpperCase() : '—');
+
+        return {
+            ...doc,
+            order_number: orderNumber,
+            id: orderNumber,
+            createdAt: doc.created_at || doc.createdAt || new Date(),
+            vendorId: vendor,
+            customerId: customer,
+            amount,
+            commission,
+            productDetails
+        };
+    });
+
+    return resolvedItems;
+};
         const amount = doc.amount !== undefined ? doc.amount : (doc.finalAmount !== undefined ? doc.finalAmount : (doc.totalAmount !== undefined ? doc.totalAmount : 0));
         const commission = doc.commission !== undefined ? doc.commission : Math.round(amount * 0.05);
 
@@ -2933,7 +2929,21 @@ router.post(['/orders', '/public/orders'], async (req, res) => {
     }
 });
 
+let activeProductsCache = null;
+let activeProductsCacheTime = 0;
+const PRODUCTS_CACHE_TTL = 10000; // 10s TTL
+
+const invalidateVendorProductsCache = () => {
+    activeProductsCache = null;
+    activeProductsCacheTime = 0;
+};
+
 const fetchActiveVendorProducts = async (reqProductId = null) => {
+    const now = Date.now();
+    if (!reqProductId && activeProductsCache && (now - activeProductsCacheTime < PRODUCTS_CACHE_TTL)) {
+        return activeProductsCache;
+    }
+
     // 1. Fetch explicitly suspended or rejected vendors
     const suspendedUsers = await User.find({
         $and: [
@@ -3067,6 +3077,11 @@ const fetchActiveVendorProducts = async (reqProductId = null) => {
 
         return true;
     });
+
+    if (!reqProductId) {
+        activeProductsCache = activeProducts;
+        activeProductsCacheTime = Date.now();
+    }
 
     return activeProducts;
 };
