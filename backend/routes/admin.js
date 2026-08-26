@@ -2003,12 +2003,24 @@ router.get('/banners', [auth, adminAuth], async (req, res) => {
 
 router.post('/banners', [auth, adminAuth], async (req, res) => {
     try {
-        const banner = new Banner(req.body);
+        const title = (req.body.title || '').trim() || 'Special Promotion';
+        const bannerData = {
+            ...req.body,
+            title,
+            isActive: true,
+            startDate: req.body.startDate || new Date(),
+            endDate: req.body.endDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+        };
+        const banner = new Banner(bannerData);
         await banner.save();
+
+        const io = req.app.get('io');
+        if (io) io.emit('banners:updated', { action: 'create', banner });
+
         res.json(banner);
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
+        console.error('Error creating banner:', err);
+        res.status(500).json({ error: err.message || 'Server error creating banner' });
     }
 });
 
