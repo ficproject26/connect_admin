@@ -2420,7 +2420,7 @@ function App() {
                     const hierarchyMap = {};
 
                     filteredAgents.forEach((ag) => {
-                      const lvl = (ag.level || 'pincode').toLowerCase();
+                      const lvl = getAgentLevel(ag);
                       const terr = extractAgentTerritory(ag);
                       const stateName = terr.state;
                       const districtName = terr.district;
@@ -2446,7 +2446,7 @@ function App() {
 
                           if (['division', 'divisional'].includes(lvl)) {
                             hierarchyMap[stateName].districts[districtName].divisions[divisionName].divisionAgents.push(ag);
-                          } else if (lvl === 'pincode') {
+                          } else {
                             hierarchyMap[stateName].districts[districtName].divisions[divisionName].pincodeAgents.push(ag);
                           }
                         }
@@ -2496,7 +2496,7 @@ function App() {
                         <div className="p-6 space-y-6 bg-slate-50/40 dark:bg-slate-950/20">
                           {stateEntries.map((stObj) => {
                             const stKey = stObj.stateName;
-                            const isStExpanded = !!expandedAgents[stKey];
+                            const isStExpanded = expandedAgents[stKey] !== false; // Expanded by default so all agents are visible
                             const districtList = Object.values(stObj.districts);
                             const totalDistrictAgents = districtList.reduce((sum, d) => {
                               const dAgents = d.districtAgents.length;
@@ -2582,7 +2582,7 @@ function App() {
                                   <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-amber-400 dark:border-amber-600/70 space-y-3 pt-2">
                                     {districtList.map((distObj) => {
                                       const distKey = distObj.districtName;
-                                      const isDistExpanded = !!expandedAgents[distKey];
+                                      const isDistExpanded = expandedAgents[distKey] !== false; // Expanded by default
                                       const divList = Object.values(distObj.divisions);
 
                                       return (
@@ -2665,7 +2665,7 @@ function App() {
                                             <div className="ml-2 sm:ml-5 pl-3 sm:pl-4 border-l-2 border-purple-400 dark:border-purple-600/70 space-y-3 pt-2">
                                               {divList.map((divObj) => {
                                                 const divKey = divObj.divisionName;
-                                                const isDivExpanded = !!expandedAgents[divKey];
+                                                const isDivExpanded = expandedAgents[divKey] !== false; // Expanded by default
                                                 const pinAgents = divObj.pincodeAgents;
 
                                                 return (
