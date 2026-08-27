@@ -5971,6 +5971,7 @@ function App() {
                         _id: c._id,
                         name: childName,
                         description: c.description || `${childName} category`,
+                        requiredVendorFields: c.requiredVendorFields || [],
                         isActive: c.isActive !== undefined ? c.isActive : true
                       };
                     } else {
@@ -5978,6 +5979,7 @@ function App() {
                         _id: c._id,
                         name: childName,
                         description: c.description || `${childName} category`,
+                        requiredVendorFields: c.requiredVendorFields || [],
                         isActive: c.isActive !== undefined ? c.isActive : true
                       });
                     }
@@ -9390,6 +9392,8 @@ function App() {
                   const level = subSubcategory ? 'child' : 'sub';
                   await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
                 }
+                await safeFetch(`${API_BASE}/admin/categories`, setCategories);
+                addToast('Category changes saved successfully!', 'success');
                 setShowModal(null);
               }}
               className="space-y-4"

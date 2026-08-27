@@ -3944,6 +3944,8 @@ router.put('/categories/:id', [auth, adminAuth], async (req, res) => {
 
         const updated = await Category.findByIdAndUpdate(req.params.id, updates, { new: true });
 
+        invalidateCategoryCache();
+
         // Emit real-time update
         const io = req.app.get('io');
         if (io) io.emit('categories:updated', { action: 'update', category: updated });
