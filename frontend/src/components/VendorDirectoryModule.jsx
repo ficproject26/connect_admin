@@ -234,7 +234,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   // Existing Vendor Business Requests Modal
   const [showBusinessRequestsModal, setShowBusinessRequestsModal] = useState(false);
   const [businessRequestsSearch, setBusinessRequestsSearch] = useState('');
-  const [businessRequestsFilter, setBusinessRequestsFilter] = useState('all'); // 'all' | 'secondary' | 'active' | 'pending'
+  const [businessRequestsFilter, setBusinessRequestsFilter] = useState('pending'); // 'pending' (default) | 'active' | 'all'
   const [businessRequestsList, setBusinessRequestsList] = useState([]);
   const [businessRequestsLoading, setBusinessRequestsLoading] = useState(false);
 
@@ -794,13 +794,13 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
           {/* Existing Vendor Business Requests Button */}
           <button
-            onClick={() => { setShowBusinessRequestsModal(true); fetchVendorBusinessRequests(); }}
+            onClick={() => { setShowBusinessRequestsModal(true); setBusinessRequestsFilter('pending'); fetchVendorBusinessRequests(); }}
             className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
-            title="Review business profile & outlet requests registered by existing vendors"
+            title="Review secondary business outlet requests registered by existing vendors"
           >
             <Building2 className="w-4 h-4 shrink-0" /> Business Requests
-            <span className="bg-white text-indigo-800 px-2 py-0.5 rounded-full text-[10px] font-black">
-              {businessRequestsList.length}
+            <span className="bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full text-[10px] font-black">
+              {businessRequestsList.filter(b => !['active', 'approved'].includes((b.status||'').toLowerCase())).length}
             </span>
           </button>
 
@@ -1773,36 +1773,28 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                 {/* Filter Pills */}
                 <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700 text-xs shrink-0 self-stretch sm:self-auto justify-center">
                   <button
-                    onClick={() => setBusinessRequestsFilter('all')}
-                    className={`px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
-                      businessRequestsFilter === 'all' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
+                    onClick={() => setBusinessRequestsFilter('pending')}
+                    className={`px-3.5 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
+                      businessRequestsFilter === 'pending' ? 'bg-amber-500 text-white shadow-xs' : 'text-slate-500 dark:text-slate-400'
                     }`}
                   >
-                    All Outlets ({businessRequestsList.length})
-                  </button>
-                  <button
-                    onClick={() => setBusinessRequestsFilter('secondary')}
-                    className={`px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
-                      businessRequestsFilter === 'secondary' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
-                    }`}
-                  >
-                    Secondary ({businessRequestsList.filter(b => !b.isPrimary).length})
+                    ⚡ New Requests ({businessRequestsList.filter(b => !['active', 'approved'].includes((b.status||'').toLowerCase())).length})
                   </button>
                   <button
                     onClick={() => setBusinessRequestsFilter('active')}
-                    className={`px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
-                      businessRequestsFilter === 'active' ? 'bg-white dark:bg-slate-900 text-emerald-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
+                    className={`px-3.5 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
+                      businessRequestsFilter === 'active' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-500 dark:text-slate-400'
                     }`}
                   >
-                    Active ({businessRequestsList.filter(b => ['active', 'approved'].includes((b.status||'').toLowerCase())).length})
+                    Active Secondary ({businessRequestsList.filter(b => ['active', 'approved'].includes((b.status||'').toLowerCase())).length})
                   </button>
                   <button
-                    onClick={() => setBusinessRequestsFilter('pending')}
-                    className={`px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
-                      businessRequestsFilter === 'pending' ? 'bg-white dark:bg-slate-900 text-amber-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
+                    onClick={() => setBusinessRequestsFilter('all')}
+                    className={`px-3.5 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
+                      businessRequestsFilter === 'all' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
                     }`}
                   >
-                    Pending / Suspended ({businessRequestsList.filter(b => !['active', 'approved'].includes((b.status||'').toLowerCase())).length})
+                    All Secondary Outlets ({businessRequestsList.length})
                   </button>
                 </div>
               </div>
@@ -1810,26 +1802,22 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
             {/* Summary KPI Strip */}
             <div className="px-6 pb-3 shrink-0">
-              <div className="grid grid-cols-4 gap-3">
-                <div className="bg-blue-500/8 border border-blue-500/15 rounded-2xl px-3.5 py-2.5 text-center">
-                  <p className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 tracking-wider">Total Business Outlets</p>
-                  <p className="text-lg font-black text-blue-700 dark:text-blue-300 mt-0.5">{businessRequestsList.length}</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl px-3.5 py-2.5 text-center">
+                  <p className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">New Requests (Pending Approval)</p>
+                  <p className="text-lg font-black text-amber-700 dark:text-amber-300 mt-0.5">
+                    {businessRequestsList.filter(b => !['active', 'approved'].includes((b.status||'').toLowerCase())).length}
+                  </p>
                 </div>
-                <div className="bg-purple-500/8 border border-purple-500/15 rounded-2xl px-3.5 py-2.5 text-center">
-                  <p className="text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">Secondary Requests</p>
-                  <p className="text-lg font-black text-purple-700 dark:text-purple-300 mt-0.5">{businessRequestsList.filter(b => !b.isPrimary).length}</p>
-                </div>
-                <div className="bg-emerald-500/8 border border-emerald-500/15 rounded-2xl px-3.5 py-2.5 text-center">
-                  <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">Active Outlets</p>
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl px-3.5 py-2.5 text-center">
+                  <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">Active Secondary Outlets</p>
                   <p className="text-lg font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
                     {businessRequestsList.filter(b => ['active', 'approved'].includes((b.status||'').toLowerCase())).length}
                   </p>
                 </div>
-                <div className="bg-amber-500/8 border border-amber-500/15 rounded-2xl px-3.5 py-2.5 text-center">
-                  <p className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">Pending / Suspended</p>
-                  <p className="text-lg font-black text-amber-700 dark:text-amber-300 mt-0.5">
-                    {businessRequestsList.filter(b => !['active', 'approved'].includes((b.status||'').toLowerCase())).length}
-                  </p>
+                <div className="bg-purple-500/10 border border-purple-500/20 rounded-2xl px-3.5 py-2.5 text-center">
+                  <p className="text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">Total Secondary Requests</p>
+                  <p className="text-lg font-black text-purple-700 dark:text-purple-300 mt-0.5">{businessRequestsList.length}</p>
                 </div>
               </div>
             </div>
@@ -1840,9 +1828,8 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                 const q = businessRequestsSearch.toLowerCase().trim();
                 const filtered = businessRequestsList.filter(b => {
                   const s = (b.status || '').toLowerCase().trim();
-                  if (businessRequestsFilter === 'secondary' && b.isPrimary) return false;
-                  if (businessRequestsFilter === 'active' && !['active', 'approved'].includes(s)) return false;
                   if (businessRequestsFilter === 'pending' && ['active', 'approved'].includes(s)) return false;
+                  if (businessRequestsFilter === 'active' && !['active', 'approved'].includes(s)) return false;
 
                   if (!q) return true;
                   return (

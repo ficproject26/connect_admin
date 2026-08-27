@@ -1470,6 +1470,12 @@ router.get('/vendors/business-requests', [auth, adminAuth], async (req, res) => 
             const primaryRegId = user.registrationId || user.vendorId || `ven-fic-${String(user._id).slice(-6)}`;
 
             bizList.forEach((biz, idx) => {
+                const isPrimary = biz.isPrimary === true || idx === 0;
+                // Exclude primary onboarded business outlets from secondary business requests list
+                if (isPrimary) return;
+
+                const statusStr = biz.status || 'Pending Approval';
+
                 businessRequests.push({
                     _id: biz._id || `${user._id}_${idx}`,
                     businessId: biz._id,
@@ -1485,8 +1491,8 @@ router.get('/vendors/business-requests', [auth, adminAuth], async (req, res) => 
                     address: biz.address || user.address || '',
                     pincode: biz.pincode || user.pincode || user.postalCode || '',
                     phone: biz.phone || vendorPhone,
-                    status: biz.status || (idx === 0 ? (user.status || 'Approved') : 'Pending Approval'),
-                    isPrimary: idx === 0,
+                    status: statusStr,
+                    isPrimary: false,
                     createdAt: biz.createdAt || user.createdAt || new Date()
                 });
             });
