@@ -8527,27 +8527,15 @@ function App() {
               </div>
 
               {categoryModalTier === 'sub' ? (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
-                    <input
-                      name="subcategory"
-                      placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
-                      required
-                      type="text"
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Required Vendor Fields</label>
-                    <input
-                      name="requiredVendorFields"
-                      placeholder="e.g. RAM, Display Size, Processor, Storage"
-                      type="text"
-                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
-                    />
-                    <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields for this category (e.g. RAM, Display Size, Processor, Storage).</p>
-                  </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
+                  <input
+                    name="subcategory"
+                    placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
+                    required
+                    type="text"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -9385,104 +9373,110 @@ function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6">
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Edit Category Hierarchy</h3>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault();
-                const name = modalData.mainCategory || modalData.name || 'Products';
-                const subcategory = e.target.subcategory?.value?.trim() || '';
-                const subSubcategory = e.target.subSubcategory?.value?.trim() || '';
-                const description = e.target.description?.value?.trim() || '';
-                const requiredVendorFields = e.target.requiredVendorFields?.value !== undefined ? e.target.requiredVendorFields.value : undefined;
+            {(() => {
+              const isChildCategory = modalData.level === 'child' || Boolean(modalData.subSubcategory);
+              return (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    const name = modalData.mainCategory || modalData.name || 'Products';
+                    const subcategory = e.target.subcategory?.value?.trim() || '';
+                    const subSubcategory = e.target.subSubcategory?.value?.trim() || '';
+                    const description = e.target.description?.value?.trim() || '';
+                    const requiredVendorFields = e.target.requiredVendorFields?.value !== undefined ? e.target.requiredVendorFields.value : undefined;
 
-                const hasValidId = modalData._id && String(modalData._id).length === 24 && String(modalData._id) !== 'undefined';
+                    const hasValidId = modalData._id && String(modalData._id).length === 24 && String(modalData._id) !== 'undefined';
 
-                if (hasValidId) {
-                  // If editing a subcategory but user entered a Third Category name, create/link child category
-                  if (modalData.level === 'sub' && subSubcategory && !modalData.subSubcategory) {
-                    await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level: 'child', requiredVendorFields });
-                  } else {
-                    const res = await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { name, subcategory, subSubcategory, description, requiredVendorFields });
-                    if (!res || !res.success) {
-                      const level = subSubcategory ? 'child' : 'sub';
+                    if (hasValidId) {
+                      const res = await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { name, subcategory, subSubcategory, description, requiredVendorFields });
+                      if (!res || !res.success) {
+                        const level = isChildCategory ? 'child' : 'sub';
+                        await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
+                      }
+                    } else {
+                      const level = isChildCategory ? 'child' : 'sub';
                       await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
                     }
-                  }
-                } else {
-                  const level = subSubcategory ? 'child' : 'sub';
-                  await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
-                }
-                await safeFetch(`${API_BASE}/admin/categories`, setCategories);
-                addToast('Category changes saved successfully!', 'success');
-                setShowModal(null);
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Non-Editable)</label>
-                <input
-                  disabled
-                  value={modalData.mainCategory || modalData.name || 'Products'}
-                  type="text"
-                  className="w-full bg-slate-100 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-500 cursor-not-allowed"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub)</label>
-                  <input
-                    name="subcategory"
-                    defaultValue={modalData.subcategory || (modalData.level === 'sub' ? modalData.name : '')}
-                    type="text"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Sub-sub)</label>
-                  <input
-                    name="subSubcategory"
-                    defaultValue={
-                      modalData.subSubcategory ||
-                      modalData.childCategory ||
-                      (modalData.level === 'child' ? modalData.name : '') ||
-                      (Array.isArray(modalData.childCategories) && modalData.childCategories.length > 0
-                        ? modalData.childCategories.map(ch => typeof ch === 'string' ? ch : ch.name).join(', ')
-                        : '')
-                    }
-                    placeholder="Enter third category name"
-                    type="text"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
+                    await safeFetch(`${API_BASE}/admin/categories`, setCategories);
+                    addToast('Category changes saved successfully!', 'success');
+                    setShowModal(null);
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Non-Editable)</label>
+                    <input
+                      disabled
+                      value={modalData.mainCategory || modalData.name || 'Products'}
+                      type="text"
+                      className="w-full bg-slate-100 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-500 cursor-not-allowed"
+                    />
+                  </div>
 
-              {(modalData.level === 'sub' || modalData.level === 'child' || modalData.subcategory || modalData.subSubcategory) && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Required Vendor Fields</label>
-                  <input
-                    name="requiredVendorFields"
-                    defaultValue={Array.isArray(modalData.requiredVendorFields) ? modalData.requiredVendorFields.join(', ') : (modalData.requiredVendorFields || '')}
-                    placeholder="e.g. RAM, Display Size, Processor, Storage"
-                    type="text"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
-                  />
-                  <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields for this category (e.g. RAM, Display Size, Processor, Storage).</p>
-                </div>
-              )}
+                  {isChildCategory ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub)</label>
+                          <input
+                            name="subcategory"
+                            defaultValue={modalData.subcategory || ''}
+                            type="text"
+                            className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Sub-sub)</label>
+                          <input
+                            name="subSubcategory"
+                            defaultValue={modalData.subSubcategory || modalData.childCategory || modalData.name || ''}
+                            placeholder="Enter third category name"
+                            type="text"
+                            className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
-                <textarea
-                  name="description"
-                  defaultValue={modalData.description || ''}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]"
-                />
-              </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Required Vendor Fields</label>
+                        <input
+                          name="requiredVendorFields"
+                          defaultValue={Array.isArray(modalData.requiredVendorFields) ? modalData.requiredVendorFields.join(', ') : (modalData.requiredVendorFields || '')}
+                          placeholder="e.g. RAM, Display Size, Processor, Storage"
+                          type="text"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
+                        />
+                        <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields for this category (e.g. RAM, Display Size, Processor, Storage).</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Name)</label>
+                      <input
+                        name="subcategory"
+                        defaultValue={modalData.subcategory || modalData.name || ''}
+                        type="text"
+                        className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  )}
 
-              <div className="flex gap-2 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
-                <button type="submit" className="bg-primary-600 hover:bg-primary-500 text-white text-sm font-semibold px-4 py-2 rounded-xl">Save Changes</button>
-              </div>
-            </form>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Description</label>
+                    <textarea
+                      name="description"
+                      defaultValue={modalData.description || ''}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm min-h-[80px]"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 justify-end pt-4">
+                    <button type="button" onClick={() => setShowModal(null)} className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-semibold px-4 py-2 rounded-xl">Cancel</button>
+                    <button type="submit" className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold px-5 py-2 rounded-xl shadow-sm">Save Changes</button>
+                  </div>
+                </form>
+              );
+            })()}
           </div>
         </div>
       )}
