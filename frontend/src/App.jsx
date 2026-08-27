@@ -204,6 +204,27 @@ const isApprovedAgent = (agent) => {
   return true;
 };
 
+const getAgentLevel = (a) => {
+  if (!a) return 'pincode';
+  const l = (a.level || a.agentLevel || a.role || a.assignedRole || a.agentType || a.type || '').toString().toLowerCase().trim();
+  if (l.includes('state')) return 'state';
+  if (l.includes('district') || l.includes('dist')) return 'district';
+  if (l.includes('divis') || l.includes('division')) return 'division';
+  if (l.includes('pincode') || l.includes('pin')) return 'pincode';
+
+  const nameEmail = `${a.name || ''} ${a.email || ''}`.toLowerCase();
+  if (nameEmail.includes('state')) return 'state';
+  if (nameEmail.includes('district') || nameEmail.includes('dis')) return 'district';
+  if (nameEmail.includes('division') || nameEmail.includes('div')) return 'division';
+  if (nameEmail.includes('pincode') || nameEmail.includes('pin')) return 'pincode';
+
+  if (a.assignedState && !a.assignedDistrict) return 'state';
+  if (a.assignedDistrict) return 'district';
+  if (a.assignedDivision || a.division) return 'division';
+
+  return 'pincode';
+};
+
 // --- Error Boundary to prevent blank screens ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
