@@ -1427,6 +1427,8 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
         console.error('Fatal error in GET /api/admin/vendors/requests:', err);
         res.status(500).json({ error: 'Server error fetching vendor requests', message: err.message });
     }
+});
+
 // GET all vendor business requests & branch outlets across registered vendors
 router.get('/vendors/business-requests', [auth, adminAuth], async (req, res) => {
     try {
