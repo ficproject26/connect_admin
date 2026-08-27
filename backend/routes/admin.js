@@ -744,7 +744,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             } catch (aErr) {
                 console.error("Error fetching raw agents collection:", aErr);
             }
-        // 3. Merge & Deduplicate by registrationId, email, or _id
+        }
         const agentMap = new Map();
 
         const resolveAgentCleanLevel = (item) => {
