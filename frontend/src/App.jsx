@@ -2505,236 +2505,244 @@ function App() {
                             }, 0);
 
                             return (
-                              <div key={stKey} className="bg-white dark:bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-5 shadow-sm space-y-4 transition-all">
-                                {/* State Header */}
-                                <div
-                                  onClick={() => setExpandedAgents(prev => ({ ...prev, [stKey]: !isStExpanded }))}
-                                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-slate-100 dark:border-slate-800 cursor-pointer group"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setExpandedAgents(prev => ({ ...prev, [stKey]: !isStExpanded }));
-                                      }}
-                                      className="w-8 h-8 rounded-full border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-all shadow-xs shrink-0 cursor-pointer"
-                                      title={isStExpanded ? "Collapse District Agents" : "Expand District Agents"}
+                              <div key={stKey} className="bg-white dark:bg-slate-900 border-2 border-blue-500/80 rounded-3xl p-4 shadow-sm space-y-3 transition-all">
+                                {/* State Level: Render State Agent Card directly (or territory card if no state agent assigned) */}
+                                {stObj.stateAgents.length > 0 ? (
+                                  stObj.stateAgents.map((stAgent) => (
+                                    <div
+                                      key={stAgent._id}
+                                      onClick={() => setExpandedAgents(prev => ({ ...prev, [stKey]: !isStExpanded }))}
+                                      className="bg-blue-50/70 dark:bg-blue-950/40 border-2 border-blue-200 dark:border-blue-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:border-blue-400 transition-all group"
                                     >
-                                      <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
-                                    </button>
+                                      <div className="flex items-center gap-3">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setExpandedAgents(prev => ({ ...prev, [stKey]: !isStExpanded }));
+                                          }}
+                                          className="w-8 h-8 rounded-full border border-blue-300 dark:border-blue-700 bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:bg-blue-200 transition-all shadow-xs shrink-0 cursor-pointer"
+                                          title={isStExpanded ? "Collapse District Agents" : "Expand District Agents"}
+                                        >
+                                          <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
+                                        </button>
 
-                                    <div>
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                                          STATE TERRITORY
-                                        </span>
-                                        <span className="text-xs font-mono text-slate-400 font-bold">
-                                          {stObj.stateAgents.length} State Agent(s)
-                                        </span>
+                                        <div>
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">STATE AGENT</span>
+                                            <span className="text-xs font-mono text-slate-400 font-bold">ID: AG-STAT-{String(stAgent._id).slice(-4)}</span>
+                                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${stAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500'}`}>
+                                              {stAgent?.status || 'Approved'}
+                                            </span>
+                                          </div>
+                                          <h4 className="text-lg font-black text-slate-850 dark:text-slate-100 mt-1 group-hover:text-blue-500 transition-colors">
+                                            {formatAgentNameWithPincode(stAgent)} ({stObj.stateName})
+                                          </h4>
+                                          <p className="text-xs text-slate-500 font-semibold mt-0.5">{stAgent.email} • {stAgent.phone}</p>
+                                        </div>
                                       </div>
-                                      <h4 className="text-xl font-black text-slate-850 dark:text-slate-100 mt-1 group-hover:text-blue-500 transition-colors">
-                                        {stObj.stateName.toLowerCase().includes('state') ? stObj.stateName : `${stObj.stateName} State`}
-                                      </h4>
-                                    </div>
-                                  </div>
-                                </div>
 
-                                {/* State Agents Cards */}
-                                {stObj.stateAgents.map((stAgent) => (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setModalData(stAgent);
+                                          setShowModal('agent-profile');
+                                        }}
+                                        className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center shrink-0"
+                                      >
+                                        View Profile
+                                      </button>
+                                    </div>
+                                  ))
+                                ) : (
                                   <div
-                                    key={stAgent._id}
                                     onClick={() => setExpandedAgents(prev => ({ ...prev, [stKey]: !isStExpanded }))}
-                                    className="bg-blue-50/50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:border-blue-400 transition-all group"
+                                    className="flex items-center justify-between p-3.5 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl border border-blue-200 dark:border-blue-900/40 cursor-pointer group"
                                   >
-                                    <div>
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full uppercase">STATE AGENT</span>
-                                        <span className="text-xs font-mono text-slate-400 font-bold">ID: AG-STAT-{String(stAgent._id).slice(-4)}</span>
-                                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${stAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-500'}`}>
-                                          {stAgent?.status || 'Approved'}
-                                        </span>
+                                    <div className="flex items-center gap-3">
+                                      <button
+                                        type="button"
+                                        className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0"
+                                      >
+                                        <ChevronRight className={`w-4 h-4 transform transition-transform duration-200 ${isStExpanded ? 'rotate-90' : ''}`} />
+                                      </button>
+                                      <div>
+                                        <span className="bg-blue-600/20 text-blue-700 dark:text-blue-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">STATE TERRITORY</span>
+                                        <h4 className="text-base font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                                          📍 {stObj.stateName} State <span className="text-xs text-slate-400 font-normal">(No State Agent assigned)</span>
+                                        </h4>
                                       </div>
-                                      <h5 className="text-base font-black text-slate-850 dark:text-slate-100 mt-1 group-hover:text-blue-500 transition-colors">
-                                        {formatAgentNameWithPincode(stAgent)}
-                                      </h5>
-                                      <p className="text-xs text-slate-500 font-semibold mt-0.5">{stAgent.email} • {stAgent.phone}</p>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setModalData(stAgent);
-                                        setShowModal('agent-profile');
-                                      }}
-                                      className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center"
-                                    >
-                                      View Profile
-                                    </button>
                                   </div>
-                                ))}
+                                )}
 
-                                {/* District Agents Container */}
+                                {/* District Level Container */}
                                 {isStExpanded && (
-                                  <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-amber-400 dark:border-amber-600/70 space-y-4 pt-2">
-                                    <h5 className="text-xs font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">
-                                      DISTRICT AGENTS ({totalDistrictAgents})
-                                    </h5>
-
+                                  <div className="ml-2 sm:ml-6 pl-3 sm:pl-5 border-l-2 border-amber-400 dark:border-amber-600/70 space-y-3 pt-2">
                                     {districtList.map((distObj) => {
                                       const distKey = distObj.districtName;
                                       const isDistExpanded = !!expandedAgents[distKey];
                                       const divList = Object.values(distObj.divisions);
-                                      const totalDivisionalAgents = divList.reduce((sum, v) => sum + v.divisionAgents.length + v.pincodeAgents.length, 0);
 
                                       return (
-                                        <div key={distKey} className="bg-white dark:bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-4 shadow-sm space-y-3">
-                                          {/* District Territory Header */}
-                                          <div
-                                            onClick={() => setExpandedAgents(prev => ({ ...prev, [distKey]: !isDistExpanded }))}
-                                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 dark:border-slate-800 cursor-pointer group"
-                                          >
-                                            <div className="flex items-center gap-3">
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setExpandedAgents(prev => ({ ...prev, [distKey]: !isDistExpanded }));
-                                                }}
-                                                className="w-7 h-7 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all shadow-xs shrink-0 cursor-pointer"
-                                                title={isDistExpanded ? "Collapse Divisional Agents" : "Expand Divisional Agents"}
+                                        <div key={distKey} className="bg-white dark:bg-slate-900 border-2 border-amber-500/70 rounded-2xl p-3 shadow-sm space-y-3">
+                                          {/* District Agent Cards directly */}
+                                          {distObj.districtAgents.length > 0 ? (
+                                            distObj.districtAgents.map((distAgent) => (
+                                              <div
+                                                key={distAgent._id}
+                                                onClick={() => setExpandedAgents(prev => ({ ...prev, [distKey]: !isDistExpanded }))}
+                                                className="bg-amber-50/70 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:border-amber-500 transition-all group"
                                               >
-                                                <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
-                                              </button>
+                                                <div className="flex items-center gap-3">
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setExpandedAgents(prev => ({ ...prev, [distKey]: !isDistExpanded }));
+                                                    }}
+                                                    className="w-7 h-7 rounded-full border border-amber-300 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/60 text-amber-600 dark:text-amber-400 flex items-center justify-center hover:bg-amber-200 transition-all shadow-xs shrink-0 cursor-pointer"
+                                                    title={isDistExpanded ? "Collapse Divisional Agents" : "Expand Divisional Agents"}
+                                                  >
+                                                    <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
+                                                  </button>
 
-                                              <div>
-                                                <span className="bg-amber-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                                                  DISTRICT TERRITORY
-                                                </span>
-                                                <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-amber-500 transition-colors">
-                                                  {distObj.districtName.toLowerCase().includes('district') ? distObj.districtName : `${distObj.districtName} District`} ({distObj.districtAgents.length} Agent(s))
-                                                </h5>
-                                              </div>
-                                            </div>
-                                          </div>
-
-                                          {/* District Agent Cards */}
-                                          {distObj.districtAgents.map((distAgent) => (
-                                            <div
-                                              key={distAgent._id}
-                                              onClick={() => setExpandedAgents(prev => ({ ...prev, [distKey]: !isDistExpanded }))}
-                                              className="bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer hover:border-amber-400 transition-all group"
-                                            >
-                                              <div>
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                  <span className="bg-amber-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">DISTRICT AGENT</span>
-                                                  <span className="text-xs font-mono text-slate-400 font-bold">ID: AG-DIST-{String(distAgent._id).slice(-4)}</span>
-                                                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${distAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                                                    {distAgent?.status || 'Approved'}
-                                                  </span>
+                                                  <div>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                      <span className="bg-amber-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">DISTRICT AGENT</span>
+                                                      <span className="text-xs font-mono text-slate-400 font-bold">ID: AG-DIST-{String(distAgent._id).slice(-4)}</span>
+                                                      <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full capitalize ${distAgent?.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                                        {distAgent?.status || 'Approved'}
+                                                      </span>
+                                                    </div>
+                                                    <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-amber-500 transition-colors">
+                                                      {formatAgentNameWithPincode(distAgent)}
+                                                    </h5>
+                                                    <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                      <MapPin className="w-3 h-3 text-amber-500" /> District Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{distObj.districtName}</span> ({distAgent.email})
+                                                    </p>
+                                                  </div>
                                                 </div>
-                                                <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-amber-500 transition-colors">
-                                                  {formatAgentNameWithPincode(distAgent)}
-                                                </h5>
-                                                <p className="text-xs text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
-                                                  <MapPin className="w-3 h-3 text-amber-500" /> District Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{distObj.districtName}</span> ({distAgent.email})
-                                                </p>
-                                              </div>
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  setModalData(distAgent);
-                                                  setShowModal('agent-profile');
-                                                }}
-                                                className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center"
-                                              >
-                                                View Profile
-                                              </button>
-                                            </div>
-                                          ))}
 
-                                          {/* Divisional Agents Container */}
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setModalData(distAgent);
+                                                    setShowModal('agent-profile');
+                                                  }}
+                                                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center shrink-0"
+                                                >
+                                                  View Profile
+                                                </button>
+                                              </div>
+                                            ))
+                                          ) : (
+                                            <div
+                                              onClick={() => setExpandedAgents(prev => ({ ...prev, [distKey]: !isDistExpanded }))}
+                                              className="flex items-center justify-between p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-900/40 cursor-pointer group"
+                                            >
+                                              <div className="flex items-center gap-2.5">
+                                                <button
+                                                  type="button"
+                                                  className="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-900 text-amber-600 dark:text-amber-300 flex items-center justify-center shrink-0"
+                                                >
+                                                  <ChevronRight className={`w-3.5 h-3.5 transform transition-transform duration-200 ${isDistExpanded ? 'rotate-90' : ''}`} />
+                                                </button>
+                                                <div>
+                                                  <span className="bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full uppercase">DISTRICT TERRITORY</span>
+                                                  <h5 className="text-sm font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                                                    📍 {distObj.districtName} District <span className="text-xs text-slate-400 font-normal">(No District Agent assigned)</span>
+                                                  </h5>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Divisional Level Container */}
                                           {isDistExpanded && (
                                             <div className="ml-2 sm:ml-5 pl-3 sm:pl-4 border-l-2 border-purple-400 dark:border-purple-600/70 space-y-3 pt-2">
-                                              <h6 className="text-xs font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">
-                                                DIVISIONAL AGENTS ({totalDivisionalAgents})
-                                              </h6>
-
                                               {divList.map((divObj) => {
                                                 const divKey = divObj.divisionName;
                                                 const isDivExpanded = !!expandedAgents[divKey];
                                                 const pinAgents = divObj.pincodeAgents;
 
                                                 return (
-                                                  <div key={divKey} className="bg-white dark:bg-slate-900 border-2 border-purple-500/70 rounded-2xl p-3.5 shadow-sm space-y-2.5">
-                                                    {/* Divisional Agent Header */}
-                                                    <div
-                                                      onClick={() => setExpandedAgents(prev => ({ ...prev, [divKey]: !isDivExpanded }))}
-                                                      className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800 cursor-pointer group"
-                                                    >
-                                                      <div className="flex items-center gap-2.5">
-                                                        <button
-                                                          type="button"
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setExpandedAgents(prev => ({ ...prev, [divKey]: !isDivExpanded }));
-                                                          }}
-                                                          className="w-6 h-6 rounded-full border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-all shadow-xs shrink-0 cursor-pointer"
-                                                          title={isDivExpanded ? "Collapse Pincode Agents" : "Expand Pincode Agents"}
+                                                  <div key={divKey} className="bg-white dark:bg-slate-900 border-2 border-purple-500/70 rounded-2xl p-3 shadow-sm space-y-2.5">
+                                                    {/* Divisional Agent Cards directly */}
+                                                    {divObj.divisionAgents.length > 0 ? (
+                                                      divObj.divisionAgents.map((divAgent) => (
+                                                        <div
+                                                          key={divAgent._id}
+                                                          onClick={() => setExpandedAgents(prev => ({ ...prev, [divKey]: !isDivExpanded }))}
+                                                          className="bg-purple-50/70 dark:bg-purple-950/40 border border-purple-300 dark:border-purple-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer hover:border-purple-500 transition-all group"
                                                         >
-                                                          <ChevronRight className={`w-3 h-3 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
-                                                        </button>
+                                                          <div className="flex items-center gap-2.5">
+                                                            <button
+                                                              type="button"
+                                                              onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setExpandedAgents(prev => ({ ...prev, [divKey]: !isDivExpanded }));
+                                                              }}
+                                                              className="w-6 h-6 rounded-full border border-purple-300 dark:border-purple-700 bg-purple-100 dark:bg-purple-900/60 text-purple-600 dark:text-purple-400 flex items-center justify-center hover:bg-purple-200 transition-all shadow-xs shrink-0 cursor-pointer"
+                                                              title={isDivExpanded ? "Collapse Pincode Agents" : "Expand Pincode Agents"}
+                                                            >
+                                                              <ChevronRight className={`w-3 h-3 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
+                                                            </button>
 
-                                                        <div>
-                                                          <span className="bg-purple-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">DIVISION TERRITORY</span>
-                                                          <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-purple-500 transition-colors">
-                                                            {divObj.divisionName.toLowerCase().includes('division') ? divObj.divisionName : `${divObj.divisionName} Division`} ({divObj.divisionAgents.length} Agent(s))
-                                                          </h6>
-                                                        </div>
-                                                      </div>
-                                                    </div>
-
-                                                    {/* Division Agent Cards */}
-                                                    {divObj.divisionAgents.map((divAgent) => (
-                                                      <div
-                                                        key={divAgent._id}
-                                                        onClick={() => setExpandedAgents(prev => ({ ...prev, [divKey]: !isDivExpanded }))}
-                                                        className="bg-purple-50/50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer hover:border-purple-400 transition-all group"
-                                                      >
-                                                        <div>
-                                                          <div className="flex items-center gap-2 flex-wrap">
-                                                            <span className="bg-purple-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase">DIVISIONAL AGENT</span>
-                                                            <span className="text-[11px] font-mono text-slate-400 font-bold">ID: AG-DIV-{String(divAgent._id).slice(-4)}</span>
+                                                            <div>
+                                                              <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="bg-purple-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase">DIVISIONAL AGENT</span>
+                                                                <span className="text-[11px] font-mono text-slate-400 font-bold">ID: AG-DIV-{String(divAgent._id).slice(-4)}</span>
+                                                              </div>
+                                                              <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-purple-500 transition-colors">
+                                                                {formatAgentNameWithPincode(divAgent)}
+                                                              </h6>
+                                                              <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                                <MapPin className="w-3 h-3 text-purple-500" /> Division Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{divObj.divisionName}</span> ({divAgent.email})
+                                                              </p>
+                                                            </div>
                                                           </div>
-                                                          <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5 group-hover:text-purple-500 transition-colors">
-                                                            {formatAgentNameWithPincode(divAgent)}
-                                                          </h6>
-                                                          <p className="text-[11px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
-                                                            <MapPin className="w-3 h-3 text-purple-500" /> Division Territory: <span className="font-bold text-slate-800 dark:text-slate-200">{divObj.divisionName}</span> ({divAgent.email})
-                                                          </p>
-                                                        </div>
-                                                        <button
-                                                          type="button"
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setModalData(divAgent);
-                                                            setShowModal('agent-profile');
-                                                          }}
-                                                          className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center"
-                                                        >
-                                                          View Profile
-                                                        </button>
-                                                      </div>
-                                                    ))}
 
-                                                    {/* Pincode Agents Container */}
+                                                          <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                              e.stopPropagation();
+                                                              setModalData(divAgent);
+                                                              setShowModal('agent-profile');
+                                                            }}
+                                                            className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-4 py-1.5 rounded-full shadow-sm cursor-pointer self-end sm:self-center shrink-0"
+                                                          >
+                                                            View Profile
+                                                          </button>
+                                                        </div>
+                                                      ))
+                                                    ) : (
+                                                      <div
+                                                        onClick={() => setExpandedAgents(prev => ({ ...prev, [divKey]: !isDivExpanded }))}
+                                                        className="flex items-center justify-between p-2.5 bg-purple-50/50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-900/40 cursor-pointer group"
+                                                      >
+                                                        <div className="flex items-center gap-2">
+                                                          <button
+                                                            type="button"
+                                                            className="w-5 h-5 rounded-full bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-300 flex items-center justify-center shrink-0"
+                                                          >
+                                                            <ChevronRight className={`w-3 h-3 transform transition-transform duration-200 ${isDivExpanded ? 'rotate-90' : ''}`} />
+                                                          </button>
+                                                          <div>
+                                                            <span className="bg-purple-600/20 text-purple-700 dark:text-purple-300 text-[9px] font-black px-2 py-0.5 rounded-full uppercase">DIVISION TERRITORY</span>
+                                                            <h6 className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-0.5">
+                                                              📍 {divObj.divisionName} Division <span className="text-[11px] text-slate-400 font-normal">(No Divisional Agent assigned)</span>
+                                                            </h6>
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                    )}
+
+                                                    {/* Pincode Level Container */}
                                                     {isDivExpanded && (
                                                       <div className="ml-2 sm:ml-4 pl-3 border-l-2 border-emerald-400 dark:border-emerald-600/70 space-y-2 pt-1.5">
-                                                        <span className="block text-[11px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">
-                                                          PINCODE AGENTS ({pinAgents.length})
-                                                        </span>
-
                                                         {pinAgents.map((pinAgent) => {
                                                           const pinCode = getAgentPincodeCode(pinAgent);
                                                           const pinName = formatAgentNameWithPincode(pinAgent);
