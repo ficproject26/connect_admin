@@ -1915,30 +1915,57 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                         </div>
                       </div>
 
-                      {/* Right: Quick Action Buttons */}
+                      {/* Right: Clean Dynamic Action Buttons */}
                       <div className="flex flex-wrap items-center gap-2 shrink-0 self-stretch lg:self-auto justify-end">
-                        <button
-                          onClick={() => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, 'Active')}
-                          className={`px-3.5 py-2 text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-none ${
-                            ['active','approved'].includes((b.status||'').toLowerCase())
-                              ? 'bg-emerald-600 text-white opacity-60 cursor-default'
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          }`}
-                          disabled={['active','approved'].includes((b.status||'').toLowerCase())}
-                        >
-                          <CheckCircle className="w-4 h-4" /> Activate Outlet
-                        </button>
-                        <button
-                          onClick={() => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, 'Suspended')}
-                          className={`px-3.5 py-2 text-xs font-black rounded-xl border flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 ${
-                            ['suspended','rejected'].includes((b.status||'').toLowerCase())
-                              ? 'bg-slate-200 text-slate-400 border-slate-300 cursor-default dark:bg-slate-800 dark:border-slate-700'
-                              : 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/40 hover:bg-rose-100'
-                          }`}
-                          disabled={['suspended','rejected'].includes((b.status||'').toLowerCase())}
-                        >
-                          <XCircle className="w-4 h-4" /> Suspend Outlet
-                        </button>
+                        {(() => {
+                          const bSt = (b.status || '').toLowerCase().trim();
+                          const isActive = bSt === 'active' || bSt === 'approved';
+                          const isSuspended = bSt === 'suspended' || bSt === 'rejected';
+
+                          if (isActive) {
+                            return (
+                              <button
+                                onClick={() => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, 'Suspended')}
+                                className="px-3.5 py-2 text-xs font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                                title="Suspend this business outlet"
+                              >
+                                <XCircle className="w-4 h-4" /> Suspend Outlet
+                              </button>
+                            );
+                          }
+
+                          if (isSuspended) {
+                            return (
+                              <button
+                                onClick={() => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, 'Active')}
+                                className="px-3.5 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-none"
+                                title="Re-activate this business outlet"
+                              >
+                                <CheckCircle className="w-4 h-4" /> Re-activate Outlet
+                              </button>
+                            );
+                          }
+
+                          // If Pending Approval / Pending
+                          return (
+                            <>
+                              <button
+                                onClick={() => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, 'Active')}
+                                className="px-3.5 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-none"
+                                title="Approve & Activate this business outlet"
+                              >
+                                <CheckCircle className="w-4 h-4" /> Approve & Activate
+                              </button>
+                              <button
+                                onClick={() => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, 'Suspended')}
+                                className="px-3.5 py-2 text-xs font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                                title="Reject or Suspend this request"
+                              >
+                                <XCircle className="w-4 h-4" /> Reject Request
+                              </button>
+                            </>
+                          );
+                        })()}
                         <select
                           value={normalizeStatusValue(b.status)}
                           onChange={e => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, e.target.value)}
