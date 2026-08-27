@@ -3671,9 +3671,10 @@ router.get([
 ], async (req, res) => {
     try {
         const { name, subcategory, subSubcategory, childCategory, subcategoryId } = req.query;
-        let query = {};
+        let catDoc = null;
+
         if (subcategoryId) {
-            query._id = subcategoryId;
+            catDoc = await Category.findById(subcategoryId).lean();
         } else {
             const childName = (subSubcategory || childCategory || '').trim();
             const subName = (subcategory || '').trim();
@@ -3683,29 +3684,60 @@ router.get([
                 return res.json({ success: true, requiredVendorFields: [] });
             }
 
-            const queryOr = [];
+            // Strategy: Search Child Category first, then Subcategory, then Main. Prioritize non-empty requiredVendorFields.
             if (childName) {
                 const escChild = childName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                queryOr.push({ subSubcategory: new RegExp(`^${escChild}$`, 'i') });
-                queryOr.push({ name: new RegExp(`^${escChild}$`, 'i'), level: 'child' });
+                const childReg = new RegExp(`^${escChild}$`, 'i');
+
+                // 1. Try finding child doc with non-empty fields
+                catDoc = await Category.findOne({
+                    $or: [
+                        { subSubcategory: childReg },
+                        { name: childReg, level: 'child' }
+                    ],
+                    requiredVendorFields: { $exists: true, $not: { $size: 0 } }
+                }).sort({ updatedAt: -1 }).lean();
+
+                // 2. Try finding any child doc matching childName
+                if (!catDoc) {
+                    catDoc = await Category.findOne({
+                        $or: [
+                            { subSubcategory: childReg },
+                            { name: childReg, level: 'child' }
+                        ]
+                    }).sort({ updatedAt: -1 }).lean();
+                }
             }
-            if (subName) {
+
+            if (!catDoc && subName) {
                 const escSub = subName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                queryOr.push({ subcategory: new RegExp(`^${escSub}$`, 'i') });
-                queryOr.push({ name: new RegExp(`^${escSub}$`, 'i'), level: 'sub' });
+                const subReg = new RegExp(`^${escSub}$`, 'i');
+
+                // 1. Try finding subcategory doc with non-empty fields
+                catDoc = await Category.findOne({
+                    $or: [
+                        { subcategory: subReg },
+                        { name: subReg, level: 'sub' }
+                    ],
+                    requiredVendorFields: { $exists: true, $not: { $size: 0 } }
+                }).sort({ updatedAt: -1 }).lean();
+
+                // 2. Try finding any subcategory doc
+                if (!catDoc) {
+                    catDoc = await Category.findOne({
+                        $or: [
+                            { subcategory: subReg },
+                            { name: subReg, level: 'sub' }
+                        ]
+                    }).sort({ updatedAt: -1 }).lean();
+                }
             }
-            if (mainName) {
+
+            if (!catDoc && mainName) {
                 const escMain = mainName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                queryOr.push({ name: new RegExp(`^${escMain}$`, 'i') });
+                catDoc = await Category.findOne({ name: new RegExp(`^${escMain}$`, 'i') }).sort({ updatedAt: -1 }).lean();
             }
-
-            query = { $or: queryOr };
         }
-
-        const catDoc = await Category.findOne(query)
-            .sort({ level: -1, requiredVendorFields: -1 })
-            .select('name subcategory subSubcategory requiredVendorFields')
-            .lean();
 
         const rawFields = catDoc?.requiredVendorFields || [];
         const requiredVendorFields = Array.isArray(rawFields)

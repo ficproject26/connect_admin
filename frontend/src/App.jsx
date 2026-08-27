@@ -8525,15 +8525,27 @@ function App() {
               </div>
 
               {categoryModalTier === 'sub' ? (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
-                  <input
-                    name="subcategory"
-                    placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
-                    required
-                    type="text"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
-                  />
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub Category Name)</label>
+                    <input
+                      name="subcategory"
+                      placeholder="Enter sub category name (e.g. Mobiles & Tablets)"
+                      required
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-1.5">Required Vendor Fields</label>
+                    <input
+                      name="requiredVendorFields"
+                      placeholder="e.g. RAM, Display Size, Processor, Storage"
+                      type="text"
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1">Comma separated list of dynamic vendor input fields for this category (e.g. RAM, Display Size, Processor, Storage).</p>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-4">
