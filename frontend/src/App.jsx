@@ -2353,6 +2353,21 @@ function App() {
                       if (!pincode && ag.territory.pincode) pincode = String(ag.territory.pincode).trim();
                     }
 
+                    // Smart Territory Detection from Agent Name / Email / Search Context
+                    if (!state) {
+                      const haystack = `${ag.name || ''} ${ag.email || ''} ${ag.assignedArea || ''}`.toLowerCase();
+                      if (haystack.includes('karnataka')) state = 'Karnataka';
+                      else if (haystack.includes('tamil') || haystack.includes('tn')) state = 'Tamil Nadu';
+                      else if (haystack.includes('kerala')) state = 'Kerala';
+                      else if (haystack.includes('maharashtra')) state = 'Maharashtra';
+                      else if (haystack.includes('telangana')) state = 'Telangana';
+                      else if (haystack.includes('andhra')) state = 'Andhra Pradesh';
+                      else if (haystack.includes('delhi')) state = 'Delhi';
+                      else if (haystack.includes('gujarat')) state = 'Gujarat';
+                      else if (haystack.includes('punjab')) state = 'Punjab';
+                      else if (haystack.includes('bengal')) state = 'West Bengal';
+                    }
+
                     state = state || 'General State';
                     district = district || 'General District';
                     division = division || 'General Division';
@@ -2491,9 +2506,8 @@ function App() {
                                           {stObj.stateAgents.length} State Agent(s)
                                         </span>
                                       </div>
-
                                       <h4 className="text-xl font-black text-slate-850 dark:text-slate-100 mt-1">
-                                        {stObj.stateName} State
+                                        {stObj.stateName.toLowerCase().includes('state') ? stObj.stateName : `${stObj.stateName} State`}
                                       </h4>
                                     </div>
                                   </div>
@@ -2553,7 +2567,7 @@ function App() {
                                                   DISTRICT TERRITORY
                                                 </span>
                                                 <h5 className="text-base font-bold text-slate-850 dark:text-slate-100 mt-0.5">
-                                                  {distObj.districtName} District ({distObj.districtAgents.length} Agent(s))
+                                                  {distObj.districtName.toLowerCase().includes('district') ? distObj.districtName : `${distObj.districtName} District`} ({distObj.districtAgents.length} Agent(s))
                                                 </h5>
                                               </div>
                                             </div>
@@ -2612,7 +2626,7 @@ function App() {
                                                         <div>
                                                           <span className="bg-purple-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">DIVISION TERRITORY</span>
                                                           <h6 className="text-sm font-bold text-slate-850 dark:text-slate-100 mt-0.5">
-                                                            {divObj.divisionName} Division ({divObj.divisionAgents.length} Agent(s))
+                                                            {divObj.divisionName.toLowerCase().includes('division') ? divObj.divisionName : `${divObj.divisionName} Division`} ({divObj.divisionAgents.length} Agent(s))
                                                           </h6>
                                                         </div>
                                                       </div>
