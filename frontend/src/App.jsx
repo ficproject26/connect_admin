@@ -5970,6 +5970,7 @@ function App() {
                       childArr[existingIdx] = {
                         _id: c._id,
                         name: childName,
+                        subSubcategory: childName,
                         description: c.description || `${childName} category`,
                         requiredVendorFields: c.requiredVendorFields || [],
                         isActive: c.isActive !== undefined ? c.isActive : true
@@ -5978,6 +5979,7 @@ function App() {
                       childArr.push({
                         _id: c._id,
                         name: childName,
+                        subSubcategory: childName,
                         description: c.description || `${childName} category`,
                         requiredVendorFields: c.requiredVendorFields || [],
                         isActive: c.isActive !== undefined ? c.isActive : true
@@ -9386,7 +9388,7 @@ function App() {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                const name = modalData.name || modalData.mainCategory || 'Products';
+                const name = modalData.mainCategory || modalData.name || 'Products';
                 const subcategory = e.target.subcategory?.value?.trim() || '';
                 const subSubcategory = e.target.subSubcategory?.value?.trim() || '';
                 const description = e.target.description?.value?.trim() || '';
@@ -9395,10 +9397,15 @@ function App() {
                 const hasValidId = modalData._id && String(modalData._id).length === 24 && String(modalData._id) !== 'undefined';
 
                 if (hasValidId) {
-                  const res = await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { name, subcategory, subSubcategory, description, requiredVendorFields });
-                  if (!res || !res.success) {
-                    const level = subSubcategory ? 'child' : 'sub';
-                    await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
+                  // If editing a subcategory but user entered a Third Category name, create/link child category
+                  if (modalData.level === 'sub' && subSubcategory && !modalData.subSubcategory) {
+                    await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level: 'child', requiredVendorFields });
+                  } else {
+                    const res = await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { name, subcategory, subSubcategory, description, requiredVendorFields });
+                    if (!res || !res.success) {
+                      const level = subSubcategory ? 'child' : 'sub';
+                      await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
+                    }
                   }
                 } else {
                   const level = subSubcategory ? 'child' : 'sub';
@@ -9414,7 +9421,7 @@ function App() {
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">First Category (Non-Editable)</label>
                 <input
                   disabled
-                  value={modalData.name}
+                  value={modalData.mainCategory || modalData.name || 'Products'}
                   type="text"
                   className="w-full bg-slate-100 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-500 cursor-not-allowed"
                 />
@@ -9424,7 +9431,7 @@ function App() {
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Second Category (Sub)</label>
                   <input
                     name="subcategory"
-                    defaultValue={modalData.subcategory || ''}
+                    defaultValue={modalData.subcategory || (modalData.level === 'sub' ? modalData.name : '')}
                     type="text"
                     className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
                   />
@@ -9433,9 +9440,17 @@ function App() {
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Third Category (Sub-sub)</label>
                   <input
                     name="subSubcategory"
-                    defaultValue={modalData.subSubcategory || ''}
+                    defaultValue={
+                      modalData.subSubcategory ||
+                      modalData.childCategory ||
+                      (modalData.level === 'child' ? modalData.name : '') ||
+                      (Array.isArray(modalData.childCategories) && modalData.childCategories.length > 0
+                        ? modalData.childCategories.map(ch => typeof ch === 'string' ? ch : ch.name).join(', ')
+                        : '')
+                    }
+                    placeholder="Enter third category name"
                     type="text"
-                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm text-slate-900 dark:text-white"
                   />
                 </div>
               </div>
