@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Store, LayoutGrid, List, Search, Filter, Download, ArrowUpRight, CheckCircle,
   XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, AlertTriangle, RefreshCw, X, ChevronRight, Trash2,
-  Eye, Building, Phone, Mail, FileText, CreditCard, ShieldCheck, User, Globe, Tag, Calendar, Layers
+  Eye, Building, Building2, Phone, Mail, FileText, CreditCard, ShieldCheck, User, Globe, Tag, Calendar, Layers
 } from 'lucide-react';
 
 const formatVendorId = (rawId, index = 0) => {
@@ -231,6 +231,13 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const [agentOnboardedVendorsList, setAgentOnboardedVendorsList] = useState([]);
   const [directRequests, setDirectRequests] = useState([]);
 
+  // Existing Vendor Business Requests Modal
+  const [showBusinessRequestsModal, setShowBusinessRequestsModal] = useState(false);
+  const [businessRequestsSearch, setBusinessRequestsSearch] = useState('');
+  const [businessRequestsFilter, setBusinessRequestsFilter] = useState('all'); // 'all' | 'secondary' | 'active' | 'pending'
+  const [businessRequestsList, setBusinessRequestsList] = useState([]);
+  const [businessRequestsLoading, setBusinessRequestsLoading] = useState(false);
+
   // Enterprise Status Change Confirmation Modal
   const [statusConfirmModal, setStatusConfirmModal] = useState({
     isOpen: false,
@@ -321,10 +328,55 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
     }
   };
 
+  const fetchVendorBusinessRequests = async () => {
+    setBusinessRequestsLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/vendors/business-requests`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': token,
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data && data.success && Array.isArray(data.data)) {
+        setBusinessRequestsList(data.data);
+      }
+    } catch (err) {
+      console.error('Fetch business requests error:', err);
+    } finally {
+      setBusinessRequestsLoading(false);
+    }
+  };
+
+  const handleUpdateBusinessStatus = async (userId, businessId, newStatus) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/vendors/business-status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': token,
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ userId, businessId, status: newStatus })
+      });
+      const data = await res.json();
+      if (data && data.success) {
+        setBusinessRequestsList(prev =>
+          prev.map(b => (String(b.businessId) === String(businessId) ? { ...b, status: newStatus } : b))
+        );
+        fetchVendors();
+      }
+    } catch (err) {
+      console.error('Error updating business status:', err);
+    }
+  };
+
   useEffect(() => {
     fetchVendors();
     fetchDirectRequests();
     fetchAgentOnboardedVendors();
+    fetchVendorBusinessRequests();
   }, [search, category, stateFilter, statusFilter, isDirectRequest, page]);
 
   useEffect(() => {
@@ -333,6 +385,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
         fetchVendors();
         fetchDirectRequests();
         fetchAgentOnboardedVendors();
+        fetchVendorBusinessRequests();
       }
     }, 5000);
 
@@ -736,6 +789,18 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
             <UserCheck className="w-4 h-4 shrink-0" /> Agent Onboarded
             <span className="bg-white text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-black">
               {agentOnboardedVendorsList.length}
+            </span>
+          </button>
+
+          {/* Existing Vendor Business Requests Button */}
+          <button
+            onClick={() => { setShowBusinessRequestsModal(true); fetchVendorBusinessRequests(); }}
+            className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
+            title="Review business profile & outlet requests registered by existing vendors"
+          >
+            <Building2 className="w-4 h-4 shrink-0" /> Business Requests
+            <span className="bg-white text-indigo-800 px-2 py-0.5 rounded-full text-[10px] font-black">
+              {businessRequestsList.length}
             </span>
           </button>
 
@@ -1659,6 +1724,254 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
           </div>
         );
       })()}
+
+      {/* 5. EXISTING VENDOR BUSINESS REQUESTS MODAL */}
+      {showBusinessRequestsModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-5xl rounded-3xl shadow-2xl my-8 flex flex-col">
+
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl border border-indigo-500/20">
+                  <Building2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Existing Vendor Business Requests</h3>
+                  <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                    Review and manage secondary business profile & branch outlet requests registered by existing vendors
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => { setShowBusinessRequestsModal(false); setBusinessRequestsSearch(''); }}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Search & Filter Toolbar */}
+            <div className="px-6 pt-4 pb-3 shrink-0 space-y-3">
+              <div className="flex flex-col sm:flex-row items-center gap-3">
+                <div className="flex-1 flex items-center bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl px-4 py-2.5 gap-2 w-full">
+                  <Search className="w-4 h-4 text-slate-400 shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search by vendor name, business name, category, vendor type, email, pincode..."
+                    value={businessRequestsSearch}
+                    onChange={e => setBusinessRequestsSearch(e.target.value)}
+                    className="bg-transparent focus:outline-none w-full text-xs text-slate-800 dark:text-slate-200 font-medium"
+                  />
+                  {businessRequestsSearch && (
+                    <button onClick={() => setBusinessRequestsSearch('')} className="text-slate-400 hover:text-slate-600 cursor-pointer shrink-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700 text-xs shrink-0 self-stretch sm:self-auto justify-center">
+                  <button
+                    onClick={() => setBusinessRequestsFilter('all')}
+                    className={`px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
+                      businessRequestsFilter === 'all' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    All Outlets ({businessRequestsList.length})
+                  </button>
+                  <button
+                    onClick={() => setBusinessRequestsFilter('secondary')}
+                    className={`px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
+                      businessRequestsFilter === 'secondary' ? 'bg-white dark:bg-slate-900 text-indigo-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    Secondary ({businessRequestsList.filter(b => !b.isPrimary).length})
+                  </button>
+                  <button
+                    onClick={() => setBusinessRequestsFilter('active')}
+                    className={`px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
+                      businessRequestsFilter === 'active' ? 'bg-white dark:bg-slate-900 text-emerald-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    Active ({businessRequestsList.filter(b => ['active', 'approved'].includes((b.status||'').toLowerCase())).length})
+                  </button>
+                  <button
+                    onClick={() => setBusinessRequestsFilter('pending')}
+                    className={`px-3 py-1.5 rounded-xl font-extrabold transition-all cursor-pointer ${
+                      businessRequestsFilter === 'pending' ? 'bg-white dark:bg-slate-900 text-amber-600 shadow-xs' : 'text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    Pending / Suspended ({businessRequestsList.filter(b => !['active', 'approved'].includes((b.status||'').toLowerCase())).length})
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Summary KPI Strip */}
+            <div className="px-6 pb-3 shrink-0">
+              <div className="grid grid-cols-4 gap-3">
+                <div className="bg-blue-500/8 border border-blue-500/15 rounded-2xl px-3.5 py-2.5 text-center">
+                  <p className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 tracking-wider">Total Business Outlets</p>
+                  <p className="text-lg font-black text-blue-700 dark:text-blue-300 mt-0.5">{businessRequestsList.length}</p>
+                </div>
+                <div className="bg-purple-500/8 border border-purple-500/15 rounded-2xl px-3.5 py-2.5 text-center">
+                  <p className="text-[10px] font-black uppercase text-purple-600 dark:text-purple-400 tracking-wider">Secondary Requests</p>
+                  <p className="text-lg font-black text-purple-700 dark:text-purple-300 mt-0.5">{businessRequestsList.filter(b => !b.isPrimary).length}</p>
+                </div>
+                <div className="bg-emerald-500/8 border border-emerald-500/15 rounded-2xl px-3.5 py-2.5 text-center">
+                  <p className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">Active Outlets</p>
+                  <p className="text-lg font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
+                    {businessRequestsList.filter(b => ['active', 'approved'].includes((b.status||'').toLowerCase())).length}
+                  </p>
+                </div>
+                <div className="bg-amber-500/8 border border-amber-500/15 rounded-2xl px-3.5 py-2.5 text-center">
+                  <p className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400 tracking-wider">Pending / Suspended</p>
+                  <p className="text-lg font-black text-amber-700 dark:text-amber-300 mt-0.5">
+                    {businessRequestsList.filter(b => !['active', 'approved'].includes((b.status||'').toLowerCase())).length}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* List of Business Requests */}
+            <div className="px-6 pb-6 overflow-y-auto max-h-[52vh] space-y-3">
+              {(() => {
+                const q = businessRequestsSearch.toLowerCase().trim();
+                const filtered = businessRequestsList.filter(b => {
+                  const s = (b.status || '').toLowerCase().trim();
+                  if (businessRequestsFilter === 'secondary' && b.isPrimary) return false;
+                  if (businessRequestsFilter === 'active' && !['active', 'approved'].includes(s)) return false;
+                  if (businessRequestsFilter === 'pending' && ['active', 'approved'].includes(s)) return false;
+
+                  if (!q) return true;
+                  return (
+                    (b.businessName || '').toLowerCase().includes(q) ||
+                    (b.vendorName || '').toLowerCase().includes(q) ||
+                    (b.vendorEmail || '').toLowerCase().includes(q) ||
+                    (b.vendorPhone || '').includes(q) ||
+                    (b.category || '').toLowerCase().includes(q) ||
+                    (b.vendorType || '').toLowerCase().includes(q) ||
+                    (b.pincode || '').includes(q)
+                  );
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-16 text-slate-400">
+                      <Building2 className="w-12 h-12 mx-auto mb-3 opacity-30 text-indigo-500" />
+                      <p className="text-sm font-bold">No vendor business requests match your current filters.</p>
+                      <p className="text-xs mt-1 font-medium">Try clearing your search term or filter tabs.</p>
+                    </div>
+                  );
+                }
+
+                return filtered.map((b, idx) => (
+                  <div
+                    key={b._id || idx}
+                    className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 space-y-4 hover:border-indigo-400/50 hover:shadow-md transition-all"
+                  >
+                    <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                      {/* Left: Outlet & Vendor Details */}
+                      <div className="flex items-start gap-3.5 flex-1 min-w-0">
+                        <div className="w-12 h-12 shrink-0 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-black text-xl flex items-center justify-center border border-indigo-500/20 shadow-xs">
+                          {(b.businessName || b.vendorName || 'B')[0].toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="font-black text-slate-850 dark:text-slate-100 text-base truncate">
+                              {b.businessName}
+                            </h4>
+                            <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                              b.isPrimary 
+                                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20' 
+                                : 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                            }`}>
+                              {b.isPrimary ? 'Primary Outlet' : 'Secondary Outlet Request'}
+                            </span>
+                            {renderStatusBadge(b.status)}
+                          </div>
+
+                          <p className="text-xs text-slate-600 dark:text-slate-300 font-semibold truncate">
+                            Vendor Owner: <strong className="text-slate-900 dark:text-white">{b.vendorName}</strong> ({b.vendorEmail || 'No email'} &nbsp;•&nbsp; {b.vendorPhone || 'N/A'})
+                          </p>
+
+                          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                            <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-900/40">
+                              {b.vendorType} • {b.category}
+                            </span>
+                            {b.subcategory && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                {b.subcategory}
+                              </span>
+                            )}
+                            <span className="text-[10px] font-mono text-slate-400 font-bold">
+                              Reg ID: {b.registrationId}
+                            </span>
+                            <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                              📍 {b.address || 'Address not specified'} {b.pincode ? `(${b.pincode})` : ''}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Quick Action Buttons */}
+                      <div className="flex flex-wrap items-center gap-2 shrink-0 self-stretch lg:self-auto justify-end">
+                        <button
+                          onClick={() => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, 'Active')}
+                          className={`px-3.5 py-2 text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-none ${
+                            ['active','approved'].includes((b.status||'').toLowerCase())
+                              ? 'bg-emerald-600 text-white opacity-60 cursor-default'
+                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                          }`}
+                          disabled={['active','approved'].includes((b.status||'').toLowerCase())}
+                        >
+                          <CheckCircle className="w-4 h-4" /> Activate Outlet
+                        </button>
+                        <button
+                          onClick={() => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, 'Suspended')}
+                          className={`px-3.5 py-2 text-xs font-black rounded-xl border flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 ${
+                            ['suspended','rejected'].includes((b.status||'').toLowerCase())
+                              ? 'bg-slate-200 text-slate-400 border-slate-300 cursor-default dark:bg-slate-800 dark:border-slate-700'
+                              : 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900/40 hover:bg-rose-100'
+                          }`}
+                          disabled={['suspended','rejected'].includes((b.status||'').toLowerCase())}
+                        >
+                          <XCircle className="w-4 h-4" /> Suspend Outlet
+                        </button>
+                        <select
+                          value={normalizeStatusValue(b.status)}
+                          onChange={e => handleUpdateBusinessStatus(b.vendorUserId, b.businessId, e.target.value)}
+                          className="text-xs font-extrabold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 cursor-pointer focus:outline-none shadow-2xs"
+                        >
+                          <option value="Active">🟢 Active</option>
+                          <option value="Pending Approval">🟡 Pending</option>
+                          <option value="Suspended">⚫ Suspend</option>
+                          <option value="Rejected">🔴 Reject</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <span className="text-xs font-semibold text-slate-400">
+                Total Outlets Loaded: <strong className="text-slate-600 dark:text-slate-300">{businessRequestsList.length}</strong>
+              </span>
+              <button
+                onClick={() => { setShowBusinessRequestsModal(false); setBusinessRequestsSearch(''); }}
+                className="px-5 py-2 rounded-xl text-xs font-black text-white bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 dark:hover:bg-slate-600 transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
 
     </div>
   );

@@ -1427,6 +1427,102 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
         console.error('Fatal error in GET /api/admin/vendors/requests:', err);
         res.status(500).json({ error: 'Server error fetching vendor requests', message: err.message });
     }
+// GET all vendor business requests & branch outlets across registered vendors
+router.get('/vendors/business-requests', [auth, adminAuth], async (req, res) => {
+    try {
+        const users = await User.find({
+            $or: [
+                { role: { $in: ['Vendor', 'vendor', 'Merchant', 'merchant'] } },
+                { vendorType: { $exists: true, $ne: '' } },
+                { businesses: { $exists: true, $not: { $size: 0 } } }
+            ]
+        }).lean();
+
+        const businessRequests = [];
+
+        users.forEach(user => {
+            const bizList = user.businesses || [];
+            const vendorName = user.businessName || user.name || user.username || 'Unnamed Vendor';
+            const vendorEmail = user.email || '';
+            const vendorPhone = user.phone || user.mobileNumber || user.telephone || '';
+            const primaryRegId = user.registrationId || user.vendorId || `ven-fic-${String(user._id).slice(-6)}`;
+
+            bizList.forEach((biz, idx) => {
+                businessRequests.push({
+                    _id: biz._id || `${user._id}_${idx}`,
+                    businessId: biz._id,
+                    vendorUserId: user._id,
+                    vendorName,
+                    vendorEmail,
+                    vendorPhone,
+                    registrationId: primaryRegId,
+                    businessName: biz.businessName || vendorName,
+                    vendorType: biz.vendorType || user.vendorType || 'Products',
+                    category: biz.category || user.category || 'General',
+                    subcategory: biz.subcategory || user.subcategory || '',
+                    address: biz.address || user.address || '',
+                    pincode: biz.pincode || user.pincode || user.postalCode || '',
+                    phone: biz.phone || vendorPhone,
+                    status: biz.status || (idx === 0 ? (user.status || 'Approved') : 'Pending Approval'),
+                    isPrimary: idx === 0,
+                    createdAt: biz.createdAt || user.createdAt || new Date()
+                });
+            });
+        });
+
+        res.json({ success: true, count: businessRequests.length, data: businessRequests });
+    } catch (err) {
+        console.error('Error fetching vendor business requests:', err);
+        res.status(500).json({ success: false, error: 'Server error fetching business requests', message: err.message });
+    }
+});
+
+// PUT update business status of a vendor business profile/outlet
+router.put('/vendors/business-status', [auth, adminAuth], async (req, res) => {
+    try {
+        const { userId, businessId, status } = req.body;
+        if (!userId || !businessId || !status) {
+            return res.status(400).json({ success: false, message: 'userId, businessId, and status are required' });
+        }
+
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Vendor user not found' });
+        }
+
+        let updatedBiz = null;
+        if (Array.isArray(user.businesses)) {
+            user.businesses.forEach(b => {
+                if (String(b._id) === String(businessId)) {
+                    b.status = status;
+                    updatedBiz = b;
+                }
+            });
+        }
+
+        if (!updatedBiz) {
+            return res.status(404).json({ success: false, message: 'Business outlet profile not found' });
+        }
+
+        user.markModified('businesses');
+        await user.save();
+
+        // Synchronize products for this business outlet
+        const isSuspended = status.toLowerCase() === 'suspended' || status.toLowerCase() === 'rejected';
+        try {
+            await Product.updateMany(
+                { $or: [{ businessId: String(businessId) }, { outletId: String(businessId) }, { storeId: String(businessId) }] },
+                { $set: { isVendorSuspended: isSuspended, businessStatus: status } }
+            );
+        } catch (prodErr) {
+            console.error('Product sync warning:', prodErr.message);
+        }
+
+        res.json({ success: true, message: `Business outlet status updated to ${status}`, business: updatedBiz });
+    } catch (err) {
+        console.error('Error updating business status:', err);
+        res.status(500).json({ success: false, message: err.message });
+    }
 });
 
 router.post('/vendors', [auth, adminAuth], async (req, res) => {
