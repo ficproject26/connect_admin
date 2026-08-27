@@ -2135,28 +2135,28 @@ function App() {
                     onClick={() => setAgentLevelFilter('state')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'state' ? 'bg-purple-500/10 border-2 border-purple-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-purple-500">{agents.filter(a => isApprovedAgent(a) && (a.level || '').toLowerCase() === 'state').length}</span>
+                    <span className="block text-2xl font-black text-purple-500">{agents.filter(a => isApprovedAgent(a) && getAgentLevel(a) === 'state').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">State Agents</span>
                   </div>
                   <div
                     onClick={() => setAgentLevelFilter('district')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'district' ? 'bg-blue-500/10 border-2 border-blue-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-blue-500">{agents.filter(a => isApprovedAgent(a) && (a.level || '').toLowerCase() === 'district').length}</span>
+                    <span className="block text-2xl font-black text-blue-500">{agents.filter(a => isApprovedAgent(a) && getAgentLevel(a) === 'district').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">District Agents</span>
                   </div>
                   <div
                     onClick={() => setAgentLevelFilter('division')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'division' ? 'bg-indigo-500/10 border-2 border-indigo-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-indigo-500">{agents.filter(a => isApprovedAgent(a) && ['division', 'divisional'].includes((a.level || '').toLowerCase())).length}</span>
+                    <span className="block text-2xl font-black text-indigo-500">{agents.filter(a => isApprovedAgent(a) && getAgentLevel(a) === 'division').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">Divisional Agents</span>
                   </div>
                   <div
                     onClick={() => setAgentLevelFilter('pincode')}
                     className={`p-4 rounded-xl text-center cursor-pointer transition-all ${agentLevelFilter === 'pincode' ? 'bg-emerald-500/10 border-2 border-emerald-500' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 hover:bg-slate-100 dark:hover:bg-slate-900'}`}
                   >
-                    <span className="block text-2xl font-black text-emerald-500">{agents.filter(a => isApprovedAgent(a) && (a.level || 'pincode').toLowerCase() === 'pincode').length}</span>
+                    <span className="block text-2xl font-black text-emerald-500">{agents.filter(a => isApprovedAgent(a) && getAgentLevel(a) === 'pincode').length}</span>
                     <span className="text-xs font-semibold text-slate-400 mt-1">Pincode Agents</span>
                   </div>
                 </div>
@@ -2230,10 +2230,10 @@ function App() {
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">Agent Level:</span>
                   {[
                     { id: 'all', label: 'All Agents', count: agents.filter(isApprovedAgent).length },
-                    { id: 'state', label: 'State Agents', count: agents.filter(a => isApprovedAgent(a) && (a.level || '').toLowerCase() === 'state').length },
-                    { id: 'district', label: 'District Agents', count: agents.filter(a => isApprovedAgent(a) && (a.level || '').toLowerCase() === 'district').length },
-                    { id: 'division', label: 'Divisional Agents', count: agents.filter(a => isApprovedAgent(a) && ['division', 'divisional'].includes((a.level || '').toLowerCase())).length },
-                    { id: 'pincode', label: 'Pincode Agents', count: agents.filter(a => isApprovedAgent(a) && (a.level || 'pincode').toLowerCase() === 'pincode').length },
+                    { id: 'state', label: 'State Agents', count: agents.filter(a => isApprovedAgent(a) && getAgentLevel(a) === 'state').length },
+                    { id: 'district', label: 'District Agents', count: agents.filter(a => isApprovedAgent(a) && getAgentLevel(a) === 'district').length },
+                    { id: 'division', label: 'Divisional Agents', count: agents.filter(a => isApprovedAgent(a) && getAgentLevel(a) === 'division').length },
+                    { id: 'pincode', label: 'Pincode Agents', count: agents.filter(a => isApprovedAgent(a) && getAgentLevel(a) === 'pincode').length },
                     { id: 'rejected', label: 'Rejected Agents', count: agents.filter(a => (a.status || '').toLowerCase() === 'rejected').length }
                   ].map((filter) => (
                     <button
@@ -2267,7 +2267,7 @@ function App() {
                       (a.assignedPincode?.code && a.assignedPincode.code.includes(query));
 
                     const aStatus = (a.status || '').toLowerCase();
-                    const lvl = (a.level || 'pincode').toLowerCase();
+                    const lvl = getAgentLevel(a);
 
                     if (agentLevelFilter === 'rejected') {
                       if (!(matchesSearch && aStatus === 'rejected')) return false;
@@ -2277,7 +2277,7 @@ function App() {
                       let matchesLevel = true;
                       if (agentLevelFilter === 'state') matchesLevel = lvl === 'state';
                       else if (agentLevelFilter === 'district') matchesLevel = lvl === 'district';
-                      else if (agentLevelFilter === 'division') matchesLevel = lvl === 'division' || lvl === 'divisional';
+                      else if (agentLevelFilter === 'division') matchesLevel = lvl === 'division';
                       else if (agentLevelFilter === 'pincode') matchesLevel = lvl === 'pincode';
 
                       if (!(matchesSearch && matchesLevel)) return false;

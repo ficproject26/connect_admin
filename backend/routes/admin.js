@@ -744,14 +744,32 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             } catch (aErr) {
                 console.error("Error fetching raw agents collection:", aErr);
             }
-        }
-
         // 3. Merge & Deduplicate by registrationId, email, or _id
         const agentMap = new Map();
 
+        const resolveAgentCleanLevel = (item) => {
+            if (!item) return 'pincode';
+            const l = (item.level || item.agentLevel || item.role || item.assignedRole || item.agentType || item.type || '').toString().toLowerCase().trim();
+            if (l.includes('state')) return 'state';
+            if (l.includes('district') || l.includes('dist')) return 'district';
+            if (l.includes('divis') || l.includes('division')) return 'division';
+            if (l.includes('pincode') || l.includes('pin')) return 'pincode';
+
+            const nameEmail = `${item.name || ''} ${item.email || ''}`.toLowerCase();
+            if (nameEmail.includes('state')) return 'state';
+            if (nameEmail.includes('district') || nameEmail.includes('dis')) return 'district';
+            if (nameEmail.includes('division') || nameEmail.includes('div')) return 'division';
+            if (nameEmail.includes('pincode') || nameEmail.includes('pin')) return 'pincode';
+
+            if (item.assignedState && !item.assignedDistrict) return 'state';
+            if (item.assignedDistrict) return 'district';
+            if (item.assignedDivision || item.division) return 'division';
+
+            return 'pincode';
+        };
+
         userAgents.forEach(agent => {
-            const levelVal = (agent.level || agent.agentLevel || agent.role || 'pincode').toLowerCase();
-            const cleanLevel = levelVal.includes('state') ? 'state' : levelVal.includes('district') ? 'district' : (levelVal.includes('divis') || levelVal.includes('division')) ? 'division' : 'pincode';
+            const cleanLevel = resolveAgentCleanLevel(agent);
             const key = (agent.registrationId || agent.email || (agent._id ? agent._id.toString() : '')).toLowerCase().trim();
             if (key) {
                 const kycObj = agent.kyc || agent.kycDocs || {};
@@ -804,8 +822,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         rawAgents.forEach(raw => {
             const rawIdStr = raw._id ? raw._id.toString() : '';
             const key = (raw.registrationId || raw.email || rawIdStr).toLowerCase().trim();
-            const levelVal = (raw.level || raw.role || 'pincode').toLowerCase();
-            const cleanLevel = levelVal.includes('state') ? 'state' : levelVal.includes('district') ? 'district' : (levelVal.includes('divis') || levelVal.includes('division')) ? 'division' : 'pincode';
+            const cleanLevel = resolveAgentCleanLevel(raw);
 
             const rawTerritory = raw.territory || {};
             const rawKycDocs = raw.kycDocs || raw.kyc || {};
@@ -860,6 +877,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     });
                 } else {
                     const existing = agentMap.get(key);
+                    if (!existing.level || existing.level === 'pincode') {
+                        existing.level = cleanLevel;
+                    }
                     existing.status = existing.status || rawStatus;
                     existing.kycStatus = existing.kycStatus || rawKycStatus;
                     existing.altPhone = existing.altPhone || raw.altPhone || raw.alternativePhone || raw.secondaryPhone || '';
