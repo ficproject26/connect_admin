@@ -985,10 +985,11 @@ router.post('/vendors/update-business-status', auth, async (req, res) => {
 // POST Approve & Activate Direct Vendor Request
 router.post('/vendors/approve', auth, async (req, res) => {
     try {
-        const { vendorId, registrationId, _id, email, businessName, name } = req.body;
+        const { vendorId, registrationId, _id, email, businessName, name, phone, mobile } = req.body;
         const targetId = _id || vendorId;
         const targetEmail = email ? String(email).toLowerCase().trim() : '';
         const targetBizName = businessName || name || '';
+        const targetPhone = phone || mobile || '';
         const updateFilter = buildVendorQuery(targetId, targetEmail, registrationId, targetBizName);
 
         await User.collection.updateMany(
