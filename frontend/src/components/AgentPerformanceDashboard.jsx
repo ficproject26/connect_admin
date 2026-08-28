@@ -32,42 +32,12 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
     areaChartRegistrations: []
   };
 
-  // Loading & Data States (Instant 0ms LocalStorage SWR Caching)
-  const [cardsData, setCardsData] = useState(() => {
-    try {
-      const c = localStorage.getItem('perf_cached_cards');
-      if (c) return JSON.parse(c);
-    } catch(e){}
-    return null;
-  });
-  const [leaderboards, setLeaderboards] = useState(() => {
-    try {
-      const c = localStorage.getItem('perf_cached_leaderboards');
-      if (c) return JSON.parse(c);
-    } catch(e){}
-    return null;
-  });
-  const [chartsData, setChartsData] = useState(() => {
-    try {
-      const c = localStorage.getItem('perf_cached_charts');
-      if (c) return JSON.parse(c);
-    } catch(e){}
-    return defaultChartsData;
-  });
-  const [agentsList, setAgentsList] = useState(() => {
-    try {
-      const c = localStorage.getItem('perf_cached_agents');
-      if (c) return JSON.parse(c);
-    } catch(e){}
-    return [];
-  });
-  const [loading, setLoading] = useState(() => {
-    try {
-      return !localStorage.getItem('perf_cached_cards');
-    } catch(e) {
-      return true;
-    }
-  });
+  // Loading & Data States (Direct Database Fetching Only - No LocalStorage Data Caching)
+  const [cardsData, setCardsData] = useState(null);
+  const [leaderboards, setLeaderboards] = useState(null);
+  const [chartsData, setChartsData] = useState(defaultChartsData);
+  const [agentsList, setAgentsList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Modals & Profile Drawer
   const [selectedAgentProfile, setSelectedAgentProfile] = useState(null);
@@ -82,8 +52,9 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
     revenue: 500000
   });
 
-  // Fetch Performance Overview
+  // Fetch Performance Overview directly from MongoDB via backend API
   const fetchOverview = async () => {
+    setLoading(true);
     try {
       const queryParams = new URLSearchParams({
         period,
@@ -128,12 +99,6 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
         setLeaderboards(successData.leaderboards);
         setChartsData(successData.charts || defaultChartsData);
         setAgentsList(successData.agents || []);
-        try {
-          localStorage.setItem('perf_cached_cards', JSON.stringify(successData.cards));
-          localStorage.setItem('perf_cached_leaderboards', JSON.stringify(successData.leaderboards));
-          localStorage.setItem('perf_cached_charts', JSON.stringify(successData.charts || defaultChartsData));
-          localStorage.setItem('perf_cached_agents', JSON.stringify(successData.agents || []));
-        } catch(e){}
       }
     } catch (err) {
       console.error('Fetch agent performance error:', err);

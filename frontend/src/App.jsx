@@ -493,23 +493,11 @@ function App() {
     pincodeCoverage: []
   };
 
-  // Data States (with Persistent SWR Local Cache for Instant Render on Refresh)
-  const [stats, setStats] = useState(() => {
-    try {
-      const cached = localStorage.getItem('cached_dashboard_stats');
-      if (cached) return JSON.parse(cached);
-    } catch (e) { }
-    return defaultDashboardStats;
-  });
+  // Data States (Direct Database Load via API)
+  const [stats, setStats] = useState(defaultDashboardStats);
   const [branches, setBranches] = useState([]);
   const [admins, setAdmins] = useState([]);
-  const [agents, setAgents] = useState(() => {
-    try {
-      const cached = localStorage.getItem('cached_agents');
-      if (cached) return JSON.parse(cached);
-    } catch (e) { }
-    return [];
-  });
+  const [agents, setAgents] = useState([]);
   const [pincodes, setPincodes] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -730,8 +718,6 @@ function App() {
     try {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      localStorage.removeItem('cached_agents');
-      localStorage.removeItem('cached_dashboard_stats');
     } catch (e) { }
     setToken('');
     setUser(null);
@@ -803,17 +789,13 @@ function App() {
     return null;
   }, [token, handleLogout]);
 
-  // Fetch Dashboard Core Stats (Fast 0ms SWR Caching & Non-blocking Load)
+  // Fetch Dashboard Core Stats directly from Database via Backend API
   const fetchData = async (forceRefresh = false) => {
     if (!token) return;
     try {
       if (forceRefresh) {
         delete apiCacheRef.current['stats'];
         delete apiCacheRef.current['agents'];
-        try {
-          localStorage.removeItem('cached_agents');
-          localStorage.removeItem('cached_dashboard_stats');
-        } catch (e) {}
       } else {
         if (apiCacheRef.current['stats']) setStats(apiCacheRef.current['stats']);
         if (Array.isArray(apiCacheRef.current['agents'])) setAgents(apiCacheRef.current['agents']);
@@ -823,7 +805,6 @@ function App() {
       await Promise.allSettled([
         safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
           apiCacheRef.current['stats'] = data;
-          try { localStorage.setItem('cached_dashboard_stats', JSON.stringify(data)); } catch (e) {}
           setStats(data);
         }),
         safeFetch(`${API_BASE}/admin/agents`, handleSetAgents),
@@ -901,7 +882,6 @@ function App() {
 
       setAgents(uniqueList);
       apiCacheRef.current['agents'] = uniqueList;
-      try { localStorage.setItem('cached_agents', JSON.stringify(uniqueList)); } catch (e) {}
     }
   }, []);
 
