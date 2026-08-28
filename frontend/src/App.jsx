@@ -889,22 +889,17 @@ function App() {
       const seen = new Set();
       const uniqueList = list.filter(ag => {
         if (!ag) return false;
+        const idStr = (ag._id || '').toString().toLowerCase().trim();
         const regId = (ag.registrationId || ag.id || '').toString().toLowerCase().trim();
         const email = (ag.email || '').toLowerCase().trim();
-        const phone = (ag.phone || ag.mobile || '').toString().replace(/\D/g, '');
-        const idStr = (ag._id || '').toString().toLowerCase().trim();
 
         let primaryKey = null;
-        if (regId && regId !== 'undefined' && regId !== 'null') primaryKey = `reg_${regId}`;
+        if (idStr) primaryKey = `id_${idStr}`;
+        else if (regId && regId !== 'undefined' && regId !== 'null') primaryKey = `reg_${regId}`;
         else if (email && email !== 'undefined' && email !== 'null') primaryKey = `email_${email}`;
-        else if (phone && phone.length >= 7) primaryKey = `phone_${phone}`;
-        else if (idStr) primaryKey = `id_${idStr}`;
 
         if (!primaryKey || seen.has(primaryKey)) return false;
-        if (regId) seen.add(`reg_${regId}`);
-        if (email) seen.add(`email_${email}`);
-        if (phone && phone.length >= 7) seen.add(`phone_${phone}`);
-        if (idStr) seen.add(`id_${idStr}`);
+        seen.add(primaryKey);
         return true;
       });
 
@@ -2309,23 +2304,18 @@ function App() {
                       if (!(matchesSearch && matchesLevel)) return false;
                     }
 
-                    // Strict Deduplication by registrationId, email, phone, or _id
+                    // Strict Deduplication by _id, registrationId, or email
+                    const idStr = (a._id || '').toString().toLowerCase().trim();
                     const regId = (a.registrationId || a.id || '').toString().toLowerCase().trim();
                     const email = (a.email || '').toLowerCase().trim();
-                    const phone = (a.phone || a.mobile || '').toString().replace(/\D/g, '');
-                    const idStr = (a._id || '').toString().toLowerCase().trim();
 
                     let primaryKey = null;
-                    if (regId && regId !== 'undefined' && regId !== 'null') primaryKey = `reg_${regId}`;
+                    if (idStr) primaryKey = `id_${idStr}`;
+                    else if (regId && regId !== 'undefined' && regId !== 'null') primaryKey = `reg_${regId}`;
                     else if (email && email !== 'undefined' && email !== 'null') primaryKey = `email_${email}`;
-                    else if (phone && phone.length >= 7) primaryKey = `phone_${phone}`;
-                    else if (idStr) primaryKey = `id_${idStr}`;
 
                     if (!primaryKey || seenKeysInFilter.has(primaryKey)) return false;
-                    if (regId) seenKeysInFilter.add(`reg_${regId}`);
-                    if (email) seenKeysInFilter.add(`email_${email}`);
-                    if (phone && phone.length >= 7) seenKeysInFilter.add(`phone_${phone}`);
-                    if (idStr) seenKeysInFilter.add(`id_${idStr}`);
+                    seenKeysInFilter.add(primaryKey);
 
                     return true;
                   });
