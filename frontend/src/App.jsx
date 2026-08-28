@@ -162,6 +162,11 @@ const isPendingAgent = (agent) => {
   const status = (agent.status || '').toLowerCase().trim();
   const kycStatus = (agent.kycStatus || '').toLowerCase().trim();
 
+  const pendingVariants = ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'new', 'submitted'];
+  if (pendingVariants.includes(status) || pendingVariants.includes(kycStatus)) {
+    return true;
+  }
+
   // Explicitly approved & active directory agents are not pending onboarding requests
   if (
     (status === 'approved' || status === 'active' || kycStatus === 'approved' || kycStatus === 'active') &&

@@ -780,12 +780,26 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
                 let statusVal = (agent.status && String(agent.status) !== 'undefined') ? String(agent.status) : (agent.kycStatus || 'pending');
                 let kycStatusVal = (agent.kycStatus && String(agent.kycStatus) !== 'undefined') ? String(agent.kycStatus) : (agent.status || 'pending');
-                if (statusVal === 'approved' || statusVal === 'active' || agent.isApproved || agent.isActive) {
+
+                const statusLower = statusVal.toLowerCase().trim();
+                const kycLower = kycStatusVal.toLowerCase().trim();
+                const isPendingState = ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'new', 'submitted'].includes(statusLower) ||
+                                       ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'new', 'submitted'].includes(kycLower);
+
+                let isActiveVal = false;
+                let isApprovedVal = false;
+
+                if (isPendingState) {
+                    statusVal = 'pending';
+                    kycStatusVal = 'pending';
+                    isActiveVal = false;
+                    isApprovedVal = false;
+                } else if (statusLower === 'approved' || statusLower === 'active' || kycLower === 'approved' || kycLower === 'active' || agent.isApproved === true || agent.isActive === true) {
                     statusVal = 'approved';
                     kycStatusVal = 'approved';
+                    isActiveVal = true;
+                    isApprovedVal = true;
                 }
-                const isActiveVal = typeof agent.isActive !== 'undefined' ? !!agent.isActive : (statusVal === 'approved' || statusVal === 'active');
-                const isApprovedVal = typeof agent.isApproved !== 'undefined' ? !!agent.isApproved : (statusVal === 'approved' || statusVal === 'active');
 
                 agentMap.set(key, {
                     ...agent,
@@ -834,9 +848,28 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             const rawKycDocs = raw.kycDocs || raw.kyc || {};
             const rawKyc = raw.kyc || raw.kycDocs || {};
 
-            const rawStatus = (raw.status && String(raw.status) !== 'undefined') ? String(raw.status) : (raw.kycStatus || 'pending');
-            const rawKycStatus = (raw.kycStatus && String(raw.kycStatus) !== 'undefined') ? String(raw.kycStatus) : (raw.status || 'pending');
-            const rawIsActive = typeof raw.isActive !== 'undefined' ? !!raw.isActive : (rawStatus === 'approved' || rawKycStatus === 'approved');
+            let rawStatus = (raw.status && String(raw.status) !== 'undefined') ? String(raw.status) : (raw.kycStatus || 'pending');
+            let rawKycStatus = (raw.kycStatus && String(raw.kycStatus) !== 'undefined') ? String(raw.kycStatus) : (raw.status || 'pending');
+
+            const rawStatusLower = rawStatus.toLowerCase().trim();
+            const rawKycLower = rawKycStatus.toLowerCase().trim();
+            const rawIsPendingState = ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'new', 'submitted'].includes(rawStatusLower) ||
+                                      ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'new', 'submitted'].includes(rawKycLower);
+
+            let rawIsActive = false;
+            let rawIsApproved = false;
+
+            if (rawIsPendingState) {
+                rawStatus = 'pending';
+                rawKycStatus = 'pending';
+                rawIsActive = false;
+                rawIsApproved = false;
+            } else if (rawStatusLower === 'approved' || rawStatusLower === 'active' || rawKycLower === 'approved' || rawKycLower === 'active' || raw.isApproved === true || raw.isActive === true) {
+                rawStatus = 'approved';
+                rawKycStatus = 'approved';
+                rawIsActive = true;
+                rawIsApproved = true;
+            }
 
             if (key) {
                 if (!agentMap.has(key)) {
