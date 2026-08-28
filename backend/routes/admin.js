@@ -1634,10 +1634,15 @@ const buildProductVendorQuery = (v) => {
 router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
     try {
         let vendor = await User.findById(req.params.id);
+        const bcrypt = require('bcryptjs');
         if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
             vendor.status = 'Approved';
             vendor.isActive = true;
             vendor.isApproved = true;
+            if (!vendor.password) {
+                const salt = await bcrypt.genSalt(10);
+                vendor.password = await bcrypt.hash('Vendor@12345', salt);
+            }
             await vendor.save();
             await Product.updateMany(
                 buildProductVendorQuery(vendor),
@@ -1650,6 +1655,38 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
             legacy.status = 'approved';
             legacy.isActive = true;
             await legacy.save();
+            
+            // Sync to User collection if missing
+            const cleanEmail = (legacy.email || '').toLowerCase().trim();
+            if (cleanEmail) {
+                let userRec = await User.findOne({ email: cleanEmail });
+                if (!userRec) {
+                    const salt = await bcrypt.genSalt(10);
+                    const hashedPassword = await bcrypt.hash('Vendor@12345', salt);
+                    userRec = new User({
+                        name: legacy.name || legacy.businessName || 'Vendor Merchant',
+                        businessName: legacy.businessName || legacy.name || 'Vendor Store',
+                        contactPerson: legacy.contactPerson || legacy.ownerName || 'Contact Person',
+                        email: cleanEmail,
+                        password: hashedPassword,
+                        role: 'Vendor',
+                        category: legacy.category || 'General Store',
+                        status: 'Approved',
+                        isActive: true,
+                        isApproved: true,
+                        createdAt: legacy.createdAt || new Date()
+                    });
+                    await userRec.save().catch(() => {});
+                } else if (!userRec.password) {
+                    const salt = await bcrypt.genSalt(10);
+                    userRec.password = await bcrypt.hash('Vendor@12345', salt);
+                    userRec.status = 'Approved';
+                    userRec.isActive = true;
+                    userRec.isApproved = true;
+                    await userRec.save().catch(() => {});
+                }
+            }
+
             await Product.updateMany(
                 buildProductVendorQuery(legacy),
                 { $set: { vendorStatus: 'approved', isVendorSuspended: false, isSuspended: false, isActive: true, isAvailable: true } }

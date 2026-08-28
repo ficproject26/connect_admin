@@ -495,12 +495,17 @@ router.post('/vendors/agent-onboard', async (req, res) => {
 
         const territoryStr = assignedArea || (territoryParts.length > 0 ? territoryParts.join(' / ') : (agentDoc?.assignedArea || ''));
 
+        const bcrypt = require('bcryptjs');
+        const defaultSalt = await bcrypt.genSalt(10);
+        const defaultHashedPassword = await bcrypt.hash('Vendor@12345', defaultSalt);
+
         const vendorData = {
             name: name || contactPerson || businessName || 'Vendor Merchant',
             businessName: businessName || name || 'Vendor Business',
             contactPerson: contactPerson || name || businessName || 'Contact Person',
             email: lowerEmail,
             phone: cleanPhone || undefined,
+            password: defaultHashedPassword,
             role: 'Vendor',
             vendorType: category || 'General Store',
             category: category || 'General Store',
@@ -1019,25 +1024,35 @@ router.post('/vendors/approve', auth, async (req, res) => {
             user.isApproved = true;
             user.isLocked = false;
             user.rejectionReason = '';
+            if (!user.password) {
+                const salt = await bcrypt.genSalt(10);
+                user.password = await bcrypt.hash('Vendor@12345', salt);
+            }
             await user.save().catch(() => {});
-        } else if (targetEmail || targetBizName) {
-            const salt = await bcrypt.genSalt(12);
-            const hashedPassword = await bcrypt.hash('Vendor@12345', salt);
-            user = new User({
-                name: name || targetBizName || 'Vendor Partner',
-                businessName: targetBizName || name || 'Vendor Partner',
-                email: targetEmail || `vendor_${Date.now()}@connect.com`,
-                phone: (targetPhone || '').replace(/\D/g, '') || undefined,
-                password: hashedPassword,
-                role: 'vendor',
-                status: 'Approved',
-                isActive: true,
-                isApproved: true,
-                isLocked: false,
-                createdAt: new Date()
-            });
-            await user.save().catch((err) => {
-                console.error("Vendor auto-user creation warning:", err.message);
+        } else {
+            const rawVendor = await Vendor.findOne(updateFilter);
+            if (rawVendor || targetEmail || targetBizName) {
+                const salt = await bcrypt.genSalt(10);
+                const hashedPassword = await bcrypt.hash('Vendor@12345', salt);
+                user = new User({
+                    name: (rawVendor && rawVendor.name) || name || targetBizName || 'Vendor Partner',
+                    businessName: (rawVendor && rawVendor.businessName) || targetBizName || name || 'Vendor Partner',
+                    email: (rawVendor && rawVendor.email) || targetEmail || `vendor_${Date.now()}@connect.com`,
+                    phone: (rawVendor && rawVendor.phone) || (targetPhone || '').replace(/\D/g, '') || undefined,
+                    password: hashedPassword,
+                    role: 'Vendor',
+                    category: (rawVendor && rawVendor.category) || 'General Store',
+                    status: 'Approved',
+                    isActive: true,
+                    isApproved: true,
+                    isLocked: false,
+                    createdAt: (rawVendor && rawVendor.createdAt) || new Date()
+                });
+                await user.save().catch((err) => {
+                    console.error("Vendor auto-user creation warning:", err.message);
+                });
+            }
+        }
             });
         }
 
