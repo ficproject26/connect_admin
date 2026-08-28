@@ -912,7 +912,7 @@ function App() {
     if (activeTab === 'dashboard' || activeTab === 'overview') {
       fetchData();
     }
-    if (activeTab === 'agents' || activeTab === 'agent-directory') {
+    if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-performance' || activeTab === 'agent-payment') {
       safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
     }
     if (activeTab === 'vendors' || activeTab === 'vendor-directory' || activeTab === 'vendor-directory-enterprise') {

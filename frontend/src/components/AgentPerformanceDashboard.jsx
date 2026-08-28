@@ -32,13 +32,43 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
     areaChartRegistrations: []
   };
 
-  // Loading & Data States
-  const [loading, setLoading] = useState(false);
-  const [cardsData, setCardsData] = useState(null);
-  const [leaderboards, setLeaderboards] = useState(null);
-  const [chartsData, setChartsData] = useState(defaultChartsData);
-  const [agentsList, setAgentsList] = useState([]);
-  
+  // Loading & Data States (Instant 0ms LocalStorage SWR Caching)
+  const [cardsData, setCardsData] = useState(() => {
+    try {
+      const c = localStorage.getItem('perf_cached_cards');
+      if (c) return JSON.parse(c);
+    } catch(e){}
+    return null;
+  });
+  const [leaderboards, setLeaderboards] = useState(() => {
+    try {
+      const c = localStorage.getItem('perf_cached_leaderboards');
+      if (c) return JSON.parse(c);
+    } catch(e){}
+    return null;
+  });
+  const [chartsData, setChartsData] = useState(() => {
+    try {
+      const c = localStorage.getItem('perf_cached_charts');
+      if (c) return JSON.parse(c);
+    } catch(e){}
+    return defaultChartsData;
+  });
+  const [agentsList, setAgentsList] = useState(() => {
+    try {
+      const c = localStorage.getItem('perf_cached_agents');
+      if (c) return JSON.parse(c);
+    } catch(e){}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => {
+    try {
+      return !localStorage.getItem('perf_cached_cards');
+    } catch(e) {
+      return true;
+    }
+  });
+
   // Modals & Profile Drawer
   const [selectedAgentProfile, setSelectedAgentProfile] = useState(null);
   const [profileTab, setProfileTab] = useState('overview');
@@ -54,7 +84,6 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
   // Fetch Performance Overview
   const fetchOverview = async () => {
-    setLoading(true);
     try {
       const queryParams = new URLSearchParams({
         period,
@@ -71,24 +100,25 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
       const queryString = queryParams.toString();
       const primaryUrl = `${API_BASE}/admin/agent-performance/overview?${queryString}`;
-      const targetUrls = [primaryUrl];
-      const isLocalDev = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      );
-      if (isLocalDev && !primaryUrl.includes('connect-admin-qlcy.onrender.com')) {
-        targetUrls.push(`https://connect-admin-qlcy.onrender.com/api/admin/agent-performance/overview?${queryString}`);
-      }
-      targetUrls.push(`/api/admin/agent-performance/overview?${queryString}`);
 
       let successData = null;
-      for (const targetUrl of [...new Set(targetUrls)]) {
+      try {
+        const res = await fetch(primaryUrl, {
+          headers: { 'x-auth-token': token, 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          successData = await res.json();
+        }
+      } catch (e) { }
+
+      if (!successData) {
+        // Fallback relative url
         try {
-          const res = await fetch(targetUrl, {
+          const res = await fetch(`/api/admin/agent-performance/overview?${queryString}`, {
             headers: { 'x-auth-token': token, 'Content-Type': 'application/json' }
           });
           if (res.ok) {
             successData = await res.json();
-            break;
           }
         } catch (e) { }
       }
@@ -96,8 +126,14 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       if (successData) {
         setCardsData(successData.cards);
         setLeaderboards(successData.leaderboards);
-        setChartsData(successData.charts);
+        setChartsData(successData.charts || defaultChartsData);
         setAgentsList(successData.agents || []);
+        try {
+          localStorage.setItem('perf_cached_cards', JSON.stringify(successData.cards));
+          localStorage.setItem('perf_cached_leaderboards', JSON.stringify(successData.leaderboards));
+          localStorage.setItem('perf_cached_charts', JSON.stringify(successData.charts || defaultChartsData));
+          localStorage.setItem('perf_cached_agents', JSON.stringify(successData.agents || []));
+        } catch(e){}
       }
     } catch (err) {
       console.error('Fetch agent performance error:', err);
