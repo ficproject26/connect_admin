@@ -36,7 +36,11 @@ const adminAuth = async (req, res, next) => {
             userId = new mongoose.Types.ObjectId(userId);
         }
         const user = await User.findById(userId).select('role adminRole level branchId status isActive email name').lean();
-        if (!user || user.role !== 'admin') {
+        const roleLower = (user?.role || '').toLowerCase();
+        const adminRoleLower = (user?.adminRole || '').toLowerCase();
+        const isAdminUser = roleLower.includes('admin') || adminRoleLower.includes('admin') || roleLower === 'super-admin' || adminRoleLower === 'super-admin' || roleLower === 'staff' || adminRoleLower === 'staff';
+
+        if (!user || !isAdminUser) {
             return res.status(403).json({ msg: 'Access denied. Admins only.' });
         }
         req.adminUser = user; // attach admin profile

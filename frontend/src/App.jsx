@@ -918,6 +918,9 @@ function App() {
   useEffect(() => {
     if (!token) return;
 
+    if (activeTab === 'dashboard' || activeTab === 'overview') {
+      fetchData();
+    }
     if (activeTab === 'agents' || activeTab === 'agent-directory') {
       safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
     }
