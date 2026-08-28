@@ -3538,8 +3538,8 @@ function App() {
                             <td className="px-6 py-4 text-xs font-semibold text-purple-500">
                               {c.customerType || c.type || 'Standard'}
                             </td>
-                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.aadhaarNumber || '—'}</td>
-                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.panNumber || '—'}</td>
+                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.aadhaarNumber || c.aadhaar || c.aadharNumber || c.aadhar || '—'}</td>
+                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.panNumber || c.pan || c.panCard || '—'}</td>
                             <td className="px-6 py-4">
                               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${c.status === 'active' || c.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                                 {c.status === 'active' || c.status === 'Active' ? 'Active' : 'Inactive'}

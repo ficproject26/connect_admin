@@ -2055,8 +2055,8 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
         const sanitize = (doc) => {
             const d = doc.toObject ? doc.toObject() : { ...doc };
             delete d.password; // never expose passwords
-            d.aadhaarNumber = d.kyc?.aadhaarNumber || d.aadhaarNumber || '';
-            d.panNumber = d.kyc?.panNumber || d.panNumber || '';
+            d.aadhaarNumber = d.aadhaar || d.aadhaarNumber || d.aadhar || d.aadharNumber || d.adhaar || d.adhaarNumber || (d.kyc && (d.kyc.aadhaarNumber || d.kyc.aadhaar || d.kyc.aadhar)) || (d.kycDocs && (d.kycDocs.aadhaarNumber || d.kycDocs.aadhaar)) || '';
+            d.panNumber = d.pan || d.panNumber || d.panCard || d.pancard || (d.kyc && (d.kyc.panNumber || d.kyc.pan)) || (d.kycDocs && (d.kycDocs.panNumber || d.kycDocs.pan)) || '';
             d.customerType = d.customerType || 'Standard';
             d.district = d.district || d.city || 'Direct';
             d.status = d.status || 'Active';
