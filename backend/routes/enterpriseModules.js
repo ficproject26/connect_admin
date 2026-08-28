@@ -1053,8 +1053,6 @@ router.post('/vendors/approve', auth, async (req, res) => {
                 });
             }
         }
-            });
-        }
 
         // Record Audit Log
         try {
