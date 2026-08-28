@@ -1325,18 +1325,18 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
         const filter = getBranchFilter(req.adminUser);
         let usersVendors = [];
         try {
-            usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).populate('branchId', 'name').populate('referredBy', 'name');
+            usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).populate('branchId', 'name').populate('referredBy', 'name').lean();
         } catch (err1) {
             console.error('Error fetching user vendors with populate:', err1.message);
-            usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } });
+            usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).lean();
         }
 
         let legacyVendors = [];
         try {
-            legacyVendors = await Vendor.find(filter).populate('branchId', 'name').populate('agentId', 'name');
+            legacyVendors = await Vendor.find(filter).populate('branchId', 'name').populate('agentId', 'name').lean();
         } catch (err2) {
             console.error('Error fetching legacy vendors with populate:', err2.message);
-            legacyVendors = await Vendor.find(filter);
+            legacyVendors = await Vendor.find(filter).lean();
         }
         
         const formatVId = (v, index) => {
