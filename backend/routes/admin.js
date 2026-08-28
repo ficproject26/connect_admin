@@ -627,12 +627,14 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 {
                     $or: [
                         { role: { $regex: /agent/i } },
-                        { role: { $in: ['agent', 'Agent', 'state_agent', 'district_agent', 'division_agent', 'divisional_agent', 'pincode_agent', 'State Agent', 'District Agent', 'Divisional Agent', 'Pincode Agent', 'state', 'district', 'division', 'divisional', 'pincode'] } },
+                        { role: { $in: ['agent', 'Agent', 'state_agent', 'district_agent', 'division_agent', 'divisional_agent', 'pincode_agent', 'State Agent', 'District Agent', 'Divisional Agent', 'Pincode Agent', 'state', 'district', 'division', 'divisional', 'pincode', 'user', 'applicant'] } },
                         { level: { $in: ['state', 'district', 'division', 'divisional', 'pincode', 'State', 'District', 'Division', 'Divisional', 'Pincode'] } },
                         { agentLevel: { $in: ['state', 'district', 'division', 'divisional', 'pincode', 'State', 'District', 'Division', 'Divisional', 'Pincode'] } },
                         { joiningType: 'agent' },
                         { registrationSource: 'agent' },
-                        { registrationId: { $regex: /^AG-/i } }
+                        { registrationId: { $regex: /^(AG|REG|AGT)-/i } },
+                        { status: { $in: ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'Pending', 'new', 'submitted'] } },
+                        { kycStatus: { $in: ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'Pending KYC', 'Pending'] } }
                     ]
                 }
             ]

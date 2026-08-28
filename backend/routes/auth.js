@@ -223,6 +223,34 @@ router.post('/register', async (req, res) => {
             details: 'New Agent registered and pending approval'
         }).catch(() => {});
 
+        // Real-time Socket.IO emission to Admin room and broadcast
+        try {
+            const io = req.app.get('io');
+            if (io) {
+                const payload = {
+                    id: user._id,
+                    _id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    role: agentRole,
+                    level: agentRole,
+                    status: 'pending',
+                    kycStatus: 'pending',
+                    registrationId: user.registrationId,
+                    createdAt: new Date()
+                };
+                io.to('admin').emit('agent_registered', payload);
+                io.to('admin').emit('agent_onboarded_request', payload);
+                io.to('admin').emit('new_registration_request', payload);
+                io.emit('agent_registered', payload);
+                io.emit('agent_onboarded_request', payload);
+                io.emit('new_registration_request', payload);
+            }
+        } catch (ioErr) {
+            console.warn('Socket.IO emit warning on agent register:', ioErr.message);
+        }
+
         return res.status(201).json({ 
             message: 'Agent registered successfully. Pending Admin approval.',
             registrationId,
