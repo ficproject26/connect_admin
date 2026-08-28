@@ -776,8 +776,12 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 const kycDocsObj = agent.kycDocs || agent.kyc || {};
                 const territoryObj = agent.territory || {};
 
-                const statusVal = (agent.status && String(agent.status) !== 'undefined') ? String(agent.status) : (agent.kycStatus || 'pending');
-                const kycStatusVal = (agent.kycStatus && String(agent.kycStatus) !== 'undefined') ? String(agent.kycStatus) : (agent.status || 'pending');
+                let statusVal = (agent.status && String(agent.status) !== 'undefined') ? String(agent.status) : (agent.kycStatus || 'pending');
+                let kycStatusVal = (agent.kycStatus && String(agent.kycStatus) !== 'undefined') ? String(agent.kycStatus) : (agent.status || 'pending');
+                if (statusVal === 'approved' || statusVal === 'active' || agent.isApproved || agent.isActive) {
+                    statusVal = 'approved';
+                    kycStatusVal = 'approved';
+                }
                 const isActiveVal = typeof agent.isActive !== 'undefined' ? !!agent.isActive : (statusVal === 'approved' || statusVal === 'active');
                 const isApprovedVal = typeof agent.isApproved !== 'undefined' ? !!agent.isApproved : (statusVal === 'approved' || statusVal === 'active');
 
@@ -880,8 +884,15 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     if (!existing.level || existing.level === 'pincode') {
                         existing.level = cleanLevel;
                     }
-                    existing.status = existing.status || rawStatus;
-                    existing.kycStatus = existing.kycStatus || rawKycStatus;
+                    if (rawStatus === 'approved' || rawKycStatus === 'approved' || raw.isApproved || raw.isActive) {
+                        existing.status = 'approved';
+                        existing.kycStatus = 'approved';
+                        existing.isApproved = true;
+                        existing.isActive = true;
+                    } else {
+                        existing.status = existing.status || rawStatus;
+                        existing.kycStatus = existing.kycStatus || rawKycStatus;
+                    }
                     existing.altPhone = existing.altPhone || raw.altPhone || raw.alternativePhone || raw.secondaryPhone || '';
                     existing.dob = existing.dob || raw.dob || raw.dateOfBirth || '';
                     existing.gender = existing.gender || raw.gender || '';
