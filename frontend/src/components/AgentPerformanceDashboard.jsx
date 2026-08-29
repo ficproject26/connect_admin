@@ -11,6 +11,8 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 
+const agentPerfCacheMap = new Map();
+
 export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
   // Filters & State
   const [period, setPeriod] = useState('monthly'); // today, weekly, monthly, quarterly, half-yearly, yearly, custom
@@ -54,7 +56,17 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
   // Fetch Performance Overview directly from MongoDB via backend API
   const fetchOverview = async () => {
-    setLoading(true);
+    const cacheKey = `${period}_${agentType}_${statusFilter}_${stateFilter}_${districtFilter}_${divisionFilter}_${pincodeFilter}_${searchQuery}_${startDate}_${endDate}`;
+    if (agentPerfCacheMap.has(cacheKey)) {
+      const cached = agentPerfCacheMap.get(cacheKey);
+      setCardsData(cached.cards);
+      setLeaderboards(cached.leaderboards);
+      setChartsData(cached.charts);
+      setAgentsList(cached.agents);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const queryParams = new URLSearchParams({
         period,
@@ -95,6 +107,12 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       }
 
       if (successData) {
+        agentPerfCacheMap.set(cacheKey, {
+          cards: successData.cards,
+          leaderboards: successData.leaderboards,
+          charts: successData.charts || defaultChartsData,
+          agents: successData.agents || []
+        });
         setCardsData(successData.cards);
         setLeaderboards(successData.leaderboards);
         setChartsData(successData.charts || defaultChartsData);
@@ -116,7 +134,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       if (document.visibilityState === 'visible') {
         fetchOverview();
       }
-    }, 5000);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);

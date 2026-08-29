@@ -207,6 +207,8 @@ const getAgentInfo = (v) => {
   };
 };
 
+const vendorModuleCacheMap = new Map();
+
 export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [loading, setLoading] = useState(false);
@@ -250,7 +252,16 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const [selectedVendorDetails, setSelectedVendorDetails] = useState(null);
 
   const fetchVendors = async () => {
-    setLoading(true);
+    const cacheKey = `${search}_${category}_${stateFilter}_${statusFilter}_${isDirectRequest}_${page}`;
+    if (vendorModuleCacheMap.has(cacheKey)) {
+      const cached = vendorModuleCacheMap.get(cacheKey);
+      setVendors(cached.list);
+      setTotal(cached.totalCount);
+      setPages(cached.totalPages);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const query = new URLSearchParams({
         search,
@@ -273,6 +284,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
         list = data.vendors || [];
         totalCount = data.total || list.length;
         totalPages = data.pages || Math.ceil(list.length / 12);
+        vendorModuleCacheMap.set(cacheKey, { list, totalCount, totalPages, timestamp: Date.now() });
       }
 
       setVendors(list);

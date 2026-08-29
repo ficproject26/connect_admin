@@ -764,6 +764,16 @@ function App() {
     return null;
   }, [token, handleLogout]);
 
+  const swrFetch = useCallback((url, setter, cacheKey = url, retries = 1) => {
+    if (apiCacheRef.current[cacheKey]) {
+      if (setter) setter(apiCacheRef.current[cacheKey]);
+    }
+    return safeFetch(url, (data) => {
+      apiCacheRef.current[cacheKey] = data;
+      if (setter) setter(data);
+    }, retries);
+  }, [safeFetch]);
+
   // Fetch Dashboard Core Stats directly from Database via Backend API
   const fetchData = async (forceRefresh = false) => {
     if (!token) return;
@@ -857,7 +867,7 @@ function App() {
     }
   }, []);
 
-  // Selective On-Demand Tab Data Loading (Lazily fetches ONLY when active tab changes)
+  // Selective On-Demand Tab Data Loading with SWR Memory Cache (0ms Instant Switch)
   useEffect(() => {
     if (!token) return;
 
@@ -865,66 +875,66 @@ function App() {
       fetchData();
     }
     if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-performance' || activeTab === 'agent-payment') {
-      safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+      swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
     }
     if (activeTab === 'vendors' || activeTab === 'vendor-directory' || activeTab === 'vendor-directory-enterprise') {
-      safeFetch(`${API_BASE}/admin/vendors`, setVendors);
+      swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors');
     }
     if (activeTab === 'customers' || activeTab === 'customer-directory') {
-      safeFetch(`${API_BASE}/admin/customers`, setCustomers);
+      swrFetch(`${API_BASE}/admin/customers`, setCustomers, 'customers');
     }
     if (activeTab === 'branches') {
-      safeFetch(`${API_BASE}/admin/branches`, setBranches);
+      swrFetch(`${API_BASE}/admin/branches`, setBranches, 'branches');
     }
     if (activeTab === 'admins') {
-      safeFetch(`${API_BASE}/admin/admins`, setAdmins);
+      swrFetch(`${API_BASE}/admin/admins`, setAdmins, 'admins');
     }
     if (activeTab === 'pincodes') {
-      safeFetch(`${API_BASE}/pincodes`, setPincodes);
+      swrFetch(`${API_BASE}/pincodes`, setPincodes, 'pincodes');
     }
     if (activeTab === 'payroll' || activeTab === 'payroll-enterprise' || activeTab === 'payroll-management') {
-      safeFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals);
+      swrFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals, 'payroll');
     }
     if (activeTab === 'memberships' || activeTab === 'membership-cards-enterprise' || activeTab === 'membership-cards') {
-      safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans);
+      swrFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans, 'membershipPlans');
     }
     if (activeTab === 'payments' || activeTab === 'payment-enterprise' || activeTab === 'enterprise-payments') {
-      safeFetch(`${API_BASE}/admin/payments`, setPayments);
+      swrFetch(`${API_BASE}/admin/payments`, setPayments, 'payments');
     }
     if (activeTab === 'categories' || activeTab === 'category-management') {
-      safeFetch(`${API_BASE}/admin/categories`, setCategories);
+      swrFetch(`${API_BASE}/admin/categories`, setCategories, 'categories');
     }
     if (activeTab === 'queries' || activeTab === 'customer-queries') {
-      safeFetch(`${API_BASE}/admin/queries`, setQueries);
+      swrFetch(`${API_BASE}/admin/queries`, setQueries, 'queries');
     }
     if (activeTab === 'tickets' || activeTab === 'support-tickets') {
-      safeFetch(`${API_BASE}/admin/tickets`, setTickets);
+      swrFetch(`${API_BASE}/admin/tickets`, setTickets, 'tickets');
     }
     if (activeTab === 'banners') {
-      safeFetch(`${API_BASE}/admin/banners`, setBanners);
+      swrFetch(`${API_BASE}/admin/banners`, setBanners, 'banners');
     }
     if (activeTab === 'reports') {
-      safeFetch(`${API_BASE}/admin/reports?type=${reportType}`, setReports);
+      swrFetch(`${API_BASE}/admin/reports?type=${reportType}`, setReports, `reports_${reportType}`);
     }
     if (activeTab === 'orders') {
-      safeFetch(`${API_BASE}/admin/orders`, setOrders);
+      swrFetch(`${API_BASE}/admin/orders`, setOrders, 'orders');
     }
     if (activeTab === 'bookings') {
-      safeFetch(`${API_BASE}/admin/bookings`, setBookings);
+      swrFetch(`${API_BASE}/admin/bookings`, setBookings, 'bookings');
     }
     if (activeTab === 'jobs') {
-      safeFetch(`${API_BASE}/admin/jobs`, setJobs);
+      swrFetch(`${API_BASE}/admin/jobs`, setJobs, 'jobs');
     }
     if (activeTab === 'card-holders') {
-      safeFetch(`${API_BASE}/admin/card-holders`, setCardHolders);
+      swrFetch(`${API_BASE}/admin/card-holders`, setCardHolders, 'cardHolders');
     }
     if (activeTab === 'delivery-partners') {
-      safeFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners);
+      swrFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners, 'deliveryPartners');
     }
     if (activeTab === 'support-team' || activeTab === 'support-team-enterprise') {
-      safeFetch(`${API_BASE}/admin/support-team`, setSupportTeam);
+      swrFetch(`${API_BASE}/admin/support-team`, setSupportTeam, 'supportTeam');
     }
-  }, [activeTab, token]);
+  }, [activeTab, token, reportType, swrFetch]);
 
   // Selective revalidation when request modals open
   useEffect(() => {
