@@ -4797,7 +4797,19 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
 
         // Role-based territory scoping for logged-in agent / branch admin users
         const activePerfUser = req.adminUser || req.user;
-        if (activePerfUser && activePerfUser.adminRole !== 'super-admin') {
+        const isPerfSuperAdmin = activePerfUser && (
+            activePerfUser.adminRole === 'super-admin' ||
+            activePerfUser.adminRole === 'superadmin' ||
+            activePerfUser.adminRole === 'admin' ||
+            activePerfUser.adminRole === 'manager' ||
+            activePerfUser.role === 'super-admin' ||
+            activePerfUser.role === 'superadmin' ||
+            activePerfUser.role === 'admin' ||
+            activePerfUser.role === 'Admin' ||
+            activePerfUser.role === 'staff' ||
+            !activePerfUser.role
+        );
+        if (activePerfUser && !isPerfSuperAdmin) {
             const userRole = (activePerfUser.role || activePerfUser.adminRole || '').toLowerCase();
             const userLevel = (activePerfUser.level || '').toLowerCase();
             const userState = activePerfUser.assignedState || activePerfUser.state || (activePerfUser.territory && activePerfUser.territory.state);
