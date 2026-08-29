@@ -1465,7 +1465,7 @@ function App() {
               </button>
               <div className="hidden md:block text-left">
                 <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">{user?.name || 'Super Admin'}</span>
-                <span className="block text-[10px] text-slate-400 font-medium capitalize">{(user?.adminRole || 'Admin User').replace('-', ' ')}</span>
+                <span className="block text-[10px] text-slate-400 font-medium capitalize">Super Admin</span>
               </div>
               <button
                 onClick={handleLogout}

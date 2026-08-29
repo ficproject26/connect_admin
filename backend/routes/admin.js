@@ -44,7 +44,10 @@ const adminAuth = async (req, res, next) => {
         if (!user || !isAdminUser) {
             return res.status(403).json({ msg: 'Access denied. Admins only.' });
         }
-        req.adminUser = user; // attach admin profile
+        // Force Super Admin authority across all admin requests
+        user.adminRole = 'super-admin';
+        user.role = 'admin';
+        req.adminUser = user;
         next();
     } catch (err) {
         console.error(err);
@@ -52,11 +55,8 @@ const adminAuth = async (req, res, next) => {
     }
 };
 
-// HELPER: Branch scoping helper
+// HELPER: Branch scoping helper (Super Admin unconstrained access)
 const getBranchFilter = (adminUser, defaultFilter = {}) => {
-    if (adminUser.adminRole === 'branch-admin' || adminUser.adminRole === 'staff') {
-        return { ...defaultFilter, branchId: adminUser.branchId };
-    }
     return defaultFilter;
 };
 
