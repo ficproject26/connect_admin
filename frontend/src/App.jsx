@@ -2103,7 +2103,7 @@ function App() {
           )}
 
           {/* 4. AGENTS DIRECTORY */}
-          {activeTab === 'agents' && (
+          {(activeTab === 'agents' || activeTab === 'agent-directory') && (
             <div className="space-y-6">
 
               {/* Agent Level & Network Overview Cards */}
@@ -3046,7 +3046,177 @@ function App() {
             </div>
           )}
 
-          {/* 5. PINCODE MANAGEMENT */}
+          {/* 4.5 AGENT PAYMENT & COMMISSION PAYOUTS */}
+          {activeTab === 'agent-payment' && (
+            <div className="space-y-6">
+              {/* Payment KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Agent Earnings</span>
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
+                      <DollarSign className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <span className="block text-2xl font-black text-slate-850 dark:text-slate-100 mt-2">
+                    ₹{agents.filter(isApprovedAgent).reduce((sum, a) => sum + getAgentEarnings(a), 0).toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[11px] text-emerald-500 font-semibold mt-1 block">Accumulated Agent Earnings</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Paid Payouts</span>
+                    <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold">
+                      <CheckCircle className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <span className="block text-2xl font-black text-slate-850 dark:text-slate-100 mt-2">
+                    ₹{agents.filter(isApprovedAgent).reduce((sum, a) => sum + (a.isPaid ? getAgentEarnings(a) : 0), 0).toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[11px] text-blue-500 font-semibold mt-1 block">Settled Commission Payouts</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Payout Balance</span>
+                    <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <span className="block text-2xl font-black text-slate-850 dark:text-slate-100 mt-2">
+                    ₹{agents.filter(isApprovedAgent).reduce((sum, a) => sum + (!a.isPaid ? getAgentEarnings(a) : 0), 0).toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[11px] text-amber-500 font-semibold mt-1 block">Pending Settlement</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Eligible Agents</span>
+                    <div className="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center font-bold">
+                      <Users className="w-5 h-5" />
+                    </div>
+                  </div>
+                  <span className="block text-2xl font-black text-slate-850 dark:text-slate-100 mt-2">
+                    {agents.filter(isApprovedAgent).length}
+                  </span>
+                  <span className="text-[11px] text-purple-500 font-semibold mt-1 block">Active Network Agents</span>
+                </div>
+              </div>
+
+              {/* Agent Payment Directory & Payout Release Table */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center">
+                  <div className="flex gap-2 bg-slate-50 dark:bg-slate-950 px-3 py-2 rounded-xl flex-1 border border-slate-200/60 dark:border-slate-850 w-full sm:max-w-md">
+                    <Search className="w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search agent payments by name, email, phone..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="bg-transparent focus:outline-none text-sm w-full"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      safeFetch(`${API_BASE}/admin/agents`, handleSetAgents, 2);
+                      addToast('Refreshing Agent Payment data...', 'info');
+                    }}
+                    className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4" /> Refresh Payments
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                        <th className="px-6 py-4">Agent Profile</th>
+                        <th className="px-6 py-4">Level / Territory</th>
+                        <th className="px-6 py-4 text-center">Vendors Onboarded</th>
+                        <th className="px-6 py-4 text-right">Calculated Earnings</th>
+                        <th className="px-6 py-4 text-right">Wallet Balance</th>
+                        <th className="px-6 py-4 text-center">Status</th>
+                        <th className="px-6 py-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                      {agents.filter(isApprovedAgent)
+                        .filter(ag => {
+                          const q = (searchTerm || '').toLowerCase().trim();
+                          if (!q) return true;
+                          return (ag.name || '').toLowerCase().includes(q) ||
+                            (ag.email || '').toLowerCase().includes(q) ||
+                            (ag.phone && ag.phone.includes(q));
+                        })
+                        .map((agent) => {
+                          const earnings = getAgentEarnings(agent);
+                          const vendorsCount = getAgentVendorsCount(agent);
+                          const lvl = getAgentLevel(agent);
+                          const terrInfo = getAgentTerritoryDetail(agent);
+
+                          return (
+                            <tr key={agent._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="flex items-center gap-3">
+                                  <img src={agent.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="" className="w-10 h-10 rounded-xl object-cover" />
+                                  <div>
+                                    <span className="font-bold text-slate-850 dark:text-slate-100 block">{agent.name}</span>
+                                    <span className="text-xs text-slate-400 block">{agent.email}</span>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border inline-block mb-1 ${lvl === 'state' ? 'bg-purple-500/10 text-purple-500 border-purple-500/20' :
+                                    lvl === 'district' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
+                                      lvl === 'division' ? 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20' :
+                                        'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                                  }`}>
+                                  {lvl.toUpperCase()} AGENT
+                                </span>
+                                <span className="text-xs text-slate-500 block font-medium">{terrInfo?.value || '—'}</span>
+                              </td>
+                              <td className="px-6 py-4 text-center font-bold text-slate-800 dark:text-slate-200">
+                                {vendorsCount}
+                              </td>
+                              <td className="px-6 py-4 text-right font-extrabold text-emerald-600 dark:text-emerald-400">
+                                ₹{earnings.toLocaleString('en-IN')}
+                              </td>
+                              <td className="px-6 py-4 text-right font-mono font-bold text-slate-700 dark:text-slate-300">
+                                ₹{Number(agent.balance || agent.pendingPayout || earnings).toLocaleString('en-IN')}
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${agent.isPaid ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                                  {agent.isPaid ? 'Paid' : 'Pending Payout'}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const defaultAmt = Number(agent.balance || earnings) || 0;
+                                    const input = window.prompt(`Enter payout settlement amount for agent "${agent.name}":`, defaultAmt);
+                                    if (input === null) return;
+                                    const amt = Number(input);
+                                    if (isNaN(amt) || amt <= 0) { alert('Enter a valid payout amount.'); return; }
+                                    executeAction(`/admin/agents/${agent._id}/payout`, 'POST', { amount: amt });
+                                  }}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
+                                >
+                                  Release Payout
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
           {activeTab === 'pincodes' && (
             <div className="space-y-6">
 
