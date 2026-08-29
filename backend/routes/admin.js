@@ -1326,21 +1326,21 @@ router.post('/pincodes/remove', [auth, adminAuth], async (req, res) => {
 router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
-        let usersVendors = [];
-        try {
-            usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).populate('branchId', 'name').populate('referredBy', 'name').lean();
-        } catch (err1) {
-            console.error('Error fetching user vendors with populate:', err1.message);
-            usersVendors = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).lean();
-        }
 
-        let legacyVendors = [];
-        try {
-            legacyVendors = await Vendor.find(filter).populate('branchId', 'name').populate('agentId', 'name').lean();
-        } catch (err2) {
-            console.error('Error fetching legacy vendors with populate:', err2.message);
-            legacyVendors = await Vendor.find(filter).lean();
-        }
+        // Concurrently query User and Vendor collections in parallel
+        const [usersVendors, legacyVendors] = await Promise.all([
+            User.find({ role: { $in: ['Vendor', 'vendor'] } })
+                .select('-password -__v')
+                .populate('branchId', 'name')
+                .populate('referredBy', 'name')
+                .lean()
+                .catch(() => User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('-password -__v').lean()),
+            Vendor.find(filter)
+                .populate('branchId', 'name')
+                .populate('agentId', 'name')
+                .lean()
+                .catch(() => Vendor.find(filter).lean())
+        ]);
         
         const formatVId = (v, index) => {
             if (v && v.registrationId && /^ven-fic-/i.test(v.registrationId)) return String(v.registrationId).toLowerCase();
@@ -1352,7 +1352,7 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
         const formattedUserVendors = (usersVendors || []).map((v, idx) => {
             if (!v) return null;
             const vId = formatVId(v, idx);
-            return {
+            return sanitizeHeavyFields({
                 _id: v._id,
                 registrationId: vId,
                 vendorId: vId,
@@ -1371,23 +1371,23 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
                 kycStatus: v.status || 'Pending',
                 kycDocs: {
                     aadhaarNumber: v.kyc?.aadhaarNumber || '',
-                    aadhaarImage: v.kyc?.aadhaarImage || '',
+                    aadhaarImage: v.kyc?.aadhaarImage ? (String(v.kyc.aadhaarImage).startsWith('http') ? v.kyc.aadhaarImage : '[Uploaded Document]') : '',
                     panNumber: v.kyc?.panNumber || '',
-                    panImage: v.kyc?.panImage || '',
-                    selfie: v.kyc?.selfie || '',
-                    businessProofImage: v.kyc?.businessProofImage || ''
+                    panImage: v.kyc?.panImage ? (String(v.kyc.panImage).startsWith('http') ? v.kyc.panImage : '[Uploaded Document]') : '',
+                    selfie: v.kyc?.selfie ? (String(v.kyc.selfie).startsWith('http') ? v.kyc.selfie : '[Uploaded Document]') : '',
+                    businessProofImage: v.kyc?.businessProofImage ? (String(v.kyc.businessProofImage).startsWith('http') ? v.kyc.businessProofImage : '[Uploaded Document]') : ''
                 },
                 address: v.address || '',
                 bankDetails: v.bankDetails || null,
                 paymentOptions: v.paymentOptions || null,
                 isUserCollection: true
-            };
+            });
         }).filter(Boolean);
 
         const formattedLegacy = (legacyVendors || []).map((v, idx) => {
             if (!v) return null;
-            const vId = formatVId(v, usersVendors.length + idx);
-            return {
+            const vId = formatVId(v, (usersVendors || []).length + idx);
+            return sanitizeHeavyFields({
                 _id: v._id,
                 registrationId: vId,
                 vendorId: vId,
@@ -1407,7 +1407,7 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
                 kycDocs: v.kycDocs || null,
                 address: v.address || '',
                 isUserCollection: false
-            };
+            });
         }).filter(Boolean);
 
         res.json([...formattedUserVendors, ...formattedLegacy]);
