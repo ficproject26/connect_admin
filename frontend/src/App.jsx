@@ -1550,312 +1550,313 @@ function App() {
 
           {/* 1. DASHBOARD VIEW */}
           {activeTab === 'dashboard' && (
-            stats ? (
-              <div className="max-w-7xl mx-auto space-y-6">
+            <div className="max-w-7xl mx-auto space-y-6">
 
-                {/* KPI Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                  {[
-                    {
-                      title: 'Total Revenue',
-                      value: `₹${stats.kpis.totalRevenue.toLocaleString()}`,
-                      change: '+12.4% vs last mo',
-                      icon: DollarSign,
-                      cardBg: 'bg-emerald-50 dark:bg-emerald-950/20',
-                      borderColor: 'border-emerald-100 dark:border-emerald-900/30',
-                      titleColor: 'text-emerald-700 dark:text-emerald-400',
-                      valueColor: 'text-emerald-900 dark:text-emerald-300',
-                      changeColor: 'text-emerald-600/80 dark:text-emerald-500',
-                      iconColor: 'text-emerald-600'
-                    },
-                    {
-                      title: 'Total Orders',
-                      value: stats.kpis.totalOrders,
-                      change: '+8.2% vs last mo',
-                      icon: FileText,
-                      cardBg: 'bg-blue-50 dark:bg-blue-950/20',
-                      borderColor: 'border-blue-100 dark:border-blue-900/30',
-                      titleColor: 'text-blue-700 dark:text-blue-400',
-                      valueColor: 'text-blue-900 dark:text-blue-300',
-                      changeColor: 'text-blue-600/80 dark:text-blue-500',
-                      iconColor: 'text-blue-600'
-                    },
-                    {
-                      title: 'Total Agents',
-                      value: stats.kpis.totalAgents,
-                      change: `${stats.kpis.pendingAgentApprovals} pending approval`,
-                      icon: Users,
-                      cardBg: 'bg-purple-50 dark:bg-purple-950/20',
-                      borderColor: 'border-purple-100 dark:border-purple-900/30',
-                      titleColor: 'text-purple-700 dark:text-purple-400',
-                      valueColor: 'text-purple-900 dark:text-purple-300',
-                      changeColor: 'text-purple-600/80 dark:text-purple-500',
-                      iconColor: 'text-purple-600'
-                    },
-                    {
-                      title: 'Total Vendors',
-                      value: stats?.kpis?.totalVendors ?? 0,
-                      change: `${stats?.kpis?.pendingVendorApprovals ?? 0} pending approval`,
-                      icon: Award,
-                      cardBg: 'bg-amber-50 dark:bg-amber-950/20',
-                      borderColor: 'border-amber-100 dark:border-amber-900/30',
-                      titleColor: 'text-amber-700 dark:text-amber-400',
-                      valueColor: 'text-amber-900 dark:text-amber-300',
-                      changeColor: 'text-amber-600/80 dark:text-amber-500',
-                      iconColor: 'text-amber-600'
-                    }
-                  ].map((kpi, idx) => (
-                    <div key={idx} className={`${kpi.cardBg} p-6 rounded-3xl shadow-sm border ${kpi.borderColor} flex items-center justify-between hover:scale-[1.02] transition-all hover:shadow-md`}>
-                      <div>
-                        <span className={`block text-xs font-extrabold uppercase tracking-wider ${kpi.titleColor}`}>{kpi.title}</span>
-                        <span className={`block text-3xl font-black mt-2.5 ${kpi.valueColor}`}>{kpi.value}</span>
-                        <span className={`block text-xs font-semibold mt-2 ${kpi.changeColor}`}>{kpi.change}</span>
-                      </div>
-                      <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 shrink-0">
-                        <kpi.icon className={`w-5 h-5 ${kpi.iconColor}`} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Extra KPIs */}
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-                  {[
-                    {
-                      label: 'Agent Pending KYC',
-                      val: stats.kpis.pendingAgentKYC ?? 0,
-                      bg: 'bg-rose-50/50 dark:bg-rose-950/10',
-                      border: 'border-rose-100 dark:border-rose-900/30',
-                      text: 'text-rose-600 dark:text-rose-400'
-                    },
-                    {
-                      label: 'Vendor Pending KYC',
-                      val: stats.kpis.pendingVendorKYC ?? 0,
-                      bg: 'bg-orange-50/50 dark:bg-orange-950/10',
-                      border: 'border-orange-100 dark:border-orange-900/30',
-                      text: 'text-orange-600 dark:text-orange-400'
-                    },
-                    {
-                      label: 'State Agent',
-                      val: stats.kpis.stateAgents ?? 0,
-                      bg: 'bg-blue-50/50 dark:bg-blue-950/10',
-                      border: 'border-blue-100 dark:border-blue-900/30',
-                      text: 'text-blue-600 dark:text-blue-400'
-                    },
-                    {
-                      label: 'District Agent',
-                      val: stats.kpis.districtAgents ?? 0,
-                      bg: 'bg-indigo-50/50 dark:bg-indigo-950/10',
-                      border: 'border-indigo-100 dark:border-indigo-900/30',
-                      text: 'text-indigo-600 dark:text-indigo-400'
-                    },
-                    {
-                      label: 'Sub District Agent',
-                      val: stats.kpis.subDistrictAgents ?? 0,
-                      bg: 'bg-violet-50/50 dark:bg-violet-950/10',
-                      border: 'border-violet-100 dark:border-violet-900/30',
-                      text: 'text-violet-600 dark:text-violet-400'
-                    },
-                    {
-                      label: 'Pincode Agent',
-                      val: stats.kpis.pincodeAgents ?? 0,
-                      bg: 'bg-purple-50/50 dark:bg-purple-950/10',
-                      border: 'border-purple-100 dark:border-purple-900/30',
-                      text: 'text-purple-600 dark:text-purple-400'
-                    }
-                  ].map((sub, sIdx) => (
-                    <div
-                      key={sIdx}
-                      className={`${sub.bg} border ${sub.border} p-4 rounded-2xl shadow-sm text-center flex flex-col justify-center items-center hover:scale-[1.03] transition-all duration-300 hover:shadow-md`}
-                    >
-                      <span className="block text-2xl font-black text-slate-800 dark:text-white">{sub.val}</span>
-                      <span className={`block text-[11px] font-extrabold mt-1.5 uppercase tracking-wider leading-tight ${sub.text}`}>
-                        {sub.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Charts Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                  {/* Revenue Trend Area Chart */}
-                  <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Revenue Overview</h3>
-                    <div className="h-72 min-h-[288px] w-full min-w-0">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 288 }}>
-                        <AreaChart data={stats?.charts?.revenueOverview || stats?.revenueTrend || []}>
-                          <defs>
-                            <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2} />
-                              <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                          <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
-                          <YAxis stroke="#94a3b8" fontSize={11} />
-                          <Tooltip />
-                          <Area type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  {/* Category Wise Revenue Pie Chart */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Category Wise Revenue</h3>
-                    <div className="h-72 min-h-[288px] w-full min-w-0">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 288 }}>
-                        <PieChart>
-                          <Pie
-                            data={stats?.charts?.categoryWiseRevenue || []}
-                            cx="50%"
-                            cy="55%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={5}
-                            dataKey="value"
-                            nameKey="category"
-                          >
-                            {(stats?.charts?.categoryWiseRevenue || []).map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                          <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={11} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* Branch Wise Revenue (Super Admin exclusive comparison) */}
-                {isSuperAdmin && (
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">District Wise Performance</h3>
-                    <div className="h-64 min-h-[256px] w-full min-w-0">
-                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 256 }}>
-                        <BarChart data={stats?.charts?.branchWiseRevenue || []}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                          <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
-                          <YAxis stroke="#94a3b8" fontSize={11} />
-                          <Tooltip />
-                          <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                )}
-
-                {/* Recent Notifications / Approvals */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-                  {/* Pending Approvals */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                    <div className="flex justify-between items-center mb-4">
-                      <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pending Action Items</h3>
-                      <span className="bg-rose-500/10 text-rose-500 text-xs px-2 py-0.5 rounded-full font-bold">Alert</span>
-                    </div>
-                    <div className="space-y-3">
-                      {agents.filter(isPendingAgent).map((pAgent, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
-                          <div>
-                            <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pAgent.name}</span>
-                            <span className="text-xs text-slate-400">Agent KYC Pending • {getFormattedTerritory(pAgent)}</span>
-                          </div>
-                          <button
-                            onClick={() => { setActiveTab('kyc') }}
-                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
-                          >
-                            Verify KYC
-                          </button>
-                        </div>
-                      ))}
-                      {vendors.filter(v => v.status?.toLowerCase() === 'pending').map((pVendor, idx) => (
-                        <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
-                          <div>
-                            <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pVendor.businessName}</span>
-                            <span className="text-xs text-slate-400">New Vendor Tie-Up • {pVendor.category}</span>
-                          </div>
-                          <button
-                            onClick={() => { setActiveTab('vendors') }}
-                            className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
-                          >
-                            Approve
-                          </button>
-                        </div>
-                      ))}
-                      {agents.filter(isPendingAgent).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
-                        <div className="text-center py-6 text-slate-400 text-sm">
-                          <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                          No pending approvals!
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Latest Activity Log */}
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
-                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Latest Platform Activity</h3>
-                    <div className="space-y-4">
-                      {(stats?.recent?.latestVendors || vendors || []).slice(0, 3).map((v, idx) => (
-                        <div key={idx} className="flex gap-3 items-start text-sm">
-                          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
-                            <Award className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-850 dark:text-slate-200">
-                              Vendor tie-up <span className="text-primary-500">{v.businessName}</span> submitted.
-                            </p>
-                            <span className="text-[10px] text-slate-400">Category: {v.category}</span>
-                          </div>
-                        </div>
-                      ))}
-                      {(stats?.recent?.latestAgents || agents || []).slice(0, 2).map((a, idx) => (
-                        <div key={idx} className="flex gap-3 items-start text-sm">
-                          <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
-                            <Users className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-850 dark:text-slate-200">
-                              New agent onboarding: <span className="text-purple-500">{a.name}</span> ({a.email})
-                            </p>
-                            <span className="text-[10px] text-slate-400">Level: {a.level}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                </div>
-
-                {/* AGENT PERFORMANCE MONITORING SYSTEM EMBEDDED IN MAIN ADMIN DASHBOARD */}
-                <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
-                  <div className="flex justify-between items-center">
+              {/* KPI Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {[
+                  {
+                    title: 'Total Revenue',
+                    value: stats?.kpis?.totalRevenue !== undefined ? `₹${stats.kpis.totalRevenue.toLocaleString()}` : null,
+                    change: '+12.4% vs last mo',
+                    icon: DollarSign,
+                    cardBg: 'bg-emerald-50 dark:bg-emerald-950/20',
+                    borderColor: 'border-emerald-100 dark:border-emerald-900/30',
+                    titleColor: 'text-emerald-700 dark:text-emerald-400',
+                    valueColor: 'text-emerald-900 dark:text-emerald-300',
+                    changeColor: 'text-emerald-600/80 dark:text-emerald-500',
+                    iconColor: 'text-emerald-600'
+                  },
+                  {
+                    title: 'Total Orders',
+                    value: stats?.kpis?.totalOrders ?? null,
+                    change: '+8.2% vs last mo',
+                    icon: FileText,
+                    cardBg: 'bg-blue-50 dark:bg-blue-950/20',
+                    borderColor: 'border-blue-100 dark:border-blue-900/30',
+                    titleColor: 'text-blue-700 dark:text-blue-400',
+                    valueColor: 'text-blue-900 dark:text-blue-300',
+                    changeColor: 'text-blue-600/80 dark:text-blue-500',
+                    iconColor: 'text-blue-600'
+                  },
+                  {
+                    title: 'Total Agents',
+                    value: stats?.kpis?.totalAgents ?? null,
+                    change: `${stats?.kpis?.pendingAgentApprovals ?? 0} pending approval`,
+                    icon: Users,
+                    cardBg: 'bg-purple-50 dark:bg-purple-950/20',
+                    borderColor: 'border-purple-100 dark:border-purple-900/30',
+                    titleColor: 'text-purple-700 dark:text-purple-400',
+                    valueColor: 'text-purple-900 dark:text-purple-300',
+                    changeColor: 'text-purple-600/80 dark:text-purple-500',
+                    iconColor: 'text-purple-600'
+                  },
+                  {
+                    title: 'Total Vendors',
+                    value: stats?.kpis?.totalVendors ?? null,
+                    change: `${stats?.kpis?.pendingVendorApprovals ?? 0} pending approval`,
+                    icon: Award,
+                    cardBg: 'bg-amber-50 dark:bg-amber-950/20',
+                    borderColor: 'border-amber-100 dark:border-amber-900/30',
+                    titleColor: 'text-amber-700 dark:text-amber-400',
+                    valueColor: 'text-amber-900 dark:text-amber-300',
+                    changeColor: 'text-amber-600/80 dark:text-amber-500',
+                    iconColor: 'text-amber-600'
+                  }
+                ].map((kpi, idx) => (
+                  <div key={idx} className={`${kpi.cardBg} p-6 rounded-3xl shadow-sm border ${kpi.borderColor} flex items-center justify-between hover:scale-[1.02] transition-all hover:shadow-md`}>
                     <div>
-                      <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                        <Activity className="w-5 h-5 text-primary-500" /> Agent Performance Monitoring System
-                      </h3>
-                      <p className="text-xs text-slate-400">Real-time performance metrics, target completions, and multi-tier agent directory</p>
+                      <span className={`block text-xs font-extrabold uppercase tracking-wider ${kpi.titleColor}`}>{kpi.title}</span>
+                      {kpi.value !== null ? (
+                        <span className={`block text-3xl font-black mt-2.5 ${kpi.valueColor}`}>{kpi.value}</span>
+                      ) : (
+                        <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse mt-2.5"></div>
+                      )}
+                      <span className={`block text-xs font-semibold mt-2 ${kpi.changeColor}`}>{kpi.change}</span>
                     </div>
-                    <button
-                      onClick={() => setActiveTab('agent-performance')}
-                      className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
-                    >
-                      Open Full Performance Portal →
-                    </button>
+                    <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 shrink-0">
+                      <kpi.icon className={`w-5 h-5 ${kpi.iconColor}`} />
+                    </div>
                   </div>
-                  <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
+                ))}
+              </div>
+
+              {/* Extra KPIs */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {[
+                  {
+                    label: 'Agent Pending KYC',
+                    val: stats?.kpis?.pendingAgentKYC,
+                    bg: 'bg-rose-50/50 dark:bg-rose-950/10',
+                    border: 'border-rose-100 dark:border-rose-900/30',
+                    text: 'text-rose-600 dark:text-rose-400'
+                  },
+                  {
+                    label: 'Vendor Pending KYC',
+                    val: stats?.kpis?.pendingVendorKYC,
+                    bg: 'bg-orange-50/50 dark:bg-orange-950/10',
+                    border: 'border-orange-100 dark:border-orange-900/30',
+                    text: 'text-orange-600 dark:text-orange-400'
+                  },
+                  {
+                    label: 'State Agent',
+                    val: stats?.kpis?.stateAgents,
+                    bg: 'bg-blue-50/50 dark:bg-blue-950/10',
+                    border: 'border-blue-100 dark:border-blue-900/30',
+                    text: 'text-blue-600 dark:text-blue-400'
+                  },
+                  {
+                    label: 'District Agent',
+                    val: stats?.kpis?.districtAgents,
+                    bg: 'bg-indigo-50/50 dark:bg-indigo-950/10',
+                    border: 'border-indigo-100 dark:border-indigo-900/30',
+                    text: 'text-indigo-600 dark:text-indigo-400'
+                  },
+                  {
+                    label: 'Sub District Agent',
+                    val: stats?.kpis?.subDistrictAgents,
+                    bg: 'bg-violet-50/50 dark:bg-violet-950/10',
+                    border: 'border-violet-100 dark:border-violet-900/30',
+                    text: 'text-violet-600 dark:text-violet-400'
+                  },
+                  {
+                    label: 'Pincode Agent',
+                    val: stats?.kpis?.pincodeAgents,
+                    bg: 'bg-purple-50/50 dark:bg-purple-950/10',
+                    border: 'border-purple-100 dark:border-purple-900/30',
+                    text: 'text-purple-600 dark:text-purple-400'
+                  }
+                ].map((sub, sIdx) => (
+                  <div
+                    key={sIdx}
+                    className={`${sub.bg} border ${sub.border} p-4 rounded-2xl shadow-sm text-center flex flex-col justify-center items-center hover:scale-[1.03] transition-all duration-300 hover:shadow-md`}
+                  >
+                    {sub.val !== undefined ? (
+                      <span className="block text-2xl font-black text-slate-800 dark:text-white">{sub.val}</span>
+                    ) : (
+                      <div className="h-7 w-12 bg-slate-200 dark:bg-slate-800 rounded animate-pulse mb-1"></div>
+                    )}
+                    <span className={`block text-[11px] font-extrabold mt-1.5 uppercase tracking-wider leading-tight ${sub.text}`}>
+                      {sub.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Charts Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                {/* Revenue Trend Area Chart */}
+                <div className="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Revenue Overview</h3>
+                  <div className="h-72 min-h-[288px] w-full min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 288 }}>
+                      <AreaChart data={stats?.charts?.revenueOverview || stats?.revenueTrend || []}>
+                        <defs>
+                          <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2} />
+                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="month" stroke="#94a3b8" fontSize={11} />
+                        <YAxis stroke="#94a3b8" fontSize={11} />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={2} fillOpacity={1} fill="url(#colorRev)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Category Wise Revenue Pie Chart */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Category Wise Revenue</h3>
+                  <div className="h-72 min-h-[288px] w-full min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 288 }}>
+                      <PieChart>
+                        <Pie
+                          data={stats?.charts?.categoryWiseRevenue || []}
+                          cx="50%"
+                          cy="55%"
+                          innerRadius={60}
+                          outerRadius={80}
+                          paddingAngle={5}
+                          dataKey="value"
+                          nameKey="category"
+                        >
+                          {(stats?.charts?.categoryWiseRevenue || []).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                        <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={11} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
 
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mb-4"></div>
-                <p>Loading dashboard data or server is unavailable...</p>
+
+              {/* Branch Wise Revenue (Super Admin exclusive comparison) */}
+              {isSuperAdmin && (
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">District Wise Performance</h3>
+                  <div className="h-64 min-h-[256px] w-full min-w-0">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 256 }}>
+                      <BarChart data={stats?.charts?.branchWiseRevenue || []}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} />
+                        <YAxis stroke="#94a3b8" fontSize={11} />
+                        <Tooltip />
+                        <Bar dataKey="revenue" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Notifications / Approvals */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                {/* Pending Approvals */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Pending Action Items</h3>
+                    <span className="bg-rose-500/10 text-rose-500 text-xs px-2 py-0.5 rounded-full font-bold">Alert</span>
+                  </div>
+                  <div className="space-y-3">
+                    {agents.filter(isPendingAgent).map((pAgent, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
+                        <div>
+                          <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pAgent.name}</span>
+                          <span className="text-xs text-slate-400">Agent KYC Pending • {getFormattedTerritory(pAgent)}</span>
+                        </div>
+                        <button
+                          onClick={() => { setActiveTab('kyc') }}
+                          className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                        >
+                          Verify KYC
+                        </button>
+                      </div>
+                    ))}
+                    {vendors.filter(v => v.status?.toLowerCase() === 'pending').map((pVendor, idx) => (
+                      <div key={idx} className="flex justify-between items-center bg-slate-50 dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/60 dark:border-slate-850">
+                        <div>
+                          <span className="block text-sm font-bold text-slate-800 dark:text-slate-200">{pVendor.businessName}</span>
+                          <span className="text-xs text-slate-400">New Vendor Tie-Up • {pVendor.category}</span>
+                        </div>
+                        <button
+                          onClick={() => { setActiveTab('vendors') }}
+                          className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
+                        >
+                          Approve
+                        </button>
+                      </div>
+                    ))}
+                    {agents.filter(isPendingAgent).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
+                      <div className="text-center py-6 text-slate-400 text-sm">
+                        <CheckCircle className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
+                        No pending approvals!
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Latest Activity Log */}
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
+                  <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Latest Platform Activity</h3>
+                  <div className="space-y-4">
+                    {(stats?.recent?.latestVendors || vendors || []).slice(0, 3).map((v, idx) => (
+                      <div key={idx} className="flex gap-3 items-start text-sm">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
+                          <Award className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-850 dark:text-slate-200">
+                            Vendor tie-up <span className="text-primary-500">{v.businessName}</span> submitted.
+                          </p>
+                          <span className="text-[10px] text-slate-400">Category: {v.category}</span>
+                        </div>
+                      </div>
+                    ))}
+                    {(stats?.recent?.latestAgents || agents || []).slice(0, 2).map((a, idx) => (
+                      <div key={idx} className="flex gap-3 items-start text-sm">
+                        <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-850 dark:text-slate-200">
+                            New agent onboarding: <span className="text-purple-500">{a.name}</span> ({a.email})
+                          </p>
+                          <span className="text-[10px] text-slate-400">Level: {a.level}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
-            )
+
+              {/* AGENT PERFORMANCE MONITORING SYSTEM EMBEDDED IN MAIN ADMIN DASHBOARD */}
+              <div className="pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-primary-500" /> Agent Performance Monitoring System
+                    </h3>
+                    <p className="text-xs text-slate-400">Real-time performance metrics, target completions, and multi-tier agent directory</p>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab('agent-performance')}
+                    className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
+                  >
+                    Open Full Performance Portal →
+                  </button>
+                </div>
+                <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
+              </div>
+
+            </div>
           )}
 
           {/* 2. BRANCH MANAGEMENT */}
