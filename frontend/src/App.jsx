@@ -320,26 +320,6 @@ const getDocFallbackSvg = (title = 'Document', docNumber = '') => {
     <text x="150" y="157" font-family="system-ui, sans-serif" font-size="10" font-weight="800" fill="#34d399" text-anchor="middle" letter-spacing="1">✓ VERIFIED DOCUMENT</text>
   </svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-const getAgentEarnings = (agent) => {
-  if (!agent) return 0;
-  const balance = Number(agent.balance || 0);
-  const commission = Number(agent.commissionEarned || agent.totalCommission || 0);
-  if (balance > 0) return balance;
-  if (commission > 0) return commission;
-  return 5000;
-};
-
-const getFormattedTerritory = (agent) => {
-  if (!agent) return 'General Territory';
-  const state = agent.assignedState || agent.state || agent.territory?.state || '';
-  const district = agent.assignedDistrict || agent.district || agent.territory?.district || '';
-  const division = agent.assignedDivision || agent.division || agent.territory?.division || '';
-  const pincode = agent.pincode || agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : '') || agent.territory?.pincode || '';
-  const area = agent.assignedArea || '';
-
-  const parts = [state, district, division, pincode, area].filter(Boolean);
-  if (parts.length > 0) return parts.join(' / ');
-  return 'General Territory';
 };
 
 function App() {
