@@ -581,7 +581,8 @@ router.post('/login', async (req, res) => {
         await user.save();
 
         const payload = { user: { id: user.id, role: user.role } };
-        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
+        const secret = process.env.JWT_SECRET || 'connect_secret_key';
+        const token = jwt.sign(payload, secret, { expiresIn: '7d' });
 
         // Record Multi-Device Session & Audit Log
         await createSecuritySession(user._id, token, req);

@@ -16,7 +16,8 @@ module.exports = async function(req, res, next) {
 
     // Verify token
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const secret = process.env.JWT_SECRET || 'connect_secret_key';
+        const decoded = jwt.verify(token, secret);
         req.user = decoded.user || { id: decoded.agentId, role: 'agent' };
 
         // Suspension Access Control Check for Agents & Vendors
