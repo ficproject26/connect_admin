@@ -726,33 +726,15 @@ function App() {
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     const targetUrls = [url];
 
-    // Only add direct EC2 fallback URLs on local development
-    const isLocalDev = typeof window !== 'undefined' && (
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1' ||
-      window.location.hostname.startsWith('192.168.') ||
-      window.location.hostname.startsWith('10.') ||
-      window.location.hostname.startsWith('172.')
-    );
-
-    if (isLocalDev) {
-      // Local dev: add Render direct URL as fallback
-      if (url.startsWith('/api/')) {
-        targetUrls.push(`https://connect-admin-qlcy.onrender.com${url}`);
-      } else if (url.includes('/api/')) {
-        const path = url.substring(url.indexOf('/api/'));
-        targetUrls.push(`https://connect-admin-qlcy.onrender.com${path}`);
-        targetUrls.push(path);
-      } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
-        const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
-        targetUrls.push(path);
-      }
-    } else {
-      // Production: ensure we use relative /api/ path only
-      if (url.startsWith('http')) {
-        const path = url.includes('/api/') ? url.substring(url.indexOf('/api/')) : url;
-        if (path.startsWith('/api/')) targetUrls.push(path);
-      }
+    if (url.startsWith('/api/')) {
+      targetUrls.push(`https://connect-admin-qlcy.onrender.com${url}`);
+    } else if (url.includes('/api/')) {
+      const path = url.substring(url.indexOf('/api/'));
+      targetUrls.push(`https://connect-admin-qlcy.onrender.com${path}`);
+      targetUrls.push(path);
+    } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
+      const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
+      targetUrls.push(path);
     }
 
     for (const targetUrl of [...new Set(targetUrls)]) {
