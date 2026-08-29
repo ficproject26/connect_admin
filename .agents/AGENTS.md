@@ -54,5 +54,16 @@
 2. **Customer Visibility Rule**:
    - A listing MUST appear on the Customer Website (`/api/public/products`, `/api/products`) ONLY when: `Vendor == ACTIVE` AND `Business Outlet == ACTIVE` AND `Listing == ACTIVE`.
    - If a specific business outlet of a vendor is suspended (`status: 'Suspended'`), ONLY items belonging to that suspended business outlet MUST be hidden. Other active business outlets of that same vendor and all other active vendors MUST remain completely unaffected and visible.
-   - When a suspended business outlet is re-activated by Admin, its listings MUST immediately become visible on the Customer Website again.
+   
+## Master Project Rule — Zero Regression / Safe Change Architecture
+
+### Mandatory Principles (NEVER ALTER WITHOUT EXPLICIT USER INSTRUCTION)
+1. **Additive & Backward Compatible Changes**:
+   - All new features and bug fixes MUST be strictly additive, backward-compatible, and isolated to prevent regressions in existing working workflows across Customer, Vendor, Admin, and Agent portals.
+2. **Impact Analysis Protocol**:
+   - Before modifying any shared code, trace the complete data flow, identify all affected files, APIs, components, and models, and ensure zero breaking changes to existing production contracts.
+3. **API & Database Contract Protection**:
+   - Never repurpose existing database fields, modify existing API response structures, or delete fields relied upon by production workflows. Use isolated extensions or optional properties for new requirements.
+4. **Empirical Verification & Git Checkpoints**:
+   - Validate every change with production builds (`npx vite build`) and syntax checks before committing cleanly to Git.- When a suspended business outlet is re-activated by Admin, its listings MUST immediately become visible on the Customer Website again.
   
