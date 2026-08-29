@@ -2175,6 +2175,18 @@ function App() {
                     <button
                       type="button"
                       onClick={() => {
+                        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents, 2);
+                        addToast('Refreshing Agent Directory data...', 'info');
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold px-3 py-2.5 rounded-xl transition-all active:scale-95 flex items-center gap-1.5 text-xs cursor-pointer"
+                      title="Refresh Agent Data"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
                         fetchData();
                         setShowOnboardingRequestsModal(true);
                       }}
