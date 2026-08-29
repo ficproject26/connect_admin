@@ -993,8 +993,12 @@ function App() {
       if (!res.ok) {
         throw new Error(data.msg || data.error || 'Authentication failed');
       }
-      if (data.user.role !== 'admin') {
-        throw new Error('Access denied. Admin portal only.');
+      const userRole = (data.user?.role || '').toLowerCase().trim();
+      const userAdminRole = (data.user?.adminRole || '').toLowerCase().trim();
+      const isSuperAdminUser = userRole === 'super-admin' || userAdminRole === 'super-admin' || userRole === 'admin';
+
+      if (!isSuperAdminUser) {
+        throw new Error('Access denied. Super Admin portal only.');
       }
       try {
         localStorage.setItem('token', data.token);

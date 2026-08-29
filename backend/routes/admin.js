@@ -37,16 +37,15 @@ const adminAuth = async (req, res, next) => {
             userId = new mongoose.Types.ObjectId(userId);
         }
         const user = await User.findById(userId).select('role adminRole level branchId status isActive email name').lean();
-        const roleLower = (user?.role || '').toLowerCase();
-        const adminRoleLower = (user?.adminRole || '').toLowerCase();
-        const isAdminUser = roleLower.includes('admin') || adminRoleLower.includes('admin') || roleLower === 'super-admin' || adminRoleLower === 'super-admin' || roleLower === 'staff' || adminRoleLower === 'staff';
+        const roleVal = (user?.role || '').toLowerCase().trim();
+        const adminRoleVal = (user?.adminRole || '').toLowerCase().trim();
+        const isSuperAdmin = roleVal === 'super-admin' || adminRoleVal === 'super-admin';
 
-        if (!user || !isAdminUser) {
-            return res.status(403).json({ msg: 'Access denied. Admins only.' });
+        if (!user || !isSuperAdmin) {
+            return res.status(403).json({ msg: 'Access denied. Super Admin only.' });
         }
-        // Force Super Admin authority across all admin requests
         user.adminRole = 'super-admin';
-        user.role = 'admin';
+        user.role = 'super-admin';
         req.adminUser = user;
         next();
     } catch (err) {
@@ -635,15 +634,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         const activeUser = req.adminUser || req.user;
         const isSuperAdminUser = activeUser && (
             activeUser.adminRole === 'super-admin' ||
-            activeUser.adminRole === 'superadmin' ||
-            activeUser.adminRole === 'admin' ||
-            activeUser.adminRole === 'manager' ||
-            activeUser.role === 'super-admin' ||
-            activeUser.role === 'superadmin' ||
-            activeUser.role === 'admin' ||
-            activeUser.role === 'Admin' ||
-            activeUser.role === 'staff' ||
-            !activeUser.role
+            activeUser.role === 'super-admin'
         );
 
         const isTerritoryScopedAgent = activeUser && !isSuperAdminUser && (
@@ -4799,15 +4790,7 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         const activePerfUser = req.adminUser || req.user;
         const isPerfSuperAdmin = activePerfUser && (
             activePerfUser.adminRole === 'super-admin' ||
-            activePerfUser.adminRole === 'superadmin' ||
-            activePerfUser.adminRole === 'admin' ||
-            activePerfUser.adminRole === 'manager' ||
-            activePerfUser.role === 'super-admin' ||
-            activePerfUser.role === 'superadmin' ||
-            activePerfUser.role === 'admin' ||
-            activePerfUser.role === 'Admin' ||
-            activePerfUser.role === 'staff' ||
-            !activePerfUser.role
+            activePerfUser.role === 'super-admin'
         );
         if (activePerfUser && !isPerfSuperAdmin) {
             const userRole = (activePerfUser.role || activePerfUser.adminRole || '').toLowerCase();
