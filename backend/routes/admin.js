@@ -1665,11 +1665,55 @@ const buildProductVendorQuery = (v) => {
     return { $or: orConds };
 };
 
+const findVendorByAnyId = async (idParam) => {
+    if (!idParam) return { userVendor: null, legacyVendor: null };
+    const isValidId = mongoose.Types.ObjectId.isValid(idParam);
+    const cleanId = String(idParam).trim();
+
+    let userVendor = null;
+    if (isValidId) {
+        try { userVendor = await User.findById(cleanId); } catch (e) {}
+    }
+    if (!userVendor) {
+        try {
+            userVendor = await User.findOne({
+                $or: [
+                    { registrationId: cleanId },
+                    { vendorId: cleanId },
+                    { email: cleanId.toLowerCase() },
+                    { phone: cleanId }
+                ]
+            });
+        } catch (e) {}
+    }
+
+    let legacyVendor = null;
+    if (!userVendor) {
+        if (isValidId) {
+            try { legacyVendor = await Vendor.findById(cleanId); } catch (e) {}
+        }
+        if (!legacyVendor) {
+            try {
+                legacyVendor = await Vendor.findOne({
+                    $or: [
+                        { registrationId: cleanId },
+                        { vendorId: cleanId },
+                        { email: cleanId.toLowerCase() },
+                        { phone: cleanId }
+                    ]
+                });
+            } catch (e) {}
+        }
+    }
+
+    return { userVendor, legacyVendor };
+};
+
 router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
     try {
-        let vendor = await User.findById(req.params.id);
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
         const bcrypt = require('bcryptjs');
-        if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
+        if (vendor) {
             vendor.status = 'Approved';
             vendor.isActive = true;
             vendor.isApproved = true;
@@ -1684,7 +1728,6 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
             ).catch(() => {});
             return res.json(vendor);
         }
-        let legacy = await Vendor.findById(req.params.id);
         if (legacy) {
             legacy.status = 'approved';
             legacy.isActive = true;
@@ -1736,8 +1779,8 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
 
 router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
     try {
-        let vendor = await User.findById(req.params.id);
-        if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
+        if (vendor) {
             vendor.status = 'Rejected';
             vendor.isActive = false;
             vendor.isApproved = false;
@@ -1748,7 +1791,6 @@ router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
             ).catch(() => {});
             return res.json(vendor);
         }
-        let legacy = await Vendor.findById(req.params.id);
         if (legacy) {
             legacy.status = 'rejected';
             legacy.isActive = false;
@@ -1768,8 +1810,8 @@ router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
 
 router.put('/vendors/:id/suspend', [auth, adminAuth], async (req, res) => {
     try {
-        let vendor = await User.findById(req.params.id);
-        if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
+        if (vendor) {
             vendor.status = 'Suspended';
             vendor.isActive = false;
             vendor.isApproved = false;
@@ -1780,7 +1822,6 @@ router.put('/vendors/:id/suspend', [auth, adminAuth], async (req, res) => {
             ).catch(() => {});
             return res.json(vendor);
         }
-        let legacy = await Vendor.findById(req.params.id);
         if (legacy) {
             legacy.status = 'suspended';
             legacy.isActive = false;
