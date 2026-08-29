@@ -16,7 +16,11 @@ module.exports = async function(req, res, next) {
 
     // Verify token
     try {
-        const secret = process.env.JWT_SECRET || 'connect_secret_key';
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            console.error('FATAL: JWT_SECRET environment variable is missing.');
+            return res.status(500).json({ msg: 'Server configuration error: JWT_SECRET is not configured.' });
+        }
         const decoded = jwt.verify(token, secret);
         req.user = decoded.user || { id: decoded.agentId, role: 'agent' };
 

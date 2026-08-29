@@ -581,7 +581,11 @@ router.post('/login', async (req, res) => {
         await user.save();
 
         const payload = { user: { id: user.id, role: user.role } };
-        const secret = process.env.JWT_SECRET || 'connect_secret_key';
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            console.error('FATAL: JWT_SECRET environment variable is missing.');
+            return res.status(500).json({ msg: 'Server configuration error: JWT_SECRET is not configured.' });
+        }
         const token = jwt.sign(payload, secret, { expiresIn: '7d' });
 
         // Record Multi-Device Session & Audit Log

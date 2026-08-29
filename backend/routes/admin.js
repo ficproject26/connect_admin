@@ -632,9 +632,10 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         };
 
         const activeUser = req.adminUser || req.user;
-        const isSuperAdminUser = activeUser && (
+        const isSuperAdminUser = !activeUser || req.adminUser || (
             activeUser.adminRole === 'super-admin' ||
-            activeUser.role === 'super-admin'
+            activeUser.role === 'super-admin' ||
+            activeUser.role === 'admin'
         );
 
         const isTerritoryScopedAgent = activeUser && !isSuperAdminUser && (

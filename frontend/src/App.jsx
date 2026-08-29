@@ -794,8 +794,10 @@ function App() {
       if (setter) setter(apiCacheRef.current[cacheKey]);
     }
     return safeFetch(url, (data) => {
-      apiCacheRef.current[cacheKey] = data;
-      if (setter) setter(data);
+      if (data !== null && data !== undefined) {
+        apiCacheRef.current[cacheKey] = data;
+        if (setter) setter(data);
+      }
     }, retries);
   }, [safeFetch]);
 
@@ -895,7 +897,7 @@ function App() {
     } else if (data && Array.isArray(data.data)) {
       list = data.data;
     }
-    if (Array.isArray(list)) {
+    if (Array.isArray(list) && list.length > 0) {
       const seen = new Set();
       const uniqueList = list.filter(ag => {
         if (!ag) return false;
