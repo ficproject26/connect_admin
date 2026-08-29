@@ -1,7 +1,11 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
-    const dbURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-app:Connect123@cluster0.fzj1k5l.mongodb.net/connect_db?retryWrites=true&w=majority&appName=Cluster0';
+    let rawURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-app:Connect123@cluster0.fzj1k5l.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0';
+    if (rawURI.includes('/connect_db')) {
+        rawURI = rawURI.replace('/connect_db', '/test');
+    }
+    const dbURI = rawURI;
 
     const options = {
         serverSelectionTimeoutMS: 30000,
