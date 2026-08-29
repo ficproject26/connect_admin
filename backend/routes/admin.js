@@ -853,21 +853,21 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             let rawIsActive = false;
             let rawIsApproved = false;
 
-            if (rawIsApprovedOrActive) {
-                rawStatus = 'approved';
-                rawKycStatus = 'approved';
-                rawIsActive = true;
-                rawIsApproved = true;
-            } else if (rawStatusLower === 'rejected' || rawKycLower === 'rejected') {
+            if (rawStatusLower === 'rejected' || rawKycLower === 'rejected') {
                 rawStatus = 'rejected';
                 rawKycStatus = 'rejected';
                 rawIsActive = false;
                 rawIsApproved = false;
-            } else {
+            } else if (['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(rawStatusLower) && raw.isActive !== true && raw.isApproved !== true) {
                 rawStatus = 'pending';
                 rawKycStatus = 'pending';
                 rawIsActive = false;
                 rawIsApproved = false;
+            } else {
+                rawStatus = 'approved';
+                rawKycStatus = 'approved';
+                rawIsActive = true;
+                rawIsApproved = true;
             }
 
             if (key) {
