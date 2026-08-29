@@ -2258,7 +2258,7 @@ function App() {
                   const seenKeysInFilter = new Set();
                   const filteredAgents = agents.filter(a => {
                     if (!a) return false;
-                    const query = debouncedSearchTerm.toLowerCase();
+                    const query = (searchTerm || '').toLowerCase().trim();
                     const matchesSearch = !query ||
                       (a.name || '').toLowerCase().includes(query) ||
                       (a.email || '').toLowerCase().includes(query) ||

@@ -626,7 +626,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
         // 1. Fetch agents from User collection with high-performance indexed query filter
         const userAgentFilter = {
-            role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] }
+            $and: [
+                { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] } }
+            ]
         };
 
         const activeUser = req.adminUser || req.user;
