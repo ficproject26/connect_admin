@@ -643,8 +643,15 @@ function App() {
   const [filterBranch, setFilterBranch] = useState('All');
   const [reportType, setReportType] = useState('revenue');
 
-  // In-Memory SWR (Stale-While-Revalidate) API Cache Ref
+  // In-Memory SWR (Stale-While-Revalidate) API Cache Ref & In-Flight Request Map
   const apiCacheRef = useRef({});
+  const inFlightRequestsRef = useRef(new Map());
+
+  const invalidateCache = useCallback((cacheKey) => {
+    if (cacheKey && apiCacheRef.current[cacheKey]) {
+      delete apiCacheRef.current[cacheKey];
+    }
+  }, []);
 
   // Notification Overlay State
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
@@ -716,52 +723,70 @@ function App() {
     setUser(null);
   }, []);
 
-  // Component-scoped safeFetch helper available across all component hooks
+  // Component-scoped safeFetch helper with In-Flight Request Deduplication
   const safeFetch = useCallback(async (url, setter, retries = 1) => {
     if (!token) return null;
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return null;
     }
 
-    const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-    const targetUrls = [url];
-
-    if (url.startsWith('/api/')) {
-      targetUrls.push(`https://connect-admin-qlcy.onrender.com${url}`);
-    } else if (url.includes('/api/')) {
-      const path = url.substring(url.indexOf('/api/'));
-      targetUrls.push(`https://connect-admin-qlcy.onrender.com${path}`);
-      targetUrls.push(path);
-    } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
-      const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
-      targetUrls.push(path);
+    // In-Flight Request Deduplication: Reuse active HTTP request promise
+    if (inFlightRequestsRef.current.has(url)) {
+      try {
+        const data = await inFlightRequestsRef.current.get(url);
+        if (data && setter) setter(data);
+        return data;
+      } catch (e) { }
     }
 
-    for (const targetUrl of [...new Set(targetUrls)]) {
-      for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000);
-          const r = await fetch(targetUrl, { headers, signal: controller.signal });
-          clearTimeout(timeoutId);
+    const fetchPromise = (async () => {
+      const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+      const targetUrls = [url];
 
-          if (r.status === 401 || r.status === 403) {
-            handleLogout();
-            return null;
-          }
-          if (r.ok) {
-            const data = await r.json();
-            if (setter) setter(data);
-            return data;
-          }
-        } catch (e) {
-          if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
-            await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+      if (url.startsWith('/api/')) {
+        targetUrls.push(`https://connect-admin-qlcy.onrender.com${url}`);
+      } else if (url.includes('/api/')) {
+        const path = url.substring(url.indexOf('/api/'));
+        targetUrls.push(`https://connect-admin-qlcy.onrender.com${path}`);
+        targetUrls.push(path);
+      } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
+        const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
+        targetUrls.push(path);
+      }
+
+      for (const targetUrl of [...new Set(targetUrls)]) {
+        for (let attempt = 0; attempt <= retries; attempt++) {
+          try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+            const r = await fetch(targetUrl, { headers, signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (r.status === 401 || r.status === 403) {
+              handleLogout();
+              return null;
+            }
+            if (r.ok) {
+              const data = await r.json();
+              if (setter) setter(data);
+              return data;
+            }
+          } catch (e) {
+            if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
+              await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+            }
           }
         }
       }
+      return null;
+    })();
+
+    inFlightRequestsRef.current.set(url, fetchPromise);
+    try {
+      return await fetchPromise;
+    } finally {
+      inFlightRequestsRef.current.delete(url);
     }
-    return null;
   }, [token, handleLogout]);
 
   const swrFetch = useCallback((url, setter, cacheKey = url, retries = 1) => {
@@ -773,6 +798,31 @@ function App() {
       if (setter) setter(data);
     }, retries);
   }, [safeFetch]);
+
+  // Controlled Concurrency Staggered Background Prefetch Engine
+  const startBackgroundPrefetchQueue = useCallback(() => {
+    if (!token) return;
+
+    // Phase 2: Priority 2 High-Frequency Modules (T+500ms)
+    setTimeout(() => {
+      swrFetch(`${API_BASE}/admin/customers`, setCustomers, 'customers');
+      swrFetch(`${API_BASE}/admin/orders`, setOrders, 'orders');
+      swrFetch(`${API_BASE}/admin/bookings`, setBookings, 'bookings');
+    }, 500);
+
+    // Phase 3: Priority 3 Management & System Modules (T+1500ms)
+    setTimeout(() => {
+      swrFetch(`${API_BASE}/admin/categories`, setCategories, 'categories');
+      swrFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals, 'payroll');
+      swrFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans, 'membershipPlans');
+      swrFetch(`${API_BASE}/admin/payments`, setPayments, 'payments');
+      swrFetch(`${API_BASE}/admin/queries`, setQueries, 'queries');
+      swrFetch(`${API_BASE}/admin/tickets`, setTickets, 'tickets');
+      swrFetch(`${API_BASE}/admin/banners`, setBanners, 'banners');
+      swrFetch(`${API_BASE}/admin/support-team`, setSupportTeam, 'supportTeam');
+      swrFetch(`${API_BASE}/pincodes`, setPincodes, 'pincodes');
+    }, 1500);
+  }, [token, API_BASE, swrFetch]);
 
   // Fetch Dashboard Core Stats directly from Database via Backend API
   const fetchData = async (forceRefresh = false) => {
@@ -786,17 +836,18 @@ function App() {
         if (Array.isArray(apiCacheRef.current['agents'])) setAgents(apiCacheRef.current['agents']);
       }
 
-      // Priority Core Dashboard Tasks
+      // Priority Core Dashboard Tasks (Phase 1 - Immediate)
       await Promise.allSettled([
         safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
           apiCacheRef.current['stats'] = data;
           setStats(data);
         }),
-        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents),
-        safeFetch(`${API_BASE}/admin/vendors`, setVendors),
-        safeFetch(`${API_BASE}/admin/customers`, setCustomers),
+        swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents'),
+        swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors'),
+        swrFetch(`${API_BASE}/admin/customers`, setCustomers, 'customers'),
       ]);
       setLoading(false);
+      startBackgroundPrefetchQueue();
     } catch (err) {
       console.error("API Server not reachable:", err);
       setLoading(false);
