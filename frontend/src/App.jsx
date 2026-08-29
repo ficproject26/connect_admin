@@ -817,15 +817,12 @@ function App() {
 
     if (!token) return;
 
-    // Automatic real-time refresh every 5 seconds when tab is active
+    // Periodic dashboard stats sync when tab is active (60s)
     const interval = setInterval(() => {
       if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
         safeFetch(`${API_BASE}/admin/dashboard-stats`, setStats);
-        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
-        safeFetch(`${API_BASE}/admin/vendors`, setVendors);
-        safeFetch(`${API_BASE}/admin/customers`, setCustomers);
       }
-    }, 5000);
+    }, 60000);
 
     const handleSyncTrigger = () => {
       if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
