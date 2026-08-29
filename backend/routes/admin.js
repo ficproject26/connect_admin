@@ -4073,17 +4073,23 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
             targetName = (subSubcategory || name || '').trim();
 
             if (parentId) {
-                parentDoc = await Category.findById(parentId);
+                parentDoc = await Category.findById(parentId).catch(() => null);
             }
             if (!parentDoc && subcategory) {
-                parentDoc = await Category.findOne({ name: subcategory, level: 'sub' });
+                parentDoc = await Category.findOne({
+                    level: 'sub',
+                    $or: [
+                        { subcategory: subcategory.trim() },
+                        { name: subcategory.trim() }
+                    ]
+                });
                 if (!parentDoc && name) {
-                    let mainParent = await Category.findOne({ name: name, level: 'main' });
+                    let mainParent = await Category.findOne({ name: name.trim(), level: 'main' });
                     if (!mainParent) {
                         mainParent = await Category.create({
                             level: 'main',
                             name: name.trim(),
-                            slug: slugify(name.trim()),
+                            slug: slugify(name.trim() + '-main-' + Date.now()),
                             isSystem: true,
                             isActive: true
                         });
@@ -4092,7 +4098,7 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
                         level: 'sub',
                         name: name.trim(),
                         subcategory: subcategory.trim(),
-                        slug: slugify(subcategory.trim()),
+                        slug: slugify(subcategory.trim() + '-sub-' + Date.now()),
                         parentId: mainParent._id,
                         isActive: true
                     });
@@ -4103,22 +4109,22 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
             targetName = (subcategory || name || '').trim();
 
             if (parentId) {
-                parentDoc = await Category.findById(parentId);
+                parentDoc = await Category.findById(parentId).catch(() => null);
             }
             if (!parentDoc && name) {
-                parentDoc = await Category.findOne({ name: name, level: 'main' });
+                parentDoc = await Category.findOne({ name: name.trim(), level: 'main' });
                 if (!parentDoc) {
                     parentDoc = await Category.create({
                         level: 'main',
                         name: name.trim(),
-                        slug: slugify(name.trim()),
+                        slug: slugify(name.trim() + '-main-' + Date.now()),
                         isSystem: true,
                         isActive: true
                     });
                 }
             }
         } else if (parentId) {
-            parentDoc = await Category.findById(parentId);
+            parentDoc = await Category.findById(parentId).catch(() => null);
         }
 
         if (!targetName) {
@@ -4129,30 +4135,7 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
             return res.status(403).json({ error: 'Main categories are system-locked and cannot be created via API' });
         }
 
-        // Clear any batch deletion markers so newly created category items display immediately
-        if ((level === 'sub' || !subSubcategory) && name) {
-            const mainReg = new RegExp(`^${name.trim()}$`, 'i');
-            await Category.deleteMany({
-                name: mainReg,
-                subcategory: 'ALL_SUBCATEGORIES_DELETED_MARKER'
-            });
-        }
-
-        if ((level === 'child' || subSubcategory) && subcategory) {
-            const subReg = new RegExp(`^${subcategory.trim()}$`, 'i');
-            await Category.deleteMany({
-                subcategory: subReg,
-                subSubcategory: 'ALL_CHILD_DELETED_MARKER'
-            });
-        }
-
-        const parentObjId = parentDoc ? parentDoc._id : null;
-
-        // Get next sort order
-        const maxOrder = await Category.findOne({ parentId: parentObjId }).sort({ sortOrder: -1 }).select('sortOrder');
-        const nextOrder = (maxOrder?.sortOrder ?? -1) + 1;
-
-        // Parse requiredVendorFields for Subcategories (level === 'sub') and Child categories (level === 'child')
+        // Parse requiredVendorFields
         let parsedRequiredVendorFields = [];
         if (req.body.requiredVendorFields) {
             if (typeof req.body.requiredVendorFields === 'string') {
@@ -4167,12 +4150,62 @@ router.post('/categories', [auth, adminAuth], async (req, res) => {
             }
         }
 
+        // Check if matching Category document ALREADY exists in MongoDB
+        let existingCat = null;
+        if (level === 'child' && subcategory && subSubcategory) {
+            existingCat = await Category.findOne({
+                level: 'child',
+                subcategory: subcategory.trim(),
+                subSubcategory: subSubcategory.trim()
+            });
+        } else if (level === 'sub' && name && subcategory) {
+            existingCat = await Category.findOne({
+                level: 'sub',
+                name: name.trim(),
+                subcategory: subcategory.trim()
+            });
+        }
+
+        if (existingCat) {
+            existingCat.description = description || existingCat.description;
+            if (parsedRequiredVendorFields.length > 0) {
+                existingCat.requiredVendorFields = parsedRequiredVendorFields;
+            }
+            existingCat.updatedAt = new Date();
+            await existingCat.save();
+            invalidateCategoryCache();
+            return res.json(existingCat);
+        }
+
+        // Clear any batch deletion markers so newly created category items display immediately
+        if ((level === 'sub' || !subSubcategory) && name) {
+            const mainReg = new RegExp(`^${name.trim()}$`, 'i');
+            await Category.deleteMany({
+                name: mainReg,
+                subcategory: 'ALL_SUBCATEGORIES_DELETED_MARKER'
+            }).catch(() => {});
+        }
+
+        if ((level === 'child' || subSubcategory) && subcategory) {
+            const subReg = new RegExp(`^${subcategory.trim()}$`, 'i');
+            await Category.deleteMany({
+                subcategory: subReg,
+                subSubcategory: 'ALL_CHILD_DELETED_MARKER'
+            }).catch(() => {});
+        }
+
+        const parentObjId = parentDoc ? parentDoc._id : null;
+
+        // Get next sort order
+        const maxOrder = await Category.findOne({ parentId: parentObjId }).sort({ sortOrder: -1 }).select('sortOrder');
+        const nextOrder = (maxOrder?.sortOrder ?? -1) + 1;
+
         const newCat = await Category.create({
             level: level || 'sub',
             name: name ? name.trim() : targetName,
             subcategory: subcategory ? subcategory.trim() : (level === 'sub' ? targetName : ''),
             subSubcategory: subSubcategory ? subSubcategory.trim() : (level === 'child' ? targetName : ''),
-            slug: slugify(targetName + '-' + Date.now()),
+            slug: slugify(targetName + '-' + Date.now() + '-' + Math.floor(Math.random() * 1000)),
             parentId: parentObjId,
             isSystem: false,
             isEditable: true,

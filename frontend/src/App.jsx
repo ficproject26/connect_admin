@@ -9439,17 +9439,34 @@ function App() {
                     const requiredVendorFields = e.target.requiredVendorFields?.value !== undefined ? e.target.requiredVendorFields.value : undefined;
 
                     const hasValidId = modalData._id && String(modalData._id).length === 24 && String(modalData._id) !== 'undefined';
+                    let success = false;
 
                     if (hasValidId) {
                       const res = await executeAction(`/admin/categories/${modalData._id}`, 'PUT', { name, subcategory, subSubcategory, description, requiredVendorFields });
-                      if (!res || !res.success) {
-                        const level = isChildCategory ? 'child' : 'sub';
-                        await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
+                      if (res && res.success) success = true;
+                    }
+
+                    if (!success) {
+                      // Attempt to find existing Category in loaded state by matching hierarchy fields
+                      const matchCat = (categories || []).find(c => {
+                        if (!c) return false;
+                        const mainMatch = (c.name || '').toLowerCase() === name.toLowerCase();
+                        const subMatch = (c.subcategory || '').toLowerCase() === subcategory.toLowerCase();
+                        const childMatch = !subSubcategory || (c.subSubcategory || '').toLowerCase() === subSubcategory.toLowerCase();
+                        return mainMatch && subMatch && childMatch;
+                      });
+
+                      if (matchCat && matchCat._id && String(matchCat._id).length === 24) {
+                        const res = await executeAction(`/admin/categories/${matchCat._id}`, 'PUT', { name, subcategory, subSubcategory, description, requiredVendorFields });
+                        if (res && res.success) success = true;
                       }
-                    } else {
+                    }
+
+                    if (!success) {
                       const level = isChildCategory ? 'child' : 'sub';
                       await executeAction('/admin/categories', 'POST', { name, subcategory, subSubcategory, description, level, requiredVendorFields });
                     }
+
                     await safeFetch(`${API_BASE}/admin/categories`, setCategories);
                     addToast('Category changes saved successfully!', 'success');
                     setShowModal(null);
