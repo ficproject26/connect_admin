@@ -633,7 +633,13 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         };
 
         const activeUser = req.adminUser || req.user;
-        if (activeUser && activeUser.adminRole !== 'super-admin') {
+        const isTerritoryScopedAgent = activeUser && (
+            activeUser.role === 'agent' || 
+            activeUser.role === 'Agent' || 
+            ['state', 'district', 'division', 'pincode'].includes((activeUser.level || '').toLowerCase())
+        ) && activeUser.adminRole !== 'super-admin' && activeUser.role !== 'admin' && activeUser.role !== 'Admin';
+
+        if (isTerritoryScopedAgent) {
             const userRole = (activeUser.role || activeUser.adminRole || '').toLowerCase();
             const userLevel = (activeUser.level || '').toLowerCase();
             const userState = activeUser.assignedState || activeUser.state || (activeUser.territory && activeUser.territory.state);
