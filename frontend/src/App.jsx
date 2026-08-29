@@ -2308,8 +2308,23 @@ function App() {
                   };
 
                   const formatAgentNameWithPincode = (agent) => {
+                    if (!agent) return 'Agent';
                     const lvl = (agent.level || 'pincode').toLowerCase();
-                    const rawName = (agent.name || 'Agent').replace(/\s*\(\d{6}\)$/, '').trim();
+                    let rawName = (
+                      agent.name || 
+                      agent.fullName || 
+                      agent.contactName || 
+                      agent.agentName || 
+                      agent.username || 
+                      agent.ownerName || 
+                      (agent.email ? agent.email.split('@')[0] : '') || 
+                      'Agent Partner'
+                    ).replace(/\s*\(\d{6}\)$/, '').trim();
+
+                    if (rawName.length > 0) {
+                      rawName = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+                    }
+
                     const pin = getAgentPincodeCode(agent);
                     if ((lvl === 'pincode' || !agent.level) && pin) {
                       return `${rawName} (${pin})`;

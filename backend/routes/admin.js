@@ -768,6 +768,17 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             return 'pincode';
         };
 
+        const resolveAgentName = (item) => {
+            if (!item) return 'Agent Partner';
+            let n = item.name || item.fullName || item.contactName || item.agentName || item.username || item.ownerName || '';
+            if (!n && item.email) {
+                n = item.email.split('@')[0];
+            }
+            if (!n) n = 'Agent Partner';
+            n = n.replace(/\s*\(\d{6}\)$/, '').trim();
+            return n.charAt(0).toUpperCase() + n.slice(1);
+        };
+
         userAgents.forEach(agent => {
             const cleanLevel = resolveAgentCleanLevel(agent);
             const key = (agent.registrationId || agent.email || (agent._id ? agent._id.toString() : '')).toLowerCase().trim();
@@ -775,13 +786,13 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 const kycObj = agent.kyc || agent.kycDocs || {};
                 const kycDocsObj = agent.kycDocs || agent.kyc || {};
                 const territoryObj = agent.territory || {};
+                const agentNameVal = resolveAgentName(agent);
 
                 let statusVal = (agent.status && String(agent.status) !== 'undefined') ? String(agent.status) : (agent.kycStatus || 'pending');
                 let kycStatusVal = (agent.kycStatus && String(agent.kycStatus) !== 'undefined') ? String(agent.kycStatus) : (agent.status || 'pending');
 
                 const statusLower = statusVal.toLowerCase().trim();
                 const kycLower = kycStatusVal.toLowerCase().trim();
-                const isApprovedOrActive = statusLower === 'approved' || statusLower === 'active' || agent.isApproved === true || agent.isActive === true;
 
                 let isActiveVal = false;
                 let isApprovedVal = false;
@@ -805,6 +816,8 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
                 agentMap.set(key, {
                     ...agent,
+                    name: agentNameVal,
+                    fullName: agentNameVal,
                     role: 'agent',
                     level: cleanLevel,
                     status: statusVal,
@@ -845,6 +858,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             const rawIdStr = raw._id ? raw._id.toString() : '';
             const key = (raw.registrationId || raw.email || rawIdStr).toLowerCase().trim();
             const cleanLevel = resolveAgentCleanLevel(raw);
+            const rawNameVal = resolveAgentName(raw);
 
             const rawTerritory = raw.territory || {};
             const rawKycDocs = raw.kycDocs || raw.kyc || {};
@@ -855,7 +869,6 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
             const rawStatusLower = rawStatus.toLowerCase().trim();
             const rawKycLower = rawKycStatus.toLowerCase().trim();
-            const rawIsApprovedOrActive = rawStatusLower === 'approved' || rawStatusLower === 'active' || raw.isApproved === true || raw.isActive === true;
 
             let rawIsActive = false;
             let rawIsApproved = false;
@@ -881,7 +894,8 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 if (!agentMap.has(key)) {
                     agentMap.set(key, {
                         _id: raw._id || rawIdStr,
-                        name: raw.name || 'Agent',
+                        name: rawNameVal,
+                        fullName: rawNameVal,
                         email: raw.email || '',
                         phone: raw.phone || '',
                         altPhone: raw.altPhone || raw.alternativePhone || raw.secondaryPhone || '',
