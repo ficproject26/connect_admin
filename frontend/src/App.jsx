@@ -194,15 +194,16 @@ const isApprovedAgent = (agent) => {
     return false;
   }
 
-  // Active / Approved agents render in Directory
+  // Pending onboarding applications belong in Onboarding Requests modal, not active directory
   if (
-    (status === 'approved' || status === 'active' || kycStatus === 'approved' || kycStatus === 'active') ||
-    (agent.isActive === true || agent.isApproved === true)
+    ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested', 'new', 'submitted'].includes(status) &&
+    agent.isActive !== true && agent.isApproved !== true
   ) {
-    return true;
+    return false;
   }
 
-  return false;
+  // All approved & active onboarded agents render in active directory
+  return true;
 };
 
 const getAgentLevel = (a) => {
