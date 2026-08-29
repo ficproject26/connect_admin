@@ -4635,7 +4635,7 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         }
 
         // Base user filter for agents
-        const agentFilter = { role: { $in: ['agent', 'Agent'] } };
+        const agentFilter = { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] } };
         if (agentType && agentType !== 'all') agentFilter.level = agentType.toLowerCase();
         if (status && status !== 'all') agentFilter.status = status.toLowerCase();
 
