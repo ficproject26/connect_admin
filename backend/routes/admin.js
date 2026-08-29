@@ -779,21 +779,21 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 let isActiveVal = false;
                 let isApprovedVal = false;
 
-                if (isApprovedOrActive) {
-                    statusVal = 'approved';
-                    kycStatusVal = 'approved';
-                    isActiveVal = true;
-                    isApprovedVal = true;
-                } else if (statusLower === 'rejected' || kycLower === 'rejected') {
+                if (statusLower === 'rejected' || kycLower === 'rejected') {
                     statusVal = 'rejected';
                     kycStatusVal = 'rejected';
                     isActiveVal = false;
                     isApprovedVal = false;
-                } else {
+                } else if (['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(statusLower) && agent.isActive !== true && agent.isApproved !== true) {
                     statusVal = 'pending';
                     kycStatusVal = 'pending';
                     isActiveVal = false;
                     isApprovedVal = false;
+                } else {
+                    statusVal = 'approved';
+                    kycStatusVal = 'approved';
+                    isActiveVal = true;
+                    isApprovedVal = true;
                 }
 
                 agentMap.set(key, {
