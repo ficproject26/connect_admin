@@ -13,14 +13,15 @@ module.exports = async function(req, res, next) {
             return res.status(401).json({ msg: 'User not found' });
         }
 
-        // Allow admin, superadmin, or any adminRole
+        // Allow admin, superadmin, super-admin, or any adminRole
+        const r = (user.role || '').toLowerCase().replace(/[-_]/g, '');
+        const ar = (user.adminRole || '').toLowerCase().replace(/[-_]/g, '');
         const isAdmin = 
-            user.role === 'admin' || 
-            user.role === 'Admin' || 
-            user.role === 'superadmin' || 
-            user.adminRole === 'superadmin' || 
-            user.adminRole === 'admin' ||
-            user.adminRole === 'manager';
+            r === 'admin' || 
+            r === 'superadmin' || 
+            ar === 'superadmin' || 
+            ar === 'admin' ||
+            ar === 'manager';
 
         if (!isAdmin) {
             return res.status(403).json({ msg: 'Access denied. Admin privileges required.' });
