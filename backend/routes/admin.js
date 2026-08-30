@@ -1753,6 +1753,17 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
             vendor.status = 'Approved';
             vendor.isActive = true;
             vendor.isApproved = true;
+            if (Array.isArray(vendor.businesses)) {
+                vendor.businesses.forEach(b => {
+                    if (b) {
+                        b.status = 'Active';
+                        b.isActive = true;
+                    }
+                });
+                if (typeof vendor.markModified === 'function') {
+                    vendor.markModified('businesses');
+                }
+            }
             if (!vendor.password) {
                 const salt = await bcrypt.genSalt(10);
                 vendor.password = await bcrypt.hash('Vendor@12345', salt);
