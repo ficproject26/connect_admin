@@ -988,10 +988,20 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
         const mergedAgents = Array.from(agentMap.values());
 
-        // Fetch vendor lists and pre-build O(1) vendor count map
-        const Vendor = require('../models/Vendor');
-        const userVendorsList = await User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('_id email referredBy agentId onboardedBy').lean();
-        const vendorModelList = await Vendor.find({}).select('_id agentId email').lean();
+        // Fetch vendor lists and pre-build O(1) vendor count map with non-blocking Promise.allSettled
+        let userVendorsList = [];
+        let vendorModelList = [];
+        try {
+            const Vendor = require('../models/Vendor');
+            const [uvRes, vmRes] = await Promise.allSettled([
+                User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('_id email referredBy agentId onboardedBy').lean().limit(1000),
+                Vendor.find({}).select('_id agentId email').lean().limit(1000)
+            ]);
+            if (uvRes.status === 'fulfilled' && Array.isArray(uvRes.value)) userVendorsList = uvRes.value;
+            if (vmRes.status === 'fulfilled' && Array.isArray(vmRes.value)) vendorModelList = vmRes.value;
+        } catch (vErr) {
+            console.error("Error fetching vendor counts for agents:", vErr.message);
+        }
 
         const agentVendorCountMap = new Map();
 
