@@ -720,17 +720,24 @@ function App() {
 
     const fetchPromise = (async () => {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-      const targetUrls = [url];
+      const isLocalDev = typeof window !== 'undefined' && (
+        window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1'
+      );
 
       if (url.startsWith('/api/')) {
-        targetUrls.push(`https://connect-admin-qlcy.onrender.com${url}`);
+        targetUrls.unshift(`https://connect-admin-qlcy.onrender.com${url}`);
       } else if (url.includes('/api/')) {
         const path = url.substring(url.indexOf('/api/'));
-        targetUrls.push(`https://connect-admin-qlcy.onrender.com${path}`);
-        targetUrls.push(path);
+        targetUrls.unshift(`https://connect-admin-qlcy.onrender.com${path}`);
+        if (isLocalDev) {
+          targetUrls.push(path);
+        }
       } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
-        const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
-        targetUrls.push(path);
+        if (isLocalDev) {
+          const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
+          targetUrls.push(path);
+        }
       }
 
       for (const targetUrl of [...new Set(targetUrls)]) {

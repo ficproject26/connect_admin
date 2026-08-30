@@ -734,9 +734,15 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
         let userAgents = [];
         try {
-            userAgents = await User.find(userAgentFilter)
-                .sort({ createdAt: -1 })
-                .lean();
+            if (db) {
+                userAgents = await db.collection('users')
+                    .find(userAgentFilter)
+                    .sort({ createdAt: -1 })
+                    .maxTimeMS(5000)
+                    .toArray();
+            } else {
+                userAgents = await User.find(userAgentFilter).sort({ createdAt: -1 }).lean();
+            }
         } catch (err) {
             console.error("Error querying userAgents:", err.message);
         }
@@ -992,13 +998,20 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         let userVendorsList = [];
         let vendorModelList = [];
         try {
-            const Vendor = require('../models/Vendor');
-            const [uvRes, vmRes] = await Promise.allSettled([
-                User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('_id email referredBy agentId onboardedBy').lean().limit(1000),
-                Vendor.find({}).select('_id agentId email').lean().limit(1000)
-            ]);
-            if (uvRes.status === 'fulfilled' && Array.isArray(uvRes.value)) userVendorsList = uvRes.value;
-            if (vmRes.status === 'fulfilled' && Array.isArray(vmRes.value)) vendorModelList = vmRes.value;
+            if (db) {
+                const [uvRes, vmRes] = await Promise.allSettled([
+                    db.collection('users').find(
+                        { role: { $in: ['Vendor', 'vendor'] } },
+                        { projection: { _id: 1, email: 1, referredBy: 1, agentId: 1, onboardedBy: 1 } }
+                    ).maxTimeMS(3000).toArray(),
+                    db.collection('vendors').find(
+                        {},
+                        { projection: { _id: 1, agentId: 1, email: 1 } }
+                    ).maxTimeMS(3000).toArray()
+                ]);
+                if (uvRes.status === 'fulfilled' && Array.isArray(uvRes.value)) userVendorsList = uvRes.value;
+                if (vmRes.status === 'fulfilled' && Array.isArray(vmRes.value)) vendorModelList = vmRes.value;
+            }
         } catch (vErr) {
             console.error("Error fetching vendor counts for agents:", vErr.message);
         }
