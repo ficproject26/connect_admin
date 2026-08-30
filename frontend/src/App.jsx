@@ -703,7 +703,7 @@ function App() {
   }, []);
 
   // Component-scoped safeFetch helper with In-Flight Request Deduplication
-  const safeFetch = useCallback(async (url, setter, retries = 1) => {
+  const safeFetch = useCallback(async (url, setter, retries = 2) => {
     if (!token) return null;
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       return null;
@@ -745,7 +745,7 @@ function App() {
         for (let attempt = 0; attempt <= retries; attempt++) {
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 30000);
+            const timeoutId = setTimeout(() => controller.abort(), 45000);
             const r = await fetch(targetUrl, { headers, signal: controller.signal });
             clearTimeout(timeoutId);
 
@@ -764,7 +764,7 @@ function App() {
             }
           } catch (e) {
             if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
-              await new Promise(resolve => setTimeout(resolve, 300 * (attempt + 1)));
+              await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
             }
           }
         }
@@ -780,7 +780,7 @@ function App() {
     }
   }, [token, handleLogout]);
 
-  const swrFetch = useCallback((url, setter, cacheKey = url, retries = 1) => {
+  const swrFetch = useCallback((url, setter, cacheKey = url, retries = 2) => {
     if (apiCacheRef.current[cacheKey]) {
       if (setter) setter(apiCacheRef.current[cacheKey]);
     }
