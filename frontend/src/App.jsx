@@ -23,13 +23,19 @@ import { CustomerSupportTeamManagement } from './components/CustomerSupportTeamM
 import dataSyncManager from './utils/dataSyncManager';
 
 const getBackendUrl = () => {
-  const envApiUrl =
-    typeof import.meta !== 'undefined' && import.meta.env
+  const isLocalDev = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+  );
+
+  if (isLocalDev) {
+    const envApiUrl = typeof import.meta !== 'undefined' && import.meta.env
       ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
       : null;
-
-  if (envApiUrl && envApiUrl.startsWith('http')) {
-    return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+    if (envApiUrl && envApiUrl.startsWith('http')) {
+      return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+    }
+    return 'http://localhost:8004/api';
   }
 
   // Live production HTTPS backend URL on Render
@@ -920,6 +926,9 @@ function App() {
     }
     if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-performance' || activeTab === 'agent-payment') {
       swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
+      if (agents.length === 0) {
+        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+      }
     }
     if (activeTab === 'vendors' || activeTab === 'vendor-directory' || activeTab === 'vendor-directory-enterprise') {
       swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors');
