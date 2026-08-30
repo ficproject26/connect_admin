@@ -23,38 +23,17 @@ import { CustomerSupportTeamManagement } from './components/CustomerSupportTeamM
 import dataSyncManager from './utils/dataSyncManager';
 
 const getBackendUrl = () => {
-  // On production domains (Vercel), always use relative /api path.
-  // Vercel's rewrite proxy (vercel.json) routes /api/* to the EC2 backend server-side,
-  // which avoids CORS and Mixed Content (HTTPS→HTTP) issues entirely.
-  if (typeof window !== 'undefined') {
-    const hostname = window.location.hostname;
-    const isLocalDev =
-      !hostname ||
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname.startsWith('192.168.') ||
-      hostname.startsWith('10.') ||
-      hostname.startsWith('172.');
+  const envApiUrl =
+    typeof import.meta !== 'undefined' && import.meta.env
+      ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
+      : null;
 
-    if (!isLocalDev) {
-      // Production: use relative URL → Vercel rewrite proxy handles it
-      return '/api';
-    }
-
-    // Local development: use direct EC2 backend URL
-    const envApiUrl =
-      typeof import.meta !== 'undefined' && import.meta.env
-        ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
-        : null;
-
-    if (envApiUrl && envApiUrl.startsWith('http')) {
-      return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
-    }
-
-    return 'https://connect-admin-qlcy.onrender.com/api';
+  if (envApiUrl && envApiUrl.startsWith('http')) {
+    return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
   }
 
-  return '/api';
+  // Live production HTTPS backend URL on Render
+  return 'https://connect-admin-qlcy.onrender.com/api';
 };
 
 const API_BASE = getBackendUrl();
@@ -767,6 +746,10 @@ function App() {
               return null;
             }
             if (r.ok) {
+              const contentType = r.headers.get('content-type') || '';
+              if (!contentType.includes('application/json')) {
+                continue;
+              }
               const data = await r.json();
               if (setter) setter(data);
               return data;
