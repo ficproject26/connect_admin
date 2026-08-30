@@ -622,7 +622,7 @@ router.delete('/admins/:id', [auth, adminAuth], async (req, res) => {
 // ==========================================
 router.get('/agents', [auth, adminAuth], async (req, res) => {
     try {
-        const db = mongoose.connection.db;
+        const db = mongoose.connection.db || (mongoose.connection.client ? mongoose.connection.client.db() : null);
 
         // 1. Fetch agents from User collection with high-performance indexed query filter
         const userAgentFilter = {
