@@ -720,6 +720,7 @@ function App() {
 
     const fetchPromise = (async () => {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+      const targetUrls = [url];
       const isLocalDev = typeof window !== 'undefined' && (
         window.location.hostname === 'localhost' ||
         window.location.hostname === '127.0.0.1'
