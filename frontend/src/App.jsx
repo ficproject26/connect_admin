@@ -2068,30 +2068,27 @@ function App() {
 
           {/* AGENT PAYMENT - Agent Payments Overview */}
           {activeTab === 'agent-payment' && (
-            <div className="space-y-6">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
               {/* Header */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 rounded-3xl shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Agent Payment</h2>
-                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
-                        Payment Suite
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 font-semibold mt-1">View all agent payment details, earnings, and process commission payouts to agents.</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
-                      Total Agents: <strong className="text-primary-600">{agents.length}</strong>
+              <div className="p-5 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Agent Payment</h2>
+                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20">
+                      Payment Suite
                     </span>
                   </div>
+                  <p className="text-xs text-slate-400 font-semibold mt-1">View all agent payment details, earnings, and process commission payouts to agents.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
+                    Total Agents: <strong className="text-primary-600">{agents.length}</strong>
+                  </span>
                 </div>
               </div>
 
               {/* Agent Payment Table */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
+              <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
                       <tr>
@@ -2188,7 +2185,6 @@ function App() {
                     </p>
                   </div>
                 )}
-              </div>
             </div>
           )}
 
