@@ -319,17 +319,24 @@ function App() {
   const [pincodeStateFilter, setPincodeStateFilter] = useState('');
 
   // Helper to determine if an agent is a pending onboarding request
-  const isPendingAgent = (a) => {
-    if (!a) return false;
+  const isPendingAgent = (agent) => {
+    if (!agent) return false;
+    const a = agent.agent || agent;
     const s = (a.status || '').toLowerCase().trim();
     const k = (a.kycStatus || '').toLowerCase().trim();
-    if (['approved', 'active', 'suspended'].includes(s) || ['approved', 'active', 'suspended'].includes(k)) {
+
+    if (s === 'rejected' || k === 'rejected' || s === 'suspended' || k === 'suspended') {
       return false;
     }
-    if (s === 'rejected' || k === 'rejected') {
+    if (a.isApproved === true && a.isActive === true && s === 'approved' && k === 'approved') {
       return false;
     }
-    return true;
+    if (['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(s) ||
+        ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(k) ||
+        a.isApproved === false || a.isActive === false) {
+      return true;
+    }
+    return !['approved', 'active'].includes(s);
   };
   const [pincodeDistrictFilter, setPincodeDistrictFilter] = useState('');
   const [pincodeStatusFilter, setPincodeStatusFilter] = useState('all');
@@ -908,6 +915,25 @@ function App() {
         if (!item) return null;
         const ag = item.agent || item;
         const metrics = item.metrics || {};
+        const rawStatus = ag.status || item.status || ag.kycStatus || item.kycStatus || 'pending';
+        const rawKycStatus = ag.kycStatus || item.kycStatus || ag.status || item.status || 'pending';
+        const statusLower = String(rawStatus).toLowerCase().trim();
+        const kycLower = String(rawKycStatus).toLowerCase().trim();
+
+        let isApprovedVal = ag.isApproved === true || item.isApproved === true;
+        let isActiveVal = ag.isActive === true || item.isActive === true;
+
+        if (['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(statusLower) || ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(kycLower)) {
+          isApprovedVal = false;
+          isActiveVal = false;
+        } else if (statusLower === 'rejected' || kycLower === 'rejected') {
+          isApprovedVal = false;
+          isActiveVal = false;
+        } else {
+          isApprovedVal = true;
+          isActiveVal = true;
+        }
+
         return {
           ...ag,
           _id: ag._id || item._id,
@@ -916,10 +942,10 @@ function App() {
           phone: ag.phone || item.phone || '',
           role: ag.role || item.role || 'agent',
           level: (ag.level || item.level || 'pincode').toLowerCase(),
-          status: ag.status || item.status || 'approved',
-          kycStatus: ag.kycStatus || item.kycStatus || 'approved',
-          isActive: ag.isActive !== false && item.isActive !== false,
-          isApproved: ag.isApproved !== false && item.isApproved !== false,
+          status: rawStatus,
+          kycStatus: rawKycStatus,
+          isActive: isActiveVal,
+          isApproved: isApprovedVal,
           assignedArea: ag.assignedArea || item.assignedArea || (ag.territory ? Object.values(ag.territory).filter(Boolean).join(' / ') : ''),
           territory: ag.territory || item.territory || {},
           balance: (ag.balance !== undefined && ag.balance > 0) ? ag.balance : (item.balance || metrics.revenue || 0),
@@ -10080,7 +10106,10 @@ function App() {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => fetchData(true)}
+                  onClick={() => {
+                    safeFetch(`${API_BASE}/admin/agents`, handleSetAgents, 2);
+                    addToast('Refreshed agent onboarding requests list', 'info');
+                  }}
                   className="flex items-center gap-1.5 text-xs font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 px-3 py-1.5 rounded-xl border border-primary-200 dark:border-primary-800 transition-all cursor-pointer"
                   title="Reload onboarding requests from server"
                 >
