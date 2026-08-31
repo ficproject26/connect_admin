@@ -88,7 +88,13 @@ router.post('/register', async (req, res) => {
 
         // Extract territory string
         const territory = req.body.territory || {};
-        const agentRole = (role || level || req.body.role || req.body.level || 'pincode').toLowerCase();
+        let rawRole = (level || req.body.level || role || req.body.role || 'pincode').toString().toLowerCase().trim();
+        if (rawRole === 'agent' || rawRole === 'approved') rawRole = (level || req.body.level || 'pincode').toString().toLowerCase().trim();
+        let agentRole = 'pincode';
+        if (rawRole.includes('state')) agentRole = 'state';
+        else if (rawRole.includes('district') || rawRole.includes('dist')) agentRole = 'district';
+        else if (rawRole.includes('divis') || rawRole.includes('division')) agentRole = 'division';
+        else if (rawRole.includes('pincode') || rawRole.includes('pin')) agentRole = 'pincode';
         let territoryParts = [];
         if (territory.state || territory.district || territory.division || territory.pincode) {
             const stateVal = territory.state || '';
