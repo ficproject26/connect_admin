@@ -3038,11 +3038,6 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
 const resolveVendorAndCustomer = async (items) => {
     if (!Array.isArray(items) || items.length === 0) return [];
 
-    let fallbackVendorDoc = null;
-    try {
-        fallbackVendorDoc = await Vendor.findOne().select('_id businessName email mobileNumber phone').lean();
-    } catch (e) {}
-
     // Batch collect IDs & emails for single multi-item queries
     const vendorIdsToFetch = new Set();
     const customerIdsToFetch = new Set();
@@ -3050,35 +3045,51 @@ const resolveVendorAndCustomer = async (items) => {
 
     items.forEach(item => {
         const doc = item.toObject ? item.toObject() : item;
-        const v = doc.vendorId;
-        if (v && typeof v === 'string' && mongoose.Types.ObjectId.isValid(v)) {
-            vendorIdsToFetch.add(v);
+        const v = doc.vendorId || doc.vendor_id || doc.businessId;
+        if (v && typeof v === 'string') {
+            vendorIdsToFetch.add(v.trim());
         } else if (v && typeof v === 'object' && v._id) {
-            vendorIdsToFetch.add(v._id.toString());
+            vendorIdsToFetch.add(v._id.toString().trim());
         }
 
-        const c = doc.customerId;
-        if (c && typeof c === 'string' && mongoose.Types.ObjectId.isValid(c)) {
-            customerIdsToFetch.add(c);
+        const c = doc.customerId || doc.customer_id;
+        if (c && typeof c === 'string') {
+            customerIdsToFetch.add(c.trim());
         } else if (c && typeof c === 'object' && c._id) {
-            customerIdsToFetch.add(c._id.toString());
+            customerIdsToFetch.add(c._id.toString().trim());
         }
 
         const custEmail = doc.customer_email || doc.email || doc.customer?.email;
         if (custEmail) customerEmailsToFetch.add(custEmail.toLowerCase().trim());
     });
 
-    const vendorObjIds = Array.from(vendorIdsToFetch).filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
-    const customerObjIds = Array.from(customerIdsToFetch).filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+    const vStrArray = Array.from(vendorIdsToFetch);
+    const vObjIdArray = vStrArray.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
 
-    // Execute 3 fast batch queries in parallel
+    const cStrArray = Array.from(customerIdsToFetch);
+    const cObjIdArray = cStrArray.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+
+    // Execute batch queries in parallel for User (including businesses._id), Vendor, and Customer collections
     const [fetchedVendorUsers, fetchedVendors, fetchedCustomers] = await Promise.all([
-        vendorObjIds.length > 0 ? User.find({ _id: { $in: vendorObjIds } }).select('_id name email mobileNumber phone businessName businesses').lean() : [],
-        vendorObjIds.length > 0 ? Vendor.find({ _id: { $in: vendorObjIds } }).select('_id name businessName email mobileNumber phone').lean() : [],
-        (customerObjIds.length > 0 || customerEmailsToFetch.size > 0)
+        (vObjIdArray.length > 0 || vStrArray.length > 0) ? User.find({
+            $or: [
+                ...(vObjIdArray.length > 0 ? [{ _id: { $in: vObjIdArray } }] : []),
+                ...(vStrArray.length > 0 ? [{ _id: { $in: vStrArray } }] : []),
+                ...(vObjIdArray.length > 0 ? [{ 'businesses._id': { $in: vObjIdArray } }] : []),
+                ...(vStrArray.length > 0 ? [{ 'businesses._id': { $in: vStrArray } }] : [])
+            ]
+        }).select('_id name email mobileNumber phone businessName businesses').lean() : [],
+        (vObjIdArray.length > 0 || vStrArray.length > 0) ? Vendor.find({
+            $or: [
+                ...(vObjIdArray.length > 0 ? [{ _id: { $in: vObjIdArray } }] : []),
+                ...(vStrArray.length > 0 ? [{ _id: { $in: vStrArray } }] : [])
+            ]
+        }).select('_id name businessName email mobileNumber phone').lean() : [],
+        (cObjIdArray.length > 0 || cStrArray.length > 0 || customerEmailsToFetch.size > 0)
             ? Customer.find({
                 $or: [
-                    ...(customerObjIds.length > 0 ? [{ _id: { $in: customerObjIds } }] : []),
+                    ...(cObjIdArray.length > 0 ? [{ _id: { $in: cObjIdArray } }] : []),
+                    ...(cStrArray.length > 0 ? [{ _id: { $in: cStrArray } }] : []),
                     ...(customerEmailsToFetch.size > 0 ? [{ email: { $in: Array.from(customerEmailsToFetch) } }] : [])
                 ]
             }).select('_id name email phone mobile mobileNumber contactNumber').lean()
@@ -3086,10 +3097,19 @@ const resolveVendorAndCustomer = async (items) => {
     ]);
 
     const userVendorMap = new Map();
-    fetchedVendorUsers.forEach(u => userVendorMap.set(u._id.toString(), u));
+    fetchedVendorUsers.forEach(u => {
+        if (u._id) userVendorMap.set(u._id.toString(), u);
+        if (Array.isArray(u.businesses)) {
+            u.businesses.forEach(b => {
+                if (b._id) userVendorMap.set(b._id.toString(), u);
+            });
+        }
+    });
 
     const vendorDocMap = new Map();
-    fetchedVendors.forEach(v => vendorDocMap.set(v._id.toString(), v));
+    fetchedVendors.forEach(v => {
+        if (v._id) vendorDocMap.set(v._id.toString(), v);
+    });
 
     const customerMap = new Map();
     fetchedCustomers.forEach(c => {
@@ -3100,31 +3120,48 @@ const resolveVendorAndCustomer = async (items) => {
     const resolvedItems = items.map(item => {
         const doc = item.toObject ? item.toObject() : item;
 
-        // Resolve Vendor
-        let vendor = doc.vendorId;
-        const explicitVendorName = doc.vendor_name || doc.vendorName || doc.businessName || doc.shop_name || doc.vendor;
+        // Resolve Vendor dynamically from product/service owner
+        let vendor = doc.vendorId || doc.vendor_id || doc.businessId;
+        let explicitVendorName = doc.vendor_name || doc.vendorName || doc.businessName || doc.shop_name || doc.vendor;
+
+        let resolvedVendorObj = null;
 
         if (vendor && typeof vendor === 'object' && vendor.businessName) {
-            // Already resolved
+            resolvedVendorObj = vendor;
         } else {
-            const vKey = (vendor || '').toString();
+            const vKey = (vendor && typeof vendor === 'object' && vendor._id ? vendor._id : vendor || '').toString().trim();
             const uObj = userVendorMap.get(vKey);
             const vDoc = vendorDocMap.get(vKey);
 
             if (uObj) {
                 const matchedBiz = (uObj.businesses || []).find(b => b._id && b._id.toString() === vKey);
-                vendor = {
+                const bName = matchedBiz?.businessName || uObj.businessName || uObj.name || explicitVendorName || 'Vendor unavailable';
+                resolvedVendorObj = {
                     _id: uObj._id,
-                    businessName: matchedBiz?.businessName || uObj.businessName || uObj.name || explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A'),
-                    name: uObj.name,
-                    email: uObj.email,
+                    businessId: matchedBiz ? matchedBiz._id : uObj._id,
+                    businessName: bName,
+                    name: uObj.name || bName,
+                    email: uObj.email || 'N/A',
                     mobileNumber: uObj.mobileNumber || uObj.phone || 'N/A'
                 };
             } else if (vDoc) {
-                vendor = vDoc;
+                resolvedVendorObj = {
+                    _id: vDoc._id,
+                    businessId: vDoc._id,
+                    businessName: vDoc.businessName || vDoc.name || explicitVendorName || 'Vendor unavailable',
+                    name: vDoc.name || vDoc.businessName || 'Vendor',
+                    email: vDoc.email || 'N/A',
+                    mobileNumber: vDoc.mobileNumber || vDoc.phone || 'N/A'
+                };
+            } else if (explicitVendorName) {
+                resolvedVendorObj = {
+                    businessName: explicitVendorName,
+                    email: doc.vendorEmail || 'N/A',
+                    mobileNumber: doc.vendorPhone || 'N/A'
+                };
             } else {
-                vendor = {
-                    businessName: explicitVendorName || (fallbackVendorDoc ? fallbackVendorDoc.businessName : 'N/A'),
+                resolvedVendorObj = {
+                    businessName: 'Vendor unavailable',
                     email: doc.vendorEmail || 'N/A',
                     mobileNumber: doc.vendorPhone || 'N/A'
                 };
@@ -3157,7 +3194,8 @@ const resolveVendorAndCustomer = async (items) => {
             order_number: orderNumber,
             id: orderNumber,
             createdAt: doc.created_at || doc.createdAt || new Date(),
-            vendorId: vendor,
+            vendorId: resolvedVendorObj || vendor,
+            vendorName: resolvedVendorObj?.businessName || doc.vendorName || doc.vendor_name || 'Vendor unavailable',
             customerId: customer,
             amount,
             commission,

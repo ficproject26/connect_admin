@@ -5130,7 +5130,7 @@ function App() {
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
                         {filteredOrders.map((order) => {
-                          const vName = order.vendorId?.businessName || order.vendorName || order.vendorId?.name || '—';
+                          const vName = order.vendorId?.businessName || order.vendorName || order.vendor_name || order.vendorId?.name || 'Vendor unavailable';
                           const vEmail = order.vendorId?.email || order.vendorEmail || '—';
                           const pDetails = order.serviceName || order.service || order.productDetails || order.product_details || order.productName || order.title || '—';
                           const custName = order.customerId?.name || order.customer_name || order.memberName || '—';
