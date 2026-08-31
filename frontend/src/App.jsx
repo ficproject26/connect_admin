@@ -984,6 +984,9 @@ function App() {
       fetchData();
     }
     if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-performance' || activeTab === 'agent-payment') {
+      if (!Array.isArray(agents) || agents.length === 0) {
+        delete apiCacheRef.current['agents'];
+      }
       swrFetch(`${API_BASE}/admin/agents`, (data) => {
         if (Array.isArray(data) && data.length > 0) {
           handleSetAgents(data);
@@ -991,7 +994,7 @@ function App() {
           safeFetch(`${API_BASE}/admin/agent-performance/overview`, handleSetAgents);
         }
       }, 'agents');
-      if (agents.length === 0) {
+      if (!Array.isArray(agents) || agents.length === 0) {
         safeFetch(`${API_BASE}/admin/agents`, (data) => {
           if (Array.isArray(data) && data.length > 0) {
             handleSetAgents(data);
