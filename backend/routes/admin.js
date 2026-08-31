@@ -3073,26 +3073,21 @@ const resolveVendorAndCustomer = async (items) => {
     const [fetchedVendorUsers, fetchedVendors, fetchedCustomers] = await Promise.all([
         (vObjIdArray.length > 0 || vStrArray.length > 0) ? User.find({
             $or: [
-                ...(vObjIdArray.length > 0 ? [{ _id: { $in: vObjIdArray } }] : []),
-                ...(vStrArray.length > 0 ? [{ _id: { $in: vStrArray } }] : []),
-                ...(vObjIdArray.length > 0 ? [{ 'businesses._id': { $in: vObjIdArray } }] : []),
+                ...(vObjIdArray.length > 0 ? [{ _id: { $in: vObjIdArray } }, { 'businesses._id': { $in: vObjIdArray } }] : []),
                 ...(vStrArray.length > 0 ? [{ 'businesses._id': { $in: vStrArray } }] : [])
             ]
         }).select('_id name email mobileNumber phone businessName businesses').lean() : [],
-        (vObjIdArray.length > 0 || vStrArray.length > 0) ? Vendor.find({
-            $or: [
-                ...(vObjIdArray.length > 0 ? [{ _id: { $in: vObjIdArray } }] : []),
-                ...(vStrArray.length > 0 ? [{ _id: { $in: vStrArray } }] : [])
-            ]
+        (vObjIdArray.length > 0) ? Vendor.find({
+            _id: { $in: vObjIdArray }
         }).select('_id name businessName email mobileNumber phone').lean() : [],
         (cObjIdArray.length > 0 || cStrArray.length > 0 || customerEmailsToFetch.size > 0)
             ? Customer.find({
                 $or: [
                     ...(cObjIdArray.length > 0 ? [{ _id: { $in: cObjIdArray } }] : []),
-                    ...(cStrArray.length > 0 ? [{ _id: { $in: cStrArray } }] : []),
+                    ...(cStrArray.length > 0 ? [{ memberId: { $in: cStrArray } }, { phone: { $in: cStrArray } }] : []),
                     ...(customerEmailsToFetch.size > 0 ? [{ email: { $in: Array.from(customerEmailsToFetch) } }] : [])
                 ]
-            }).select('_id name email phone mobile mobileNumber contactNumber').lean()
+            }).select('_id name email phone mobile mobileNumber contactNumber memberId').lean()
             : []
     ]);
 
