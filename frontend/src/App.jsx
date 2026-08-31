@@ -2210,7 +2210,7 @@ function App() {
           {(activeTab === 'agents' || activeTab === 'agent-directory') && (
             <div className="space-y-6">
 
-              {/* Agent Level & Network Overview Cards */}
+              {/* Agent Level & Network Overview Cards - Live Sync Ready */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
                 <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Agent Network Breakdown</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
