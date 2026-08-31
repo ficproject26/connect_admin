@@ -168,8 +168,9 @@ const isPendingAgent = (agent) => {
 
 const isApprovedAgent = (agent) => {
   if (!agent) return false;
-  const status = (agent.status || '').toLowerCase().trim();
-  const kycStatus = (agent.kycStatus || '').toLowerCase().trim();
+  const a = agent.agent || agent;
+  const status = (a.status || '').toLowerCase().trim();
+  const kycStatus = (a.kycStatus || '').toLowerCase().trim();
 
   // Explicitly rejected or suspended agents do not render in active directory tabs
   if (
@@ -183,8 +184,9 @@ const isApprovedAgent = (agent) => {
   return true;
 };
 
-const getAgentLevel = (a) => {
-  if (!a) return 'pincode';
+const getAgentLevel = (raw) => {
+  if (!raw) return 'pincode';
+  const a = raw.agent || raw;
   const l = (a.level || a.agentLevel || a.role || a.assignedRole || a.agentType || a.type || '').toString().toLowerCase().trim();
   if (l.includes('state')) return 'state';
   if (l.includes('district') || l.includes('dist')) return 'district';
@@ -841,7 +843,13 @@ function App() {
           apiCacheRef.current['stats'] = data;
           setStats(data);
         }),
-        swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents'),
+        swrFetch(`${API_BASE}/admin/agents`, (data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            handleSetAgents(data);
+          } else {
+            safeFetch(`${API_BASE}/admin/agent-performance/overview`, handleSetAgents);
+          }
+        }, 'agents'),
         swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors'),
         swrFetch(`${API_BASE}/admin/customers`, setCustomers, 'customers'),
       ]);
@@ -896,8 +904,31 @@ function App() {
     }
     if (Array.isArray(list) && list.length > 0) {
       const seen = new Set();
-      const uniqueList = list.filter(ag => {
-        if (!ag) return false;
+      const normalized = list.map(item => {
+        if (!item) return null;
+        const ag = item.agent || item;
+        const metrics = item.metrics || {};
+        return {
+          ...ag,
+          _id: ag._id || item._id,
+          name: ag.name || item.name || 'Agent Partner',
+          email: ag.email || item.email || '',
+          phone: ag.phone || item.phone || '',
+          role: ag.role || item.role || 'agent',
+          level: (ag.level || item.level || 'pincode').toLowerCase(),
+          status: ag.status || item.status || 'approved',
+          kycStatus: ag.kycStatus || item.kycStatus || 'approved',
+          isActive: ag.isActive !== false && item.isActive !== false,
+          isApproved: ag.isApproved !== false && item.isApproved !== false,
+          assignedArea: ag.assignedArea || item.assignedArea || (ag.territory ? Object.values(ag.territory).filter(Boolean).join(' / ') : ''),
+          territory: ag.territory || item.territory || {},
+          balance: (ag.balance !== undefined && ag.balance > 0) ? ag.balance : (item.balance || metrics.revenue || 0),
+          commissionEarned: (ag.commissionEarned !== undefined && ag.commissionEarned > 0) ? ag.commissionEarned : (item.commissionEarned || metrics.commission || 0),
+          vendorsAdded: ag.vendorsAdded || item.vendorsAdded || metrics.vendorOnboarding || 0
+        };
+      }).filter(Boolean);
+
+      const uniqueList = normalized.filter(ag => {
         const idStr = (ag._id || '').toString().toLowerCase().trim();
         const regId = (ag.registrationId || ag.id || '').toString().toLowerCase().trim();
         const email = (ag.email || '').toLowerCase().trim();
@@ -912,8 +943,10 @@ function App() {
         return true;
       });
 
-      setAgents(uniqueList);
-      apiCacheRef.current['agents'] = uniqueList;
+      if (uniqueList.length > 0) {
+        setAgents(uniqueList);
+        apiCacheRef.current['agents'] = uniqueList;
+      }
     }
   }, []);
 
@@ -925,9 +958,21 @@ function App() {
       fetchData();
     }
     if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-performance' || activeTab === 'agent-payment') {
-      swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
+      swrFetch(`${API_BASE}/admin/agents`, (data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          handleSetAgents(data);
+        } else {
+          safeFetch(`${API_BASE}/admin/agent-performance/overview`, handleSetAgents);
+        }
+      }, 'agents');
       if (agents.length === 0) {
-        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+        safeFetch(`${API_BASE}/admin/agents`, (data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            handleSetAgents(data);
+          } else {
+            safeFetch(`${API_BASE}/admin/agent-performance/overview`, handleSetAgents);
+          }
+        });
       }
     }
     if (activeTab === 'vendors' || activeTab === 'vendor-directory' || activeTab === 'vendor-directory-enterprise') {
