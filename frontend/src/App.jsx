@@ -934,6 +934,13 @@ function App() {
           isActiveVal = true;
         }
 
+        const rawLvlStr = (ag.level || item.level || ag.agentLevel || item.agentLevel || ag.role || item.role || ag.assignedRole || item.assignedRole || ag.agentType || 'pincode').toString().toLowerCase().trim();
+        let resolvedLvl = 'pincode';
+        if (rawLvlStr.includes('state')) resolvedLvl = 'state';
+        else if (rawLvlStr.includes('district') || rawLvlStr.includes('dist')) resolvedLvl = 'district';
+        else if (rawLvlStr.includes('divis') || rawLvlStr.includes('division')) resolvedLvl = 'division';
+        else if (rawLvlStr.includes('pincode') || rawLvlStr.includes('pin')) resolvedLvl = 'pincode';
+
         return {
           ...ag,
           _id: ag._id || item._id,
@@ -941,7 +948,7 @@ function App() {
           email: ag.email || item.email || '',
           phone: ag.phone || item.phone || '',
           role: ag.role || item.role || 'agent',
-          level: (ag.level || item.level || 'pincode').toLowerCase(),
+          level: resolvedLvl,
           status: rawStatus,
           kycStatus: rawKycStatus,
           isActive: isActiveVal,
