@@ -2156,6 +2156,11 @@ function App() {
             <AdminSecurityDashboard token={token} API_BASE={API_BASE} />
           )}
 
+          {/* AGENT PERFORMANCE MONITORING & ANALYTICS DASHBOARD */}
+          {(activeTab === 'agent-performance' || activeTab === 'agent-dashboard') && (
+            <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
+          )}
+
           {/* 4. AGENTS DIRECTORY */}
           {(activeTab === 'agents' || activeTab === 'agent-directory') && (
             <div className="space-y-6">
