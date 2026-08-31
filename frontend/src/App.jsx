@@ -2062,7 +2062,7 @@ function App() {
           )}
 
           {/* AGENT PERFORMANCE MONITORING SYSTEM */}
-          {activeTab === 'agent-performance' && (
+          {(activeTab === 'agent-performance' || activeTab === 'agent-dashboard') && (
             <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
           )}
 
@@ -2225,11 +2225,6 @@ function App() {
           {/* DEVSECOPS SECURITY DASHBOARD */}
           {activeTab === 'security' && (
             <AdminSecurityDashboard token={token} API_BASE={API_BASE} />
-          )}
-
-          {/* AGENT PERFORMANCE MONITORING & ANALYTICS DASHBOARD */}
-          {(activeTab === 'agent-performance' || activeTab === 'agent-dashboard') && (
-            <AgentPerformanceDashboard token={token} API_BASE={API_BASE} />
           )}
 
           {/* 4. AGENTS DIRECTORY */}
