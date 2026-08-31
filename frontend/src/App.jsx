@@ -743,17 +743,14 @@ function App() {
 
       if (url.startsWith('/api/')) {
         targetUrls.unshift(`https://connect-admin-qlcy.onrender.com${url}`);
+        targetUrls.push(url);
       } else if (url.includes('/api/')) {
         const path = url.substring(url.indexOf('/api/'));
+        targetUrls.unshift(path);
         targetUrls.unshift(`https://connect-admin-qlcy.onrender.com${path}`);
-        if (isLocalDev) {
-          targetUrls.push(path);
-        }
       } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
-        if (isLocalDev) {
-          const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
-          targetUrls.push(path);
-        }
+        const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
+        targetUrls.push(path);
       }
 
       for (const targetUrl of [...new Set(targetUrls)]) {
