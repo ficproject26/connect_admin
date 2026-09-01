@@ -257,7 +257,7 @@ export default function AgentDirectoryModule({
     }
   });
 
-  // Hierarchy Tree Map Builder
+  // Hierarchy Tree Map Builder (State -> District -> Division -> Pincode -> Agents)
   const buildHierarchyMap = () => {
     const map = {};
     filteredAgents.forEach(ag => {
@@ -265,6 +265,7 @@ export default function AgentDirectoryModule({
       const s = terr.state;
       const d = terr.district;
       const v = terr.division;
+      const p = terr.pincode;
 
       if (!map[s]) map[s] = { stateName: s, stateAgents: [], districts: {} };
 
@@ -275,11 +276,14 @@ export default function AgentDirectoryModule({
         if (ag.level === 'district') {
           map[s].districts[d].districtAgents.push(ag);
         } else {
-          if (!map[s].districts[d].divisions[v]) map[s].districts[d].divisions[v] = { divisionName: v, divisionAgents: [], pincodeAgents: [] };
+          if (!map[s].districts[d].divisions[v]) map[s].districts[d].divisions[v] = { divisionName: v, divisionAgents: [], pincodes: {} };
           if (ag.level === 'division') {
             map[s].districts[d].divisions[v].divisionAgents.push(ag);
           } else {
-            map[s].districts[d].divisions[v].pincodeAgents.push(ag);
+            if (!map[s].districts[d].divisions[v].pincodes[p]) {
+              map[s].districts[d].divisions[v].pincodes[p] = { pincodeCode: p, pincodeAgents: [] };
+            }
+            map[s].districts[d].divisions[v].pincodes[p].pincodeAgents.push(ag);
           }
         }
       }
@@ -287,8 +291,87 @@ export default function AgentDirectoryModule({
     return map;
   };
 
+  // Node Toggle Helper
   const toggleNode = (nodeId) => {
     setExpandedNodes(prev => ({ ...prev, [nodeId]: !prev[nodeId] }));
+  };
+
+  // Auto-expand all nodes when search is active
+  useEffect(() => {
+    if (debouncedSearch && debouncedSearch.trim().length > 0) {
+      const autoExpanded = {};
+      filteredAgents.forEach(ag => {
+        const terr = extractAgentTerritory(ag);
+        const sKey = `st_${terr.state}`;
+        const dKey = `dist_${terr.state}_${terr.district}`;
+        const vKey = `div_${terr.state}_${terr.district}_${terr.division}`;
+        const pKey = `pin_${terr.state}_${terr.district}_${terr.division}_${terr.pincode}`;
+        autoExpanded[sKey] = true;
+        autoExpanded[dKey] = true;
+        autoExpanded[vKey] = true;
+        autoExpanded[pKey] = true;
+      });
+      setExpandedNodes(autoExpanded);
+    }
+  }, [debouncedSearch, filteredAgents]);
+
+  const expandAllNodes = (hMap) => {
+    const allExpanded = {};
+    Object.values(hMap).forEach(st => {
+      const sKey = `st_${st.stateName}`;
+      allExpanded[sKey] = true;
+      Object.values(st.districts).forEach(dist => {
+        const dKey = `dist_${st.stateName}_${dist.districtName}`;
+        allExpanded[dKey] = true;
+        Object.values(dist.divisions).forEach(div => {
+          const vKey = `div_${st.stateName}_${dist.districtName}_${div.divisionName}`;
+          allExpanded[vKey] = true;
+          Object.values(div.pincodes).forEach(pin => {
+            const pKey = `pin_${st.stateName}_${dist.districtName}_${div.divisionName}_${pin.pincodeCode}`;
+            allExpanded[pKey] = true;
+          });
+        });
+      });
+    });
+    setExpandedNodes(allExpanded);
+  };
+
+  const collapseAllNodes = () => {
+    setExpandedNodes({});
+  };
+
+  // Total Subtree Count Helpers
+  const getStateTotalCount = (st) => {
+    let count = st.stateAgents.length;
+    Object.values(st.districts).forEach(d => {
+      count += d.districtAgents.length;
+      Object.values(d.divisions).forEach(div => {
+        count += div.divisionAgents.length;
+        Object.values(div.pincodes).forEach(pin => {
+          count += pin.pincodeAgents.length;
+        });
+      });
+    });
+    return count;
+  };
+
+  const getDistrictTotalCount = (d) => {
+    let count = d.districtAgents.length;
+    Object.values(d.divisions).forEach(div => {
+      count += div.divisionAgents.length;
+      Object.values(div.pincodes).forEach(pin => {
+        count += pin.pincodeAgents.length;
+      });
+    });
+    return count;
+  };
+
+  const getDivisionTotalCount = (div) => {
+    let count = div.divisionAgents.length;
+    Object.values(div.pincodes).forEach(pin => {
+      count += pin.pincodeAgents.length;
+    });
+    return count;
   };
 
   return (
@@ -489,82 +572,233 @@ export default function AgentDirectoryModule({
       ) : (
         /* ── DYNAMIC VIEW RENDERERS ── */
         <div>
-          {/* 1. HIERARCHY TREE VIEW */}
+          {/* 1. HIERARCHY TREE VIEW (State -> District -> Division -> Pincode -> Agent) */}
           {agentViewMode === 'tree' && (() => {
             const hMap = buildHierarchyMap();
             const stateList = Object.values(hMap);
 
             return (
               <div className="space-y-4">
+                {/* Tree Toolbar Controls */}
+                <div className="flex justify-between items-center px-1">
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    Territory Hierarchy ({stateList.length} States)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => expandAllNodes(hMap)}
+                      className="text-[11px] font-bold text-primary-600 dark:text-primary-400 hover:underline cursor-pointer"
+                    >
+                      Expand All
+                    </button>
+                    <span className="text-slate-300 dark:text-slate-700">|</span>
+                    <button
+                      type="button"
+                      onClick={collapseAllNodes}
+                      className="text-[11px] font-bold text-slate-500 hover:underline cursor-pointer"
+                    >
+                      Collapse All
+                    </button>
+                  </div>
+                </div>
+
                 {stateList.map(st => {
-                  const isStateExpanded = expandedNodes[st.stateName] !== false;
+                  const sKey = `st_${st.stateName}`;
+                  const isStateExpanded = !!expandedNodes[sKey];
+                  const stateAgentCount = getStateTotalCount(st);
+                  const districtList = Object.values(st.districts);
+
                   return (
                     <div key={st.stateName} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
-                      {/* State Group Header */}
+                      {/* LEVEL 1: STATE HEADER */}
                       <div
-                        onClick={() => toggleNode(st.stateName)}
-                        className="bg-slate-50 dark:bg-slate-950 px-5 py-3.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 cursor-pointer select-none"
+                        onClick={() => toggleNode(sKey)}
+                        className="bg-slate-50 dark:bg-slate-950 px-5 py-3.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 cursor-pointer select-none hover:bg-slate-100/80 dark:hover:bg-slate-900 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          {isStateExpanded ? <ChevronDown className="w-4 h-4 text-purple-500" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
-                          <span className="text-xs font-extrabold uppercase tracking-wider text-purple-600 dark:text-purple-400">
-                            State: {st.stateName}
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleNode(sKey); }}
+                            className="p-1 rounded-md text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 cursor-pointer"
+                          >
+                            {isStateExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </button>
+                          <span className="text-xs font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
+                            <MapPin className="w-4 h-4 text-purple-500" />
+                            STATE: {st.stateName}
                           </span>
                         </div>
-                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-500">
-                          {st.stateAgents.length} State Agents
+                        <span className="text-[11px] font-black px-3 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                          {stateAgentCount} {stateAgentCount === 1 ? 'State Agent' : 'State Agents'}
                         </span>
                       </div>
 
-                      {/* State Agents & Sub-Districts */}
+                      {/* LEVEL 1 SUB-CONTENT: Direct State Agents & Districts */}
                       {isStateExpanded && (
                         <div className="p-4 space-y-4">
-                          {/* Render State Agent Cards */}
-                          {st.stateAgents.map(ag => (
-                            <AgentCardItem key={ag._id} agent={ag} levelBadge="State Agent" levelColor="purple" />
-                          ))}
+                          {/* Direct State Level Agents */}
+                          {st.stateAgents.length > 0 && (
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 block px-1">State Level Assigned Agents</span>
+                              {st.stateAgents.map(ag => (
+                                <AgentCardItem key={ag._id} agent={ag} levelBadge="State Agent" levelColor="purple" />
+                              ))}
+                            </div>
+                          )}
 
                           {/* Districts Sub-Tree */}
-                          {Object.values(st.districts).map(dist => {
-                            const isDistExpanded = expandedNodes[st.stateName + '_' + dist.districtName] !== false;
-                            return (
-                              <div key={dist.districtName} className="ml-4 pl-4 border-l-2 border-blue-500/30 space-y-3">
-                                <div
-                                  onClick={() => toggleNode(st.stateName + '_' + dist.districtName)}
-                                  className="flex items-center justify-between py-1.5 cursor-pointer"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    {isDistExpanded ? <ChevronDown className="w-3.5 h-3.5 text-blue-500" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />}
-                                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400">District: {dist.districtName}</span>
+                          {districtList.length > 0 ? (
+                            districtList.map(dist => {
+                              const dKey = `dist_${st.stateName}_${dist.districtName}`;
+                              const isDistExpanded = !!expandedNodes[dKey];
+                              const distAgentCount = getDistrictTotalCount(dist);
+                              const divisionList = Object.values(dist.divisions);
+
+                              return (
+                                <div key={dist.districtName} className="ml-3 pl-3 border-l-2 border-blue-500/30 space-y-3">
+                                  {/* LEVEL 2: DISTRICT HEADER */}
+                                  <div
+                                    onClick={() => toggleNode(dKey)}
+                                    className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 dark:bg-blue-950/20 border border-blue-500/20 cursor-pointer select-none hover:bg-blue-500/10 transition-colors"
+                                  >
+                                    <div className="flex items-center gap-2.5">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); toggleNode(dKey); }}
+                                        className="p-0.5 rounded-md text-blue-500 hover:bg-blue-500/20 cursor-pointer"
+                                      >
+                                        {isDistExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                      </button>
+                                      <span className="text-xs font-black uppercase tracking-wider text-blue-700 dark:text-blue-300">
+                                        DISTRICT: {dist.districtName}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                                      {distAgentCount} {distAgentCount === 1 ? 'District Agent' : 'District Agents'}
+                                    </span>
                                   </div>
-                                  <span className="text-[10px] font-bold px-2 py-0.2 rounded-full bg-blue-500/10 text-blue-500">
-                                    {dist.districtAgents.length} District Agents
-                                  </span>
+
+                                  {/* LEVEL 2 SUB-CONTENT: Direct District Agents & Divisions */}
+                                  {isDistExpanded && (
+                                    <div className="space-y-3 pt-1">
+                                      {dist.districtAgents.length > 0 && (
+                                        <div className="space-y-2">
+                                          <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 block px-1">District Level Assigned Agents</span>
+                                          {dist.districtAgents.map(ag => (
+                                            <AgentCardItem key={ag._id} agent={ag} levelBadge="District Agent" levelColor="blue" />
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Divisions Sub-Tree */}
+                                      {divisionList.length > 0 ? (
+                                        divisionList.map(div => {
+                                          const vKey = `div_${st.stateName}_${dist.districtName}_${div.divisionName}`;
+                                          const isDivExpanded = !!expandedNodes[vKey];
+                                          const divAgentCount = getDivisionTotalCount(div);
+                                          const pincodeList = Object.values(div.pincodes);
+
+                                          return (
+                                            <div key={div.divisionName} className="ml-3 pl-3 border-l-2 border-indigo-500/30 space-y-3">
+                                              {/* LEVEL 3: DIVISION HEADER */}
+                                              <div
+                                                onClick={() => toggleNode(vKey)}
+                                                className="flex items-center justify-between p-2.5 rounded-xl bg-indigo-500/5 dark:bg-indigo-950/20 border border-indigo-500/20 cursor-pointer select-none hover:bg-indigo-500/10 transition-colors"
+                                              >
+                                                <div className="flex items-center gap-2">
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); toggleNode(vKey); }}
+                                                    className="p-0.5 rounded-md text-indigo-500 hover:bg-indigo-500/20 cursor-pointer"
+                                                  >
+                                                    {isDivExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                                  </button>
+                                                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                                    DIVISION: {div.divisionName}
+                                                  </span>
+                                                </div>
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                                                  {divAgentCount} {divAgentCount === 1 ? 'Agent' : 'Agents'}
+                                                </span>
+                                              </div>
+
+                                              {/* LEVEL 3 SUB-CONTENT: Direct Division Agents & Pincodes */}
+                                              {isDivExpanded && (
+                                                <div className="space-y-3 pt-1">
+                                                  {div.divisionAgents.length > 0 && (
+                                                    <div className="space-y-2">
+                                                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block px-1">Divisional Level Assigned Agents</span>
+                                                      {div.divisionAgents.map(ag => (
+                                                        <AgentCardItem key={ag._id} agent={ag} levelBadge="Divisional Agent" levelColor="indigo" />
+                                                      ))}
+                                                    </div>
+                                                  )}
+
+                                                  {/* Pincodes Sub-Tree */}
+                                                  {pincodeList.length > 0 ? (
+                                                    pincodeList.map(pin => {
+                                                      const pKey = `pin_${st.stateName}_${dist.districtName}_${div.divisionName}_${pin.pincodeCode}`;
+                                                      const isPinExpanded = !!expandedNodes[pKey];
+
+                                                      return (
+                                                        <div key={pin.pincodeCode} className="ml-3 pl-3 border-l-2 border-emerald-500/30 space-y-2">
+                                                          {/* LEVEL 4: PINCODE HEADER */}
+                                                          <div
+                                                            onClick={() => toggleNode(pKey)}
+                                                            className="flex items-center justify-between p-2 rounded-xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 cursor-pointer select-none hover:bg-emerald-500/10 transition-colors"
+                                                          >
+                                                            <div className="flex items-center gap-2">
+                                                              <button
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); toggleNode(pKey); }}
+                                                                className="p-0.5 rounded-md text-emerald-500 hover:bg-emerald-500/20 cursor-pointer"
+                                                              >
+                                                                {isPinExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                                              </button>
+                                                              <span className="text-xs font-bold tracking-wider text-emerald-600 dark:text-emerald-400 font-mono">
+                                                                PINCODE: {pin.pincodeCode}
+                                                              </span>
+                                                            </div>
+                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                              {pin.pincodeAgents.length} {pin.pincodeAgents.length === 1 ? 'Agent' : 'Agents'}
+                                                            </span>
+                                                          </div>
+
+                                                          {/* LEVEL 4 SUB-CONTENT: Pincode Agent Cards */}
+                                                          {isPinExpanded && (
+                                                            <div className="space-y-2 pt-1">
+                                                              {pin.pincodeAgents.length > 0 ? (
+                                                                pin.pincodeAgents.map(ag => (
+                                                                  <AgentCardItem key={ag._id} agent={ag} levelBadge="Pincode Agent" levelColor="emerald" />
+                                                                ))
+                                                              ) : (
+                                                                <p className="text-[11px] text-slate-400 italic px-2">No agents available.</p>
+                                                              )}
+                                                            </div>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })
+                                                  ) : (
+                                                    <p className="text-[11px] text-slate-400 italic px-2">No pincode data available.</p>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })
+                                      ) : (
+                                        <p className="text-[11px] text-slate-400 italic px-2">No division data available.</p>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
-
-                                {isDistExpanded && (
-                                  <div className="space-y-3 pt-1">
-                                    {dist.districtAgents.map(ag => (
-                                      <AgentCardItem key={ag._id} agent={ag} levelBadge="District Agent" levelColor="blue" />
-                                    ))}
-
-                                    {/* Divisions Sub-Tree */}
-                                    {Object.values(dist.divisions).map(div => (
-                                      <div key={div.divisionName} className="ml-4 pl-4 border-l-2 border-indigo-500/30 space-y-2 pt-2">
-                                        <span className="text-[11px] font-bold text-indigo-500 block">Division: {div.divisionName}</span>
-                                        {div.divisionAgents.map(ag => (
-                                          <AgentCardItem key={ag._id} agent={ag} levelBadge="Divisional Agent" levelColor="indigo" />
-                                        ))}
-                                        {div.pincodeAgents.map(ag => (
-                                          <AgentCardItem key={ag._id} agent={ag} levelBadge="Pincode Agent" levelColor="emerald" />
-                                        ))}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+                              );
+                            })
+                          ) : (
+                            <p className="text-[11px] text-slate-400 italic px-2">No district data available.</p>
+                          )}
                         </div>
                       )}
                     </div>
