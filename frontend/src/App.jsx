@@ -2121,7 +2121,7 @@ function App() {
               token={token}
               API_BASE={API_BASE}
               initialAgents={agents}
-              onOpenOnboardingModal={() => setShowDirectRequestsModal(true)}
+              onOpenOnboardingModal={() => setShowOnboardingRequestsModal(true)}
               onOpenAddAgentModal={() => setShowAddAgentModal(true)}
             />
           )}

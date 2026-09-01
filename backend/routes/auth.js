@@ -530,10 +530,13 @@ router.post('/login', async (req, res) => {
                     role: user.level || 'pincode'
                 });
             }
-            if (userStatus === 'pending') {
+            if (userStatus === 'pending' || userStatus === 'pending_approval' || userStatus === 'under_verification') {
                 return res.status(403).json({
-                    message: 'Your registration has been submitted successfully. You can log in only after Admin approval.',
+                    title: 'YOUR REQUEST IS UNDER REVIEW',
+                    heading: 'YOUR REQUEST IS UNDER REVIEW',
+                    message: 'Your agent registration request has been successfully submitted.\n\nYour request is currently under review by the administration.\n\nPlease contact the administration for further assistance.',
                     status: 'pending',
+                    approvalStatus: 'PENDING',
                     registrationId: user.registrationId || 'N/A',
                     role: user.level || 'pincode'
                 });
@@ -541,9 +544,12 @@ router.post('/login', async (req, res) => {
             if (userStatus === 'rejected') {
                 const reasonText = user.rejectionReason ? ` Reason: ${user.rejectionReason}` : '';
                 return res.status(403).json({
-                    message: `Your registration application was rejected.${reasonText}`,
+                    title: 'APPLICATION REJECTED',
+                    heading: 'APPLICATION REJECTED',
+                    message: `Your agent registration request has been rejected by the administration.${reasonText}\n\nPlease contact support for further assistance.`,
                     rejectionReason: user.rejectionReason || '',
-                    status: userStatus,
+                    status: 'rejected',
+                    approvalStatus: 'REJECTED',
                     registrationId: user.registrationId || 'N/A',
                     role: user.level || 'pincode'
                 });
@@ -863,13 +869,33 @@ router.get('/me', async (req, res) => {
 
         if (user.role === 'agent' || user.role === 'Agent') {
             const uStatus = (user.status || '').toLowerCase();
-            if (uStatus === 'suspended' || (!user.isActive && uStatus !== 'approved')) {
+            if (uStatus === 'suspended') {
                 return res.status(403).json({
                     title: 'Account Suspended',
                     message: 'Your agent account has been suspended by the Administrator. Your access to the Agent Portal has been temporarily disabled. Please contact the Administration Team to reactivate your account.',
                     error: 'Account Suspended',
                     status: 'suspended',
                     isSuspended: true
+                });
+            }
+            if (uStatus === 'pending' || uStatus === 'pending_approval' || uStatus === 'under_verification' || (!user.isActive && uStatus !== 'approved')) {
+                return res.status(403).json({
+                    title: 'YOUR REQUEST IS UNDER REVIEW',
+                    heading: 'YOUR REQUEST IS UNDER REVIEW',
+                    message: 'Your agent registration request has been successfully submitted.\n\nYour request is currently under review by the administration.\n\nPlease contact the administration for further assistance.',
+                    status: 'pending',
+                    approvalStatus: 'PENDING',
+                    registrationId: user.registrationId || 'N/A'
+                });
+            }
+            if (uStatus === 'rejected') {
+                return res.status(403).json({
+                    title: 'APPLICATION REJECTED',
+                    heading: 'APPLICATION REJECTED',
+                    message: 'Your agent registration request has been rejected by the administration. Please contact support for further assistance.',
+                    status: 'rejected',
+                    approvalStatus: 'REJECTED',
+                    registrationId: user.registrationId || 'N/A'
                 });
             }
 
