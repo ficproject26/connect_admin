@@ -950,37 +950,53 @@ export default function AgentDirectoryModule({
                     <div className="flex gap-2 shrink-0 flex-wrap">
                       <button
                         type="button"
-                        onClick={async () => {
+                        disabled={refreshing}
+                        onClick={async (e) => {
+                          const targetBtn = e.currentTarget;
+                          targetBtn.disabled = true;
                           try {
-                            const res = await fetch(`/api/admin/approve-agent/${pAgent._id}`, {
-                              method: 'PUT',
-                              headers: { 'x-auth-token': token, 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: 'rejected' })
-                            });
-                            if (res.ok) {
-                              loadAgentData(true);
+                            const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+                            const body = JSON.stringify({ status: 'rejected' });
+                            const urls = [`/api/admin/approve-agent/${pAgent._id}`, `${API_BASE}/admin/approve-agent/${pAgent._id}`];
+                            for (const u of urls) {
+                              try {
+                                const res = await fetch(u, { method: 'PUT', headers, body });
+                                if (res.ok) break;
+                              } catch (e) {}
                             }
-                          } catch (e) {}
+                            loadAgentData(true);
+                          } catch (err) {
+                          } finally {
+                            targetBtn.disabled = false;
+                          }
                         }}
-                        className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                        className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
                       >
                         Reject
                       </button>
                       <button
                         type="button"
-                        onClick={async () => {
+                        disabled={refreshing}
+                        onClick={async (e) => {
+                          const targetBtn = e.currentTarget;
+                          targetBtn.disabled = true;
                           try {
-                            const res = await fetch(`/api/admin/approve-agent/${pAgent._id}`, {
-                              method: 'PUT',
-                              headers: { 'x-auth-token': token, 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: 'approved' })
-                            });
-                            if (res.ok) {
-                              loadAgentData(true);
+                            const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+                            const body = JSON.stringify({ status: 'approved' });
+                            const urls = [`/api/admin/approve-agent/${pAgent._id}`, `${API_BASE}/admin/approve-agent/${pAgent._id}`];
+                            for (const u of urls) {
+                              try {
+                                const res = await fetch(u, { method: 'PUT', headers, body });
+                                if (res.ok) break;
+                              } catch (e) {}
                             }
-                          } catch (e) {}
+                            loadAgentData(true);
+                          } catch (err) {
+                          } finally {
+                            targetBtn.disabled = false;
+                          }
                         }}
-                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow-md cursor-pointer"
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow-md cursor-pointer disabled:opacity-50"
                       >
                         Approve Agent
                       </button>

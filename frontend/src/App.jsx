@@ -1181,18 +1181,19 @@ function App() {
   // API Action Mutators
   const executeAction = async (endpoint, method = 'POST', body = null) => {
     try {
-      const headers = { 'x-auth-token': token };
-      if (body) {
-        headers['Content-Type'] = 'application/json';
-      }
+      const headers = { 
+        'x-auth-token': token,
+        'Content-Type': 'application/json' 
+      };
+      const payloadBody = body || {};
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method,
         headers,
-        body: body ? JSON.stringify(body) : undefined
+        body: JSON.stringify(payloadBody)
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        addToast(data.msg || data.error || "Action failed.", 'error');
+        addToast(data.message || data.msg || data.error || "Action failed.", 'error');
         return { success: false, data };
       }
       fetchData();
@@ -1202,8 +1203,8 @@ function App() {
       return { success: true, data };
     } catch (err) {
       console.error("API action failed:", err);
-      addToast("API Action failed: Server unreachable or request rejected.", 'error');
-      return { success: false };
+      addToast(err.message || "API Action failed: Server unreachable or request rejected.", 'error');
+      return { success: false, error: err.message };
     }
   };
 
