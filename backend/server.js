@@ -72,7 +72,14 @@ app.use(cors(corsOptions));
 const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./middleware/security');
 app.use(applySecurityHeaders);
 app.use(sanitizeInput);
-app.use(express.json({ limit: '100mb', extended: true }));
+const path = require('path');
+const fs = require('fs');
+const uploadsDir = path.join(__dirname, 'uploads');
+const resumesDir = path.join(__dirname, 'uploads', 'resumes');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+if (!fs.existsSync(resumesDir)) fs.mkdirSync(resumesDir, { recursive: true });
+app.use('/uploads/resumes', express.static(resumesDir));
+app.use('/uploads', express.static(uploadsDir));
 
 // Health Check Endpoints
 const getHealthStatus = () => {

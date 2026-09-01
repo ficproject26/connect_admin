@@ -7391,10 +7391,11 @@ function App() {
                     }}
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm px-3.5 py-2.5 font-semibold text-slate-800 dark:text-slate-200"
                   >
-                    <option value="applied">Applied</option>
-                    <option value="interviewing">Interviewing</option>
-                    <option value="selected">Selected</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="APPLICATION RECEIVED">APPLICATION RECEIVED</option>
+                    <option value="UNDER REVIEW">UNDER REVIEW</option>
+                    <option value="SHORTLISTED">SHORTLISTED</option>
+                    <option value="SELECTED">SELECTED</option>
+                    <option value="REJECTED">REJECTED</option>
                   </select>
                 </div>
               </div>
@@ -7848,29 +7849,42 @@ function App() {
                       executeAction(`/admin/jobs/${modalData._id}`, 'PUT', { status: newStatus });
                       setModalData(prev => ({ ...prev, status: newStatus }));
                     }}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold capitalize"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold uppercase"
                   >
-                    <option value="applied">Applied</option>
-                    <option value="interviewing">Interviewing / Shortlisted</option>
-                    <option value="selected">Selected</option>
-                    <option value="rejected">Rejected</option>
+                    <option value="APPLICATION RECEIVED">APPLICATION RECEIVED</option>
+                    <option value="UNDER REVIEW">UNDER REVIEW</option>
+                    <option value="SHORTLISTED">SHORTLISTED</option>
+                    <option value="SELECTED">SELECTED</option>
+                    <option value="REJECTED">REJECTED</option>
                   </select>
                 </div>
 
-                {(modalData.resumeUrl && (modalData.resumeUrl.startsWith('http://') || modalData.resumeUrl.startsWith('https://')) && !modalData.resumeUrl.includes('dummy') && !modalData.resumeUrl.includes('unsplash')) ? (
-                  <a
-                    href={modalData.resumeUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2"
-                  >
-                    <FileText className="w-4 h-4" /> View / Download Resume
-                  </a>
-                ) : (
-                  <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold text-xs rounded-xl">
-                    No Resume Uploaded
-                  </span>
-                )}
+                {(() => {
+                  const rawRes = modalData.resumeUrl || modalData.candidateResume;
+                  let fullUrl = null;
+                  if (rawRes && typeof rawRes === 'string' && rawRes.trim() && !rawRes.includes('dummy') && !rawRes.includes('unsplash')) {
+                    const clean = rawRes.trim();
+                    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:')) {
+                      fullUrl = clean;
+                    } else {
+                      fullUrl = `http://localhost:5000${clean.startsWith('/') ? '' : '/'}${clean}`;
+                    }
+                  }
+                  return fullUrl ? (
+                    <a
+                      href={fullUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2"
+                    >
+                      <FileText className="w-4 h-4" /> View / Download Resume
+                    </a>
+                  ) : (
+                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold text-xs rounded-xl">
+                      No Resume Uploaded
+                    </span>
+                  );
+                })()}
               </div>
             </div>
 

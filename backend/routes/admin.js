@@ -3674,23 +3674,28 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
         });
 
         const mappedCustomJobs = resolvedCustomJobs.map((order) => {
-            const appId = order.order_number || order.id || (order._id ? 'JOB-' + String(order._id).substring(18, 24).toUpperCase() : '—');
+            const appId = order.applicationId || order.order_number || order.id || (order._id ? 'APP-' + String(order._id).substring(18, 24).toUpperCase() : '—');
             const custIdVal = (order.customerId && (order.customerId.memberId || order.customerId._id || order.customerId.id)) || (order._id ? 'CUST-' + String(order._id).substring(18, 24).toUpperCase() : '—');
             const companyName = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || order.companyName || order.vendorName || '—';
             const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || order.hrName || '—';
-            const posVal = order.product_details || order.position || order.title || order.jobTitle || 'Job Application';
+            const posVal = order.jobTitle || (order.items && order.items[0]?.name) || order.product_details || order.position || order.title || 'Job Role';
             const resumeVal = order.candidateResume || order.resumeUrl || '';
+            const statusVal = order.status && order.status !== 'Pending' && order.status !== 'Order Received' ? order.status : 'APPLICATION RECEIVED';
 
             return {
                 _id: order._id,
                 applicationId: appId,
-                candidateName: order.customerId?.name || order.memberName || order.customer_name || 'Candidate',
-                email: order.candidateEmail || order.customerId?.email || 'N/A',
-                phone: (order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.customerId?.phone && order.customerId?.phone !== 'N/A' ? order.customerId.phone : 'N/A'),
+                jobId: order.jobId || (order.items && order.items[0]?.productId) || 'N/A',
+                jobTitle: posVal,
+                candidateName: order.candidateName || order.memberName || order.customer_name || order.customerId?.name || 'Candidate',
+                email: order.candidateEmail || order.customer_email || order.email || order.customerId?.email || 'N/A',
+                phone: order.candidatePhone || ((order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.customerId?.phone && order.customerId?.phone !== 'N/A' ? order.customerId.phone : 'N/A')),
                 position: posVal,
+                jobLocation: order.jobLocation || order.candidateLocation || order.customer_address || 'N/A',
+                candidateEducation: order.candidateEducation || 'Graduate',
                 experience: order.experience || 'Fresher',
-                status: (order.status || 'applied').toLowerCase(),
-                createdAt: order.created_at || order.createdAt,
+                status: statusVal,
+                createdAt: order.applicationDate || order.created_at || order.createdAt,
                 customerId: custIdVal,
                 companyName,
                 hrName,
