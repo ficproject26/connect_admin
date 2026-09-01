@@ -2077,7 +2077,7 @@ function App() {
 
           {/* AGENT PAYMENT - Modular Agent Payments Suite */}
           {activeTab === 'agent-payment' && (
-            <AgentPaymentModule token={token} API_BASE={API_BASE} />
+            <AgentPaymentModule token={token} API_BASE={API_BASE} initialAgents={agents} />
           )}
 
           {/* ENTERPRISE VENDOR DIRECTORY */}
@@ -2120,6 +2120,7 @@ function App() {
             <AgentDirectoryModule
               token={token}
               API_BASE={API_BASE}
+              initialAgents={agents}
               onOpenOnboardingModal={() => setShowDirectRequestsModal(true)}
               onOpenAddAgentModal={() => setShowAddAgentModal(true)}
             />

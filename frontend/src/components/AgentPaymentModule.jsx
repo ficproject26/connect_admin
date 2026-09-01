@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   DollarSign, Search, RefreshCw, Wallet, CheckCircle, Clock, 
-  AlertTriangle, Filter, ArrowUpRight, ShieldCheck, UserCheck 
+  AlertTriangle, UserCheck 
 } from 'lucide-react';
 
-export default function AgentPaymentModule({ token, API_BASE }) {
+export default function AgentPaymentModule({ token, API_BASE, initialAgents = [] }) {
   const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !(Array.isArray(initialAgents) && initialAgents.length > 0));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
@@ -26,10 +26,13 @@ export default function AgentPaymentModule({ token, API_BASE }) {
   const safeFetchPaymentData = useCallback(async () => {
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+    
+    // Priority order: Relative Vercel edge proxy FIRST
     const urls = [
-      `${API_BASE}/admin/agents`,
       '/api/admin/agents',
+      `${API_BASE}/admin/agents`,
       'https://connect-admin-qlcy.onrender.com/api/admin/agents',
+      '/api/admin/agent-performance/overview',
       `${API_BASE}/admin/agent-performance/overview`
     ];
 
@@ -37,7 +40,7 @@ export default function AgentPaymentModule({ token, API_BASE }) {
     for (const url of uniqueUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
         const res = await fetch(url, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
 
@@ -45,7 +48,7 @@ export default function AgentPaymentModule({ token, API_BASE }) {
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('application/json')) {
             const data = await res.json();
-            return data;
+            if (data) return data;
           }
         }
       } catch (e) {
@@ -106,6 +109,15 @@ export default function AgentPaymentModule({ token, API_BASE }) {
     }).filter(Boolean);
   }, []);
 
+  // Sync initialAgents if passed from parent
+  useEffect(() => {
+    if (Array.isArray(initialAgents) && initialAgents.length > 0) {
+      const records = normalizePaymentRecords(initialAgents);
+      setPayments(records);
+      setLoading(false);
+    }
+  }, [initialAgents, normalizePaymentRecords]);
+
   // Primary Data Fetcher
   const loadPaymentData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -116,11 +128,13 @@ export default function AgentPaymentModule({ token, API_BASE }) {
       const data = await safeFetchPaymentData();
       if (data) {
         const records = normalizePaymentRecords(data);
-        setPayments(records);
-        setError(null);
+        if (records.length > 0) {
+          setPayments(records);
+          setError(null);
+        }
       } else {
         if (payments.length === 0) {
-          setError('Unable to fetch agent payment metrics from server. Please retry.');
+          setError('Server connection timeout. Retrying in background...');
         }
       }
     } catch (err) {
@@ -192,7 +206,7 @@ export default function AgentPaymentModule({ token, API_BASE }) {
           <div>
             <span className="text-xs font-bold text-slate-400 block">Total Earnings</span>
             <span className="text-xl font-black text-slate-850 dark:text-slate-100">
-              ₹{loading ? '...' : totalEarningsAll.toLocaleString()}
+              ₹{loading && payments.length === 0 ? '...' : totalEarningsAll.toLocaleString()}
             </span>
           </div>
         </div>
@@ -204,7 +218,7 @@ export default function AgentPaymentModule({ token, API_BASE }) {
           <div>
             <span className="text-xs font-bold text-slate-400 block">Total Paid Out</span>
             <span className="text-xl font-black text-emerald-500">
-              ₹{loading ? '...' : totalPaidAll.toLocaleString()}
+              ₹{loading && payments.length === 0 ? '...' : totalPaidAll.toLocaleString()}
             </span>
           </div>
         </div>
@@ -216,7 +230,7 @@ export default function AgentPaymentModule({ token, API_BASE }) {
           <div>
             <span className="text-xs font-bold text-slate-400 block">Pending Payout</span>
             <span className="text-xl font-black text-amber-500">
-              ₹{loading ? '...' : totalPendingAll.toLocaleString()}
+              ₹{loading && payments.length === 0 ? '...' : totalPendingAll.toLocaleString()}
             </span>
           </div>
         </div>
@@ -228,7 +242,7 @@ export default function AgentPaymentModule({ token, API_BASE }) {
           <div>
             <span className="text-xs font-bold text-slate-400 block">Disbursed Agents</span>
             <span className="text-xl font-black text-indigo-500">
-              {loading ? '...' : paidAgentCount}
+              {loading && payments.length === 0 ? '...' : paidAgentCount}
             </span>
           </div>
         </div>
@@ -294,7 +308,7 @@ export default function AgentPaymentModule({ token, API_BASE }) {
         </div>
 
         {/* Content Table States */}
-        {loading ? (
+        {loading && payments.length === 0 ? (
           <div className="p-12 text-center space-y-3">
             <RefreshCw className="w-8 h-8 text-cyan-500 animate-spin mx-auto" />
             <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Loading Agent Payment Records...</p>

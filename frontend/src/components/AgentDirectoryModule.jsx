@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Users, Search, RefreshCw, Plus, UserCheck, ChevronRight, ChevronDown, 
-  MapPin, Phone, Mail, Award, CheckCircle, Clock, AlertTriangle, XCircle, Filter, Eye, Layers, Grid, List
+  MapPin, Phone, Mail, Award, AlertTriangle, XCircle, Grid, List, Layers
 } from 'lucide-react';
 
 export default function AgentDirectoryModule({ 
   token, 
   API_BASE, 
+  initialAgents = [],
   onOpenOnboardingModal, 
   onOpenAddAgentModal 
 }) {
-  const [agents, setAgents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // Normalize initialAgents if provided from parent App.jsx
+  const [agents, setAgents] = useState(() => Array.isArray(initialAgents) && initialAgents.length > 0 ? initialAgents : []);
+  const [loading, setLoading] = useState(() => !(Array.isArray(initialAgents) && initialAgents.length > 0));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
 
@@ -21,6 +23,14 @@ export default function AgentDirectoryModule({
   const [agentViewMode, setAgentViewMode] = useState('tree'); // 'tree' | 'list' | 'grid'
   const [expandedNodes, setExpandedNodes] = useState({});
 
+  // Synchronize when initialAgents updates from parent
+  useEffect(() => {
+    if (Array.isArray(initialAgents) && initialAgents.length > 0) {
+      setAgents(initialAgents);
+      setLoading(false);
+    }
+  }, [initialAgents]);
+
   // Debounce search input
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -29,14 +39,17 @@ export default function AgentDirectoryModule({
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  // Safe fetch helper for target URLs (same-origin relative proxy + direct Render URL)
+  // Fast & reliable fetch helper (same-origin relative proxy FIRST with 8s timeout)
   const safeFetchAgents = useCallback(async () => {
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+    
+    // Priority order: Relative Vercel edge proxy FIRST, then direct API base
     const urls = [
-      `${API_BASE}/admin/agents`,
       '/api/admin/agents',
+      `${API_BASE}/admin/agents`,
       'https://connect-admin-qlcy.onrender.com/api/admin/agents',
+      '/api/admin/agent-performance/overview',
       `${API_BASE}/admin/agent-performance/overview`
     ];
 
@@ -44,7 +57,7 @@ export default function AgentDirectoryModule({
     for (const url of uniqueUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
         const res = await fetch(url, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
 
@@ -52,11 +65,11 @@ export default function AgentDirectoryModule({
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('application/json')) {
             const data = await res.json();
-            return data;
+            if (data) return data;
           }
         }
       } catch (e) {
-        // Continue to fallback URL
+        // Try next fallback endpoint
       }
     }
     return null;
@@ -140,16 +153,18 @@ export default function AgentDirectoryModule({
       const data = await safeFetchAgents();
       if (data) {
         const parsedAgents = normalizeAgentList(data);
-        setAgents(parsedAgents);
-        setError(null);
+        if (parsedAgents.length > 0) {
+          setAgents(parsedAgents);
+          setError(null);
+        }
       } else {
         if (agents.length === 0) {
-          setError('Unable to fetch agent network data from server. Please retry.');
+          setError('Server connection timeout. Retrying in background...');
         }
       }
     } catch (err) {
       if (agents.length === 0) {
-        setError('Network error loading agent directory.');
+        setError('Network error fetching agent network.');
       }
     } finally {
       setLoading(false);
@@ -342,7 +357,7 @@ export default function AgentDirectoryModule({
             }`}
           >
             <span className={`block text-2xl font-black ${card.color}`}>
-              {loading ? '...' : card.count}
+              {loading && agents.length === 0 ? '...' : card.count}
             </span>
             <span className="text-xs font-semibold text-slate-400 mt-1 block">{card.label}</span>
           </div>
@@ -442,7 +457,7 @@ export default function AgentDirectoryModule({
       )}
 
       {/* ── RENDERING CONTENT STATES ── */}
-      {loading ? (
+      {loading && agents.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center space-y-3">
           <RefreshCw className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
           <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Loading Agent Directory...</p>
@@ -580,7 +595,7 @@ export default function AgentDirectoryModule({
                       return (
                         <tr key={ag._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                           <td className="px-5 py-3.5">
-                            <span className="block font-bold text-slate-800 dark:text-slate-100">{ag.name}</span>
+                            <span className="block font-bold text-slate-880 dark:text-slate-100">{ag.name}</span>
                             <span className="text-[10px] font-mono text-slate-400">{ag.registrationId}</span>
                           </td>
                           <td className="px-5 py-3.5">
