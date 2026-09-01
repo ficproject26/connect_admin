@@ -22,6 +22,7 @@ export default function AgentDirectoryModule({
   const [agentLevelFilter, setAgentLevelFilter] = useState('all');
   const [agentViewMode, setAgentViewMode] = useState('tree'); // 'tree' | 'list' | 'grid'
   const [expandedNodes, setExpandedNodes] = useState({});
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
 
   // Synchronize when initialAgents updates from parent
   useEffect(() => {
@@ -401,7 +402,13 @@ export default function AgentDirectoryModule({
 
           <button
             type="button"
-            onClick={onOpenOnboardingModal}
+            onClick={() => {
+              setShowOnboardingModal(true);
+              loadAgentData(true);
+              if (typeof onOpenOnboardingModal === 'function') {
+                onOpenOnboardingModal();
+              }
+            }}
             className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
           >
             <UserCheck className="w-4 h-4" />
@@ -879,6 +886,117 @@ export default function AgentDirectoryModule({
               ))}
             </div>
           )}
+        </div>
+      )}
+      {/* AGENT ONBOARDING REQUESTS MODAL (Internal Component Fallback) */}
+      {showOnboardingModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <UserCheck className="w-5 h-5 text-amber-500" />
+                  Agent Onboarding Requests ({agents.filter(isPendingAgent).length})
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">Review pending agent registration and KYC approval applications</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => loadAgentData(true)}
+                  disabled={refreshing}
+                  className="flex items-center gap-1.5 text-xs font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 px-3 py-1.5 rounded-xl border border-primary-200 dark:border-primary-800 transition-all cursor-pointer disabled:opacity-50"
+                  title="Reload onboarding requests from server"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} /> Refresh List
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setShowOnboardingModal(false)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              {agents.filter(isPendingAgent).map((pAgent) => {
+                const terr = extractAgentTerritory(pAgent);
+                const terrStr = `${terr.state} → ${terr.district} → ${terr.division} → ${terr.pincode}`;
+
+                return (
+                  <div key={pAgent._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-slate-800 dark:text-slate-100 text-base">{pAgent.name}</span>
+                        <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">
+                          {pAgent.level || 'Pincode'} Agent
+                        </span>
+                        <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 capitalize">
+                          {pAgent.status || pAgent.kycStatus || 'Pending Review'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">{pAgent.email || 'No email'} • {pAgent.phone || 'No phone'}</p>
+                      <p className="text-xs text-slate-500 font-semibold flex items-center gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-amber-500" />
+                        Territory: {terrStr}
+                      </p>
+                      <p className="text-[11px] font-mono text-slate-400">
+                        REG ID: {pAgent.registrationId} | Applied: {new Date(pAgent.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2 shrink-0 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/admin/approve-agent/${pAgent._id}`, {
+                              method: 'PUT',
+                              headers: { 'x-auth-token': token, 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'rejected' })
+                            });
+                            if (res.ok) {
+                              loadAgentData(true);
+                            }
+                          } catch (e) {}
+                        }}
+                        className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/admin/approve-agent/${pAgent._id}`, {
+                              method: 'PUT',
+                              headers: { 'x-auth-token': token, 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'approved' })
+                            });
+                            if (res.ok) {
+                              loadAgentData(true);
+                            }
+                          } catch (e) {}
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow-md cursor-pointer"
+                      >
+                        Approve Agent
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {agents.filter(isPendingAgent).length === 0 && (
+                <div className="text-center py-12 text-slate-400">
+                  <UserCheck className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                  <p className="text-sm font-semibold">No pending agent onboarding requests at this time.</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -2121,7 +2121,10 @@ function App() {
               token={token}
               API_BASE={API_BASE}
               initialAgents={agents}
-              onOpenOnboardingModal={() => setShowOnboardingRequestsModal(true)}
+              onOpenOnboardingModal={() => {
+                safeFetch(`${API_BASE}/admin/agents`, handleSetAgents, 2);
+                setShowOnboardingRequestsModal(true);
+              }}
               onOpenAddAgentModal={() => setShowAddAgentModal(true)}
             />
           )}
@@ -8888,7 +8891,7 @@ function App() {
 
       {/* AGENT ONBOARDING REQUESTS MODAL */}
       {showOnboardingRequestsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
               <div>
