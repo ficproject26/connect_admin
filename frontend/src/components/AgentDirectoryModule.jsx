@@ -40,7 +40,7 @@ export default function AgentDirectoryModule({
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  // Fast & reliable fetch helper (same-origin relative proxy FIRST with 8s timeout)
+  // Fast & reliable fetch helper (same-origin relative proxy FIRST with 30s timeout for Render cold starts)
   const safeFetchAgents = useCallback(async () => {
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
@@ -54,11 +54,11 @@ export default function AgentDirectoryModule({
       `${API_BASE}/admin/agent-performance/overview`
     ];
 
-    const uniqueUrls = [...new Set(urls)];
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
     for (const url of uniqueUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
         const res = await fetch(url, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
 
@@ -66,11 +66,11 @@ export default function AgentDirectoryModule({
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('application/json')) {
             const data = await res.json();
-            if (data) return data;
+            if (data !== null && data !== undefined) return data;
           }
         }
       } catch (e) {
-        // Try next fallback endpoint
+        console.warn(`Fetch attempt to ${url} failed/timed out:`, e.message);
       }
     }
     return null;
@@ -152,15 +152,16 @@ export default function AgentDirectoryModule({
     setError(null);
     try {
       const data = await safeFetchAgents();
-      if (data) {
+      if (data !== null && data !== undefined) {
         const parsedAgents = normalizeAgentList(data);
-        if (parsedAgents.length > 0) {
-          setAgents(parsedAgents);
-          setError(null);
-        }
+        setAgents(parsedAgents);
+        setError(null);
       } else {
         if (agents.length === 0) {
           setError('Server connection timeout. Retrying in background...');
+          setTimeout(() => {
+            loadAgentData(false);
+          }, 3000);
         }
       }
     } catch (err) {
