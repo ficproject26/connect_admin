@@ -732,30 +732,44 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         const BranchModel = require('../models/Branch');
         const PincodeModel = require('../models/Pincode');
 
+        // Lightweight projection excluding base64 docs, photos, and heavy binary strings
+        const agentProjection = {
+            _id: 1, name: 1, fullName: 1, email: 1, phone: 1, altPhone: 1, mobile: 1,
+            role: 1, level: 1, agentLevel: 1, assignedRole: 1, agentType: 1, type: 1,
+            status: 1, kycStatus: 1, isActive: 1, isApproved: 1, registrationId: 1, id: 1,
+            state: 1, district: 1, division: 1, pincode: 1,
+            assignedState: 1, assignedDistrict: 1, assignedDivision: 1, assignedPincode: 1, assignedArea: 1, territory: 1,
+            balance: 1, commissionEarned: 1, wallet: 1, totalEarnings: 1, pendingPayout: 1, vendorsAdded: 1,
+            dob: 1, dateOfBirth: 1, gender: 1, qualification: 1, experience: 1, previousCompany: 1,
+            postOffice: 1, address: 1, fullAddress: 1, aadhaarNumber: 1, panNumber: 1,
+            createdAt: 1, created_at: 1
+        };
+
         let userAgents = [];
+        let rawAgents = [];
+        let userVendorsList = [];
+        let vendorModelList = [];
+
         try {
             if (db) {
-                userAgents = await db.collection('users')
-                    .find(userAgentFilter)
-                    .sort({ createdAt: -1 })
-                    .maxTimeMS(5000)
-                    .toArray();
+                // Execute all independent database queries in parallel
+                const [uRes, rRes, uvRes, vmRes] = await Promise.allSettled([
+                    db.collection('users').find(userAgentFilter, { projection: agentProjection }).sort({ createdAt: -1 }).maxTimeMS(4000).toArray(),
+                    db.collection('agents').find({}, { projection: agentProjection }).maxTimeMS(4000).toArray(),
+                    db.collection('users').find({ role: { $in: ['Vendor', 'vendor'] } }, { projection: { _id: 1, email: 1, referredBy: 1, agentId: 1, onboardedBy: 1 } }).maxTimeMS(3000).toArray(),
+                    db.collection('vendors').find({}, { projection: { _id: 1, agentId: 1, email: 1 } }).maxTimeMS(3000).toArray()
+                ]);
+                if (uRes.status === 'fulfilled' && Array.isArray(uRes.value)) userAgents = uRes.value;
+                if (rRes.status === 'fulfilled' && Array.isArray(rRes.value)) rawAgents = rRes.value;
+                if (uvRes.status === 'fulfilled' && Array.isArray(uvRes.value)) userVendorsList = uvRes.value;
+                if (vmRes.status === 'fulfilled' && Array.isArray(vmRes.value)) vendorModelList = vmRes.value;
             } else {
-                userAgents = await User.find(userAgentFilter).sort({ createdAt: -1 }).lean();
+                userAgents = await User.find(userAgentFilter, agentProjection).sort({ createdAt: -1 }).lean();
             }
         } catch (err) {
-            console.error("Error querying userAgents:", err.message);
+            console.error("Error parallel querying userAgents:", err.message);
         }
 
-        // 2. Fetch agents from raw 'agents' collection in MongoDB
-        let rawAgents = [];
-        if (db) {
-            try {
-                rawAgents = await db.collection('agents').find({}).toArray();
-            } catch (aErr) {
-                console.error("Error fetching raw agents collection:", aErr);
-            }
-        }
         const agentMap = new Map();
 
         const resolveAgentCleanLevel = (item) => {
@@ -994,28 +1008,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
         const mergedAgents = Array.from(agentMap.values());
 
-        // Fetch vendor lists and pre-build O(1) vendor count map with non-blocking Promise.allSettled
-        let userVendorsList = [];
-        let vendorModelList = [];
-        try {
-            if (db) {
-                const [uvRes, vmRes] = await Promise.allSettled([
-                    db.collection('users').find(
-                        { role: { $in: ['Vendor', 'vendor'] } },
-                        { projection: { _id: 1, email: 1, referredBy: 1, agentId: 1, onboardedBy: 1 } }
-                    ).maxTimeMS(3000).toArray(),
-                    db.collection('vendors').find(
-                        {},
-                        { projection: { _id: 1, agentId: 1, email: 1 } }
-                    ).maxTimeMS(3000).toArray()
-                ]);
-                if (uvRes.status === 'fulfilled' && Array.isArray(uvRes.value)) userVendorsList = uvRes.value;
-                if (vmRes.status === 'fulfilled' && Array.isArray(vmRes.value)) vendorModelList = vmRes.value;
-            }
-        } catch (vErr) {
-            console.error("Error fetching vendor counts for agents:", vErr.message);
-        }
-
+        // Pre-build O(1) vendor count map using parallel-fetched vendor lists
         const agentVendorCountMap = new Map();
 
         userVendorsList.forEach(v => {

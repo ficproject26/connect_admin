@@ -1,21 +1,51 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  Users, Search, RefreshCw, Plus, UserCheck, ChevronRight, ChevronDown, 
-  MapPin, Phone, Mail, Award, AlertTriangle, XCircle, Grid, List, Layers
-} from 'lucide-react';
+// Module-level in-memory cache for instant zero-latency rendering across tab navigation
+let MEMORY_AGENT_CACHE = null;
+
+const getCachedAgents = () => {
+  if (Array.isArray(MEMORY_AGENT_CACHE) && MEMORY_AGENT_CACHE.length > 0) {
+    return MEMORY_AGENT_CACHE;
+  }
+  try {
+    const raw = sessionStorage.getItem('connect_agent_directory_cache');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        MEMORY_AGENT_CACHE = parsed;
+        return parsed;
+      }
+    }
+  } catch (e) {}
+  return [];
+};
+
+const setCachedAgents = (list) => {
+  if (Array.isArray(list) && list.length > 0) {
+    MEMORY_AGENT_CACHE = list;
+    try {
+      sessionStorage.setItem('connect_agent_directory_cache', JSON.stringify(list));
+    } catch (e) {}
+  }
+};
 
 export default function AgentDirectoryModule({ 
   token, 
   API_BASE, 
   initialAgents = [],
+  onAgentsUpdated,
   onOpenOnboardingModal, 
   onOpenAddAgentModal 
 }) {
-  // Normalize initialAgents if provided from parent App.jsx
-  const [agents, setAgents] = useState(() => Array.isArray(initialAgents) && initialAgents.length > 0 ? initialAgents : []);
-  const [loading, setLoading] = useState(() => !(Array.isArray(initialAgents) && initialAgents.length > 0));
+  // Stale-While-Revalidate: Instant initialization from parent or module cache
+  const cachedInitial = useMemo(() => {
+    if (Array.isArray(initialAgents) && initialAgents.length > 0) return initialAgents;
+    return getCachedAgents();
+  }, [initialAgents]);
+
+  const [agents, setAgents] = useState(() => cachedInitial);
+  const [loading, setLoading] = useState(() => cachedInitial.length === 0);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [bgNotice, setBgNotice] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -24,10 +54,13 @@ export default function AgentDirectoryModule({
   const [expandedNodes, setExpandedNodes] = useState({});
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
 
+  const inFlightPromiseRef = useRef(null);
+
   // Synchronize when initialAgents updates from parent
   useEffect(() => {
     if (Array.isArray(initialAgents) && initialAgents.length > 0) {
       setAgents(initialAgents);
+      setCachedAgents(initialAgents);
       setLoading(false);
     }
   }, [initialAgents]);
@@ -40,25 +73,23 @@ export default function AgentDirectoryModule({
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  // Fast & reliable fetch helper (same-origin relative proxy FIRST with 30s timeout for Render cold starts)
+  // Fast & reliable fetch helper (Primary relative proxy FIRST with 12s timeout)
   const safeFetchAgents = useCallback(async () => {
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
-    // Priority order: Relative Vercel edge proxy FIRST, then direct API base
+    const primaryUrl = `${API_BASE}/admin/agents`.replace(/\/+/g, '/').replace(':/', '://');
     const urls = [
       '/api/admin/agents',
-      `${API_BASE}/admin/agents`,
-      'https://connect-admin-qlcy.onrender.com/api/admin/agents',
-      '/api/admin/agent-performance/overview',
-      `${API_BASE}/admin/agent-performance/overview`
+      primaryUrl,
+      'https://connect-admin-qlcy.onrender.com/api/admin/agents'
     ];
 
     const uniqueUrls = [...new Set(urls.filter(Boolean))];
     for (const url of uniqueUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch(url, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
 
@@ -70,7 +101,7 @@ export default function AgentDirectoryModule({
           }
         }
       } catch (e) {
-        console.warn(`Fetch attempt to ${url} failed/timed out:`, e.message);
+        // Try fallback endpoint
       }
     }
     return null;
@@ -144,35 +175,65 @@ export default function AgentDirectoryModule({
     });
   }, []);
 
-  // Primary Data Fetcher
+  // Primary Data Fetcher with Request Deduplication & Stale-While-Revalidate Caching
   const loadAgentData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    else if (agents.length === 0) setLoading(true);
+    else if (agents.length === 0 && getCachedAgents().length === 0) setLoading(true);
 
     setError(null);
+    setBgNotice(null);
+
+    // Reuse in-flight request to eliminate duplicate API requests
+    if (inFlightPromiseRef.current) {
+      try {
+        const data = await inFlightPromiseRef.current;
+        if (data) {
+          const parsedAgents = normalizeAgentList(data);
+          if (parsedAgents.length > 0) {
+            setAgents(parsedAgents);
+            setCachedAgents(parsedAgents);
+            if (typeof onAgentsUpdated === 'function') onAgentsUpdated(parsedAgents);
+            setError(null);
+          }
+        }
+      } catch (e) {}
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
-      const data = await safeFetchAgents();
+      const fetchPromise = safeFetchAgents();
+      inFlightPromiseRef.current = fetchPromise;
+      const data = await fetchPromise;
+      inFlightPromiseRef.current = null;
+
       if (data !== null && data !== undefined) {
         const parsedAgents = normalizeAgentList(data);
         setAgents(parsedAgents);
+        setCachedAgents(parsedAgents);
+        if (typeof onAgentsUpdated === 'function') onAgentsUpdated(parsedAgents);
         setError(null);
+        setBgNotice(null);
       } else {
-        if (agents.length === 0) {
-          setError('Server connection timeout. Retrying in background...');
-          setTimeout(() => {
-            loadAgentData(false);
-          }, 3000);
+        if (agents.length === 0 && getCachedAgents().length === 0) {
+          setError('Unable to load Agent Directory. Please check server connection.');
+        } else {
+          setBgNotice('Unable to refresh latest server data. Showing cached directory.');
         }
       }
     } catch (err) {
-      if (agents.length === 0) {
+      inFlightPromiseRef.current = null;
+      if (agents.length === 0 && getCachedAgents().length === 0) {
         setError('Network error fetching agent network.');
+      } else {
+        setBgNotice('Network connection timed out. Showing cached directory.');
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [safeFetchAgents, normalizeAgentList]);
+  }, [safeFetchAgents, normalizeAgentList, agents.length, onAgentsUpdated]);
 
   useEffect(() => {
     loadAgentData(false);
@@ -396,6 +457,13 @@ export default function AgentDirectoryModule({
   return (
     <div className="space-y-6">
       {/* ── HEADER & NETWORK BREAKDOWN ── */}
+      {bgNotice && agents.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold px-4 py-2 rounded-xl flex items-center justify-between">
+          <span>{bgNotice}</span>
+          <button type="button" onClick={() => setBgNotice(null)} className="text-amber-500 hover:text-amber-700 font-bold ml-2 cursor-pointer">✕</button>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-slate-850 dark:text-slate-100 flex items-center gap-2">

@@ -2122,6 +2122,7 @@ function App() {
               token={token}
               API_BASE={API_BASE}
               initialAgents={agents}
+              onAgentsUpdated={handleSetAgents}
               onOpenOnboardingModal={() => {
                 safeFetch(`${API_BASE}/admin/agents`, handleSetAgents, 2);
                 setShowOnboardingRequestsModal(true);

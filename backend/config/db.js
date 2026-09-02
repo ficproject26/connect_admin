@@ -58,6 +58,9 @@ const ensureIndexes = async () => {
         await Promise.allSettled([
             db.collection('users').createIndex({ role: 1, status: 1, isActive: 1 }, { background: true }),
             db.collection('users').createIndex({ role: 1, level: 1 }, { background: true }),
+            db.collection('users').createIndex({ role: 1, assignedState: 1, assignedDistrict: 1 }, { background: true }),
+            db.collection('users').createIndex({ role: 1, createdAt: -1 }, { background: true }),
+            db.collection('agents').createIndex({ status: 1, kycStatus: 1 }, { background: true }),
             db.collection('users').createIndex({ branchId: 1 }, { background: true }),
             db.collection('users').createIndex({ registrationId: 1 }, { background: true }),
             db.collection('users').createIndex({ email: 1 }, { background: true }),
