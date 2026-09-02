@@ -1,18 +1,63 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   DollarSign, Search, RefreshCw, Wallet, CheckCircle, Clock, 
   AlertTriangle, UserCheck 
 } from 'lucide-react';
 
-export default function AgentPaymentModule({ token, API_BASE, initialAgents = [] }) {
-  const [payments, setPayments] = useState([]);
-  const [loading, setLoading] = useState(() => !(Array.isArray(initialAgents) && initialAgents.length > 0));
+// Module-level in-memory cache for instant zero-latency rendering across tab navigation
+let MEMORY_PAYMENT_CACHE = null;
+
+const getCachedPayments = () => {
+  if (Array.isArray(MEMORY_PAYMENT_CACHE) && MEMORY_PAYMENT_CACHE.length > 0) {
+    return MEMORY_PAYMENT_CACHE;
+  }
+  try {
+    const raw = sessionStorage.getItem('connect_agent_payment_cache');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        MEMORY_PAYMENT_CACHE = parsed;
+        return parsed;
+      }
+    }
+  } catch (e) {}
+  return [];
+};
+
+const setCachedPayments = (list) => {
+  if (Array.isArray(list) && list.length > 0) {
+    MEMORY_PAYMENT_CACHE = list;
+    try {
+      sessionStorage.setItem('connect_agent_payment_cache', JSON.stringify(list));
+    } catch (e) {}
+  }
+};
+
+export default function AgentPaymentModule({ token, API_BASE, initialAgents = [], onAgentsUpdated }) {
+  // Stale-While-Revalidate: Instant initialization from parent or module cache
+  const cachedInitial = useMemo(() => {
+    if (Array.isArray(initialAgents) && initialAgents.length > 0) {
+      return initialAgents;
+    }
+    return getCachedPayments();
+  }, [initialAgents]);
+
+  const [payments, setPayments] = useState(() => {
+    if (Array.isArray(initialAgents) && initialAgents.length > 0) {
+      return initialAgents;
+    }
+    return getCachedPayments();
+  });
+  const [loading, setLoading] = useState(() => getCachedPayments().length === 0 && (!Array.isArray(initialAgents) || initialAgents.length === 0));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const [bgNotice, setBgNotice] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  const inFlightPromiseRef = useRef(null);
 
   // Debounce Search
   useEffect(() => {
@@ -27,20 +72,18 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
-    // Priority order: Relative Vercel edge proxy FIRST
+    const primaryUrl = `${API_BASE}/admin/agents`.replace(/\/+/g, '/').replace(':/', '://');
     const urls = [
       '/api/admin/agents',
-      `${API_BASE}/admin/agents`,
-      'https://connect-admin-qlcy.onrender.com/api/admin/agents',
-      '/api/admin/agent-performance/overview',
-      `${API_BASE}/admin/agent-performance/overview`
+      primaryUrl,
+      'https://connect-admin-qlcy.onrender.com/api/admin/agents'
     ];
 
-    const uniqueUrls = [...new Set(urls)];
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
     for (const url of uniqueUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch(url, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
 
@@ -48,11 +91,11 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('application/json')) {
             const data = await res.json();
-            if (data) return data;
+            if (data !== null && data !== undefined) return data;
           }
         }
       } catch (e) {
-        // Continue to fallback endpoint
+        // Try fallback endpoint
       }
     }
     return null;
@@ -114,38 +157,71 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     if (Array.isArray(initialAgents) && initialAgents.length > 0) {
       const records = normalizePaymentRecords(initialAgents);
       setPayments(records);
+      setCachedPayments(records);
       setLoading(false);
     }
   }, [initialAgents, normalizePaymentRecords]);
 
-  // Primary Data Fetcher
+  // Primary Data Fetcher with Deduplication & Background Stale-While-Revalidate
   const loadPaymentData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    else if (payments.length === 0) setLoading(true);
+    else if (payments.length === 0 && getCachedPayments().length === 0) setLoading(true);
 
     setError(null);
-    try {
-      const data = await safeFetchPaymentData();
-      if (data) {
-        const records = normalizePaymentRecords(data);
-        if (records.length > 0) {
-          setPayments(records);
-          setError(null);
+    setBgNotice(null);
+
+    // Deduplicate in-flight requests
+    if (inFlightPromiseRef.current) {
+      try {
+        const data = await inFlightPromiseRef.current;
+        if (data) {
+          const records = normalizePaymentRecords(data);
+          if (records.length > 0) {
+            setPayments(records);
+            setCachedPayments(records);
+            setError(null);
+          }
         }
+      } catch (e) {}
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    try {
+      const fetchPromise = safeFetchPaymentData();
+      inFlightPromiseRef.current = fetchPromise;
+      const data = await fetchPromise;
+      inFlightPromiseRef.current = null;
+
+      if (data !== null && data !== undefined) {
+        const records = normalizePaymentRecords(data);
+        setPayments(records);
+        setCachedPayments(records);
+        if (typeof onAgentsUpdated === 'function' && Array.isArray(data)) {
+          onAgentsUpdated(data);
+        }
+        setError(null);
+        setBgNotice(null);
       } else {
-        if (payments.length === 0) {
-          setError('Server connection timeout. Retrying in background...');
+        if (payments.length === 0 && getCachedPayments().length === 0) {
+          setError('Unable to load Agent Payment. Please check server connection.');
+        } else {
+          setBgNotice('Unable to refresh latest payment data. Showing cached records.');
         }
       }
     } catch (err) {
-      if (payments.length === 0) {
+      inFlightPromiseRef.current = null;
+      if (payments.length === 0 && getCachedPayments().length === 0) {
         setError('Network error fetching payment records.');
+      } else {
+        setBgNotice('Network connection timed out. Showing cached payment records.');
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [safeFetchPaymentData, normalizePaymentRecords, payments.length]);
+  }, [safeFetchPaymentData, normalizePaymentRecords, payments.length, onAgentsUpdated]);
 
   useEffect(() => {
     loadPaymentData(false);
@@ -175,6 +251,13 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
   return (
     <div className="space-y-6">
       {/* ── HEADER ── */}
+      {bgNotice && payments.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 text-xs font-semibold px-4 py-2 rounded-xl flex items-center justify-between">
+          <span>{bgNotice}</span>
+          <button type="button" onClick={() => setBgNotice(null)} className="text-amber-500 hover:text-amber-700 font-bold ml-2 cursor-pointer">✕</button>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-slate-850 dark:text-slate-100 flex items-center gap-2">

@@ -2078,7 +2078,7 @@ function App() {
 
           {/* AGENT PAYMENT - Modular Agent Payments Suite */}
           {activeTab === 'agent-payment' && (
-            <AgentPaymentModule token={token} API_BASE={API_BASE} initialAgents={agents} />
+            <AgentPaymentModule token={token} API_BASE={API_BASE} initialAgents={agents} onAgentsUpdated={handleSetAgents} />
           )}
 
           {/* ENTERPRISE VENDOR DIRECTORY */}
