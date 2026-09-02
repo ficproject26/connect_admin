@@ -172,7 +172,7 @@ export default function AgentDirectoryModule({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [safeFetchAgents, normalizeAgentList, agents.length]);
+  }, [safeFetchAgents, normalizeAgentList]);
 
   useEffect(() => {
     loadAgentData(false);
@@ -316,6 +316,23 @@ export default function AgentDirectoryModule({
       setExpandedNodes(autoExpanded);
     }
   }, [debouncedSearch, filteredAgents]);
+
+  // Auto-expand all State & District nodes by default when agent data arrives
+  useEffect(() => {
+    if (agents.length > 0) {
+      const hMap = buildHierarchyMap();
+      const defaultExpanded = {};
+      Object.values(hMap).forEach(st => {
+        const sKey = `st_${st.stateName}`;
+        defaultExpanded[sKey] = true;
+        Object.values(st.districts).forEach(dist => {
+          const dKey = `dist_${st.stateName}_${dist.districtName}`;
+          defaultExpanded[dKey] = true;
+        });
+      });
+      setExpandedNodes(prev => (Object.keys(prev).length === 0 ? defaultExpanded : prev));
+    }
+  }, [agents]);
 
   const expandAllNodes = (hMap) => {
     const allExpanded = {};
