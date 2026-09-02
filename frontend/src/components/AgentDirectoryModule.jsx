@@ -617,33 +617,60 @@ export default function AgentDirectoryModule({
                   const districtList = Object.values(st.districts);
 
                   return (
-                    <div key={st.stateName} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
-                      {/* LEVEL 1: STATE HEADER */}
-                      <div
-                        onClick={() => toggleNode(sKey)}
-                        className="bg-slate-50 dark:bg-slate-950 px-5 py-3.5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 cursor-pointer select-none hover:bg-slate-100/80 dark:hover:bg-slate-900 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
+                    <div key={st.stateName} className="space-y-3">
+                      {/* LEVEL 1: STATE HEADER CARD */}
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs border-l-4 border-l-purple-600 transition-all hover:shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                        <div className="space-y-1.5 min-w-[240px]">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-600 border border-purple-500/20">
+                              STATE AGENT
+                            </span>
+                            <span className="text-[11px] font-mono text-slate-400 font-bold">
+                              ID: STATE-{st.stateName.toUpperCase()}
+                            </span>
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-600 border border-purple-500/20 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-purple-500" /> Active State
+                            </span>
+                          </div>
+                          <h3 className="text-base font-extrabold text-slate-850 dark:text-slate-100 tracking-tight">
+                            {st.stateName} State
+                          </h3>
+                          <p className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+                            <span>Territory: {st.stateName}</span>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-6 md:gap-10 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-3 md:pt-0 md:pl-6 w-full md:w-auto justify-between md:justify-start">
+                          <div className="text-center">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">REVENUE</span>
+                            <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">₹0</span>
+                          </div>
+                          <div className="text-center">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">TIEUPS (TODAY / YEST / TOTAL)</span>
+                            <span className="text-xs font-black text-slate-700 dark:text-slate-300 font-mono">0 / 0 / {stateAgentCount}</span>
+                          </div>
+                          <div className="text-center">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">SUB-DISTRICTS</span>
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-purple-500/10 text-purple-600 border border-purple-500/20">
+                              {districtList.length} Districts
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0">
                           <button
                             type="button"
-                            onClick={(e) => { e.stopPropagation(); toggleNode(sKey); }}
-                            className="p-1 rounded-md text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 cursor-pointer"
+                            onClick={() => toggleNode(sKey)}
+                            className="px-4 py-2 rounded-xl text-xs font-extrabold bg-purple-600 hover:bg-purple-500 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                           >
-                            {isStateExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            {isStateExpanded ? 'Collapse ▲' : 'Explore Districts >'}
                           </button>
-                          <span className="text-xs font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-300 flex items-center gap-1.5">
-                            <MapPin className="w-4 h-4 text-purple-500" />
-                            STATE: {st.stateName}
-                          </span>
                         </div>
-                        <span className="text-[11px] font-black px-3 py-1 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                          {stateAgentCount} {stateAgentCount === 1 ? 'State Agent' : 'State Agents'}
-                        </span>
                       </div>
 
                       {/* LEVEL 1 SUB-CONTENT: Direct State Agents & Districts */}
                       {isStateExpanded && (
-                        <div className="p-4 space-y-4">
+                        <div className="pl-4 space-y-4">
                           {/* Direct State Level Agents */}
                           {st.stateAgents.length > 0 && (
                             <div className="space-y-2">
@@ -663,32 +690,60 @@ export default function AgentDirectoryModule({
                               const divisionList = Object.values(dist.divisions);
 
                               return (
-                                <div key={dist.districtName} className="ml-3 pl-3 border-l-2 border-blue-500/30 space-y-3">
-                                  {/* LEVEL 2: DISTRICT HEADER */}
-                                  <div
-                                    onClick={() => toggleNode(dKey)}
-                                    className="flex items-center justify-between p-3 rounded-xl bg-blue-500/5 dark:bg-blue-950/20 border border-blue-500/20 cursor-pointer select-none hover:bg-blue-500/10 transition-colors"
-                                  >
-                                    <div className="flex items-center gap-2.5">
+                                <div key={dist.districtName} className="space-y-3">
+                                  {/* LEVEL 2: DISTRICT HEADER CARD */}
+                                  <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs border-l-4 border-l-blue-600 transition-all hover:shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                    <div className="space-y-1.5 min-w-[240px]">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                                          DISTRICT AGENT
+                                        </span>
+                                        <span className="text-[11px] font-mono text-slate-400 font-bold">
+                                          ID: REG-{dist.districtName.toUpperCase().replace(/\s+/g, '-')}
+                                        </span>
+                                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600 border border-blue-500/20 flex items-center gap-1">
+                                          <MapPin className="w-3 h-3 text-blue-500" /> Active District
+                                        </span>
+                                      </div>
+                                      <h3 className="text-base font-extrabold text-slate-850 dark:text-slate-100 tracking-tight">
+                                        {dist.districtName} District
+                                      </h3>
+                                      <p className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+                                        <span>District: {dist.districtName} ({st.stateName})</span>
+                                      </p>
+                                    </div>
+
+                                    <div className="flex items-center gap-6 md:gap-10 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-3 md:pt-0 md:pl-6 w-full md:w-auto justify-between md:justify-start">
+                                      <div className="text-center">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">REVENUE</span>
+                                        <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">₹0</span>
+                                      </div>
+                                      <div className="text-center">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">TIEUPS (TODAY / YEST / TOTAL)</span>
+                                        <span className="text-xs font-black text-slate-700 dark:text-slate-300 font-mono">0 / 0 / {distAgentCount}</span>
+                                      </div>
+                                      <div className="text-center">
+                                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">SUB-DIVISIONS</span>
+                                        <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                                          {divisionList.length} Divisions
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0">
                                       <button
                                         type="button"
-                                        onClick={(e) => { e.stopPropagation(); toggleNode(dKey); }}
-                                        className="p-0.5 rounded-md text-blue-500 hover:bg-blue-500/20 cursor-pointer"
+                                        onClick={() => toggleNode(dKey)}
+                                        className="px-4 py-2 rounded-xl text-xs font-extrabold bg-blue-600 hover:bg-blue-500 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                                       >
-                                        {isDistExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                                        {isDistExpanded ? 'Collapse ▲' : 'Explore Divisions >'}
                                       </button>
-                                      <span className="text-xs font-black uppercase tracking-wider text-blue-700 dark:text-blue-300">
-                                        DISTRICT: {dist.districtName}
-                                      </span>
                                     </div>
-                                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                                      {distAgentCount} {distAgentCount === 1 ? 'District Agent' : 'District Agents'}
-                                    </span>
                                   </div>
 
                                   {/* LEVEL 2 SUB-CONTENT: Direct District Agents & Divisions */}
                                   {isDistExpanded && (
-                                    <div className="space-y-3 pt-1">
+                                    <div className="pl-4 space-y-3 pt-1">
                                       {dist.districtAgents.length > 0 && (
                                         <div className="space-y-2">
                                           <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 block px-1">District Level Assigned Agents</span>
@@ -707,32 +762,60 @@ export default function AgentDirectoryModule({
                                           const pincodeList = Object.values(div.pincodes);
 
                                           return (
-                                            <div key={div.divisionName} className="ml-3 pl-3 border-l-2 border-indigo-500/30 space-y-3">
-                                              {/* LEVEL 3: DIVISION HEADER */}
-                                              <div
-                                                onClick={() => toggleNode(vKey)}
-                                                className="flex items-center justify-between p-2.5 rounded-xl bg-indigo-500/5 dark:bg-indigo-950/20 border border-indigo-500/20 cursor-pointer select-none hover:bg-indigo-500/10 transition-colors"
-                                              >
-                                                <div className="flex items-center gap-2">
+                                            <div key={div.divisionName} className="space-y-3">
+                                              {/* LEVEL 3: DIVISION HEADER CARD */}
+                                              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs border-l-4 border-l-indigo-600 transition-all hover:shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                                <div className="space-y-1.5 min-w-[240px]">
+                                                  <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
+                                                      DIVISIONAL AGENT
+                                                    </span>
+                                                    <span className="text-[11px] font-mono text-slate-400 font-bold">
+                                                      ID: REG-{div.divisionName.toUpperCase().replace(/\s+/g, '-')}
+                                                    </span>
+                                                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 flex items-center gap-1">
+                                                      <MapPin className="w-3 h-3 text-indigo-500" /> Active Division
+                                                    </span>
+                                                  </div>
+                                                  <h3 className="text-base font-extrabold text-slate-850 dark:text-slate-100 tracking-tight">
+                                                    {div.divisionName} Division
+                                                  </h3>
+                                                  <p className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+                                                    <span>Division: {div.divisionName} ({dist.districtName})</span>
+                                                  </p>
+                                                </div>
+
+                                                <div className="flex items-center gap-6 md:gap-10 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-3 md:pt-0 md:pl-6 w-full md:w-auto justify-between md:justify-start">
+                                                  <div className="text-center">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">REVENUE</span>
+                                                    <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">₹0</span>
+                                                  </div>
+                                                  <div className="text-center">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">TIEUPS (TODAY / YEST / TOTAL)</span>
+                                                    <span className="text-xs font-black text-slate-700 dark:text-slate-300 font-mono">0 / 0 / {divAgentCount}</span>
+                                                  </div>
+                                                  <div className="text-center">
+                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">SUB-PINCODES</span>
+                                                    <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
+                                                      {pincodeList.length} Pincodes
+                                                    </span>
+                                                  </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0">
                                                   <button
                                                     type="button"
-                                                    onClick={(e) => { e.stopPropagation(); toggleNode(vKey); }}
-                                                    className="p-0.5 rounded-md text-indigo-500 hover:bg-indigo-500/20 cursor-pointer"
+                                                    onClick={() => toggleNode(vKey)}
+                                                    className="px-4 py-2 rounded-xl text-xs font-extrabold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                                                   >
-                                                    {isDivExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                                    {isDivExpanded ? 'Collapse ▲' : 'Explore Pincodes >'}
                                                   </button>
-                                                  <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                                                    DIVISION: {div.divisionName}
-                                                  </span>
                                                 </div>
-                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
-                                                  {divAgentCount} {divAgentCount === 1 ? 'Agent' : 'Agents'}
-                                                </span>
                                               </div>
 
                                               {/* LEVEL 3 SUB-CONTENT: Direct Division Agents & Pincodes */}
                                               {isDivExpanded && (
-                                                <div className="space-y-3 pt-1">
+                                                <div className="pl-4 space-y-3 pt-1">
                                                   {div.divisionAgents.length > 0 && (
                                                     <div className="space-y-2">
                                                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block px-1">Divisional Level Assigned Agents</span>
@@ -749,32 +832,60 @@ export default function AgentDirectoryModule({
                                                       const isPinExpanded = !!expandedNodes[pKey];
 
                                                       return (
-                                                        <div key={pin.pincodeCode} className="ml-3 pl-3 border-l-2 border-emerald-500/30 space-y-2">
-                                                          {/* LEVEL 4: PINCODE HEADER */}
-                                                          <div
-                                                            onClick={() => toggleNode(pKey)}
-                                                            className="flex items-center justify-between p-2 rounded-xl bg-emerald-500/5 dark:bg-emerald-950/20 border border-emerald-500/20 cursor-pointer select-none hover:bg-emerald-500/10 transition-colors"
-                                                          >
-                                                            <div className="flex items-center gap-2">
+                                                        <div key={pin.pincodeCode} className="space-y-2">
+                                                          {/* LEVEL 4: PINCODE HEADER CARD */}
+                                                          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs border-l-4 border-l-emerald-600 transition-all hover:shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                                            <div className="space-y-1.5 min-w-[240px]">
+                                                              <div className="flex items-center gap-2 flex-wrap">
+                                                                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                                                  PINCODE AGENT
+                                                                </span>
+                                                                <span className="text-[11px] font-mono text-slate-400 font-bold">
+                                                                  ID: REG-{pin.pincodeCode}
+                                                                </span>
+                                                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
+                                                                  <MapPin className="w-3 h-3 text-emerald-500" /> Active Pincode
+                                                                </span>
+                                                              </div>
+                                                              <h3 className="text-base font-extrabold text-slate-850 dark:text-slate-100 tracking-tight">
+                                                                {pin.pincodeCode} Pincode
+                                                              </h3>
+                                                              <p className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+                                                                <span>Pincode: {pin.pincodeCode} ({div.divisionName})</span>
+                                                              </p>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-6 md:gap-10 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-3 md:pt-0 md:pl-6 w-full md:w-auto justify-between md:justify-start">
+                                                              <div className="text-center">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">REVENUE</span>
+                                                                <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">₹0</span>
+                                                              </div>
+                                                              <div className="text-center">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">TIEUPS (TODAY / YEST / TOTAL)</span>
+                                                                <span className="text-xs font-black text-slate-700 dark:text-slate-300 font-mono">0 / 0 / {pin.pincodeAgents.length}</span>
+                                                              </div>
+                                                              <div className="text-center">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">SUB-AGENTS</span>
+                                                                <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                                                  {pin.pincodeAgents.length} Agents
+                                                                </span>
+                                                              </div>
+                                                            </div>
+
+                                                            <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0">
                                                               <button
                                                                 type="button"
-                                                                onClick={(e) => { e.stopPropagation(); toggleNode(pKey); }}
-                                                                className="p-0.5 rounded-md text-emerald-500 hover:bg-emerald-500/20 cursor-pointer"
+                                                                onClick={() => toggleNode(pKey)}
+                                                                className="px-4 py-2 rounded-xl text-xs font-extrabold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                                                               >
-                                                                {isPinExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                                                {isPinExpanded ? 'Collapse ▲' : 'Explore Agents >'}
                                                               </button>
-                                                              <span className="text-xs font-bold tracking-wider text-emerald-600 dark:text-emerald-400 font-mono">
-                                                                PINCODE: {pin.pincodeCode}
-                                                              </span>
                                                             </div>
-                                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                                                              {pin.pincodeAgents.length} {pin.pincodeAgents.length === 1 ? 'Agent' : 'Agents'}
-                                                            </span>
                                                           </div>
 
                                                           {/* LEVEL 4 SUB-CONTENT: Pincode Agent Cards */}
                                                           {isPinExpanded && (
-                                                            <div className="space-y-2 pt-1">
+                                                            <div className="pl-4 space-y-2 pt-1">
                                                               {pin.pincodeAgents.length > 0 ? (
                                                                 pin.pincodeAgents.map(ag => (
                                                                   <AgentCardItem key={ag._id} agent={ag} levelBadge="Pincode Agent" levelColor="emerald" />
@@ -1019,48 +1130,195 @@ export default function AgentDirectoryModule({
   );
 }
 
-// Sub-Component for Rendering Individual Agent Item Cards
-function AgentCardItem({ agent, levelBadge, levelColor }) {
-  const terrStr = [agent.assignedState || agent.territory?.state, agent.assignedDistrict || agent.territory?.district, agent.assignedDivision || agent.territory?.division].filter(Boolean).join(' / ') || agent.assignedArea || 'Territory Assigned';
+// Sub-Component for Rendering Individual Agent Item Cards (Matches exact user screenshot design)
+function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel }) {
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
 
-  const badgeStyles = {
-    purple: 'bg-purple-500/10 text-purple-500 border-purple-500/20',
-    blue: 'bg-blue-500/10 text-blue-500 border-blue-500/20',
-    indigo: 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20',
-    emerald: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+  const levelStyles = {
+    purple: {
+      border: 'border-l-purple-600',
+      pill: 'bg-purple-600 text-white',
+      badgeBg: 'bg-purple-500/10 text-purple-600 border-purple-500/20',
+      btn: 'bg-purple-600 hover:bg-purple-500 text-white'
+    },
+    blue: {
+      border: 'border-l-blue-600',
+      pill: 'bg-blue-600 text-white',
+      badgeBg: 'bg-blue-500/10 text-blue-600 border-blue-500/20',
+      btn: 'bg-blue-600 hover:bg-blue-500 text-white'
+    },
+    indigo: {
+      border: 'border-l-indigo-600',
+      pill: 'bg-indigo-600 text-white',
+      badgeBg: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+      btn: 'bg-indigo-600 hover:bg-indigo-500 text-white'
+    },
+    emerald: {
+      border: 'border-l-emerald-600',
+      pill: 'bg-emerald-600 text-white',
+      badgeBg: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20',
+      btn: 'bg-emerald-600 hover:bg-emerald-500 text-white'
+    },
+    amber: {
+      border: 'border-l-amber-500',
+      pill: 'bg-amber-500 text-white',
+      badgeBg: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+      btn: 'bg-amber-500 hover:bg-amber-400 text-white'
+    }
   };
 
+  const currentStyle = levelStyles[levelColor] || levelStyles.blue;
+  const isApproved = (agent.status === 'approved' || agent.kycStatus === 'approved' || agent.isApproved);
+  const formattedId = agent.registrationId || (agent._id ? `REG-${agent._id.substring(0, 8)}` : 'REG-20260831-0000');
+  const districtName = agent.assignedDistrict || agent.territory?.district || 'General District';
+  const stateName = agent.assignedState || agent.territory?.state || 'General State';
+
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs hover:shadow-sm transition-all space-y-2.5">
-      <div className="flex justify-between items-start">
-        <div>
-          <h4 className="text-sm font-extrabold text-slate-850 dark:text-slate-100">{agent.name}</h4>
-          <span className="text-[10px] font-mono text-slate-400">{agent.registrationId}</span>
+    <div className={`bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs border-l-4 ${currentStyle.border} transition-all hover:shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4`}>
+      {/* Left Details */}
+      <div className="space-y-1.5 min-w-[240px]">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${currentStyle.badgeBg}`}>
+            {levelBadge}
+          </span>
+          <span className="text-[11px] font-mono text-slate-400 font-bold">
+            ID: {formattedId}
+          </span>
+          {isApproved ? (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
+              <CheckCircle className="w-3 h-3 text-emerald-500" /> Approved
+            </span>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center gap-1">
+              <Clock className="w-3 h-3 text-amber-500" /> Pending KYC
+            </span>
+          )}
         </div>
-        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badgeStyles[levelColor] || badgeStyles.emerald}`}>
-          {levelBadge}
-        </span>
-      </div>
 
-      <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400 border-t border-b border-slate-100 dark:border-slate-800 py-2">
-        <div className="flex items-center gap-1.5">
+        <h4 className="text-base font-extrabold text-slate-850 dark:text-slate-100 tracking-tight">
+          {agent.name}
+        </h4>
+
+        <div className="flex items-center gap-1 text-xs text-slate-400 font-semibold">
           <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span className="truncate" title={terrStr}>{terrStr}</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span className="font-mono">{agent.phone || 'N/A'}</span>
-        </div>
-        <div className="flex items-center gap-1.5 col-span-2">
-          <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span className="truncate">{agent.email || 'N/A'}</span>
+          <span>District: {districtName} ({stateName})</span>
         </div>
       </div>
 
-      <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1">
-        <span>Status: <strong className="capitalize text-slate-700 dark:text-slate-200">{agent.status}</strong></span>
-        <span>Joined: {new Date(agent.createdAt).toLocaleDateString()}</span>
+      {/* Middle Metrics */}
+      <div className="flex items-center gap-6 md:gap-10 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-3 md:pt-0 md:pl-6 w-full md:w-auto justify-between md:justify-start">
+        <div className="text-center">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">REVENUE</span>
+          <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">₹{agent.revenue || 0}</span>
+        </div>
+
+        <div className="text-center">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">TIEUPS (TODAY / YEST / TOTAL)</span>
+          <span className="text-xs font-black text-slate-700 dark:text-slate-300 font-mono">0 / 0 / 0</span>
+        </div>
+
+        <div className="text-center">
+          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">SUB-DIVISIONS</span>
+          <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black ${currentStyle.badgeBg}`}>
+            0 Divisions
+          </span>
+        </div>
       </div>
+
+      {/* Right Actions */}
+      <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0">
+        <button
+          type="button"
+          onClick={() => setShowDetailsModal(true)}
+          className="px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+        >
+          <Eye className="w-3.5 h-3.5 text-slate-500" /> Details
+        </button>
+
+        {onExplore && (
+          <button
+            type="button"
+            onClick={onExplore}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold ${currentStyle.btn} shadow-sm transition-all flex items-center gap-1.5 cursor-pointer active:scale-95`}
+          >
+            {exploreLabel || 'Explore Divisions >'}
+          </button>
+        )}
+      </div>
+
+      {/* AGENT DETAILS SCORECARD MODAL */}
+      {showDetailsModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{agent.name}</h3>
+                <p className="text-xs text-slate-400 font-mono">REG ID: {formattedId}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDetailsModal(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Role / Level</span>
+                  <p className="font-extrabold capitalize text-slate-800 dark:text-slate-200">{agent.level || 'Pincode'} Agent</p>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Status</span>
+                  <p className="font-extrabold capitalize text-slate-800 dark:text-slate-200">{agent.status || 'Pending'}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Email</span>
+                  <p className="font-mono truncate text-slate-700 dark:text-slate-300">{agent.email || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Phone</span>
+                  <p className="font-mono text-slate-700 dark:text-slate-300">{agent.phone || 'N/A'}</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Assigned Territory</span>
+                <p className="font-semibold text-slate-800 dark:text-slate-200">
+                  {stateName} → {districtName} → {agent.assignedDivision || agent.territory?.division || 'General Division'} → {agent.assignedPincode || agent.territory?.pincode || 'General Pincode'}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center pt-2">
+                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
+                  <span className="text-[10px] font-black text-purple-600 block">TOTAL REVENUE</span>
+                  <span className="text-sm font-black text-purple-700 dark:text-purple-300">₹{agent.revenue || 0}</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                  <span className="text-[10px] font-black text-blue-600 block">ACTIVE TIEUPS</span>
+                  <span className="text-sm font-black text-blue-700 dark:text-blue-300">0</span>
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                  <span className="text-[10px] font-black text-emerald-600 block">JOINED DATE</span>
+                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{new Date(agent.createdAt || Date.now()).toLocaleDateString()}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDetailsModal(false)}
+                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2 rounded-xl"
+              >
+                Close Scorecard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
