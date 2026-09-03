@@ -282,7 +282,8 @@ router.post('/register', async (req, res) => {
 // @access   Public
 router.post('/register-customer', async (req, res) => {
     try {
-        const { name, email, phone, password, aadhaarNumber, panNumber, address, city, pincode } = req.body;
+        const body = req.body || {};
+        const { name, email, phone, password, aadhaarNumber, panNumber, address, city, pincode } = body;
         const cleanName = (name || '').trim();
         const lowerEmail = (email || '').toLowerCase().trim();
         const cleanPhone = (phone || '').replace(/\D/g, '');
@@ -375,7 +376,9 @@ router.post('/register-customer', async (req, res) => {
 // @desc     Authenticate user & get token with progressive security
 // @access   Public
 router.post('/login', async (req, res) => {
-    const { email, password } = req.body;
+    const body = req.body || {};
+    const email = body.email || body.username || body.phone || '';
+    const password = body.password || '';
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || '';
 
