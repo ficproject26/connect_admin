@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { 
   Users, Search, RefreshCw, Plus, UserCheck, ChevronRight, ChevronDown, 
   MapPin, Phone, Mail, Award, AlertTriangle, XCircle, Grid, List, Layers,
-  CheckCircle, Clock
+  CheckCircle, Clock, Eye
 } from 'lucide-react';
 
 // Module-level in-memory cache for instant zero-latency rendering across tab navigation
