@@ -1150,7 +1150,7 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
             return res.status(400).json({ success: false, msg: 'Agent ID or registration identifier is required.' });
         }
 
-        const rawTargetStatus = defaultStatus || body.status || 'approved';
+        const rawTargetStatus = body.status || defaultStatus || 'approved';
         const targetStatus = String(rawTargetStatus).toLowerCase().trim();
         const rejectionReason = body.rejectionReason || '';
 

@@ -8953,7 +8953,7 @@ function App() {
                     </button>
                     <button
                       onClick={async () => {
-                        await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { status: 'rejected' });
+                        await executeAction(`/admin/agents/${pAgent._id}/reject`, 'PUT', { status: 'rejected' });
                         fetchData(true);
                       }}
                       className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
