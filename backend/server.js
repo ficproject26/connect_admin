@@ -68,7 +68,11 @@ const corsOptions = {
 // 1. Centralized CORS Middleware & Preflight Options
 app.use(cors(corsOptions));
 
-// 2. Security Middleware
+// 2. Express Body Parsers (Parse JSON & URL-encoded request bodies up to 50MB)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
+// 3. Security Middleware
 const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./middleware/security');
 app.use(applySecurityHeaders);
 app.use(sanitizeInput);
