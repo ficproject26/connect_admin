@@ -1074,6 +1074,164 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// @route    GET api/admin/agents/:id/scorecard
+// @desc     Fetch real-time agent scorecard, territory metrics & downstream agent counts
+// @access   Private (Admin)
+router.get('/agents/:id/scorecard', [auth, adminAuth], async (req, res) => {
+    try {
+        const idParam = req.params.id;
+        const db = mongoose.connection.db;
+
+        const isValidId = mongoose.Types.ObjectId.isValid(idParam);
+        let agent = null;
+
+        if (isValidId) {
+            agent = await User.findById(idParam).lean();
+        }
+        if (!agent) {
+            const queryConds = [
+                { email: String(idParam).toLowerCase() },
+                { registrationId: idParam },
+                { phone: idParam }
+            ];
+            if (isValidId) queryConds.unshift({ _id: idParam });
+            agent = await User.findOne({ $or: queryConds }).lean();
+        }
+
+        if (!agent && db) {
+            const rawAgent = await db.collection('agents').findOne({
+                $or: [
+                    ...(isValidId ? [{ _id: new mongoose.Types.ObjectId(idParam) }] : []),
+                    { email: String(idParam).toLowerCase() },
+                    { registrationId: idParam }
+                ]
+            });
+            if (rawAgent) agent = rawAgent;
+        }
+
+        if (!agent) {
+            return res.status(404).json({ success: false, msg: 'Agent not found' });
+        }
+
+        const rawLvlStr = (agent.level || agent.agentLevel || agent.role || 'pincode').toString().toLowerCase().trim();
+        let lvl = 'pincode';
+        if (rawLvlStr.includes('state')) lvl = 'state';
+        else if (rawLvlStr.includes('district') || rawLvlStr.includes('dist')) lvl = 'district';
+        else if (rawLvlStr.includes('divis') || rawLvlStr.includes('division')) lvl = 'division';
+        else if (rawLvlStr.includes('pincode') || rawLvlStr.includes('pin')) lvl = 'pincode';
+
+        const stateName = (agent.assignedState || agent.state || agent.territory?.state || '').trim();
+        const districtName = (agent.assignedDistrict || agent.district || agent.territory?.district || '').trim();
+        const divisionName = (agent.assignedDivision || agent.division || agent.territory?.division || '').trim();
+        const pinCodeVal = (agent.assignedPincode?.code || agent.assignedPincode || agent.pincode || agent.territory?.pincode || '').trim();
+
+        const baseApprovedAgentQuery = {
+            role: { $in: ['agent', 'Agent', 'state', 'district', 'division', 'pincode'] },
+            status: { $in: ['approved', 'Approved', 'active', 'Active'] },
+            isActive: { $ne: false }
+        };
+
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfYesterday = new Date(startOfToday.getTime() - 24 * 60 * 60 * 1000);
+
+        const vendorQuery = {
+            $or: [
+                { referredBy: agent._id },
+                { agentId: agent._id },
+                { onboardedBy: agent._id },
+                { referredBy: agent.registrationId },
+                { agentId: agent.registrationId },
+                { onboardedBy: agent.email }
+            ]
+        };
+
+        let districtAgentsCount = 0;
+        let divisionAgentsCount = 0;
+        let pincodeAgentsCount = 0;
+
+        if (db) {
+            const [dRes, divRes, pinRes, vAll, vToday, vYest] = await Promise.allSettled([
+                lvl === 'state' && stateName ? db.collection('users').countDocuments({
+                    ...baseApprovedAgentQuery,
+                    level: { $in: ['district', 'District'] },
+                    $or: [{ assignedState: stateName }, { state: stateName }]
+                }) : Promise.resolve(0),
+
+                (lvl === 'state' || lvl === 'district') ? db.collection('users').countDocuments({
+                    ...baseApprovedAgentQuery,
+                    level: { $in: ['division', 'Division', 'divisional'] },
+                    ...(lvl === 'state' && stateName ? { $or: [{ assignedState: stateName }, { state: stateName }] } : {}),
+                    ...(lvl === 'district' && districtName ? { $or: [{ assignedDistrict: districtName }, { district: districtName }] } : {})
+                }) : Promise.resolve(0),
+
+                (lvl === 'state' || lvl === 'district' || lvl === 'division') ? db.collection('users').countDocuments({
+                    ...baseApprovedAgentQuery,
+                    level: { $in: ['pincode', 'Pincode'] },
+                    ...(stateName ? { $or: [{ assignedState: stateName }, { state: stateName }] } : {}),
+                    ...(districtName ? { $or: [{ assignedDistrict: districtName }, { district: districtName }] } : {}),
+                    ...(lvl === 'division' && divisionName ? { $or: [{ assignedDivision: divisionName }, { division: divisionName }] } : {})
+                }) : Promise.resolve(0),
+
+                db.collection('vendors').countDocuments(vendorQuery),
+                db.collection('vendors').countDocuments({ ...vendorQuery, createdAt: { $gte: startOfToday } }),
+                db.collection('vendors').countDocuments({ ...vendorQuery, createdAt: { $gte: startOfYesterday, $lt: startOfToday } })
+            ]);
+
+            districtAgentsCount = dRes.status === 'fulfilled' ? dRes.value : 0;
+            divisionAgentsCount = divRes.status === 'fulfilled' ? divRes.value : 0;
+            pincodeAgentsCount = pinRes.status === 'fulfilled' ? pinRes.value : 0;
+
+            const totalShops = vAll.status === 'fulfilled' ? vAll.value : 0;
+            const tieupsToday = vToday.status === 'fulfilled' ? vToday.value : 0;
+            const tieupsYesterday = vYest.status === 'fulfilled' ? vYest.value : 0;
+
+            const totalRevenue = agent.commissionEarned || agent.totalEarnings || agent.balance || 0;
+            const performanceScore = totalShops > 0 ? Math.min(100, Math.round((totalShops / 10) * 100)) : 0;
+            const isPaidVal = agent.isPaid || agent.paymentStatus === 'paid' || (agent.status === 'approved' && agent.balance > 0);
+
+            return res.json({
+                success: true,
+                agent: {
+                    _id: agent._id,
+                    name: agent.name || 'Agent Partner',
+                    email: agent.email || '',
+                    phone: agent.phone || agent.mobile || '',
+                    role: agent.role || 'agent',
+                    level: lvl,
+                    status: agent.status || 'pending',
+                    kycStatus: agent.kycStatus || agent.status || 'pending',
+                    registrationId: agent.registrationId || (agent._id ? `REG-${String(agent._id).substring(18, 24).toUpperCase()}` : 'N/A'),
+                    assignedState: stateName || 'N/A',
+                    assignedDistrict: districtName || 'N/A',
+                    assignedDivision: divisionName || 'N/A',
+                    assignedPincode: pinCodeVal || 'N/A',
+                    assignedArea: agent.assignedArea || '',
+                    isPaid: isPaidVal,
+                    createdAt: agent.createdAt || new Date()
+                },
+                metrics: {
+                    tieupsToday,
+                    tieupsYesterday,
+                    totalTieups: totalShops,
+                    totalShops,
+                    totalRevenue,
+                    performanceScore,
+                    regFeeStatus: isPaidVal ? 'PAID' : 'UNPAID'
+                },
+                downstream: {
+                    districtAgents: districtAgentsCount,
+                    divisionAgents: divisionAgentsCount,
+                    pincodeAgents: pincodeAgentsCount
+                }
+            });
+        }
+    } catch (err) {
+        console.error("Error fetching agent scorecard:", err);
+        return res.status(500).json({ success: false, msg: 'Server error fetching agent scorecard', error: err.message });
+    }
+});
+
 const sanitizeHeavyFields = (doc) => {
     if (!doc || typeof doc !== 'object') return doc;
     const clean = { ...doc };

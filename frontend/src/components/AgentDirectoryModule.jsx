@@ -61,6 +61,60 @@ export default function AgentDirectoryModule({
   const [expandedNodes, setExpandedNodes] = useState({});
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
 
+  // Agent Performance Scorecard Modal State
+  const [selectedScorecardAgent, setSelectedScorecardAgent] = useState(null);
+  const [scorecardLoading, setScorecardLoading] = useState(false);
+  const [scorecardData, setScorecardData] = useState(null);
+  const [scorecardError, setScorecardError] = useState(null);
+
+  const openAgentScorecard = useCallback(async (agentObj) => {
+    if (!agentObj) return;
+    setSelectedScorecardAgent(agentObj);
+    setScorecardLoading(true);
+    setScorecardError(null);
+    setScorecardData(null);
+
+    const agId = agentObj._id || agentObj.id || agentObj.registrationId;
+    if (!token || !agId) {
+      setScorecardLoading(false);
+      return;
+    }
+
+    const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+    const primaryUrl = `${API_BASE}/admin/agents/${agId}/scorecard`.replace(/\/+/g, '/').replace(':/', '://');
+    const urls = [
+      `/api/admin/agents/${agId}/scorecard`,
+      primaryUrl,
+      `https://connect-admin-qlcy.onrender.com/api/admin/agents/${agId}/scorecard`
+    ];
+
+    const uniqueUrls = [...new Set(urls.filter(Boolean))];
+    let fetched = false;
+
+    for (const url of uniqueUrls) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(url, { headers, signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.success) {
+            setScorecardData(data);
+            fetched = true;
+            break;
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (!fetched) {
+      setScorecardError('Unable to load real-time agent details from server.');
+    }
+    setScorecardLoading(false);
+  }, [token, API_BASE]);
+
   const inFlightPromiseRef = useRef(null);
 
   // Synchronize when initialAgents updates from parent
@@ -769,7 +823,7 @@ export default function AgentDirectoryModule({
                             <div className="space-y-2">
                               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 block px-1">State Level Assigned Agents</span>
                               {st.stateAgents.map(ag => (
-                                <AgentCardItem key={ag._id} agent={ag} levelBadge="State Agent" levelColor="purple" />
+                                <AgentCardItem key={ag._id} agent={ag} levelBadge="State Agent" levelColor="purple" onOpenScorecard={openAgentScorecard} />
                               ))}
                             </div>
                           )}
@@ -841,7 +895,7 @@ export default function AgentDirectoryModule({
                                         <div className="space-y-2">
                                           <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 block px-1">District Level Assigned Agents</span>
                                           {dist.districtAgents.map(ag => (
-                                            <AgentCardItem key={ag._id} agent={ag} levelBadge="District Agent" levelColor="blue" />
+                                            <AgentCardItem key={ag._id} agent={ag} levelBadge="District Agent" levelColor="blue" onOpenScorecard={openAgentScorecard} />
                                           ))}
                                         </div>
                                       )}
@@ -913,7 +967,7 @@ export default function AgentDirectoryModule({
                                                     <div className="space-y-2">
                                                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block px-1">Divisional Level Assigned Agents</span>
                                                       {div.divisionAgents.map(ag => (
-                                                        <AgentCardItem key={ag._id} agent={ag} levelBadge="Divisional Agent" levelColor="indigo" />
+                                                        <AgentCardItem key={ag._id} agent={ag} levelBadge="Divisional Agent" levelColor="indigo" onOpenScorecard={openAgentScorecard} />
                                                       ))}
                                                     </div>
                                                   )}
@@ -981,7 +1035,7 @@ export default function AgentDirectoryModule({
                                                             <div className="pl-4 space-y-2 pt-1">
                                                               {pin.pincodeAgents.length > 0 ? (
                                                                 pin.pincodeAgents.map(ag => (
-                                                                  <AgentCardItem key={ag._id} agent={ag} levelBadge="Pincode Agent" levelColor="emerald" />
+                                                                  <AgentCardItem key={ag._id} agent={ag} levelBadge="Pincode Agent" levelColor="emerald" onOpenScorecard={openAgentScorecard} />
                                                                 ))
                                                               ) : (
                                                                 <p className="text-[11px] text-slate-400 italic px-2">No agents available.</p>
@@ -1038,7 +1092,7 @@ export default function AgentDirectoryModule({
                     {filteredAgents.map(ag => {
                       const terr = extractAgentTerritory(ag);
                       return (
-                        <tr key={ag._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                        <tr key={ag._id} onClick={() => openAgentScorecard(ag)} className="hover:bg-amber-500/5 dark:hover:bg-slate-800/60 transition-colors cursor-pointer">
                           <td className="px-5 py-3.5">
                             <span className="block font-bold text-slate-880 dark:text-slate-100">{ag.name}</span>
                             <span className="text-[10px] font-mono text-slate-400">{ag.registrationId}</span>
@@ -1086,7 +1140,7 @@ export default function AgentDirectoryModule({
               {filteredAgents.map(ag => (
                 <AgentCardItem key={ag._id} agent={ag} levelBadge={`${ag.level.toUpperCase()} AGENT`} levelColor={
                   ag.level === 'state' ? 'purple' : ag.level === 'district' ? 'blue' : ag.level === 'division' ? 'indigo' : 'emerald'
-                } />
+                } onOpenScorecard={openAgentScorecard} />
               ))}
             </div>
           )}
@@ -1219,14 +1273,225 @@ export default function AgentDirectoryModule({
           </div>
         </div>
       )}
+      {/* REAL-TIME AGENT PERFORMANCE SCORECARD MODAL */}
+      {selectedScorecardAgent && (() => {
+        const ag = scorecardData?.agent || selectedScorecardAgent;
+        const metrics = scorecardData?.metrics || {
+          tieupsToday: 0,
+          tieupsYesterday: 0,
+          totalTieups: 0,
+          totalShops: 0,
+          totalRevenue: ag.revenue || ag.balance || 0,
+          performanceScore: 0,
+          regFeeStatus: (ag.isPaid || ag.status === 'approved') ? 'PAID' : 'UNPAID'
+        };
+        const downstream = scorecardData?.downstream || {
+          districtAgents: 0,
+          divisionAgents: 0,
+          pincodeAgents: 0
+        };
+
+        const isApproved = (ag.status === 'approved' || ag.kycStatus === 'approved' || ag.isApproved);
+        const lvl = (ag.level || 'pincode').toLowerCase();
+        const formattedId = ag.registrationId || (ag._id ? `REG-${String(ag._id).substring(0, 8).toUpperCase()}` : 'REG-N/A');
+
+        const stateName = ag.assignedState || ag.state || ag.territory?.state || '';
+        const districtName = ag.assignedDistrict || ag.district || ag.territory?.district || '';
+        const divisionName = ag.assignedDivision || ag.division || ag.territory?.division || '';
+        const pincodeCode = ag.assignedPincode?.code || ag.assignedPincode || ag.pincode || ag.territory?.pincode || '';
+
+        const locationParts = [];
+        if (stateName) locationParts.push(`State: ${stateName}`);
+        if (districtName) locationParts.push(`District: ${districtName}`);
+        if (divisionName) locationParts.push(`Division: ${divisionName}`);
+        if (pincodeCode) locationParts.push(`PIN: ${pincodeCode}`);
+        const locationStr = locationParts.length > 0 ? locationParts.join(' › ') : 'General Territory';
+
+        return (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 overflow-y-auto">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl relative my-auto animate-in fade-in zoom-in-95 duration-200">
+              
+              {/* TOP HEADER */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-900 dark:text-amber-200 font-extrabold text-2xl flex items-center justify-center border border-amber-200 dark:border-amber-800/80 shrink-0">
+                    {(ag.name || 'A')[0].toUpperCase()}
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="bg-amber-900/90 text-amber-100 text-[10px] font-black tracking-wider uppercase px-2.5 py-0.5 rounded-md">
+                        {lvl.toUpperCase()} AGENT
+                      </span>
+                      {isApproved ? (
+                        <span className="border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Approved
+                        </span>
+                      ) : (
+                        <span className="border border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-amber-500" /> Pending KYC
+                        </span>
+                      )}
+                    </div>
+
+                    <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+                      {ag.name}
+                    </h3>
+
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">
+                      {ag.email || 'N/A'} • {ag.phone || 'N/A'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedScorecardAgent(null)}
+                  className="w-8 h-8 rounded-full border border-slate-300 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center text-sm font-bold transition-all cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* LOCATION BOX */}
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
+                <MapPin className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+                <span>{locationStr}</span>
+              </div>
+
+              {scorecardLoading ? (
+                <div className="text-center py-8 space-y-2">
+                  <RefreshCw className="w-6 h-6 animate-spin text-amber-600 mx-auto" />
+                  <p className="text-xs font-bold text-slate-500">Loading Agent Scorecard...</p>
+                </div>
+              ) : (
+                <>
+                  {scorecardError && (
+                    <div className="bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center justify-between">
+                      <span>{scorecardError}</span>
+                      <button type="button" onClick={() => openAgentScorecard(selectedScorecardAgent)} className="underline text-rose-700 font-bold ml-2 cursor-pointer">Retry</button>
+                    </div>
+                  )}
+
+                  {/* MERCHANT TIE-UPS STATUS */}
+                  <div>
+                    <h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">
+                      MERCHANT TIE-UPS STATUS
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 text-left space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">TIEUPS TODAY</span>
+                        <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono block">{metrics.tieupsToday || 0} Shops</span>
+                      </div>
+                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-left space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">TIEUPS YESTERDAY</span>
+                        <span className="text-xl font-extrabold text-blue-600 dark:text-blue-400 font-mono block">{metrics.tieupsYesterday || 0} Shops</span>
+                      </div>
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-left space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 block">TOTAL TIEUPS</span>
+                        <span className="text-xl font-extrabold text-amber-800 dark:text-amber-300 font-mono block">{metrics.totalTieups || 0} Total</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* REVENUE & PERFORMANCE */}
+                  <div>
+                    <h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">
+                      REVENUE & PERFORMANCE
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 text-left space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">TOTAL REVENUE</span>
+                        <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono block">₹{metrics.totalRevenue || 0}</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 text-left space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">PERFORMANCE SCORE</span>
+                        <span className="text-xl font-extrabold text-amber-700 dark:text-amber-400 font-mono block">{metrics.performanceScore || 0}%</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 text-left space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">REG. FEE</span>
+                        <span className={`text-sm font-extrabold uppercase flex items-center gap-1 ${metrics.regFeeStatus === 'PAID' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {metrics.regFeeStatus === 'PAID' ? '✓ PAID' : '✕ UNPAID'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* DOWNSTREAM AGENTS COUNT */}
+                  <div>
+                    <h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">
+                      DOWNSTREAM AGENTS COUNT
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {lvl === 'state' && (
+                        <>
+                          <div className="bg-purple-500/10 border border-purple-500/20 rounded-2xl p-4 text-left space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700 dark:text-purple-400 block">DISTRICT AGENTS</span>
+                            <span className="text-xl font-extrabold text-purple-800 dark:text-purple-300 block">{downstream.districtAgents || 0} Agents</span>
+                          </div>
+                          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-left space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 block">DIVISION MANAGERS</span>
+                            <span className="text-xl font-extrabold text-amber-800 dark:text-amber-300 block">{downstream.divisionAgents || 0} Agents</span>
+                          </div>
+                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-left space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span>
+                            <span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents || 0} Agents</span>
+                          </div>
+                        </>
+                      )}
+
+                      {lvl === 'district' && (
+                        <>
+                          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-left space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 block">DIVISION MANAGERS</span>
+                            <span className="text-xl font-extrabold text-amber-800 dark:text-amber-300 block">{downstream.divisionAgents || 0} Agents</span>
+                          </div>
+                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-left space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span>
+                            <span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents || 0} Agents</span>
+                          </div>
+                        </>
+                      )}
+
+                      {lvl === 'division' && (
+                        <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-left space-y-1 col-span-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span>
+                          <span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents || 0} Agents</span>
+                        </div>
+                      )}
+
+                      {lvl === 'pincode' && (
+                        <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 text-left space-y-1 col-span-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">DOWNSTREAM AGENTS</span>
+                          <span className="text-xl font-extrabold text-slate-700 dark:text-slate-300 block">0 Agents</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* FOOTER BUTTON */}
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedScorecardAgent(null)}
+                  className="bg-amber-900 hover:bg-amber-950 dark:bg-amber-800 dark:hover:bg-amber-700 text-white font-extrabold text-xs px-6 py-3 rounded-2xl shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  Close Scorecard
+                </button>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
 // Sub-Component for Rendering Individual Agent Item Cards (Matches exact user screenshot design)
-function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel }) {
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-
+function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel, onOpenScorecard }) {
   const levelStyles = {
     purple: {
       border: 'border-l-purple-600',
@@ -1262,12 +1527,15 @@ function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel 
 
   const currentStyle = levelStyles[levelColor] || levelStyles.blue;
   const isApproved = (agent.status === 'approved' || agent.kycStatus === 'approved' || agent.isApproved);
-  const formattedId = agent.registrationId || (agent._id ? `REG-${agent._id.substring(0, 8)}` : 'REG-20260831-0000');
+  const formattedId = agent.registrationId || (agent._id ? `REG-${String(agent._id).substring(0, 8).toUpperCase()}` : 'REG-N/A');
   const districtName = agent.assignedDistrict || agent.territory?.district || 'General District';
   const stateName = agent.assignedState || agent.territory?.state || 'General State';
 
   return (
-    <div className={`bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs border-l-4 ${currentStyle.border} transition-all hover:shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4`}>
+    <div 
+      onClick={() => onOpenScorecard && onOpenScorecard(agent)}
+      className={`bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 shadow-xs border-l-4 ${currentStyle.border} transition-all hover:shadow-md hover:border-amber-500 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 cursor-pointer`}
+    >
       {/* Left Details */}
       <div className="space-y-1.5 min-w-[240px]">
         <div className="flex items-center gap-2 flex-wrap">
@@ -1302,7 +1570,7 @@ function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel 
       <div className="flex items-center gap-6 md:gap-10 border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 pt-3 md:pt-0 md:pl-6 w-full md:w-auto justify-between md:justify-start">
         <div className="text-center">
           <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">REVENUE</span>
-          <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">₹{agent.revenue || 0}</span>
+          <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">₹{agent.revenue || agent.balance || 0}</span>
         </div>
 
         <div className="text-center">
@@ -1319,10 +1587,10 @@ function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel 
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0">
+      <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0" onClick={e => e.stopPropagation()}>
         <button
           type="button"
-          onClick={() => setShowDetailsModal(true)}
+          onClick={() => onOpenScorecard && onOpenScorecard(agent)}
           className="px-3.5 py-2 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
         >
           <Eye className="w-3.5 h-3.5 text-slate-500" /> Details
@@ -1338,80 +1606,6 @@ function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel 
           </button>
         )}
       </div>
-
-      {/* AGENT DETAILS SCORECARD MODAL */}
-      {showDetailsModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
-          <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-3">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{agent.name}</h3>
-                <p className="text-xs text-slate-400 font-mono">REG ID: {formattedId}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowDetailsModal(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Role / Level</span>
-                  <p className="font-extrabold capitalize text-slate-800 dark:text-slate-200">{agent.level || 'Pincode'} Agent</p>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Status</span>
-                  <p className="font-extrabold capitalize text-slate-800 dark:text-slate-200">{agent.status || 'Pending'}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Email</span>
-                  <p className="font-mono truncate text-slate-700 dark:text-slate-300">{agent.email || 'N/A'}</p>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">Phone</span>
-                  <p className="font-mono text-slate-700 dark:text-slate-300">{agent.phone || 'N/A'}</p>
-                </div>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Assigned Territory</span>
-                <p className="font-semibold text-slate-800 dark:text-slate-200">
-                  {stateName} → {districtName} → {agent.assignedDivision || agent.territory?.division || 'General Division'} → {agent.assignedPincode || agent.territory?.pincode || 'General Pincode'}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-center pt-2">
-                <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20">
-                  <span className="text-[10px] font-black text-purple-600 block">TOTAL REVENUE</span>
-                  <span className="text-sm font-black text-purple-700 dark:text-purple-300">₹{agent.revenue || 0}</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                  <span className="text-[10px] font-black text-blue-600 block">ACTIVE TIEUPS</span>
-                  <span className="text-sm font-black text-blue-700 dark:text-blue-300">0</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                  <span className="text-[10px] font-black text-emerald-600 block">JOINED DATE</span>
-                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">{new Date(agent.createdAt || Date.now()).toLocaleDateString()}</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowDetailsModal(false)}
-                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold px-4 py-2 rounded-xl"
-              >
-                Close Scorecard
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
