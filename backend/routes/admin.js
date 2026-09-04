@@ -1611,7 +1611,33 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
             });
         }).filter(Boolean);
 
-        res.json([...formattedUserVendors, ...formattedLegacy]);
+        const combinedList = [...formattedUserVendors, ...formattedLegacy];
+        const vendorMap = new Map();
+        combinedList.forEach(v => {
+            if (!v) return;
+            const emailKey = (v.email || '').toLowerCase().trim();
+            const phoneKey = (v.phone || '').replace(/\D/g, '');
+            const bizKey = (v.businessName || v.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+            const pinKey = (v.pincode || v.assignedPincode || '').toString().trim();
+            const idKey = v._id ? String(v._id) : '';
+
+            let key = idKey;
+            if (emailKey && !emailKey.includes('vendor_') && !emailKey.includes('@connect.app')) key = emailKey;
+            else if (phoneKey && phoneKey.length >= 10) key = phoneKey;
+            else if (bizKey && pinKey) key = `${bizKey}_${pinKey}`;
+            else if (bizKey && bizKey.length > 3) key = bizKey;
+            else if (v.registrationId) key = String(v.registrationId).trim();
+
+            if (!vendorMap.has(key)) {
+                vendorMap.set(key, v);
+            } else {
+                const existing = vendorMap.get(key);
+                const preferActive = ['Active', 'Approved', 'active', 'approved'].includes(v.status) ? v.status : existing.status;
+                vendorMap.set(key, { ...existing, ...v, status: preferActive });
+            }
+        });
+
+        res.json(Array.from(vendorMap.values()));
     } catch (err) {
         console.error('Fatal error in GET /api/admin/vendors:', err);
         res.status(500).json({ error: 'Server error fetching vendors', message: err.message });

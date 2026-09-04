@@ -329,12 +329,23 @@ router.get('/vendors', auth, async (req, res) => {
                 const emailKey = (v.email || '').toLowerCase().trim();
                 const phoneKey = (v.phone || '').replace(/\D/g, '');
                 const regKey = (v.registrationId || '').trim();
-                const key = emailKey || phoneKey || regKey || (v._id ? String(v._id) : String(Math.random()));
+                const bizKey = (v.businessName || v.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                const pinKey = (v.pincode || v.assignedPincode || '').toString().trim();
+                const idKey = v._id ? String(v._id) : '';
+
+                let key = idKey;
+                if (emailKey && !emailKey.includes('vendor_') && !emailKey.includes('@connect.app')) key = emailKey;
+                else if (phoneKey && phoneKey.length >= 10) key = phoneKey;
+                else if (bizKey && pinKey) key = `${bizKey}_${pinKey}`;
+                else if (bizKey && bizKey.length > 3) key = bizKey;
+                else if (regKey) key = regKey;
+
                 if (!vendorMap.has(key)) {
                     vendorMap.set(key, v);
                 } else {
                     const existing = vendorMap.get(key);
-                    vendorMap.set(key, { ...existing, ...v });
+                    const preferActive = ['Active', 'Approved', 'active', 'approved'].includes(v.status) ? v.status : existing.status;
+                    vendorMap.set(key, { ...existing, ...v, status: preferActive });
                 }
             });
 
@@ -474,16 +485,25 @@ router.post('/vendors/agent-onboard', async (req, res) => {
         const existingVendorUser = await User.findOne({
             $or: [
                 { email: lowerEmail },
-                ...(cleanPhone ? [{ phone: cleanPhone }, { phone: phone }] : [])
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone: phone }] : []),
+                ...(businessName ? [{ businessName: new RegExp(`^${businessName.trim()}$`, 'i') }] : [])
+            ]
+        }) || await Vendor.findOne({
+            $or: [
+                { email: lowerEmail },
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone: phone }] : []),
+                ...(businessName ? [{ businessName: new RegExp(`^${businessName.trim()}$`, 'i') }] : [])
             ]
         });
 
         if (existingVendorUser) {
             const isPhoneMatch = cleanPhone && (existingVendorUser.phone === cleanPhone || existingVendorUser.phone === phone);
+            const isBizMatch = businessName && (existingVendorUser.businessName || existingVendorUser.name || '').toLowerCase() === businessName.trim().toLowerCase();
+            const errorMsg = isPhoneMatch ? 'A user with this phone number already exists.' : (isBizMatch ? 'A vendor with this business name already exists.' : 'A vendor with this email address already exists.');
             return res.status(400).json({
                 success: false,
-                msg: isPhoneMatch ? 'A user with this phone number already exists.' : 'A vendor with this email address already exists.',
-                message: isPhoneMatch ? 'A user with this phone number already exists.' : 'A vendor with this email address already exists.'
+                msg: errorMsg,
+                message: errorMsg
             });
         }
 
@@ -1019,6 +1039,14 @@ router.post('/vendors/approve', auth, async (req, res) => {
         ).catch(() => {});
 
         let user = await User.findOne(updateFilter);
+        if (!user && (targetEmail || targetPhone || targetBizName)) {
+            const orFind = [];
+            if (targetEmail) orFind.push({ email: targetEmail });
+            if (targetPhone) orFind.push({ phone: targetPhone });
+            if (targetBizName) orFind.push({ businessName: new RegExp(`^${targetBizName}$`, 'i') });
+            if (orFind.length > 0) user = await User.findOne({ $or: orFind });
+        }
+
         if (user) {
             user.status = 'Approved';
             user.isActive = true;
@@ -1036,10 +1064,11 @@ router.post('/vendors/approve', auth, async (req, res) => {
                 const salt = await bcrypt.genSalt(10);
                 const hashedPassword = await bcrypt.hash('Vendor@12345', salt);
                 user = new User({
+                    _id: rawVendor?._id || new mongoose.Types.ObjectId(),
                     name: (rawVendor && rawVendor.name) || name || targetBizName || 'Vendor Partner',
                     businessName: (rawVendor && rawVendor.businessName) || targetBizName || name || 'Vendor Partner',
                     email: (rawVendor && rawVendor.email) || targetEmail || `vendor_${Date.now()}@connect.com`,
-                    phone: (rawVendor && rawVendor.phone) || (targetPhone || '').replace(/\D/g, '') || undefined,
+                    phone: (rawVendor && rawVendor.phone) || targetPhone || undefined,
                     password: hashedPassword,
                     role: 'Vendor',
                     category: (rawVendor && rawVendor.category) || 'General Store',
@@ -1047,6 +1076,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
                     isActive: true,
                     isApproved: true,
                     isLocked: false,
+                    registrationId: rawVendor?.registrationId || registrationId,
                     createdAt: (rawVendor && rawVendor.createdAt) || new Date()
                 });
                 await user.save().catch((err) => {
