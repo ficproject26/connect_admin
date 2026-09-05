@@ -355,7 +355,7 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
                 {logs.map((log) => (
                   <tr key={log._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40 transition-colors">
                     <td className="py-3 px-4 whitespace-nowrap text-slate-400">
-                      {new Date(log.timestamp).toLocaleString()}
+                      {log?.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span className="font-extrabold uppercase text-[10px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">

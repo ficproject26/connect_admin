@@ -338,7 +338,7 @@ export const SecurityDashboard = React.memo(({ token, API_BASE }) => {
                   {logs.map((log) => (
                     <tr key={log._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition">
                       <td className="p-3.5 font-mono text-[11px] text-slate-400 whitespace-nowrap">
-                        {new Date(log.timestamp).toLocaleString()}
+                        {log?.timestamp ? new Date(log.timestamp).toLocaleString() : 'N/A'}
                       </td>
                       <td className="p-3.5 font-bold text-slate-800 dark:text-slate-100">
                         {log.eventType}

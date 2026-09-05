@@ -1640,7 +1640,7 @@ function App() {
                 {[
                   {
                     title: 'Total Revenue',
-                    value: stats?.kpis?.totalRevenue !== undefined ? `₹${stats.kpis.totalRevenue.toLocaleString()}` : null,
+                    value: (stats?.kpis?.totalRevenue !== undefined && stats?.kpis?.totalRevenue !== null) ? `₹${(stats.kpis.totalRevenue || 0).toLocaleString()}` : null,
                     change: '+12.4% vs last mo',
                     icon: DollarSign,
                     cardBg: 'bg-emerald-50 dark:bg-emerald-950/20',
@@ -3203,7 +3203,7 @@ function App() {
                             <strong>Contact:</strong> {req.agentId?.email || 'amit@example.com'} • {req.agentId?.phone || '9876543210'}
                           </p>
                           <p className="text-xs text-slate-400">
-                            <strong>Wallet Balance:</strong> <span className="text-emerald-500 font-bold">₹{req.agentId?.balance || 7500}</span> • <strong>Req Date:</strong> {new Date(req.createdAt).toLocaleString()}
+                            <strong>Wallet Balance:</strong> <span className="text-emerald-500 font-bold">₹{req.agentId?.balance || 7500}</span> • <strong>Req Date:</strong> {req?.createdAt ? new Date(req.createdAt).toLocaleString() : 'N/A'}
                           </p>
                         </div>
 
@@ -3674,8 +3674,8 @@ function App() {
                             <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{row.branchName}</td>
                             <td className="px-6 py-4 font-mono">{row.branchCode}</td>
                             <td className="px-6 py-4 font-semibold">{row.totalOrders}</td>
-                            <td className="px-6 py-4 font-bold text-emerald-500">₹{row.revenue?.toLocaleString()}</td>
-                            <td className="px-6 py-4 font-bold text-primary-500">₹{row.commission?.toLocaleString()}</td>
+                            <td className="px-6 py-4 font-bold text-emerald-500">₹{(Number(row.revenue) || 0).toLocaleString()}</td>
+                            <td className="px-6 py-4 font-bold text-primary-500">₹{(Number(row.commission) || 0).toLocaleString()}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -3697,7 +3697,7 @@ function App() {
                             <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{row.businessName}</td>
                             <td className="px-6 py-4 font-semibold text-primary-500">{row.category}</td>
                             <td className="px-6 py-4">{row.orders}</td>
-                            <td className="px-6 py-4 font-bold text-emerald-500">₹{row.revenue?.toLocaleString()}</td>
+                            <td className="px-6 py-4 font-bold text-emerald-500">₹{(Number(row.revenue) || 0).toLocaleString()}</td>
                             <td className="px-6 py-4 capitalize">{row.status}</td>
                           </tr>
                         ))}
@@ -3727,8 +3727,8 @@ function App() {
                               <span className="text-[10px] text-slate-400">Pincode: {row.pincode}</span>
                             </td>
                             <td className="px-6 py-4 font-semibold">{row.vendorsAdded}</td>
-                            <td className="px-6 py-4 font-bold text-emerald-500">₹{row.commissionEarned?.toLocaleString()}</td>
-                            <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">₹{row.balance?.toLocaleString()}</td>
+                            <td className="px-6 py-4 font-bold text-emerald-500">₹{(Number(row.commissionEarned) || 0).toLocaleString()}</td>
+                            <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">₹{(Number(row.balance) || 0).toLocaleString()}</td>
                             <td className="px-6 py-4">
                               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-bold capitalize ${row.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
                                 {row.status}
@@ -5926,7 +5926,7 @@ function App() {
                               <td className="px-6 py-4 space-y-1">
                                 <span className="block font-bold text-primary-500">{q.subject}</span>
                                 <p className="text-xs text-slate-600 dark:text-slate-400 italic max-w-md whitespace-pre-line">"{q.message}"</p>
-                                <span className="block text-[10px] text-slate-400">{new Date(q.createdAt).toLocaleString()}</span>
+                                <span className="block text-[10px] text-slate-400">{q?.createdAt ? new Date(q.createdAt).toLocaleString() : 'N/A'}</span>
                               </td>
                               <td className="px-6 py-4">
                                 <select
@@ -8756,7 +8756,7 @@ function App() {
                 <div className="space-y-2 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 text-xs">
                   <p><strong>Branch Name:</strong> {modalData.branchName || 'Connaught Place, New Delhi'}</p>
                   <p><strong>Withdrawal Amount Requested:</strong> <span className="text-rose-500 font-extrabold text-lg">₹{modalData.amount}</span></p>
-                  <p><strong>Request Date & Time:</strong> {new Date(modalData.createdAt).toLocaleString()}</p>
+                  <p><strong>Request Date & Time:</strong> {modalData?.createdAt ? new Date(modalData.createdAt).toLocaleString() : 'N/A'}</p>
                   <p><strong>Current Request Status:</strong> <span className="capitalize font-bold text-slate-800 dark:text-slate-100">{modalData.status}</span></p>
                 </div>
               </div>

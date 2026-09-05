@@ -124,7 +124,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE }) => {
         ].map((card, i) => (
           <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 rounded-2xl p-3.5 space-y-1 shadow-xs">
             <span className="text-[10px] font-black uppercase text-slate-400 block truncate">{card.label}</span>
-            <span className={`text-base font-black ${card.color} block tracking-tight`}>₹{card.val.toLocaleString()}</span>
+            <span className={`text-base font-black ${card.color} block tracking-tight`}>₹{(card.val || 0).toLocaleString()}</span>
           </div>
         ))}
       </div>
@@ -181,7 +181,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE }) => {
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                   {item.name}
                 </span>
-                <span className="font-bold text-slate-800 dark:text-slate-200">₹{item.value.toLocaleString()}</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">₹{(item.value || 0).toLocaleString()}</span>
               </div>
             ))}
           </div>

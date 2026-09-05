@@ -289,7 +289,7 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
           <div>
             <span className="text-xs font-bold text-slate-400 block">Total Earnings</span>
             <span className="text-xl font-black text-slate-850 dark:text-slate-100">
-              ₹{loading && payments.length === 0 ? '...' : totalEarningsAll.toLocaleString()}
+              ₹{loading && payments.length === 0 ? '...' : (totalEarningsAll || 0).toLocaleString()}
             </span>
           </div>
         </div>
@@ -301,7 +301,7 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
           <div>
             <span className="text-xs font-bold text-slate-400 block">Total Paid Out</span>
             <span className="text-xl font-black text-emerald-500">
-              ₹{loading && payments.length === 0 ? '...' : totalPaidAll.toLocaleString()}
+              ₹{loading && payments.length === 0 ? '...' : (totalPaidAll || 0).toLocaleString()}
             </span>
           </div>
         </div>
@@ -313,7 +313,7 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
           <div>
             <span className="text-xs font-bold text-slate-400 block">Pending Payout</span>
             <span className="text-xl font-black text-amber-500">
-              ₹{loading && payments.length === 0 ? '...' : totalPendingAll.toLocaleString()}
+              ₹{loading && payments.length === 0 ? '...' : (totalPendingAll || 0).toLocaleString()}
             </span>
           </div>
         </div>
@@ -454,13 +454,13 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
                       </span>
                     </td>
                     <td className="px-5 py-3.5 font-bold text-slate-850 dark:text-slate-100">
-                      ₹{p.totalEarnings.toLocaleString()}
+                      ₹{(p.totalEarnings || 0).toLocaleString()}
                     </td>
                     <td className="px-5 py-3.5 font-bold text-emerald-600 dark:text-emerald-400">
-                      ₹{p.paidAmount.toLocaleString()}
+                      ₹{(p.paidAmount || 0).toLocaleString()}
                     </td>
                     <td className="px-5 py-3.5 font-bold text-amber-600 dark:text-amber-400">
-                      ₹{p.pendingAmount.toLocaleString()}
+                      ₹{(p.pendingAmount || 0).toLocaleString()}
                     </td>
                     <td className="px-5 py-3.5">
                       <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase ${
@@ -473,7 +473,7 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
                       </span>
                     </td>
                     <td className="px-5 py-3.5 text-slate-400 text-[10px]">
-                      {new Date(p.lastPaymentDate).toLocaleDateString()}
+                      {p.lastPaymentDate ? new Date(p.lastPaymentDate).toLocaleDateString() : 'N/A'}
                     </td>
                   </tr>
                 ))}

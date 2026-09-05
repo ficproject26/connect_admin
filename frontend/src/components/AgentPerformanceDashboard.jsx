@@ -983,7 +983,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
                     <div key={t.name} className="space-y-1.5 bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-850">
                       <div className="flex justify-between font-bold text-slate-800 dark:text-slate-200">
                         <span>{t.name}</span>
-                        <span>{t.achieved.toLocaleString()} / {t.target.toLocaleString()} ({pct}%)</span>
+                        <span>{(t.achieved || 0).toLocaleString()} / {(t.target || 0).toLocaleString()} ({pct}%)</span>
                       </div>
                       <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }}></div>
