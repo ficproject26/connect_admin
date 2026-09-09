@@ -1521,6 +1521,23 @@ router.post('/pincodes/remove', [auth, adminAuth], async (req, res) => {
     }
 });
 
+router.delete('/pincodes/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const pincode = await Pincode.findById(req.params.id);
+        if (!pincode) {
+            return res.status(404).json({ msg: 'Pincode not found' });
+        }
+        if (pincode.activeAgentId) {
+            await User.findByIdAndUpdate(pincode.activeAgentId, { assignedPincode: null });
+        }
+        await Pincode.findByIdAndDelete(req.params.id);
+        res.json({ success: true, msg: 'Pincode deleted successfully' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
 // ==========================================
 // 6. VENDOR MANAGEMENT
 // ==========================================

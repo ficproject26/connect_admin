@@ -1022,8 +1022,11 @@ function App() {
     if (activeTab === 'admins') {
       swrFetch(`${API_BASE}/admin/admins`, setAdmins, 'admins');
     }
-    if (activeTab === 'pincodes') {
+    if (activeTab === 'pincodes' || activeTab === 'pincode-management') {
       swrFetch(`${API_BASE}/pincodes`, setPincodes, 'pincodes');
+      if (!Array.isArray(agents) || agents.length === 0) {
+        swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
+      }
     }
     if (activeTab === 'payroll' || activeTab === 'payroll-enterprise' || activeTab === 'payroll-management') {
       swrFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals, 'payroll');
@@ -1189,7 +1192,7 @@ function App() {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method,
         headers,
-        body: JSON.stringify(payloadBody)
+        body: (method === 'GET' || (method === 'DELETE' && !body)) ? undefined : JSON.stringify(payloadBody)
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -1199,6 +1202,10 @@ function App() {
       fetchData();
       if (endpoint.toLowerCase().includes('categor')) {
         safeFetch(`${API_BASE}/admin/categories`, setCategories);
+      }
+      if (endpoint.toLowerCase().includes('pincode')) {
+        safeFetch(`${API_BASE}/pincodes`, setPincodes);
+        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
       }
       return { success: true, data };
     } catch (err) {
@@ -1489,6 +1496,12 @@ function App() {
                 <Folder className="w-4 h-4" /> Category Management
               </button>
               <button
+                onClick={() => handleTabSelect('pincodes')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${(activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <MapPin className="w-4 h-4" /> Pincode Management
+              </button>
+              <button
                 onClick={() => handleTabSelect('queries')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'queries' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
@@ -1528,7 +1541,7 @@ function App() {
             </button>
             <div>
               <h2 className="text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight">
-                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : activeTab.replace('-', ' ')}
+                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab.replace('-', ' ')}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
                 {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -2130,12 +2143,109 @@ function App() {
               onOpenAddAgentModal={() => setShowAddAgentModal(true)}
             />
           )}
-          {activeTab === 'pincodes' && (
+          {(activeTab === 'pincodes' || activeTab === 'pincode-management') && (
             <div className="space-y-6">
+
+              {/* ── PINCODE MANAGEMENT HEADER & KPI SUMMARY ── */}
+              <div className="bg-gradient-to-r from-primary-600/10 via-purple-500/10 to-transparent p-6 rounded-3xl border border-primary-500/20 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-gradient-to-tr from-primary-600 to-indigo-600 text-white rounded-2xl shadow-md">
+                    <MapPin className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black tracking-tight text-slate-800 dark:text-white flex items-center gap-2">
+                      Pincode Management
+                      <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-primary-500/10 text-primary-500 border border-primary-500/20">
+                        {pincodes.length} Registered Zones
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                      Manage 6-digit postal zones, agent assignments, and territory serviceability across India
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2.5 flex-wrap">
+                  <button
+                    onClick={() => { setModalData(null); setShowModal('create-pincode'); }}
+                    className="bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" /> Create Pincode
+                  </button>
+                  <button
+                    onClick={() => { setModalData(null); setShowModal('pincode'); }}
+                    className="bg-primary-600 hover:bg-primary-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-1.5"
+                  >
+                    <UserCheck className="w-4 h-4" /> Assign Agent
+                  </button>
+                </div>
+              </div>
+
+              {/* ── KPI METRICS CARDS ── */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Pincodes</span>
+                    <div className="p-2 bg-primary-500/10 text-primary-500 rounded-xl">
+                      <MapPin className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-black text-slate-800 dark:text-white mt-2">{pincodes.length}</div>
+                  <span className="text-[11px] text-slate-400 font-medium">Mapped Postal Zones</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Assigned Agents</span>
+                    <div className="p-2 bg-emerald-500/10 text-emerald-500 rounded-xl">
+                      <UserCheck className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2">
+                    {pincodes.filter(p => p.activeAgentId).length}
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Active Agent Coverage</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Available Zones</span>
+                    <div className="p-2 bg-amber-500/10 text-amber-500 rounded-xl">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-2">
+                    {pincodes.filter(p => !p.activeAgentId).length}
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">Awaiting Agent Assignment</span>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Territories</span>
+                    <div className="p-2 bg-purple-500/10 text-purple-500 rounded-xl">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className="text-2xl font-black text-slate-800 dark:text-white mt-2">
+                    {[...new Set(pincodes.map(p => p.state).filter(Boolean))].length}
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-medium">
+                    Across {[...new Set(pincodes.map(p => p.district).filter(Boolean))].length} Districts
+                  </span>
+                </div>
+              </div>
 
               {/* PINCODE MASTER LOOKUP CARD */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm space-y-6 max-w-xl mx-auto">
-                <h3 className="text-xl font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">Pincode Master</h3>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary-500/10 text-primary-500 rounded-xl">
+                    <Search className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold bg-gradient-to-r from-primary-600 to-purple-600 bg-clip-text text-transparent">Pincode Master Lookup</h3>
+                    <p className="text-xs text-slate-400">Search India Post directory to verify and add pincodes</p>
+                  </div>
+                </div>
 
                 <div className="space-y-4">
                   <div className="relative">
@@ -2149,7 +2259,7 @@ function App() {
                       className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:border-primary-500 transition-colors font-mono tracking-widest text-lg"
                     />
                     {lookupLoading && (
-                      <span className="absolute right-4 bottom-3 text-xs text-slate-400 animate-pulse">Searching...</span>
+                      <span className="absolute right-4 bottom-3 text-xs text-slate-400 animate-pulse">Searching India Post...</span>
                     )}
                   </div>
 
@@ -2177,7 +2287,7 @@ function App() {
                               }}
                               className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-850 text-sm text-slate-700 dark:text-slate-350 transition-colors"
                             >
-                              {office.Name}
+                              {office.Name} ({office.District}, {office.State})
                             </button>
                           ))}
                         </div>
@@ -2195,7 +2305,7 @@ function App() {
                           </span>
                         ) : (
                           <span className="inline-flex px-4 py-1.5 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
-                            ✓ Pincode Available
+                            ✓ Pincode Available for Assignment
                           </span>
                         )}
                       </div>
@@ -2240,7 +2350,7 @@ function App() {
                             setSelectedOffice(null);
                           }
                         }}
-                        className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+                        className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-3 rounded-xl shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <Plus className="w-5 h-5" /> Add Agent for this Pincode
                       </button>
@@ -2269,7 +2379,6 @@ function App() {
                       .map(p => p.district)
                       .filter(Boolean)
                   )].sort();
-                  // Fallback for Delhi districts if data set is sparse
                   if (isDelhi && availableDistricts.length === 0) {
                     availableDistricts = ['Central Delhi', 'East Delhi', 'New Delhi', 'North Delhi', 'North East Delhi', 'North West Delhi', 'South Delhi', 'South East Delhi', 'South West Delhi', 'West Delhi'];
                   }
@@ -2279,9 +2388,10 @@ function App() {
 
                 const filteredPincodes = pincodes.filter(p => {
                   const matchesSearch = !searchTerm ||
-                    p.code.includes(searchTerm) ||
-                    p.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    p.state.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (p.code && p.code.includes(searchTerm)) ||
+                    (p.name && p.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                    (p.district && p.district.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                    (p.state && p.state.toLowerCase().includes(searchTerm.toLowerCase())) ||
                     (p.activeAgentId?.name && p.activeAgentId.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
                   const matchesState = !pincodeStateFilter || p.state === pincodeStateFilter || (pincodeStateFilter === 'Delhi' && (p.state?.toLowerCase().includes('delhi') || p.district?.toLowerCase().includes('delhi')));
@@ -2294,18 +2404,23 @@ function App() {
                 });
 
                 return (
-                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm space-y-4">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-sm space-y-5">
                     <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
                       <div className="flex flex-1 flex-wrap gap-3 w-full">
-                        <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl flex-1 min-w-[200px]">
-                          <Search className="w-5 h-5 text-slate-400" />
+                        <div className="flex gap-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-xl flex-1 min-w-[220px]">
+                          <Search className="w-5 h-5 text-slate-400 shrink-0" />
                           <input
                             type="text"
-                            placeholder="Search pincode, district, state, agent..."
+                            placeholder="Search pincode, post office, district, agent..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="bg-transparent focus:outline-none text-sm w-full"
+                            className="bg-transparent focus:outline-none text-sm w-full text-slate-800 dark:text-slate-100 placeholder-slate-400"
                           />
+                          {searchTerm && (
+                            <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600">
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
 
                         <select
@@ -2314,9 +2429,9 @@ function App() {
                             setPincodeStateFilter(e.target.value);
                             setPincodeDistrictFilter('');
                           }}
-                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
                         >
-                          <option value="">All States</option>
+                          <option value="">All States ({uniqueStates.length})</option>
                           {uniqueStates.map(state => (
                             <option key={state} value={state}>{state}</option>
                           ))}
@@ -2325,9 +2440,9 @@ function App() {
                         <select
                           value={pincodeDistrictFilter}
                           onChange={(e) => setPincodeDistrictFilter(e.target.value)}
-                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
                         >
-                          <option value="">All Districts</option>
+                          <option value="">All Districts ({availableDistricts.length})</option>
                           {availableDistricts.map(district => (
                             <option key={district} value={district}>{district}</option>
                           ))}
@@ -2336,55 +2451,135 @@ function App() {
                         <select
                           value={pincodeStatusFilter}
                           onChange={(e) => setPincodeStatusFilter(e.target.value)}
-                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
                         >
                           <option value="all">All Assignments</option>
-                          <option value="assigned">Assigned</option>
-                          <option value="unassigned">Unassigned</option>
+                          <option value="assigned">Assigned ({pincodes.filter(p => p.activeAgentId).length})</option>
+                          <option value="unassigned">Available ({pincodes.filter(p => !p.activeAgentId).length})</option>
                         </select>
                       </div>
 
-                      <div className="flex gap-2 shrink-0 w-full xl:w-auto justify-end">
-                        <button
-                          onClick={() => { setModalData(null); setShowModal('pincode'); }}
-                          className="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 text-xs"
-                        >
-                          Assign Pincode
-                        </button>
-                        <button
-                          onClick={() => { setModalData(null); setShowModal('create-pincode'); }}
-                          className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 text-xs"
-                        >
-                          Create Pincode
-                        </button>
+                      <div className="flex items-center gap-2 text-xs text-slate-400 shrink-0">
+                        <span>Showing <strong className="text-slate-700 dark:text-slate-200">{filteredPincodes.length}</strong> of {pincodes.length} pincodes</span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {filteredPincodes.map((pin) => (
-                        <div key={pin._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200/50 dark:border-slate-850 flex items-center justify-between">
-                          <div>
-                            <span className="block text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">{pin.code}</span>
-                            <span className="text-xs text-slate-400">{pin.name}, {pin.district}, {pin.state}</span>
-                            <span className="block text-xs font-semibold mt-2">
-                              Assigned Agent: {pin.activeAgentId ? (
-                                <span className="text-primary-500 font-bold">{pin.activeAgentId.name}</span>
+                    {/* PINCODES GRID */}
+                    {filteredPincodes.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filteredPincodes.map((pin) => (
+                          <div
+                            key={pin._id}
+                            className="bg-slate-50 dark:bg-slate-950/60 p-4.5 rounded-2xl border border-slate-200/70 dark:border-slate-800 hover:border-primary-500/40 transition-all flex flex-col justify-between gap-3 shadow-xs"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="p-1.5 bg-primary-500/10 text-primary-500 rounded-lg">
+                                    <MapPin className="w-4 h-4" />
+                                  </div>
+                                  <span className="text-lg font-black text-slate-900 dark:text-white tracking-wider font-mono">
+                                    {pin.code}
+                                  </span>
+                                </div>
+
+                                {pin.activeAgentId ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                    <CheckCircle className="w-3 h-3" /> Assigned
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                    <Clock className="w-3 h-3" /> Available
+                                  </span>
+                                )}
+                              </div>
+
+                              <div>
+                                <p className="text-xs font-bold text-slate-700 dark:text-slate-300 line-clamp-1">{pin.name || 'Main Post Office'}</p>
+                                <p className="text-[11px] text-slate-400">{pin.district ? `${pin.district}, ` : ''}{pin.state}</p>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/80 flex items-center justify-between text-xs">
+                                <span className="text-slate-400 text-[11px]">Assigned Agent:</span>
+                                {pin.activeAgentId ? (
+                                  <span className="font-bold text-primary-600 dark:text-primary-400 truncate max-w-[160px]" title={pin.activeAgentId.name}>
+                                    {pin.activeAgentId.name}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 italic text-[11px]">None (Unassigned)</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Card Quick Action Buttons */}
+                            <div className="pt-2 border-t border-slate-200/40 dark:border-slate-850 flex items-center justify-between gap-2">
+                              {pin.activeAgentId ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (window.confirm(`Deassign agent ${pin.activeAgentId?.name || ''} from pincode ${pin.code}?`)) {
+                                      executeAction('/admin/pincodes/remove', 'POST', { pincodeId: pin._id });
+                                    }
+                                  }}
+                                  className="text-[11px] font-bold text-rose-500 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+                                >
+                                  Deassign
+                                </button>
                               ) : (
-                                <span className="text-slate-400 italic">Available</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setModalData({ pincodeId: pin._id });
+                                    setShowModal('pincode');
+                                  }}
+                                  className="text-[11px] font-bold text-primary-600 dark:text-primary-400 hover:bg-primary-500/10 px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Plus className="w-3 h-3" /> Assign Agent
+                                </button>
                               )}
-                            </span>
+
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (window.confirm(`Are you sure you want to permanently delete pincode ${pin.code}?`)) {
+                                    await executeAction(`/admin/pincodes/${pin._id}`, 'DELETE');
+                                  }
+                                }}
+                                title="Delete Pincode"
+                                className="text-slate-400 hover:text-rose-500 p-1.5 hover:bg-rose-500/10 rounded-lg transition-all cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
-                          {pin.activeAgentId && (
-                            <button
-                              onClick={() => executeAction('/admin/pincodes/remove', 'POST', { pincodeId: pin._id })}
-                              className="text-xs font-bold text-rose-500 hover:bg-rose-500/10 px-3 py-1.5 rounded-lg transition-all"
-                            >
-                              Deassign
-                            </button>
-                          )}
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-12 text-center space-y-3">
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 mx-auto flex items-center justify-center">
+                          <MapPin className="w-6 h-6" />
                         </div>
-                      ))}
-                    </div>
+                        <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No pincodes found</h4>
+                        <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                          {searchTerm || pincodeStateFilter || pincodeDistrictFilter || pincodeStatusFilter !== 'all'
+                            ? 'No pincodes match your active filter criteria. Try resetting filters or search terms.'
+                            : 'No pincodes have been registered yet. Use the Pincode Master Lookup or Create Pincode button above.'}
+                        </p>
+                        {(searchTerm || pincodeStateFilter || pincodeDistrictFilter || pincodeStatusFilter !== 'all') && (
+                          <button
+                            onClick={() => {
+                              setSearchTerm('');
+                              setPincodeStateFilter('');
+                              setPincodeDistrictFilter('');
+                              setPincodeStatusFilter('all');
+                            }}
+                            className="text-xs font-bold text-primary-500 hover:underline cursor-pointer"
+                          >
+                            Clear All Filters
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -6338,17 +6533,26 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Pincode</label>
-                <select name="pincodeId" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                <select 
+                  name="pincodeId" 
+                  defaultValue={modalData?.pincodeId || ''} 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
+                >
                   {pincodes.map(p => (
-                    <option key={p._id} value={p._id}>{p.code} ({p.name})</option>
+                    <option key={p._id} value={p._id}>{p.code} ({p.name || p.district || ''})</option>
                   ))}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent</label>
-                <select name="agentId" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                <select 
+                  name="agentId" 
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-800 dark:text-slate-200"
+                >
                   {agents.map(a => (
-                    <option key={a._id} value={a._id}>{a.name}</option>
+                    <option key={a._id} value={a._id}>
+                      {a.name} {a.level ? `(${a.level})` : ''} {a.phone ? `• ${a.phone}` : ''}
+                    </option>
                   ))}
                 </select>
               </div>
