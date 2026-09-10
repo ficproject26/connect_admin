@@ -1404,6 +1404,12 @@ function App() {
                 <DollarSign className="w-4 h-4 text-emerald-400" /> Payment Dashboard
               </button>
               <button
+                onClick={() => handleTabSelect('admin-management')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'admin-management' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <ShieldCheck className="w-4 h-4 text-indigo-400" /> Admin Management
+              </button>
+              <button
                 onClick={() => handleTabSelect('orders')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'orders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
@@ -1542,7 +1548,7 @@ function App() {
             </button>
             <div>
               <h2 className="text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight">
-                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab.replace('-', ' ')}
+                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab === 'admin-management' ? 'Admin Management' : activeTab.replace('-', ' ')}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
                 {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -2110,6 +2116,13 @@ function App() {
             <EnterprisePaymentDashboard token={token} API_BASE={API_BASE} />
           )}
 
+          {/* ADMIN MANAGEMENT */}
+          {activeTab === 'admin-management' && (
+            <div className="min-h-[400px]">
+              {/* Empty container as requested - details to be provided later */}
+            </div>
+          )}
+
           {/* PAYROLL MANAGEMENT */}
           {activeTab === 'payroll-enterprise' && (
             <PayrollManagement token={token} API_BASE={API_BASE} />
@@ -2556,13 +2569,13 @@ function App() {
                             {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((agent.status || '').toLowerCase()) && (
                               <div className="flex gap-3 justify-end">
                                 <button
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected' })}
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected', agentId: agent._id, email: agent.email, phone: agent.phone, registrationId: agent.registrationId })}
                                   className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
                                 >
                                   Reject / Request Reupload
                                 </button>
                                 <button
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved' })}
+                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved', agentId: agent._id, email: agent.email, phone: agent.phone, registrationId: agent.registrationId })}
                                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
                                 >
                                   Verify & Approve KYC
@@ -8723,7 +8736,13 @@ function App() {
                     </button>
                     <button
                       onClick={async () => {
-                        await executeAction(`/admin/agents/${pAgent._id}/reject`, 'PUT', { status: 'rejected' });
+                        await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { 
+                          status: 'rejected',
+                          agentId: pAgent._id,
+                          email: pAgent.email,
+                          phone: pAgent.phone,
+                          registrationId: pAgent.registrationId
+                        });
                         fetchData(true);
                       }}
                       className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
@@ -8732,7 +8751,13 @@ function App() {
                     </button>
                     <button
                       onClick={async () => {
-                        await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { status: 'approved' });
+                        await executeAction(`/admin/approve-agent/${pAgent._id}`, 'PUT', { 
+                          status: 'approved',
+                          agentId: pAgent._id,
+                          email: pAgent.email,
+                          phone: pAgent.phone,
+                          registrationId: pAgent.registrationId
+                        });
                         fetchData(true);
                       }}
                       className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors shadow-md cursor-pointer"
@@ -8838,7 +8863,13 @@ function App() {
                         <button
                           onClick={async () => {
                             if (isAgentReq) {
-                              await executeAction(`/admin/approve-agent/${reqItem._id}`, 'PUT', { status: 'rejected' });
+                              await executeAction(`/admin/approve-agent/${reqItem._id}`, 'PUT', { 
+                                status: 'rejected',
+                                agentId: reqItem._id,
+                                email: reqItem.email,
+                                phone: reqItem.phone,
+                                registrationId: reqItem.registrationId
+                              });
                             } else {
                               await executeAction(`/admin/vendors/${reqItem._id}/reject`, 'PUT', {});
                             }
@@ -8851,7 +8882,13 @@ function App() {
                         <button
                           onClick={async () => {
                             if (isAgentReq) {
-                              await executeAction(`/admin/approve-agent/${reqItem._id}`, 'PUT', { status: 'approved' });
+                              await executeAction(`/admin/approve-agent/${reqItem._id}`, 'PUT', { 
+                                status: 'approved',
+                                agentId: reqItem._id,
+                                email: reqItem.email,
+                                phone: reqItem.phone,
+                                registrationId: reqItem.registrationId
+                              });
                             } else {
                               await executeAction(`/admin/vendors/${reqItem._id}/approve`, 'PUT', {});
                             }

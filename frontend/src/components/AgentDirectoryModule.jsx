@@ -1214,7 +1214,13 @@ export default function AgentDirectoryModule({
                           targetBtn.disabled = true;
                           try {
                             const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-                            const body = JSON.stringify({ status: 'rejected' });
+                            const body = JSON.stringify({ 
+                              status: 'rejected',
+                              agentId: pAgent._id,
+                              email: pAgent.email,
+                              phone: pAgent.phone,
+                              registrationId: pAgent.registrationId
+                            });
                             const urls = [`/api/admin/approve-agent/${pAgent._id}`, `${API_BASE}/admin/approve-agent/${pAgent._id}`];
                             for (const u of urls) {
                               try {
@@ -1240,7 +1246,13 @@ export default function AgentDirectoryModule({
                           targetBtn.disabled = true;
                           try {
                             const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-                            const body = JSON.stringify({ status: 'approved' });
+                            const body = JSON.stringify({ 
+                              status: 'approved',
+                              agentId: pAgent._id,
+                              email: pAgent.email,
+                              phone: pAgent.phone,
+                              registrationId: pAgent.registrationId
+                            });
                             const urls = [`/api/admin/approve-agent/${pAgent._id}`, `${API_BASE}/admin/approve-agent/${pAgent._id}`];
                             for (const u of urls) {
                               try {

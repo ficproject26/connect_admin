@@ -1074,6 +1074,75 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
     }
 });
 
+const findAgentByIdentifier = async (idParam, extraFields = {}) => {
+    if (!idParam && !extraFields.agentId && !extraFields.email && !extraFields.registrationId && !extraFields.phone) return null;
+    const isValidId = idParam && mongoose.Types.ObjectId.isValid(idParam);
+    const db = mongoose.connection.db;
+
+    const idConds = [];
+    if (idParam) {
+        idConds.push({ _id: idParam }, { id: idParam });
+        if (isValidId) idConds.push({ _id: new mongoose.Types.ObjectId(idParam) });
+    }
+    if (extraFields.agentId) {
+        idConds.push({ _id: extraFields.agentId }, { id: extraFields.agentId });
+        if (mongoose.Types.ObjectId.isValid(extraFields.agentId)) {
+            idConds.push({ _id: new mongoose.Types.ObjectId(extraFields.agentId) });
+        }
+    }
+
+    let agent = null;
+    if (idConds.length > 0) {
+        agent = await User.findOne({ $or: idConds }).catch(() => null);
+    }
+
+    if (!agent) {
+        const altConds = [];
+        if (idParam) {
+            altConds.push(
+                { email: String(idParam).toLowerCase() },
+                { registrationId: idParam },
+                { phone: idParam }
+            );
+        }
+        if (extraFields.email) altConds.push({ email: String(extraFields.email).toLowerCase() });
+        if (extraFields.registrationId) altConds.push({ registrationId: extraFields.registrationId });
+        if (extraFields.phone) altConds.push({ phone: extraFields.phone });
+
+        if (altConds.length > 0) {
+            agent = await User.findOne({ $or: altConds }).catch(() => null);
+        }
+    }
+
+    if (!agent && db) {
+        try {
+            const rawUserConds = [...idConds];
+            if (idParam) {
+                rawUserConds.push(
+                    { email: String(idParam).toLowerCase() },
+                    { registrationId: idParam },
+                    { phone: idParam }
+                );
+            }
+            if (extraFields.email) rawUserConds.push({ email: String(extraFields.email).toLowerCase() });
+            if (extraFields.registrationId) rawUserConds.push({ registrationId: extraFields.registrationId });
+            if (extraFields.phone) rawUserConds.push({ phone: extraFields.phone });
+
+            if (rawUserConds.length > 0) {
+                const rawUser = await db.collection('users').findOne({ $or: rawUserConds });
+                if (rawUser) {
+                    agent = await User.findOne({ _id: rawUser._id }).catch(() => null);
+                    if (!agent && rawUser.email) {
+                        agent = await User.findOne({ email: rawUser.email.toLowerCase() }).catch(() => null);
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
+    return agent;
+};
+
 // @route    GET api/admin/agents/:id/scorecard
 // @desc     Fetch real-time agent scorecard, territory metrics & downstream agent counts
 // @access   Private (Admin)
@@ -1082,28 +1151,19 @@ router.get('/agents/:id/scorecard', [auth, adminAuth], async (req, res) => {
         const idParam = req.params.id;
         const db = mongoose.connection.db;
 
-        const isValidId = mongoose.Types.ObjectId.isValid(idParam);
-        let agent = null;
-
-        if (isValidId) {
-            agent = await User.findById(idParam).lean();
-        }
-        if (!agent) {
-            const queryConds = [
-                { email: String(idParam).toLowerCase() },
-                { registrationId: idParam },
-                { phone: idParam }
-            ];
-            if (isValidId) queryConds.unshift({ _id: idParam });
-            agent = await User.findOne({ $or: queryConds }).lean();
-        }
+        let agent = await findAgentByIdentifier(idParam);
+        if (agent && agent.toObject) agent = agent.toObject();
 
         if (!agent && db) {
+            const isValidId = idParam && mongoose.Types.ObjectId.isValid(idParam);
             const rawAgent = await db.collection('agents').findOne({
                 $or: [
+                    { _id: idParam },
+                    { id: idParam },
                     ...(isValidId ? [{ _id: new mongoose.Types.ObjectId(idParam) }] : []),
                     { email: String(idParam).toLowerCase() },
-                    { registrationId: idParam }
+                    { registrationId: idParam },
+                    { phone: idParam }
                 ]
             });
             if (rawAgent) agent = rawAgent;
@@ -1270,7 +1330,7 @@ router.post('/agents/:id/payout', [auth, adminAuth], async (req, res) => {
         const agentId = req.params.id;
         const { amount } = req.body;
 
-        const agent = await User.findById(agentId);
+        const agent = await findAgentByIdentifier(agentId, req.body);
         if (!agent) {
             return res.status(404).json({ msg: 'Agent not found' });
         }
@@ -1304,7 +1364,7 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
         const body = req.body || {};
         const idParam = req.params?.id || body.agentId || body.id;
 
-        if (!idParam) {
+        if (!idParam && !body.email && !body.registrationId && !body.phone) {
             return res.status(400).json({ success: false, msg: 'Agent ID or registration identifier is required.' });
         }
 
@@ -1312,35 +1372,23 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
         const targetStatus = String(rawTargetStatus).toLowerCase().trim();
         const rejectionReason = body.rejectionReason || '';
 
-        const isValidId = mongoose.Types.ObjectId.isValid(idParam);
-        let agent = null;
-
-        if (isValidId) {
-            agent = await User.findById(idParam);
-        }
-        if (!agent) {
-            const queryConds = [
-                { email: String(idParam).toLowerCase() },
-                { registrationId: idParam },
-                { phone: idParam }
-            ];
-            if (isValidId) {
-                queryConds.unshift({ _id: idParam });
-            }
-            agent = await User.findOne({ $or: queryConds });
-        }
-
+        let agent = await findAgentByIdentifier(idParam, body);
         const db = mongoose.connection.db;
 
         // If agent missing from User collection, check raw agents collection
         if (!agent && db) {
-            let filter = {};
-            if (isValidId) {
-                filter = { _id: new mongoose.Types.ObjectId(idParam) };
-            } else {
-                filter = { $or: [{ email: String(idParam).toLowerCase() }, { registrationId: idParam }] };
+            const isValidId = idParam && mongoose.Types.ObjectId.isValid(idParam);
+            const rawAgentQuery = [];
+            if (idParam) {
+                rawAgentQuery.push({ _id: idParam }, { id: idParam }, { email: String(idParam).toLowerCase() }, { registrationId: idParam }, { phone: idParam });
+                if (isValidId) rawAgentQuery.push({ _id: new mongoose.Types.ObjectId(idParam) });
             }
+            if (body.agentId) rawAgentQuery.push({ _id: body.agentId }, { id: body.agentId });
+            if (body.email) rawAgentQuery.push({ email: String(body.email).toLowerCase() });
+            if (body.registrationId) rawAgentQuery.push({ registrationId: body.registrationId });
+            if (body.phone) rawAgentQuery.push({ phone: body.phone });
 
+            const filter = { $or: rawAgentQuery };
             const rawAgent = await db.collection('agents').findOne(filter);
             if (rawAgent) {
                 const isApprovedVal = (targetStatus === 'approved');
@@ -1360,13 +1408,14 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
                     }
                 );
 
-                if (rawAgent.email) {
+                const agentEmail = rawAgent.email ? rawAgent.email.toLowerCase() : (body.email ? body.email.toLowerCase() : null);
+                if (agentEmail) {
                     agent = await User.findOneAndUpdate(
-                        { email: rawAgent.email.toLowerCase() },
+                        { email: agentEmail },
                         {
                             $set: {
                                 name: rawAgent.name || 'Agent Partner',
-                                email: rawAgent.email.toLowerCase(),
+                                email: agentEmail,
                                 phone: rawAgent.phone || '',
                                 role: 'agent',
                                 level: rawAgent.role || rawAgent.level || 'pincode',
@@ -1394,7 +1443,8 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
             try {
                 const pinCodeVal = agent.assignedPincode ? (await Pincode.findById(agent.assignedPincode))?.code : null;
                 const limitCheck = await checkAgentLimitation(agent.level, agent.assignedArea, pinCodeVal, agent._id);
-                if (limitCheck && !limitCheck.allowed) {
+                // Multi-agent per state/district/division is supported by architectural guidelines; only pincode level is strictly 1:1
+                if (limitCheck && !limitCheck.allowed && agent.level === 'pincode') {
                     return res.status(400).json({ success: false, msg: limitCheck.msg || 'Agent territory limit exceeded.' });
                 }
             } catch (lErr) {
@@ -1430,11 +1480,38 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
             ).catch(() => {});
         });
 
+        // Also update native collection 'users' to guarantee synchronization
+        if (db) {
+            await db.collection('users').updateOne(
+                { _id: agent._id },
+                {
+                    $set: {
+                        status: targetStatus,
+                        kycStatus: targetStatus,
+                        isApproved: isApprovedVal,
+                        isActive: isActiveVal,
+                        isPaid: isApprovedVal ? true : agent.isPaid,
+                        rejectionReason: rejectionReason,
+                        updatedAt: new Date()
+                    }
+                }
+            ).catch(() => {});
+        }
+
         // Sync status update to standalone agents collection
-        if (db && agent.email) {
+        if (db && (agent.email || agent._id)) {
             try {
-                await db.collection('agents').updateOne(
-                    { email: agent.email.toLowerCase() },
+                const agentSyncConds = [];
+                if (agent.email) agentSyncConds.push({ email: agent.email.toLowerCase() });
+                if (agent._id) {
+                    agentSyncConds.push({ _id: agent._id });
+                    if (mongoose.Types.ObjectId.isValid(agent._id)) agentSyncConds.push({ _id: new mongoose.Types.ObjectId(agent._id) });
+                }
+                if (agent.phone) agentSyncConds.push({ phone: agent.phone });
+                if (agent.registrationId) agentSyncConds.push({ registrationId: agent.registrationId });
+
+                await db.collection('agents').updateMany(
+                    { $or: agentSyncConds },
                     {
                         $set: {
                             kycStatus: targetStatus,
@@ -2885,7 +2962,7 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
 router.put('/activate-agent/:id', [auth, adminAuth], async (req, res) => {
     const { isActive } = req.body;
     try {
-        let agent = await User.findById(req.params.id);
+        let agent = await findAgentByIdentifier(req.params.id);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 
         agent.isActive = isActive;
@@ -2900,7 +2977,7 @@ router.put('/activate-agent/:id', [auth, adminAuth], async (req, res) => {
 // Delete Agent
 router.delete('/agent/:id', [auth, adminAuth], async (req, res) => {
     try {
-        const agent = await User.findById(req.params.id);
+        const agent = await findAgentByIdentifier(req.params.id);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 
         if (agent.assignedPincode) {
@@ -2909,10 +2986,31 @@ router.delete('/agent/:id', [auth, adminAuth], async (req, res) => {
 
         const db = mongoose.connection.db;
         if (db && agent.email) {
-            await db.collection('agents').deleteOne({ email: agent.email.toLowerCase() });
+            await db.collection('agents').deleteMany({
+                $or: [
+                    { email: agent.email.toLowerCase() },
+                    { _id: agent._id },
+                    ...(mongoose.Types.ObjectId.isValid(agent._id) ? [{ _id: new mongoose.Types.ObjectId(agent._id) }] : [])
+                ]
+            });
         }
 
-        await User.findByIdAndDelete(req.params.id);
+        await User.deleteOne({
+            $or: [
+                { _id: agent._id },
+                { id: agent._id },
+                ...(mongoose.Types.ObjectId.isValid(agent._id) ? [{ _id: new mongoose.Types.ObjectId(agent._id) }] : [])
+            ]
+        });
+        if (db) {
+            await db.collection('users').deleteOne({
+                $or: [
+                    { _id: agent._id },
+                    { id: agent._id },
+                    ...(mongoose.Types.ObjectId.isValid(agent._id) ? [{ _id: new mongoose.Types.ObjectId(agent._id) }] : [])
+                ]
+            }).catch(() => {});
+        }
         res.json({ msg: 'Agent deleted successfully' });
     } catch (err) {
         console.error(err);
@@ -2922,7 +3020,7 @@ router.delete('/agent/:id', [auth, adminAuth], async (req, res) => {
 
 router.delete('/agents/:id', [auth, adminAuth], async (req, res) => {
     try {
-        const agent = await User.findById(req.params.id);
+        const agent = await findAgentByIdentifier(req.params.id);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 
         if (agent.assignedPincode) {
@@ -2931,10 +3029,31 @@ router.delete('/agents/:id', [auth, adminAuth], async (req, res) => {
 
         const db = mongoose.connection.db;
         if (db && agent.email) {
-            await db.collection('agents').deleteOne({ email: agent.email.toLowerCase() });
+            await db.collection('agents').deleteMany({
+                $or: [
+                    { email: agent.email.toLowerCase() },
+                    { _id: agent._id },
+                    ...(mongoose.Types.ObjectId.isValid(agent._id) ? [{ _id: new mongoose.Types.ObjectId(agent._id) }] : [])
+                ]
+            });
         }
 
-        await User.findByIdAndDelete(req.params.id);
+        await User.deleteOne({
+            $or: [
+                { _id: agent._id },
+                { id: agent._id },
+                ...(mongoose.Types.ObjectId.isValid(agent._id) ? [{ _id: new mongoose.Types.ObjectId(agent._id) }] : [])
+            ]
+        });
+        if (db) {
+            await db.collection('users').deleteOne({
+                $or: [
+                    { _id: agent._id },
+                    { id: agent._id },
+                    ...(mongoose.Types.ObjectId.isValid(agent._id) ? [{ _id: new mongoose.Types.ObjectId(agent._id) }] : [])
+                ]
+            }).catch(() => {});
+        }
         res.json({ msg: 'Agent deleted successfully' });
     } catch (err) {
         console.error(err);
@@ -2946,7 +3065,7 @@ router.delete('/agents/:id', [auth, adminAuth], async (req, res) => {
 router.put('/update-agent/:id', [auth, adminAuth], async (req, res) => {
     const { level, assignedArea, pincode } = req.body;
     try {
-        let agent = await User.findById(req.params.id);
+        let agent = await findAgentByIdentifier(req.params.id, req.body);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 
         const newLevel = level !== undefined ? level : agent.level;
@@ -2954,8 +3073,8 @@ router.put('/update-agent/:id', [auth, adminAuth], async (req, res) => {
         const newPincode = pincode !== undefined ? pincode : (agent.assignedPincode ? (await Pincode.findById(agent.assignedPincode))?.code : null);
 
         if (level !== undefined || assignedArea !== undefined || pincode !== undefined) {
-            const limitCheck = await checkAgentLimitation(newLevel, newArea, newPincode, req.params.id);
-            if (!limitCheck.allowed) {
+            const limitCheck = await checkAgentLimitation(newLevel, newArea, newPincode, agent._id);
+            if (!limitCheck.allowed && (newLevel === 'pincode')) {
                 return res.status(400).json({ msg: limitCheck.msg });
             }
         }
@@ -2982,7 +3101,17 @@ router.put('/update-agent/:id', [auth, adminAuth], async (req, res) => {
             }
         }
 
-        const updatedAgent = await User.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('assignedPincode', 'code name');
+        const updatedAgent = await User.findOneAndUpdate(
+            {
+                $or: [
+                    { _id: agent._id },
+                    { id: agent._id },
+                    ...(mongoose.Types.ObjectId.isValid(agent._id) ? [{ _id: new mongoose.Types.ObjectId(agent._id) }] : [])
+                ]
+            },
+            req.body,
+            { new: true }
+        ).populate('assignedPincode', 'code name');
         res.json(updatedAgent);
     } catch (err) {
         console.error(err);
