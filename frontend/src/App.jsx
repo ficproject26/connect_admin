@@ -519,6 +519,11 @@ function App() {
   const [kycPreviewImage, setKycPreviewImage] = useState(null);
   const [showVendorRequestsModal, setShowVendorRequestsModal] = useState(false);
 
+  // Admin Management Sub-Tab States
+  const [adminSubTab, setAdminSubTab] = useState('overview'); // 'overview' | 'agent'
+  const [adminSearchTerm, setAdminSearchTerm] = useState('');
+  const [adminRoleFilter, setAdminRoleFilter] = useState('All');
+
   // Pincode Verification & Official Master Lookup States
   const [lookupPincode, setLookupPincode] = useState('');
   const [lookupResults, setLookupResults] = useState([]);
@@ -1020,8 +1025,12 @@ function App() {
     if (activeTab === 'branches') {
       swrFetch(`${API_BASE}/admin/branches`, setBranches, 'branches');
     }
-    if (activeTab === 'admins') {
+    if (activeTab === 'admins' || activeTab === 'admin-management') {
       swrFetch(`${API_BASE}/admin/admins`, setAdmins, 'admins');
+      swrFetch(`${API_BASE}/admin/branches`, setBranches, 'branches');
+      if (!Array.isArray(agents) || agents.length === 0) {
+        swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
+      }
     }
     if (activeTab === 'pincodes' || activeTab === 'pincode-management') {
       swrFetch(`${API_BASE}/pincodes`, setPincodes, 'pincodes');
@@ -2118,8 +2127,231 @@ function App() {
 
           {/* ADMIN MANAGEMENT */}
           {activeTab === 'admin-management' && (
-            <div className="min-h-[400px]">
-              {/* Empty container as requested - details to be provided later */}
+            <div className="space-y-6">
+              {/* Sub-Tabs Switcher & Control Header */}
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 p-4 rounded-2xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                {/* Segmented Control Buttons */}
+                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/60 p-1.5 rounded-xl border border-slate-200/60 dark:border-slate-700/50">
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubTab('overview')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${adminSubTab === 'overview' ? 'bg-primary-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                  >
+                    <LayoutGrid className="w-4 h-4" /> Overview
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${adminSubTab === 'overview' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                      {admins.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminSubTab('agent')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${adminSubTab === 'agent' ? 'bg-primary-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                  >
+                    <Users className="w-4 h-4" /> Agent
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${adminSubTab === 'agent' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                      {agents.length}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Right Header Actions */}
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                  {adminSubTab === 'overview' && isSuperAdmin && (
+                    <button
+                      onClick={() => { setModalData(null); setShowModal('admin'); }}
+                      className="bg-primary-600 hover:bg-primary-500 text-white font-semibold text-xs px-4 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-md cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" /> Add Admin User
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      swrFetch(`${API_BASE}/admin/admins`, setAdmins, 'admins');
+                      swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
+                      swrFetch(`${API_BASE}/admin/branches`, setBranches, 'branches');
+                      addToast('Refreshed Admin Management data', 'info');
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 transition-all cursor-pointer"
+                    title="Refresh Data"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                  </button>
+                </div>
+              </div>
+
+              {/* 1. OVERVIEW SUB-TAB */}
+              {adminSubTab === 'overview' && (
+                <div className="space-y-6">
+                  {/* KPI Metrics Summary Cards */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 p-5 rounded-2xl shadow-xs flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                        <ShieldCheck className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Total Admins</p>
+                        <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">{admins.length}</h3>
+                        <span className="text-[10px] text-emerald-500 font-semibold">Active Personnel</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 p-5 rounded-2xl shadow-xs flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                        <Award className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Super Admins</p>
+                        <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">
+                          {admins.filter(a => a.adminRole === 'super-admin' || a.role === 'super-admin').length || 1}
+                        </h3>
+                        <span className="text-[10px] text-purple-500 font-semibold">Full System Access</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 p-5 rounded-2xl shadow-xs flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                        <Users className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Managed Agents</p>
+                        <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">{agents.length}</h3>
+                        <span className="text-[10px] text-emerald-500 font-semibold">Across Territories</span>
+                      </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 p-5 rounded-2xl shadow-xs flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                        <Store className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">District Outlets</p>
+                        <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">
+                          {branches.length || admins.filter(a => a.branchId).length}
+                        </h3>
+                        <span className="text-[10px] text-slate-400 font-semibold">Assigned Districts</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Search and Role Filter Bar */}
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 p-4 rounded-2xl shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div className="relative w-full sm:w-72">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Search admin by name, email..."
+                        value={adminSearchTerm}
+                        onChange={(e) => setAdminSearchTerm(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-hidden focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <Filter className="w-4 h-4 text-slate-400" />
+                      <select
+                        value={adminRoleFilter}
+                        onChange={(e) => setAdminRoleFilter(e.target.value)}
+                        className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 focus:outline-hidden"
+                      >
+                        <option value="All">All Roles</option>
+                        <option value="super-admin">Super Admin</option>
+                        <option value="branch-admin">District Admin</option>
+                        <option value="staff">Staff</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Administrators Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {admins
+                      .filter((adm) => {
+                        const q = adminSearchTerm.toLowerCase();
+                        const matchQ = !q || (adm.name && adm.name.toLowerCase().includes(q)) || (adm.email && adm.email.toLowerCase().includes(q)) || (adm.phone && adm.phone.includes(q));
+                        const matchRole = adminRoleFilter === 'All' || adm.adminRole === adminRoleFilter || adm.role === adminRoleFilter;
+                        return matchQ && matchRole;
+                      })
+                      .map((adm) => (
+                        <div key={adm._id} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 p-5 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4">
+                          <div className="space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-primary-600 to-indigo-600 text-white font-black text-sm flex items-center justify-center shadow-xs">
+                                  {(adm.name || 'A').charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-slate-850 dark:text-slate-100 text-sm leading-tight">{adm.name}</h4>
+                                  <span className="text-[11px] text-slate-400">{adm.email}</span>
+                                </div>
+                              </div>
+                              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${adm.adminRole === 'super-admin' || adm.role === 'super-admin' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' : 'bg-purple-500/10 text-purple-500 border border-purple-500/20'}`}>
+                                {adm.adminRole === 'branch-admin' ? 'District Admin' : (adm.adminRole || adm.role || 'Staff')}
+                              </span>
+                            </div>
+
+                            {adm.phone && (
+                              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                                Phone: <span className="text-slate-700 dark:text-slate-200">{adm.phone}</span>
+                              </p>
+                            )}
+
+                            <div className="pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Assigned Jurisdiction:</span>
+                              <p className="text-xs font-semibold text-slate-700 dark:text-slate-200 mt-0.5">
+                                {adm.branchId?.name || (typeof adm.branchId === 'string' ? adm.branchId : 'All Regions (Central)')}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800/60">
+                            <button
+                              onClick={() => { setModalData(adm); setShowModal('admin'); }}
+                              className="flex items-center gap-1 text-xs font-semibold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 px-3 py-1.5 rounded-xl border border-primary-200 dark:border-primary-800 transition-all cursor-pointer"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" /> Edit
+                            </button>
+                            {isSuperAdmin && adm.adminRole !== 'super-admin' && adm._id !== user?._id && (
+                              <button
+                                onClick={() => executeAction(`/admin/admins/${adm._id}`, 'DELETE')}
+                                className="flex items-center gap-1 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-800 transition-all cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+
+                  {admins.length === 0 && (
+                    <div className="text-center py-12 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 rounded-2xl">
+                      <ShieldCheck className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+                      <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">No Admin records found</p>
+                      {isSuperAdmin && (
+                        <button
+                          onClick={() => { setModalData(null); setShowModal('admin'); }}
+                          className="mt-3 bg-primary-600 hover:bg-primary-500 text-white font-semibold text-xs px-4 py-2 rounded-xl inline-flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Plus className="w-4 h-4" /> Add Admin User
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 2. AGENT SUB-TAB */}
+              {adminSubTab === 'agent' && (
+                <div className="space-y-4">
+                  <AgentDirectoryModule
+                    token={token}
+                    API_BASE={API_BASE}
+                    initialAgents={agents}
+                    onAgentsUpdated={handleSetAgents}
+                    onOpenOnboardingRequests={() => setShowOnboardingRequestsModal(true)}
+                    onOpenVendorRequests={() => setShowVendorRequestsModal(true)}
+                  />
+                </div>
+              )}
             </div>
           )}
 
