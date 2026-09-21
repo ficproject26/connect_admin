@@ -39,17 +39,13 @@ export default function AgentDirectoryModule({
   API_BASE, 
   initialAgents = [],
   onAgentsUpdated,
-  onOpenOnboardingModal, 
+  onOpenOnboardingModal,
+  onOpenOnboardingRequests, 
   onOpenAddAgentModal 
 }) {
-  // Stale-While-Revalidate: Instant initialization from parent or module cache
-  const cachedInitial = useMemo(() => {
-    if (Array.isArray(initialAgents) && initialAgents.length > 0) return initialAgents;
-    return getCachedAgents();
-  }, [initialAgents]);
-
-  const [agents, setAgents] = useState(() => cachedInitial);
-  const [loading, setLoading] = useState(() => cachedInitial.length === 0);
+  // Initial state: Start clean with initial agents if provided, or empty for live database fetch
+  const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) && initialAgents.length > 0 ? initialAgents : []));
+  const [loading, setLoading] = useState(() => !(Array.isArray(initialAgents) && initialAgents.length > 0));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [bgNotice, setBgNotice] = useState(null);
@@ -142,7 +138,7 @@ export default function AgentDirectoryModule({
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  // Fast & reliable fetch helper constructed from API_BASE and relative proxy
+  // Fast & reliable fetch helper constructed from API_BASE and relative proxy (12s timeout)
   const safeFetchAgents = useCallback(async () => {
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
@@ -157,7 +153,7 @@ export default function AgentDirectoryModule({
     for (const url of uniqueUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
         const res = await fetch(url, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
 
@@ -169,7 +165,7 @@ export default function AgentDirectoryModule({
           }
         }
       } catch (e) {
-        // Try fallback endpoint
+        // Try next fallback endpoint
       }
     }
     return null;
@@ -243,10 +239,10 @@ export default function AgentDirectoryModule({
     });
   }, []);
 
-  // Primary Data Fetcher with Request Deduplication & Stale-While-Revalidate Caching
+  // Primary Data Fetcher: Real-time database fetching with clean loading & retry states
   const loadAgentData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    else if (agents.length === 0 && getCachedAgents().length === 0) setLoading(true);
+    else if (agents.length === 0) setLoading(true);
 
     setError(null);
     setBgNotice(null);
@@ -284,18 +280,30 @@ export default function AgentDirectoryModule({
         setError(null);
         setBgNotice(null);
       } else {
-        if (agents.length === 0 && getCachedAgents().length === 0) {
-          setError('Unable to load Agent Directory. Please check server connection.');
+        if (agents.length === 0) {
+          const fallback = getCachedAgents();
+          if (fallback && fallback.length > 0) {
+            setAgents(fallback);
+            setBgNotice('Unable to reach server. Showing offline snapshot.');
+          } else {
+            setError('Unable to load latest data. Please try again.');
+          }
         } else {
-          setBgNotice('Unable to refresh latest server data. Showing cached directory.');
+          setBgNotice('Unable to load latest data. Please try again.');
         }
       }
     } catch (err) {
       inFlightPromiseRef.current = null;
-      if (agents.length === 0 && getCachedAgents().length === 0) {
-        setError('Network error fetching agent network.');
+      if (agents.length === 0) {
+        const fallback = getCachedAgents();
+        if (fallback && fallback.length > 0) {
+          setAgents(fallback);
+          setBgNotice('Unable to reach server. Showing offline snapshot.');
+        } else {
+          setError('Unable to load latest data. Please try again.');
+        }
       } else {
-        setBgNotice('Network connection timed out. Showing cached directory.');
+        setBgNotice('Unable to load latest data. Please try again.');
       }
     } finally {
       setLoading(false);
@@ -662,10 +670,13 @@ export default function AgentDirectoryModule({
           <button
             type="button"
             onClick={() => {
-              setShowOnboardingModal(true);
-              loadAgentData(true);
               if (typeof onOpenOnboardingModal === 'function') {
                 onOpenOnboardingModal();
+              } else if (typeof onOpenOnboardingRequests === 'function') {
+                onOpenOnboardingRequests();
+              } else {
+                setShowOnboardingModal(true);
+                loadAgentData(true);
               }
             }}
             className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3.5 py-2.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
@@ -799,34 +810,50 @@ export default function AgentDirectoryModule({
         <div className="bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 p-3 rounded-xl text-xs font-semibold flex justify-between items-center">
           <span className="flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" />
-            {error} (Displaying cached agent network)
+            {error || 'Unable to load latest data. Please try again.'}
           </span>
-          <button onClick={() => loadAgentData(true)} className="underline font-bold hover:text-amber-700">
-            Retry Now
+          <button onClick={() => loadAgentData(true)} className="underline font-bold hover:text-amber-700 cursor-pointer">
+            Retry
           </button>
         </div>
       )}
 
       {/* ── RENDERING CONTENT STATES ── */}
       {loading && agents.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center space-y-3">
-          <RefreshCw className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
-          <p className="text-sm font-bold text-slate-600 dark:text-slate-300">Loading Agent Directory...</p>
-          <p className="text-xs text-slate-400">Fetching live agent network hierarchy from server.</p>
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center space-y-2">
+            <RefreshCw className="w-7 h-7 text-primary-500 animate-spin mx-auto" />
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Loading latest data...</p>
+            <p className="text-xs text-slate-400">Fetching live database records.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map(sk => (
+              <div key={sk} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl space-y-3 animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-800" />
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-3.5 bg-slate-200 dark:bg-slate-800 rounded-md w-3/4" />
+                    <div className="h-2.5 bg-slate-200 dark:bg-slate-800 rounded-md w-1/2" />
+                  </div>
+                </div>
+                <div className="h-16 bg-slate-100 dark:bg-slate-850 rounded-xl" />
+              </div>
+            ))}
+          </div>
         </div>
       ) : error && agents.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/50 rounded-2xl p-12 text-center space-y-4">
           <XCircle className="w-10 h-10 text-rose-500 mx-auto" />
           <div>
-            <h4 className="text-base font-bold text-slate-800 dark:text-slate-100">Unable to Load Agent Directory</h4>
-            <p className="text-xs text-slate-400 mt-1">{error}</p>
+            <h4 className="text-base font-bold text-slate-800 dark:text-slate-100">Unable to load latest data</h4>
+            <p className="text-xs text-slate-400 mt-1">{error || 'Please check your connection and try again.'}</p>
           </div>
           <button
             type="button"
             onClick={() => loadAgentData(true)}
-            className="bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm transition-all"
+            className="bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
           >
-            Retry Fetching Data
+            Retry
           </button>
         </div>
       ) : filteredAgents.length === 0 ? (
@@ -1310,7 +1337,7 @@ export default function AgentDirectoryModule({
         </div>
       )}
       {/* AGENT ONBOARDING REQUESTS MODAL (Internal Component Fallback) */}
-      {showOnboardingModal && (
+      {showOnboardingModal && !onOpenOnboardingModal && !onOpenOnboardingRequests && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
           <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">

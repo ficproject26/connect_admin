@@ -141,6 +141,123 @@ const getVendorState = (v) => {
   return '—';
 };
 
+const getVendorFullAddressObject = (v) => {
+  if (!v) {
+    return {
+      doorNo: '—',
+      street: '—',
+      area: '—',
+      city: '—',
+      district: '—',
+      state: '—',
+      pincode: '—',
+      landmark: '—',
+      fullAddress: '—'
+    };
+  }
+
+  const isJunk = (val) => {
+    if (!val || typeof val !== 'string') return true;
+    const clean = val.trim().toLowerCase();
+    return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty', '—', '-'].includes(clean) || /^(.)\1+$/.test(clean);
+  };
+
+  let doorNo = (v.doorNo || v.doorNumber || v.buildingNo || v.buildingNumber || v.houseNo || v.flatNo || '').trim();
+  let street = (v.street || v.streetAddress || v.road || v.streetName || '').trim();
+  let area = (v.area || v.locality || v.colony || '').trim();
+  let city = (v.city || v.town || v.village || '').trim();
+  let district = (v.district || v.assignedDistrict || '').trim();
+  let state = (v.state || v.assignedState || '').trim();
+  let pincode = (v.pincode || v.postalCode || v.zipCode || v.pin || '').trim();
+  let landmark = (v.landmark || v.landMark || '').trim();
+
+  if (isJunk(doorNo)) doorNo = '';
+  if (isJunk(street)) street = '';
+  if (isJunk(area)) area = '';
+  if (isJunk(city)) city = '';
+  if (isJunk(district)) district = '';
+  if (isJunk(state)) state = '';
+  if (isJunk(pincode)) pincode = '';
+  if (isJunk(landmark)) landmark = '';
+
+  if (!city || isJunk(city)) {
+    const helperCity = getVendorCity(v);
+    if (!isJunk(helperCity) && helperCity !== '—') city = helperCity;
+  }
+  if (!district || isJunk(district)) {
+    district = (!isJunk(v.district) && v.district) ? v.district : city;
+  }
+  if (!state || isJunk(state)) {
+    const helperState = getVendorState(v);
+    if (!isJunk(helperState) && helperState !== '—') state = helperState;
+  }
+
+  const rawAddr = (v.fullAddress || v.address || v.businessAddress || '').trim();
+  if (rawAddr && !isJunk(rawAddr)) {
+    if (!pincode) {
+      const pinMatch = rawAddr.match(/\b\d{6}\b/);
+      if (pinMatch) pincode = pinMatch[0];
+    }
+
+    if (!landmark) {
+      const lmMatch = rawAddr.match(/(?:near|opp|opposite|behind|beside)\s+[^,]+/i);
+      if (lmMatch) {
+        landmark = lmMatch[0].trim();
+      }
+    }
+
+    const parts = rawAddr.split(',').map(p => p.trim()).filter(p => p && !isJunk(p));
+    if (parts.length > 0) {
+      if (!doorNo) {
+        const first = parts[0];
+        const doorMatch = first.match(/^(?:(?:no|plot|shop|flat|door|building)\.?\s*[\w\-\/]+|[\w\-\/]+\s*(?:floor|block|no|plot))/i) || first.match(/^\d+[\w\-\/]*$/);
+        if (doorMatch) {
+          doorNo = doorMatch[0];
+          const remainingFirst = first.replace(doorMatch[0], '').replace(/^[\s,\-]+/, '').trim();
+          if (remainingFirst && !street) street = remainingFirst;
+        } else if (!street) {
+          street = first;
+        }
+      }
+
+      if (!street && parts.length > 1) {
+        street = parts[doorNo ? 1 : 0];
+      }
+
+      if (!area) {
+        for (const p of parts) {
+          if (p !== doorNo && p !== street && p !== city && p !== district && p !== state && !p.match(/^\d{6}$/)) {
+            if (!landmark || !p.toLowerCase().includes(landmark.toLowerCase())) {
+              area = p;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!area && v.assignedArea && !isJunk(v.assignedArea)) {
+    const areaParts = v.assignedArea.split('/').map(p => p.trim());
+    if (areaParts.length > 2 && !isJunk(areaParts[2])) area = areaParts[2];
+    else if (areaParts.length > 1 && !isJunk(areaParts[1]) && areaParts[1] !== city) area = areaParts[1];
+  }
+
+  const full = getVendorAddress(v);
+
+  return {
+    doorNo: doorNo || '—',
+    street: street || '—',
+    area: area || '—',
+    city: city || district || '—',
+    district: district || city || '—',
+    state: state || '—',
+    pincode: pincode || '—',
+    landmark: landmark || '—',
+    fullAddress: (full && full !== '—') ? full : ([doorNo, street, area, city, state, pincode].filter(x => x && x !== '—').join(', ') || 'Address not provided')
+  };
+};
+
 const isVendorAgentOnboarded = (v) => {
   if (!v) return false;
   const jType = String(v.joiningType || '').toLowerCase();
@@ -212,6 +329,7 @@ const vendorModuleCacheMap = new Map();
 export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [vendors, setVendors] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -251,9 +369,9 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   // Full Vendor Details Profile Modal
   const [selectedVendorDetails, setSelectedVendorDetails] = useState(null);
 
-  const fetchVendors = async () => {
+  const fetchVendors = async (forceRefresh = false) => {
     const cacheKey = `${search}_${category}_${stateFilter}_${statusFilter}_${isDirectRequest}_${page}`;
-    if (vendorModuleCacheMap.has(cacheKey)) {
+    if (!forceRefresh && vendorModuleCacheMap.has(cacheKey)) {
       const cached = vendorModuleCacheMap.get(cacheKey);
       setVendors(cached.list);
       setTotal(cached.totalCount);
@@ -261,6 +379,10 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
     } else {
       setLoading(true);
     }
+    setError(null);
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
     try {
       const query = new URLSearchParams({
@@ -274,8 +396,11 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
       });
 
       const res = await fetch(`${API_BASE}/admin/enterprise/vendors?${query.toString()}`, {
-        headers: { 'x-auth-token': token }
+        headers: { 'x-auth-token': token },
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
+
       let list = [];
       let totalCount = 0;
       let totalPages = 1;
@@ -285,14 +410,22 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
         totalCount = data.total || list.length;
         totalPages = data.pages || Math.ceil(list.length / 12);
         vendorModuleCacheMap.set(cacheKey, { list, totalCount, totalPages, timestamp: Date.now() });
+        setVendors(list);
+        setTotal(totalCount);
+        setPages(totalPages);
+        setError(null);
+      } else {
+        throw new Error(`Server returned HTTP ${res.status}`);
       }
-
-      setVendors(list);
-      setTotal(totalCount);
-      setPages(totalPages);
     } catch (err) {
       console.error('Fetch vendor directory error:', err);
+      if (err.name === 'AbortError') {
+        setError('Request timed out after 12 seconds. Please retry.');
+      } else {
+        setError('Unable to load latest data. Please try again.');
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
@@ -451,17 +584,11 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   }, [search, category, stateFilter, statusFilter, isDirectRequest, page]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        fetchVendors();
-        fetchDirectRequests();
-        fetchAgentOnboardedVendors();
-        fetchVendorBusinessRequests();
-      }
-    }, 5000);
-
+    let lastFocusSync = Date.now();
     const handleFocus = () => {
-      if (document.visibilityState === 'visible') {
+      // 30-second cooldown to prevent excessive requests on rapid window focus switches
+      if (document.visibilityState === 'visible' && Date.now() - lastFocusSync > 30000) {
+        lastFocusSync = Date.now();
         fetchVendors();
         fetchDirectRequests();
         fetchAgentOnboardedVendors();
@@ -470,7 +597,6 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
     window.addEventListener('focus', handleFocus);
     return () => {
-      clearInterval(interval);
       window.removeEventListener('focus', handleFocus);
     };
   }, []);
@@ -846,6 +972,17 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          {/* Refresh Button */}
+          <button
+            onClick={() => { fetchVendors(true); fetchDirectRequests(); fetchAgentOnboardedVendors(); fetchVendorBusinessRequests(); }}
+            disabled={loading}
+            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold text-xs rounded-2xl transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 whitespace-nowrap border border-slate-200/60 dark:border-slate-700"
+            title="Refresh latest database records"
+          >
+            <RefreshCw className={`w-4 h-4 shrink-0 ${loading ? 'animate-spin text-primary-500' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
           {/* Direct Requests Button */}
           <button
             onClick={() => { setShowDirectModal(true); fetchDirectRequests(); }}
@@ -1004,101 +1141,167 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
         </span>
       </div>
 
-      {/* 3. VENDORS GRID VIEW */}
-      {viewMode === 'grid' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {vendors.map((v, idx) => (
-            <div 
-              key={v._id} 
-              onClick={() => setSelectedVendorDetails(v)}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary-500/50 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group"
-            >
-              <div className="space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-lg sm:text-xl flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-all shrink-0">
-                      {(v.businessName || v.name || 'V')[0].toUpperCase()}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all truncate">{v.businessName || v.name}</h4>
-                      <p className="text-xs text-slate-400 font-semibold truncate">{v.contactPerson || v.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0" onClick={e => e.stopPropagation()}>
-                    {renderStatusBadge(v.status)}
-                    {!isPendingVendorReview(v.status) && (
-                      <select
-                        value={normalizeStatusValue(v.status)}
-                        onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
-                        className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
-                      >
-                        <option value="Active">Active</option>
-                        <option value="Suspended">Suspended</option>
-                        <option value="Rejected">Rejected</option>
-                      </select>
-                    )}
-                  </div>
-                </div>
-
-                <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-400">Joining Type:</span>
-                    {isVendorAgentOnboarded(v) ? (
-                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                        👤 Agent Onboarded
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                        🌐 Direct Website
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{getVendorCategory(v)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{getVendorPhone(v)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Address / Territory:</span><span className="font-bold truncate max-w-[170px]" title={getVendorAddress(v)}>{getVendorAddress(v)}</span></div>
-                </div>
-
-                {/* Agent Onboarded or Pincode Agent Status */}
-                {isVendorAgentOnboarded(v) ? (
-                  <div className="p-3 bg-purple-500/5 border border-purple-500/15 rounded-2xl space-y-1 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-purple-700 dark:text-purple-300 font-extrabold flex items-center gap-1">
-                        <UserCheck className="w-3.5 h-3.5" />
-                        Agent: {getAgentInfo(v).name}
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400 font-mono">
-                        Pin: {getAgentInfo(v).pincode}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-400 font-mono font-medium">
-                      Agent ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong>
-                    </div>
-                  </div>
-                ) : v.assignedPincodeAgent ? (
-                  <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
-                      <UserCheck className="w-4 h-4" />
-                      <span>Agent: <strong>{v.assignedPincodeAgent.name}</strong></span>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="pt-2 flex items-center justify-between">
-                <span className="text-[10px] text-slate-400 font-semibold">Reg ID: {formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
-                <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
-                  <button
-                    onClick={e => { e.stopPropagation(); setSelectedVendorDetails(v); }}
-                    className="text-[10px] font-extrabold text-blue-600 hover:text-white hover:bg-blue-600 dark:text-blue-400 flex items-center gap-1 cursor-pointer bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-500/20 transition-all active:scale-95"
-                  >
-                    <Eye className="w-3 h-3" /> View Details
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+      {/* ERROR BADGE NOTIFICATION IF PREVIOUS DATA RETAINED */}
+      {error && vendors.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 p-3 rounded-xl text-xs font-semibold flex justify-between items-center">
+          <span className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            {error || 'Unable to load latest data. Please try again.'}
+          </span>
+          <button onClick={() => fetchVendors(true)} className="underline font-bold hover:text-amber-700 cursor-pointer">
+            Retry
+          </button>
         </div>
       )}
+
+      {/* RENDERING CONTENT STATES */}
+      {loading && vendors.length === 0 ? (
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 text-center space-y-2">
+            <RefreshCw className="w-7 h-7 text-primary-500 animate-spin mx-auto" />
+            <p className="text-sm font-bold text-slate-700 dark:text-slate-200">Loading latest vendor data...</p>
+            <p className="text-xs text-slate-400">Fetching live database records.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map(sk => (
+              <div key={sk} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl space-y-4 animate-pulse">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-200 dark:bg-slate-800" />
+                  <div className="space-y-2 flex-1">
+                    <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded-md w-3/4" />
+                    <div className="h-3 bg-slate-200 dark:bg-slate-800 rounded-md w-1/2" />
+                  </div>
+                </div>
+                <div className="h-24 bg-slate-100 dark:bg-slate-850 rounded-2xl" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : error && vendors.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/50 rounded-2xl p-12 text-center space-y-4">
+          <XCircle className="w-10 h-10 text-rose-500 mx-auto" />
+          <div>
+            <h4 className="text-base font-bold text-slate-800 dark:text-slate-100">Unable to load latest data</h4>
+            <p className="text-xs text-slate-400 mt-1">{error || 'Please check your connection and try again.'}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => fetchVendors(true)}
+            className="bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm transition-all cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      ) : vendors.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center space-y-2">
+          <Store className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
+          <p className="text-sm font-bold text-slate-600 dark:text-slate-300">No vendors found</p>
+          <p className="text-xs text-slate-400">
+            {search ? `No results matching "${search}".` : 'No vendors found in this filter view.'}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* 3. VENDORS GRID VIEW */}
+          {viewMode === 'grid' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {vendors.map((v, idx) => (
+                <div 
+                  key={v._id} 
+                  onClick={() => setSelectedVendorDetails(v)}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary-500/50 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group"
+                >
+                  <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-lg sm:text-xl flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-all shrink-0">
+                          {(v.businessName || v.name || 'V')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all truncate">{v.businessName || v.name}</h4>
+                          <p className="text-xs text-slate-400 font-semibold truncate">{v.contactPerson || v.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0" onClick={e => e.stopPropagation()}>
+                        {renderStatusBadge(v.status)}
+                        {!isPendingVendorReview(v.status) && (
+                          <select
+                            value={normalizeStatusValue(v.status)}
+                            onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
+                            className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
+                          >
+                            <option value="Active">Active</option>
+                            <option value="Suspended">Suspended</option>
+                            <option value="Rejected">Rejected</option>
+                          </select>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-400">Joining Type:</span>
+                        {isVendorAgentOnboarded(v) ? (
+                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                            👤 Agent Onboarded
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                            🌐 Direct Website
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{getVendorCategory(v)}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{getVendorPhone(v)}</span></div>
+                      <div className="flex flex-col gap-0.5 pt-1 border-t border-slate-100 dark:border-slate-850">
+                        <span className="text-slate-400 text-[11px] font-medium">Address / Territory:</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200 text-xs break-words line-clamp-3 leading-snug" title={getVendorAddress(v)}>
+                          {getVendorAddress(v)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Agent Onboarded or Pincode Agent Status */}
+                    {isVendorAgentOnboarded(v) ? (
+                      <div className="p-3 bg-purple-500/5 border border-purple-500/15 rounded-2xl space-y-1 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-purple-700 dark:text-purple-300 font-extrabold flex items-center gap-1">
+                            <UserCheck className="w-3.5 h-3.5" />
+                            Agent: {getAgentInfo(v).name}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400 font-mono">
+                            Pin: {getAgentInfo(v).pincode}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono font-medium">
+                          Agent ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong>
+                        </div>
+                      </div>
+                    ) : v.assignedPincodeAgent ? (
+                      <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
+                          <UserCheck className="w-4 h-4" />
+                          <span>Agent: <strong>{v.assignedPincodeAgent.name}</strong></span>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div className="pt-2 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-400 font-semibold">Reg ID: {formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
+                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                      <button
+                        onClick={e => { e.stopPropagation(); setSelectedVendorDetails(v); }}
+                        className="text-[10px] font-extrabold text-blue-600 hover:text-white hover:bg-blue-600 dark:text-blue-400 flex items-center gap-1 cursor-pointer bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-500/20 transition-all active:scale-95"
+                      >
+                        <Eye className="w-3 h-3" /> View Details
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
       {/* 4. VENDORS LIST VIEW */}
       {viewMode === 'list' && (
@@ -1202,6 +1405,31 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
           </table>
         </div>
       )}
+
+      {/* PAGINATION CONTROLS */}
+      {pages > 1 && (
+        <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed hover:bg-slate-200 transition-all"
+          >
+            Previous
+          </button>
+          <span className="text-xs font-bold text-slate-500">
+            Page {page} of {pages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(pages, p + 1))}
+            disabled={page >= pages}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed hover:bg-slate-200 transition-all"
+          >
+            Next
+          </button>
+        </div>
+      )}
+    </>
+  )}
 
       {/* 5. DIRECT VENDOR REQUESTS MODAL */}
       {showDirectModal && (
@@ -1469,21 +1697,42 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                 </div>
               </div>
 
-              {/* 2. Contact & Location */}
-              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">
-                <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold pb-2 border-b border-slate-200/60 dark:border-slate-850">
-                  <MapPin className="w-4 h-4 text-emerald-500" />
-                  <span>Contact & Territory</span>
-                </div>
-                <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
-                  <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.email || 'N/A'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Mobile Phone:</span><span className="font-bold">{getVendorPhone(selectedVendorDetails)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">District / City:</span><span className="font-bold">{getVendorCity(selectedVendorDetails)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-bold">{getVendorState(selectedVendorDetails)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-bold">{selectedVendorDetails.pincode || selectedVendorDetails.postalCode || '—'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-bold truncate max-w-[180px]" title={selectedVendorDetails.address || selectedVendorDetails.businessAddress || 'Address not provided'}>{selectedVendorDetails.address || selectedVendorDetails.businessAddress || 'Address not provided'}</span></div>
-                </div>
-              </div>
+              {/* 2. Contact & Territory / Location */}
+              {(() => {
+                const addrObj = getVendorFullAddressObject(selectedVendorDetails);
+                return (
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">
+                    <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold pb-2 border-b border-slate-200/60 dark:border-slate-850">
+                      <MapPin className="w-4 h-4 text-emerald-500" />
+                      <span>Contact & Territory Breakdown</span>
+                    </div>
+                    <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                      <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.email || 'N/A'}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Mobile Phone:</span><span className="font-bold">{getVendorPhone(selectedVendorDetails)}</span></div>
+                      
+                      <div className="pt-2 mt-2 border-t border-slate-200/60 dark:border-slate-800 space-y-1.5">
+                        <div className="text-[11px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-wider">Structured Address</div>
+                        <div className="flex justify-between"><span className="text-slate-400">Door / Building No:</span><span className="font-bold text-slate-700 dark:text-slate-300">{addrObj.doorNo}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Street / Road:</span><span className="font-bold text-slate-700 dark:text-slate-300">{addrObj.street}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Area / Locality:</span><span className="font-bold text-slate-700 dark:text-slate-300">{addrObj.area}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Town / City:</span><span className="font-bold text-slate-700 dark:text-slate-300">{addrObj.city}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">District:</span><span className="font-bold text-slate-700 dark:text-slate-300">{addrObj.district}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-bold text-slate-700 dark:text-slate-300">{addrObj.state}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-mono font-bold text-slate-800 dark:text-slate-200">{addrObj.pincode}</span></div>
+                        {addrObj.landmark && addrObj.landmark !== '—' && (
+                          <div className="flex justify-between"><span className="text-slate-400">Landmark:</span><span className="font-bold text-slate-700 dark:text-slate-300">{addrObj.landmark}</span></div>
+                        )}
+                        <div className="pt-1.5 flex flex-col gap-0.5">
+                          <span className="text-slate-400 text-[11px]">Full Address:</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 break-words leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                            {addrObj.fullAddress}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* 3. Onboarding & Agent Details */}
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">

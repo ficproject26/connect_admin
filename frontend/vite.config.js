@@ -8,9 +8,9 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://3.110.88.42:8004',
+        target: 'https://api.ficapp.in',
         changeOrigin: true,
-        secure: false
+        secure: true
       }
     }
   }

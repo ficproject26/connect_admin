@@ -27,7 +27,7 @@ import dataSyncManager from './utils/dataSyncManager';
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE)
   ? import.meta.env.VITE_API_BASE
-  : 'http://3.110.88.42:8004/api';
+  : 'https://api.ficapp.in/api';
 
 const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
@@ -303,6 +303,8 @@ function App() {
   const [agentViewMode, setAgentViewMode] = useState('tree');
   const [expandedAgents, setExpandedAgents] = useState({});
   const [showOnboardingRequestsModal, setShowOnboardingRequestsModal] = useState(false);
+  const [returnToOnboardingOnClose, setReturnToOnboardingOnClose] = useState(false);
+  const [returnToVendorRequestsOnClose, setReturnToVendorRequestsOnClose] = useState(false);
   const [pincodeStateFilter, setPincodeStateFilter] = useState('');
 
   // Helper to determine if an agent is a pending onboarding request
@@ -587,6 +589,28 @@ function App() {
       });
     } finally {
       setVerifyingPincodeLoading(false);
+    }
+  };
+
+  const handleCloseAgentProfile = () => {
+    setShowModal(null);
+    if (returnToOnboardingOnClose) {
+      setShowOnboardingRequestsModal(true);
+      setReturnToOnboardingOnClose(false);
+    } else if (returnToVendorRequestsOnClose) {
+      setShowVendorRequestsModal(true);
+      setReturnToVendorRequestsOnClose(false);
+    }
+  };
+
+  const handleClosePincodeVerifyModal = () => {
+    setShowPincodeVerifyModal(false);
+    if (returnToOnboardingOnClose) {
+      setShowOnboardingRequestsModal(true);
+      setReturnToOnboardingOnClose(false);
+    } else if (returnToVendorRequestsOnClose) {
+      setShowVendorRequestsModal(true);
+      setReturnToVendorRequestsOnClose(false);
     }
   };
 
@@ -1132,7 +1156,7 @@ function App() {
       }
 
       if (!res) {
-        throw lastError || new Error('Backend server is not reachable. Please start the backend server on port 8004.');
+        throw lastError || new Error('Backend server is not reachable. Please check network connection and API server.');
       }
 
       const contentType = res.headers.get('content-type');
@@ -1165,7 +1189,7 @@ function App() {
     } catch (err) {
       console.error("API Login failed:", err.message);
       if (err.name === 'TypeError' && err.message.includes('fetch')) {
-        setAuthError('Backend connection failed. Please ensure backend server is running on port 8004.');
+        setAuthError('Backend connection failed. Please check network connection or verify API server is online.');
       } else {
         setAuthError(err.message || 'Invalid Credentials or Connection Refused');
       }
@@ -8019,8 +8043,14 @@ function App() {
                 <span className="text-xs text-slate-400">Created: {new Date(modalData.createdAt).toLocaleDateString()}</span>
               </div>
               <button
-                onClick={() => setShowModal(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold"
+                onClick={() => {
+                  setShowModal(null);
+                  if (returnToVendorRequestsOnClose) {
+                    setShowVendorRequestsModal(true);
+                    setReturnToVendorRequestsOnClose(false);
+                  }
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
               >
                 ✕
               </button>
@@ -8328,7 +8358,7 @@ function App() {
               </div>
 
               <button
-                onClick={() => setShowModal(null)}
+                onClick={handleCloseAgentProfile}
                 className="p-2 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -8496,7 +8526,7 @@ function App() {
             {/* Footer Close Button */}
             <div className="pt-2 flex justify-end">
               <button
-                onClick={() => setShowModal(null)}
+                onClick={handleCloseAgentProfile}
                 className="bg-[#864f19] hover:bg-[#a3672f] text-white font-extrabold text-sm px-6 py-3 rounded-2xl shadow-md transition-all active:scale-95 cursor-pointer"
               >
                 Close Agent Profile
@@ -8979,13 +9009,22 @@ function App() {
 
                   <div className="flex gap-2 shrink-0 flex-wrap">
                     <button
-                      onClick={() => { setModalData(pAgent); setShowModal('agent-profile'); }}
+                      onClick={() => {
+                        setReturnToOnboardingOnClose(true);
+                        setShowOnboardingRequestsModal(false);
+                        setModalData(pAgent);
+                        setShowModal('agent-profile');
+                      }}
                       className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                     >
                       View Details & KYC
                     </button>
                     <button
-                      onClick={() => handleVerifyAgentPincode(pAgent)}
+                      onClick={() => {
+                        setReturnToOnboardingOnClose(true);
+                        setShowOnboardingRequestsModal(false);
+                        handleVerifyAgentPincode(pAgent);
+                      }}
                       className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
                     >
                       <MapPin className="w-3.5 h-3.5" /> Verify Pincode
@@ -9104,14 +9143,23 @@ function App() {
 
                       <div className="flex gap-2 shrink-0">
                         <button
-                          onClick={() => { setModalData(reqItem); setShowModal(isAgentReq ? 'agent-profile' : 'vendor-details'); }}
+                          onClick={() => {
+                            setReturnToVendorRequestsOnClose(true);
+                            setShowVendorRequestsModal(false);
+                            setModalData(reqItem);
+                            setShowModal(isAgentReq ? 'agent-profile' : 'vendor-details');
+                          }}
                           className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
                         >
                           View Details
                         </button>
                         {isAgentReq && (
                           <button
-                            onClick={() => handleVerifyAgentPincode(reqItem)}
+                            onClick={() => {
+                              setReturnToVendorRequestsOnClose(true);
+                              setShowVendorRequestsModal(false);
+                              handleVerifyAgentPincode(reqItem);
+                            }}
                             className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
                           >
                             <MapPin className="w-3.5 h-3.5" /> Verify Pincode
@@ -9198,7 +9246,7 @@ function App() {
                 </div>
               </div>
               <button
-                onClick={() => setShowPincodeVerifyModal(false)}
+                onClick={handleClosePincodeVerifyModal}
                 className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -9280,7 +9328,7 @@ function App() {
             {/* Footer */}
             <div className="flex justify-end pt-3 border-t border-slate-200 dark:border-slate-800">
               <button
-                onClick={() => setShowPincodeVerifyModal(false)}
+                onClick={handleClosePincodeVerifyModal}
                 className="bg-slate-800 hover:bg-slate-900 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
               >
                 Close Verification

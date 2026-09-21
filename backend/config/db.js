@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
+    // Reuse existing healthy connection if already established
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+        return mongoose.connection;
+    }
+
     let rawURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-app:Connect123@cluster0.fzj1k5l.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0';
     if (rawURI.includes('/connect_db')) {
         rawURI = rawURI.replace('/connect_db', '/test');
@@ -10,6 +15,9 @@ const connectDB = async () => {
     const options = {
         serverSelectionTimeoutMS: 30000,
         connectTimeoutMS: 30000,
+        socketTimeoutMS: 45000,
+        maxPoolSize: 50,
+        minPoolSize: 10,
         family: 4
     };
 

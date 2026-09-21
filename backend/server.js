@@ -12,6 +12,7 @@ app.set('trust proxy', 1);
 
 const allowedOrigins = [
     'https://connect-admin-roan.vercel.app',
+    'https://api.ficapp.in',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:5173',
@@ -34,7 +35,7 @@ const isOriginAllowed = (origin) => {
     if (!origin) return true;
     const cleanOrigin = origin.replace(/\/$/, '');
     if (allowedOrigins.includes(cleanOrigin)) return true;
-    if (cleanOrigin.endsWith('.vercel.app') || cleanOrigin.endsWith('.onrender.com')) return true;
+    if (cleanOrigin.endsWith('.vercel.app') || cleanOrigin.endsWith('.onrender.com') || cleanOrigin.endsWith('.ficapp.in')) return true;
     return false;
 };
 
@@ -67,6 +68,7 @@ const corsOptions = {
 
 // 1. Centralized CORS Middleware & Preflight Options
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // 2. Express Body Parsers (Parse JSON & URL-encoded request bodies up to 50MB)
 app.use(express.json({ limit: '50mb' }));

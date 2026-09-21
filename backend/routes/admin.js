@@ -1128,6 +1128,24 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         });
 
         res.setHeader('Content-Type', 'application/json');
+
+        const page = parseInt(req.query.page, 10);
+        const limit = parseInt(req.query.limit, 10);
+        if (page > 0 && limit > 0) {
+            const startIndex = (page - 1) * limit;
+            const endIndex = startIndex + limit;
+            const paginatedAgents = enrichedAgents.slice(startIndex, endIndex);
+            return res.status(200).json({
+                success: true,
+                agents: paginatedAgents,
+                data: paginatedAgents,
+                total: enrichedAgents.length,
+                page,
+                limit,
+                totalPages: Math.ceil(enrichedAgents.length / limit)
+            });
+        }
+
         return res.status(200).json(enrichedAgents);
     } catch (err) {
         console.error('Error fetching agents:', err);
