@@ -287,8 +287,74 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
             }
         }
     }
-    return vObj;
+    return sanitizeVendorPayload(vObj);
 };
+
+// HELPER: Deep sanitize heavy fields in vendor payload (Buffers, base64 data, large attachments)
+function sanitizeVendorPayload(vObj) {
+    if (!vObj || typeof vObj !== 'object') return vObj;
+
+    // Sanitize kycDocs
+    if (vObj.kycDocs && typeof vObj.kycDocs === 'object') {
+        const cleanDocs = {};
+        for (const [k, val] of Object.entries(vObj.kycDocs)) {
+            if (Buffer.isBuffer(val) || (val && val.type === 'Buffer') || (val && val._bsontype === 'Binary')) {
+                cleanDocs[k] = '[Binary Document]';
+            } else if (typeof val === 'string') {
+                if (val.startsWith('data:') || (val.length > 500 && !val.startsWith('http'))) {
+                    cleanDocs[k] = '[Uploaded Document]';
+                } else {
+                    cleanDocs[k] = val;
+                }
+            } else if (typeof val === 'number' || typeof val === 'boolean') {
+                cleanDocs[k] = val;
+            }
+        }
+        vObj.kycDocs = cleanDocs;
+    }
+
+    // Sanitize kyc
+    if (vObj.kyc && typeof vObj.kyc === 'object') {
+        const cleanKyc = {};
+        for (const [k, val] of Object.entries(vObj.kyc)) {
+            if (Buffer.isBuffer(val) || (val && val.type === 'Buffer') || (val && val._bsontype === 'Binary')) {
+                cleanKyc[k] = '[Binary Document]';
+            } else if (typeof val === 'string') {
+                if (val.startsWith('data:') || (val.length > 500 && !val.startsWith('http'))) {
+                    cleanKyc[k] = '[Uploaded Document]';
+                } else {
+                    cleanKyc[k] = val;
+                }
+            } else if (typeof val === 'number' || typeof val === 'boolean') {
+                cleanKyc[k] = val;
+            }
+        }
+        vObj.kyc = cleanKyc;
+    }
+
+    // Sanitize businesses array
+    if (Array.isArray(vObj.businesses)) {
+        vObj.businesses = vObj.businesses.map(b => {
+            if (!b || typeof b !== 'object') return b;
+            const cleanB = { ...b };
+            delete cleanB.documents;
+            delete cleanB.images;
+            delete cleanB.photos;
+            return cleanB;
+        });
+    }
+
+    // Strip top-level heavy string / binary / buffer properties
+    for (const [k, val] of Object.entries(vObj)) {
+        if (Buffer.isBuffer(val) || (val && val.type === 'Buffer') || (val && val._bsontype === 'Binary')) {
+            delete vObj[k];
+        } else if (typeof val === 'string' && (val.startsWith('data:') || (val.length > 500 && !val.startsWith('http') && (k.toLowerCase().includes('doc') || k.toLowerCase().includes('image') || k.toLowerCase().includes('photo') || k.toLowerCase().includes('file') || k.toLowerCase().includes('proof') || k.toLowerCase().includes('resume'))))) {
+            vObj[k] = '[Uploaded Document]';
+        }
+    }
+
+    return vObj;
+}
 
 // GET Vendor Directory with filters, pagination, and direct requests / agent-onboarded requests
 router.get('/vendors', auth, async (req, res) => {
@@ -307,7 +373,7 @@ router.get('/vendors', auth, async (req, res) => {
                     { onboardedByAgentId: { $exists: true, $ne: null } },
                     { referredBy: { $exists: true, $ne: null } }
                 ]
-            }).sort({ createdAt: -1 });
+            }).sort({ createdAt: -1 }).lean();
 
             let agentVendorsFromVendor = await Vendor.find({
                 $or: [
@@ -320,9 +386,9 @@ router.get('/vendors', auth, async (req, res) => {
                     { onboardedByAgentId: { $exists: true, $ne: null } },
                     { referredBy: { $exists: true, $ne: null } }
                 ]
-            }).sort({ createdAt: -1 });
+            }).sort({ createdAt: -1 }).lean();
 
-            let rawAgent = [...agentVendorsFromUser.map(v => v.toObject()), ...agentVendorsFromVendor.map(v => v.toObject())];
+            let rawAgent = [...agentVendorsFromUser, ...agentVendorsFromVendor];
             
             const vendorMap = new Map();
             rawAgent.forEach(v => {
@@ -379,13 +445,13 @@ router.get('/vendors', auth, async (req, res) => {
                     { isDirectRequest: true }
                 ],
                 status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
-            }).sort({ createdAt: -1 });
+            }).sort({ createdAt: -1 }).lean();
 
             let directVendorDocs = await Vendor.find({
                 status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
-            }).sort({ createdAt: -1 });
+            }).sort({ createdAt: -1 }).lean();
 
-            let rawDirect = [...directVendors.map(v => v.toObject()), ...directVendorDocs.map(v => v.toObject())];
+            let rawDirect = [...directVendors, ...directVendorDocs];
             let allDirect = await batchEnrichVendors(rawDirect);
 
             // Filter out handled statuses AND filter out any agent-onboarded vendors

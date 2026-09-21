@@ -115,6 +115,65 @@ const filterActiveVendorItems = async (items) => {
     }
 };
 
+// HELPER: Deep sanitize heavy fields (Buffers, base64 strings, massive document objects)
+function sanitizeHeavyFields(doc) {
+    if (!doc || typeof doc !== 'object') return doc;
+    const clean = { ...doc };
+
+    // Sanitize KYC
+    if (clean.kyc && typeof clean.kyc === 'object') {
+        const cleanKyc = {};
+        for (const [k, v] of Object.entries(clean.kyc)) {
+            if (Buffer.isBuffer(v) || (v && v.type === 'Buffer') || (v && v._bsontype === 'Binary')) {
+                cleanKyc[k] = '[Binary Document]';
+            } else if (typeof v === 'string') {
+                if (v.startsWith('data:') || (v.length > 500 && !v.startsWith('http'))) {
+                    cleanKyc[k] = '[Uploaded Document]';
+                } else {
+                    cleanKyc[k] = v;
+                }
+            } else if (typeof v === 'number' || typeof v === 'boolean') {
+                cleanKyc[k] = v;
+            } else if (v && typeof v === 'object') {
+                cleanKyc[k] = '[Document Object]';
+            }
+        }
+        clean.kyc = cleanKyc;
+    }
+
+    // Sanitize KYC Docs
+    if (clean.kycDocs && typeof clean.kycDocs === 'object') {
+        const cleanKycDocs = {};
+        for (const [k, v] of Object.entries(clean.kycDocs)) {
+            if (Buffer.isBuffer(v) || (v && v.type === 'Buffer') || (v && v._bsontype === 'Binary')) {
+                cleanKycDocs[k] = '[Binary Document]';
+            } else if (typeof v === 'string') {
+                if (v.startsWith('data:') || (v.length > 500 && !v.startsWith('http'))) {
+                    cleanKycDocs[k] = '[Uploaded Document]';
+                } else {
+                    cleanKycDocs[k] = v;
+                }
+            } else if (typeof v === 'number' || typeof v === 'boolean') {
+                cleanKycDocs[k] = v;
+            } else if (v && typeof v === 'object') {
+                cleanKycDocs[k] = '[Document Object]';
+            }
+        }
+        clean.kycDocs = cleanKycDocs;
+    }
+
+    // Sanitize any other top-level heavy string or buffer fields
+    for (const [key, val] of Object.entries(clean)) {
+        if (Buffer.isBuffer(val) || (val && val.type === 'Buffer') || (val && val._bsontype === 'Binary')) {
+            clean[key] = '[Binary Data]';
+        } else if (typeof val === 'string' && (val.startsWith('data:') || (val.length > 500 && !val.startsWith('http') && (key.toLowerCase().includes('doc') || key.toLowerCase().includes('image') || key.toLowerCase().includes('photo') || key.toLowerCase().includes('file'))))) {
+            clean[key] = '[Uploaded Document]';
+        }
+    }
+
+    return clean;
+}
+
 // ==========================================
 // 1. DASHBOARD & KPI STATS
 // ==========================================
@@ -1294,39 +1353,6 @@ router.get('/agents/:id/scorecard', [auth, adminAuth], async (req, res) => {
     }
 });
 
-const sanitizeHeavyFields = (doc) => {
-    if (!doc || typeof doc !== 'object') return doc;
-    const clean = { ...doc };
-
-    if (clean.kyc && typeof clean.kyc === 'object') {
-        const cleanKyc = { ...clean.kyc };
-        for (const k of Object.keys(cleanKyc)) {
-            if (typeof cleanKyc[k] === 'string' && (cleanKyc[k].startsWith('data:') || cleanKyc[k].length > 500)) {
-                cleanKyc[k] = cleanKyc[k].startsWith('http') ? cleanKyc[k] : '[Uploaded Document]';
-            }
-        }
-        clean.kyc = cleanKyc;
-    }
-
-    if (clean.kycDocs && typeof clean.kycDocs === 'object') {
-        const cleanKycDocs = { ...clean.kycDocs };
-        for (const k of Object.keys(cleanKycDocs)) {
-            if (typeof cleanKycDocs[k] === 'string' && (cleanKycDocs[k].startsWith('data:') || cleanKycDocs[k].length > 500)) {
-                cleanKycDocs[k] = cleanKycDocs[k].startsWith('http') ? cleanKycDocs[k] : '[Uploaded Document]';
-            }
-        }
-        clean.kycDocs = cleanKycDocs;
-    }
-
-    for (const key of Object.keys(clean)) {
-        if (typeof clean[key] === 'string' && (clean[key].startsWith('data:') || (clean[key].length > 500 && (key.toLowerCase().includes('doc') || key.toLowerCase().includes('image') || key.toLowerCase().includes('photo'))))) {
-            clean[key] = clean[key].startsWith('http') ? clean[key] : '[Uploaded Document]';
-        }
-    }
-
-    return clean;
-};
-
 router.post('/agents/:id/payout', [auth, adminAuth], async (req, res) => {
     try {
         const agentId = req.params.id;
@@ -1923,6 +1949,10 @@ router.get('/vendors/business-requests', [auth, adminAuth], async (req, res) => 
                 { vendorType: { $exists: true, $ne: '' } },
                 { businesses: { $exists: true, $not: { $size: 0 } } }
             ]
+        }, {
+            _id: 1, name: 1, username: 1, businessName: 1, email: 1, phone: 1,
+            mobileNumber: 1, telephone: 1, registrationId: 1, vendorId: 1, vendorType: 1,
+            category: 1, address: 1, pincode: 1, postalCode: 1, createdAt: 1, businesses: 1
         }).lean();
 
         const businessRequests = [];

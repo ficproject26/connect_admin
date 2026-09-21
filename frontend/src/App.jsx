@@ -1624,49 +1624,56 @@ function App() {
               </button>
 
               {showNotificationsPanel && (
-                <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-sm sm:w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
-                  <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
-                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Notifications</h4>
-                    <span className="text-[10px] bg-primary-500/10 text-primary-500 font-bold px-2 py-0.5 rounded-full">
-                      {agents.filter(isPendingAgent).length + vendors.filter(v => v.status?.toLowerCase() === 'pending').length} New
-                    </span>
-                  </div>
-                  <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2">
-                    {agents.filter(isPendingAgent).map(a => (
-                      <div key={a._id} onClick={() => { setShowOnboardingRequestsModal(true); setShowNotificationsPanel(false); }} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Agent KYC Pending</span>
-                          <span className="text-[10px] text-amber-500 font-semibold">Verify</span>
+                <>
+                  {/* Backdrop for outside-click dismiss on mobile */}
+                  <div 
+                    className="fixed inset-0 z-40 sm:hidden bg-black/20 backdrop-blur-[1px]" 
+                    onClick={() => setShowNotificationsPanel(false)} 
+                  />
+                  <div className="fixed sm:absolute left-3 right-3 sm:left-auto sm:right-0 top-16 sm:top-full mt-1 sm:mt-2 sm:w-80 max-w-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                    <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Notifications</h4>
+                      <span className="text-[10px] bg-primary-500/10 text-primary-500 font-bold px-2 py-0.5 rounded-full">
+                        {agents.filter(isPendingAgent).length + vendors.filter(v => v.status?.toLowerCase() === 'pending').length} New
+                      </span>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 p-2">
+                      {agents.filter(isPendingAgent).map(a => (
+                        <div key={a._id} onClick={() => { setShowOnboardingRequestsModal(true); setShowNotificationsPanel(false); }} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Agent KYC Pending</span>
+                            <span className="text-[10px] text-amber-500 font-semibold">Verify</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{a.name} submitted registration/KYC documents for approval.</p>
                         </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{a.name} submitted registration/KYC documents for approval.</p>
-                      </div>
-                    ))}
-                    {vendors.filter(v => v.status?.toLowerCase() === 'pending').map(v => (
-                      <div 
-                        key={v._id} 
-                        onClick={() => { 
-                          setActiveTab('vendors'); 
-                          setHighlightedVendorRequestId(v._id || v.registrationId);
-                          setShowVendorRequestsModal(true); 
-                          setShowNotificationsPanel(false); 
-                        }} 
-                        className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1"
-                      >
-                        <div className="flex justify-between items-center">
-                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Vendor Tie-Up Pending</span>
-                          <span className="text-[10px] text-amber-500 font-semibold">Review</span>
+                      ))}
+                      {vendors.filter(v => v.status?.toLowerCase() === 'pending').map(v => (
+                        <div 
+                          key={v._id} 
+                          onClick={() => { 
+                            setActiveTab('vendors'); 
+                            setHighlightedVendorRequestId(v._id || v.registrationId);
+                            setShowVendorRequestsModal(true); 
+                            setShowNotificationsPanel(false); 
+                          }} 
+                          className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1"
+                        >
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Vendor Tie-Up Pending</span>
+                            <span className="text-[10px] text-amber-500 font-semibold">Review</span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">{v.businessName || v.name} requested vendor registration.</p>
                         </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{v.businessName || v.name} requested vendor registration.</p>
-                      </div>
-                    ))}
-                    {agents.filter(isPendingAgent).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
-                      <div className="text-center py-8 text-slate-400 text-xs">
-                        <Bell className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
-                        No new notifications
-                      </div>
-                    )}
+                      ))}
+                      {agents.filter(isPendingAgent).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
+                        <div className="text-center py-8 text-slate-400 text-xs">
+                          <Bell className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
+                          No new notifications
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                </>
               )}
             </div>
 

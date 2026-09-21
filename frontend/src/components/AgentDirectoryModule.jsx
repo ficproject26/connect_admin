@@ -91,9 +91,11 @@ export default function AgentDirectoryModule({
     }
 
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
+    const primaryUrl = baseClean ? `${baseClean}/admin/agents/${agId}/scorecard` : null;
     const urls = [
       `/api/admin/agents/${agId}/scorecard`,
-      (!isHttps || primaryUrl.startsWith('https://')) ? primaryUrl : null,
+      (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
       `https://connect-admin-qlcy.onrender.com/api/admin/agents/${agId}/scorecard`
     ];
 
@@ -143,15 +145,17 @@ export default function AgentDirectoryModule({
     return () => clearTimeout(handler);
   }, [searchTerm]);
 
-  // Fast & reliable fetch helper (Primary relative proxy FIRST with 12s timeout)
+  // Fast & reliable fetch helper (Primary relative proxy FIRST with 20s timeout and direct Render fallback)
   const safeFetchAgents = useCallback(async () => {
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
+    const primaryUrl = baseClean ? `${baseClean}/admin/agents` : null;
     const urls = [
       '/api/admin/agents',
-      (!isHttps || primaryUrl.startsWith('https://')) ? primaryUrl : null,
+      (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
       'https://connect-admin-qlcy.onrender.com/api/admin/agents'
     ];
 
@@ -159,7 +163,7 @@ export default function AgentDirectoryModule({
     for (const url of uniqueUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
         const res = await fetch(url, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
 

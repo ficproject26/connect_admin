@@ -73,9 +73,11 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
+    const primaryUrl = baseClean ? `${baseClean}/admin/agents` : null;
     const urls = [
       '/api/admin/agents',
-      (!isHttps || primaryUrl.startsWith('https://')) ? primaryUrl : null,
+      (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
       'https://connect-admin-qlcy.onrender.com/api/admin/agents'
     ];
 
@@ -83,7 +85,7 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     for (const url of uniqueUrls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 20000);
         const res = await fetch(url, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
 

@@ -299,22 +299,42 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
   const fetchDirectRequests = async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/vendors?isDirectRequest=true&limit=50`, {
-        headers: { 'x-auth-token': token }
-      });
-      let list = [];
-      if (res.ok) {
-        const data = await res.json();
-        list = data.vendors || [];
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
+      const primaryUrl = baseClean ? `${baseClean}/admin/enterprise/vendors?isDirectRequest=true&limit=50` : null;
+      const urls = [
+        '/api/admin/enterprise/vendors?isDirectRequest=true&limit=50',
+        (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
+        'https://connect-admin-qlcy.onrender.com/api/admin/enterprise/vendors?isDirectRequest=true&limit=50'
+      ];
+      const uniqueUrls = [...new Set(urls.filter(Boolean))];
+
+      for (const url of uniqueUrls) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const res = await fetch(url, {
+            headers: { 'x-auth-token': token },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+              const data = await res.json();
+              const list = data.vendors || [];
+              const pendingOnly = list.filter(v => {
+                const s = (v.status || '').toLowerCase().trim();
+                const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+                return !isAgentOnboarded && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
+              });
+              setDirectRequests(pendingOnly);
+              break;
+            }
+          }
+        } catch (e) {}
       }
-      
-      // Filter out already approved/rejected/assigned/active/suspended vendors AND agent-onboarded vendors
-      const pendingOnly = list.filter(v => {
-        const s = (v.status || '').toLowerCase().trim();
-        const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-        return !isAgentOnboarded && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
-      });
-      setDirectRequests(pendingOnly);
     } catch (err) {
       console.error('Fetch direct requests error:', err);
       setDirectRequests([]);
@@ -323,16 +343,39 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
   const fetchAgentOnboardedVendors = async () => {
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500`, {
-        headers: { 'x-auth-token': token }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const pendingOnly = (data.vendors || []).filter(v => {
-          const s = (v.status || '').toLowerCase().trim();
-          return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
-        });
-        setAgentOnboardedVendorsList(pendingOnly);
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
+      const primaryUrl = baseClean ? `${baseClean}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500` : null;
+      const urls = [
+        '/api/admin/enterprise/vendors?isAgentOnboarded=true&limit=500',
+        (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
+        'https://connect-admin-qlcy.onrender.com/api/admin/enterprise/vendors?isAgentOnboarded=true&limit=500'
+      ];
+      const uniqueUrls = [...new Set(urls.filter(Boolean))];
+
+      for (const url of uniqueUrls) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const res = await fetch(url, {
+            headers: { 'x-auth-token': token },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+              const data = await res.json();
+              const pendingOnly = (data.vendors || []).filter(v => {
+                const s = (v.status || '').toLowerCase().trim();
+                return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
+              });
+              setAgentOnboardedVendorsList(pendingOnly);
+              break;
+            }
+          }
+        } catch (e) {}
       }
     } catch (err) {
       console.error('Fetch agent onboarded vendors error:', err);
@@ -343,16 +386,41 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const fetchVendorBusinessRequests = async () => {
     setBusinessRequestsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/vendors/business-requests`, {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-auth-token': token,
-          Authorization: `Bearer ${token}`
-        }
-      });
-      const data = await res.json();
-      if (data && data.success && Array.isArray(data.data)) {
-        setBusinessRequestsList(data.data);
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
+      const primaryUrl = baseClean ? `${baseClean}/admin/vendors/business-requests` : null;
+      const urls = [
+        '/api/admin/vendors/business-requests',
+        (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
+        'https://connect-admin-qlcy.onrender.com/api/admin/vendors/business-requests'
+      ];
+      const uniqueUrls = [...new Set(urls.filter(Boolean))];
+
+      for (const url of uniqueUrls) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const res = await fetch(url, {
+            headers: {
+              'Content-Type': 'application/json',
+              'x-auth-token': token,
+              Authorization: `Bearer ${token}`
+            },
+            signal: controller.signal
+          });
+          clearTimeout(timeoutId);
+
+          if (res.ok) {
+            const contentType = res.headers.get('content-type') || '';
+            if (contentType.includes('application/json')) {
+              const data = await res.json();
+              if (data && data.success && Array.isArray(data.data)) {
+                setBusinessRequestsList(data.data);
+                break;
+              }
+            }
+          }
+        } catch (e) {}
       }
     } catch (err) {
       console.error('Fetch business requests error:', err);
