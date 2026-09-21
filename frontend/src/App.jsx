@@ -26,28 +26,48 @@ import { PincodeTerritoryManagement } from './components/PincodeTerritoryManagem
 import dataSyncManager from './utils/dataSyncManager';
 
 const getBackendUrl = () => {
-  const envApiUrl = typeof import.meta !== 'undefined' && import.meta.env
-    ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
-    : null;
-  if (envApiUrl && envApiUrl.startsWith('http')) {
-    return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
-  }
-
   const isLocalDev = typeof window !== 'undefined' && (
     window.location.hostname === 'localhost' ||
     window.location.hostname === '127.0.0.1'
   );
 
   if (isLocalDev) {
+    const envApiUrl = typeof import.meta !== 'undefined' && import.meta.env
+      ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
+      : null;
+    if (envApiUrl && envApiUrl.startsWith('http')) {
+      return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+    }
     return 'http://localhost:8004/api';
   }
 
-  // Live production backend URL
-  return 'http://3.110.88.42:8004/api';
+  // Detect HTTPS production origin (e.g., Vercel)
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+
+  const envApiUrl = typeof import.meta !== 'undefined' && import.meta.env
+    ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
+    : null;
+
+  if (envApiUrl && envApiUrl.startsWith('http')) {
+    // If the webpage is loaded over HTTPS, calling an insecure http:// endpoint causes Mixed Content block!
+    if (isHttps && envApiUrl.startsWith('http://')) {
+      return '/api';
+    }
+    return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+  }
+
+  // When hosted on HTTPS (like Vercel), use relative /api proxy
+  if (isHttps) {
+    return '/api';
+  }
+
+  return 'https://connect-admin-qlcy.onrender.com/api';
 };
 
 const API_BASE = getBackendUrl();
-const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
+const API_ORIGIN = (API_BASE && API_BASE.startsWith('http'))
+  ? API_BASE.replace(/\/api\/?$/, '')
+  : (typeof window !== 'undefined' ? window.location.origin : '');
 
 const TAXONOMY = {
   "Services": {},
@@ -746,32 +766,37 @@ function App() {
 
     const fetchPromise = (async () => {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-      const targetUrls = [url];
-      const isLocalDev = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1'
-      );
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const cleanPath = url.includes('/api/')
+        ? url.substring(url.indexOf('/api/'))
+        : (url.startsWith('/api') ? url : null);
 
-      if (url.startsWith('/api/')) {
-        targetUrls.unshift(`${API_ORIGIN}${url}`);
+      const targetUrls = [];
+      // 1. Primary relative /api path (guaranteed same-origin HTTPS, zero mixed content)
+      if (cleanPath) {
+        targetUrls.push(cleanPath);
+      }
+
+      // 2. Add API_ORIGIN target if safe on HTTPS
+      if (API_ORIGIN && cleanPath && (!isHttps || API_ORIGIN.startsWith('https://'))) {
+        targetUrls.push(`${API_ORIGIN}${cleanPath}`);
+      }
+
+      // 3. Add HTTPS Render fallback for 100% production uptime without Mixed Content
+      if (cleanPath) {
+        targetUrls.push(`https://connect-admin-qlcy.onrender.com${cleanPath}`);
+      }
+
+      // 4. Fallback original URL if not already present and not insecure http on https
+      if (!targetUrls.includes(url) && (!isHttps || !url.startsWith('http://'))) {
         targetUrls.push(url);
-      } else if (url.includes('/api/')) {
-        const path = url.substring(url.indexOf('/api/'));
-        targetUrls.unshift(path);
-        targetUrls.unshift(`${API_ORIGIN}${path}`);
-      } else if (url.startsWith(API_ORIGIN)) {
-        const path = url.replace(API_ORIGIN, '');
-        targetUrls.push(path);
-      } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
-        const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
-        targetUrls.push(path);
       }
 
       for (const targetUrl of [...new Set(targetUrls)]) {
         for (let attempt = 0; attempt <= retries; attempt++) {
           try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 45000);
+            const timeoutId = setTimeout(() => controller.abort(), 12000);
             const r = await fetch(targetUrl, { headers, signal: controller.signal });
             clearTimeout(timeoutId);
 
@@ -1109,14 +1134,15 @@ function App() {
         window.location.hostname === 'localhost' ||
         window.location.hostname === '127.0.0.1'
       );
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const targets = [
-        `${API_BASE}/auth/login`,
         '/api/auth/login',
+        `${API_BASE}/auth/login`,
+        'https://connect-admin-qlcy.onrender.com/api/auth/login',
         ...(isLocalDev ? [
-          'http://3.110.88.42:8004/api/auth/login',
           'http://localhost:8004/api/auth/login'
         ] : [])
-      ];
+      ].filter(t => !isHttps || !t.startsWith('http://'));
       const uniqueTargets = [...new Set(targets)];
 
       let res = null;
@@ -1556,13 +1582,13 @@ function App() {
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
 
         {/* HEADER BAR */}
-        <header className="h-20 glass sticky top-0 z-20 px-4 sm:px-8 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-slate-500 dark:text-slate-400 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
-              <Menu className="w-6 h-6" />
+        <header className="h-16 sm:h-20 glass sticky top-0 z-20 px-3 sm:px-8 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1 mr-2">
+            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-slate-500 dark:text-slate-400 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0">
+              <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
-            <div>
-              <h2 className="text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight">
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight truncate">
                 {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab === 'admin-management' ? 'Admin Management' : activeTab.replace('-', ' ')}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
@@ -1571,13 +1597,11 @@ function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-
-
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {/* Dark Mode toggle button */}
             <button
               onClick={() => setDarkMode(!darkMode)}
-              className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer"
+              className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer"
               title="Toggle theme"
             >
               {darkMode ? <Sun className="w-4 h-4 text-amber-500" /> : <Moon className="w-4 h-4 text-slate-500" />}
@@ -1587,7 +1611,7 @@ function App() {
             <div className="relative">
               <button
                 onClick={() => setShowNotificationsPanel(!showNotificationsPanel)}
-                className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer relative"
+                className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 hover:bg-slate-50 dark:hover:bg-slate-850 text-slate-500 dark:text-slate-400 transition-all shadow-sm active:scale-95 cursor-pointer relative"
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
@@ -1600,7 +1624,7 @@ function App() {
               </button>
 
               {showNotificationsPanel && (
-                <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                <div className="absolute right-0 mt-2 w-[calc(100vw-2rem)] max-w-sm sm:w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl z-50 overflow-hidden">
                   <div className="p-3.5 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
                     <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">Notifications</h4>
                     <span className="text-[10px] bg-primary-500/10 text-primary-500 font-bold px-2 py-0.5 rounded-full">
@@ -1647,10 +1671,10 @@ function App() {
             </div>
 
             {/* User Profile Widget */}
-            <div className="flex items-center gap-3 pl-3 border-l border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-1.5 sm:gap-3 pl-1.5 sm:pl-3 border-l border-slate-200 dark:border-slate-800 shrink-0">
               <button
                 onClick={() => setActiveTab('settings')}
-                className="w-9 h-9 rounded-full bg-primary-500 hover:bg-primary-600 flex items-center justify-center font-bold text-white text-sm shadow-sm transition-colors cursor-pointer"
+                className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-primary-500 hover:bg-primary-600 flex items-center justify-center font-bold text-white text-xs sm:text-sm shadow-sm transition-colors cursor-pointer shrink-0"
                 title="View Profile"
               >
                 {(user?.name || '').charAt(0)}
@@ -1661,7 +1685,7 @@ function App() {
               </div>
               <button
                 onClick={handleLogout}
-                className="ml-1 p-2 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-all active:scale-95 cursor-pointer"
+                className="hidden sm:flex ml-1 p-2 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-all active:scale-95 cursor-pointer"
                 title="Sign Out"
               >
                 <LogOut className="w-4 h-4" />
@@ -1671,16 +1695,16 @@ function App() {
         </header>
 
         {/* PAGE VIEWS */}
-        <main className="px-3 py-4 sm:p-6 max-w-7xl w-full mx-auto space-y-6">
+        <main className="px-3 py-4 sm:p-6 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6 overflow-x-hidden min-w-0">
 
 
 
           {/* 1. DASHBOARD VIEW */}
           {activeTab === 'dashboard' && (
-            <div className="max-w-7xl mx-auto space-y-6">
+            <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6 min-w-0">
 
               {/* KPI Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
                 {[
                   {
                     title: 'Total Revenue',
@@ -1731,25 +1755,25 @@ function App() {
                     iconColor: 'text-amber-600'
                   }
                 ].map((kpi, idx) => (
-                  <div key={idx} className={`${kpi.cardBg} p-6 rounded-3xl shadow-sm border ${kpi.borderColor} flex items-center justify-between hover:scale-[1.02] transition-all hover:shadow-md`}>
-                    <div>
-                      <span className={`block text-xs font-extrabold uppercase tracking-wider ${kpi.titleColor}`}>{kpi.title}</span>
+                  <div key={idx} className={`${kpi.cardBg} p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-sm border ${kpi.borderColor} flex items-center justify-between hover:scale-[1.01] transition-all hover:shadow-md min-w-0`}>
+                    <div className="min-w-0 flex-1 pr-2">
+                      <span className={`block text-[11px] sm:text-xs font-extrabold uppercase tracking-wider truncate ${kpi.titleColor}`}>{kpi.title}</span>
                       {kpi.value !== null ? (
-                        <span className={`block text-3xl font-black mt-2.5 ${kpi.valueColor}`}>{kpi.value}</span>
+                        <span className={`block text-2xl sm:text-3xl font-black mt-1.5 sm:mt-2.5 truncate ${kpi.valueColor}`}>{kpi.value}</span>
                       ) : (
                         <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse mt-2.5"></div>
                       )}
-                      <span className={`block text-xs font-semibold mt-2 ${kpi.changeColor}`}>{kpi.change}</span>
+                      <span className={`block text-[11px] sm:text-xs font-semibold mt-1.5 sm:mt-2 truncate ${kpi.changeColor}`}>{kpi.change}</span>
                     </div>
-                    <div className="w-12 h-12 bg-white dark:bg-slate-800 rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 shrink-0">
-                      <kpi.icon className={`w-5 h-5 ${kpi.iconColor}`} />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-white dark:bg-slate-800 rounded-xl sm:rounded-2xl flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 shrink-0">
+                      <kpi.icon className={`w-4 h-4 sm:w-5 sm:h-5 ${kpi.iconColor}`} />
                     </div>
                   </div>
                 ))}
               </div>
 
               {/* Extra KPIs */}
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4">
                 {[
                   {
                     label: 'Agent Pending KYC',
@@ -1796,14 +1820,14 @@ function App() {
                 ].map((sub, sIdx) => (
                   <div
                     key={sIdx}
-                    className={`${sub.bg} border ${sub.border} p-4 rounded-2xl shadow-sm text-center flex flex-col justify-center items-center hover:scale-[1.03] transition-all duration-300 hover:shadow-md`}
+                    className={`${sub.bg} border ${sub.border} p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-sm text-center flex flex-col justify-center items-center hover:scale-[1.02] transition-all duration-300 hover:shadow-md min-w-0`}
                   >
                     {sub.val !== undefined ? (
-                      <span className="block text-2xl font-black text-slate-800 dark:text-white">{sub.val}</span>
+                      <span className="block text-xl sm:text-2xl font-black text-slate-800 dark:text-white truncate">{sub.val}</span>
                     ) : (
                       <div className="h-7 w-12 bg-slate-200 dark:bg-slate-800 rounded animate-pulse mb-1"></div>
                     )}
-                    <span className={`block text-[11px] font-extrabold mt-1.5 uppercase tracking-wider leading-tight ${sub.text}`}>
+                    <span className={`block text-[10px] sm:text-[11px] font-extrabold mt-1 sm:mt-1.5 uppercase tracking-wider leading-tight truncate w-full ${sub.text}`}>
                       {sub.label}
                     </span>
                   </div>

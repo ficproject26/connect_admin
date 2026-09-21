@@ -90,12 +90,11 @@ export default function AgentDirectoryModule({
       return;
     }
 
-    const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-    const primaryUrl = `${API_BASE}/admin/agents/${agId}/scorecard`.replace(/\/+/g, '/').replace(':/', '://');
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     const urls = [
       `/api/admin/agents/${agId}/scorecard`,
-      primaryUrl,
-      `http://3.110.88.42:8004/api/admin/agents/${agId}/scorecard`
+      (!isHttps || primaryUrl.startsWith('https://')) ? primaryUrl : null,
+      `https://connect-admin-qlcy.onrender.com/api/admin/agents/${agId}/scorecard`
     ];
 
     const uniqueUrls = [...new Set(urls.filter(Boolean))];
@@ -149,11 +148,11 @@ export default function AgentDirectoryModule({
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
-    const primaryUrl = `${API_BASE}/admin/agents`.replace(/\/+/g, '/').replace(':/', '://');
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     const urls = [
       '/api/admin/agents',
-      primaryUrl,
-      'http://3.110.88.42:8004/api/admin/agents'
+      (!isHttps || primaryUrl.startsWith('https://')) ? primaryUrl : null,
+      'https://connect-admin-qlcy.onrender.com/api/admin/agents'
     ];
 
     const uniqueUrls = [...new Set(urls.filter(Boolean))];

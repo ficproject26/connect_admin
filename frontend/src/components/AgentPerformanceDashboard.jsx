@@ -82,26 +82,29 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       if (endDate) queryParams.append('endDate', endDate);
 
       const queryString = queryParams.toString();
+      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+      const cleanRelativeUrl = `/api/admin/agent-performance/overview?${queryString}`;
       const primaryUrl = `${API_BASE}/admin/agent-performance/overview?${queryString}`;
 
-      let successData = null;
-      try {
-        const res = await fetch(primaryUrl, {
-          headers: { 'x-auth-token': token, 'Content-Type': 'application/json' }
-        });
-        if (res.ok) {
-          successData = await res.json();
-        }
-      } catch (e) { }
+      const urlsToTry = [
+        cleanRelativeUrl,
+        (!isHttps || primaryUrl.startsWith('https://')) ? primaryUrl : null,
+        `https://connect-admin-qlcy.onrender.com/api/admin/agent-performance/overview?${queryString}`
+      ].filter(Boolean);
 
-      if (!successData) {
-        // Fallback relative url
+      let successData = null;
+      for (const targetUrl of [...new Set(urlsToTry)]) {
         try {
-          const res = await fetch(`/api/admin/agent-performance/overview?${queryString}`, {
-            headers: { 'x-auth-token': token, 'Content-Type': 'application/json' }
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 10000);
+          const res = await fetch(targetUrl, {
+            headers: { 'x-auth-token': token, 'Content-Type': 'application/json' },
+            signal: controller.signal
           });
+          clearTimeout(timeoutId);
           if (res.ok) {
             successData = await res.json();
+            if (successData) break;
           }
         } catch (e) { }
       }
