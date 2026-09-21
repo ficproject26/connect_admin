@@ -26,23 +26,24 @@ import { PincodeTerritoryManagement } from './components/PincodeTerritoryManagem
 import dataSyncManager from './utils/dataSyncManager';
 
 const getBackendUrl = () => {
+  const envApiUrl = typeof import.meta !== 'undefined' && import.meta.env
+    ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
+    : null;
+  if (envApiUrl && envApiUrl.startsWith('http')) {
+    return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
+  }
+
   const isLocalDev = typeof window !== 'undefined' && (
     window.location.hostname === 'localhost' ||
     window.location.hostname === '127.0.0.1'
   );
 
   if (isLocalDev) {
-    const envApiUrl = typeof import.meta !== 'undefined' && import.meta.env
-      ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
-      : null;
-    if (envApiUrl && envApiUrl.startsWith('http')) {
-      return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
-    }
     return 'http://localhost:8004/api';
   }
 
-  // Live production HTTPS backend URL on Render
-  return 'https://connect-admin-qlcy.onrender.com/api';
+  // Live production backend URL
+  return 'http://3.110.88.42:8004/api';
 };
 
 const API_BASE = getBackendUrl();
@@ -752,12 +753,15 @@ function App() {
       );
 
       if (url.startsWith('/api/')) {
-        targetUrls.unshift(`https://connect-admin-qlcy.onrender.com${url}`);
+        targetUrls.unshift(`${API_ORIGIN}${url}`);
         targetUrls.push(url);
       } else if (url.includes('/api/')) {
         const path = url.substring(url.indexOf('/api/'));
         targetUrls.unshift(path);
-        targetUrls.unshift(`https://connect-admin-qlcy.onrender.com${path}`);
+        targetUrls.unshift(`${API_ORIGIN}${path}`);
+      } else if (url.startsWith(API_ORIGIN)) {
+        const path = url.replace(API_ORIGIN, '');
+        targetUrls.push(path);
       } else if (url.startsWith('https://connect-admin-qlcy.onrender.com')) {
         const path = url.replace('https://connect-admin-qlcy.onrender.com', '');
         targetUrls.push(path);
@@ -1109,7 +1113,7 @@ function App() {
         `${API_BASE}/auth/login`,
         '/api/auth/login',
         ...(isLocalDev ? [
-          'https://connect-admin-qlcy.onrender.com/api/auth/login',
+          'http://3.110.88.42:8004/api/auth/login',
           'http://localhost:8004/api/auth/login'
         ] : [])
       ];

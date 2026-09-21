@@ -76,7 +76,7 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     const urls = [
       '/api/admin/agents',
       primaryUrl,
-      'https://connect-admin-qlcy.onrender.com/api/admin/agents'
+      'http://3.110.88.42:8004/api/admin/agents'
     ];
 
     const uniqueUrls = [...new Set(urls.filter(Boolean))];

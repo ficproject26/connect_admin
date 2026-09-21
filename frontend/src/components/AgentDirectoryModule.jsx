@@ -95,7 +95,7 @@ export default function AgentDirectoryModule({
     const urls = [
       `/api/admin/agents/${agId}/scorecard`,
       primaryUrl,
-      `https://connect-admin-qlcy.onrender.com/api/admin/agents/${agId}/scorecard`
+      `http://3.110.88.42:8004/api/admin/agents/${agId}/scorecard`
     ];
 
     const uniqueUrls = [...new Set(urls.filter(Boolean))];
@@ -153,7 +153,7 @@ export default function AgentDirectoryModule({
     const urls = [
       '/api/admin/agents',
       primaryUrl,
-      'https://connect-admin-qlcy.onrender.com/api/admin/agents'
+      'http://3.110.88.42:8004/api/admin/agents'
     ];
 
     const uniqueUrls = [...new Set(urls.filter(Boolean))];
