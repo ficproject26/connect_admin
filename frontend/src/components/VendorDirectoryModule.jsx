@@ -533,6 +533,11 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
     return 'Pending';
   };
 
+  const isPendingVendorReview = (status) => {
+    const s = String(status || '').toLowerCase().trim();
+    return !s || ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', 'requested', 'unapproved'].includes(s);
+  };
+
   const handleUpdateVendorStatus = (vendorObj, newStatus) => {
     const vendorId = typeof vendorObj === 'object' ? (vendorObj._id || vendorObj.registrationId) : vendorObj;
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : vendors.find(v => v._id === vendorId);
@@ -962,14 +967,17 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                   </div>
                   <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0" onClick={e => e.stopPropagation()}>
                     {renderStatusBadge(v.status)}
-                    <select
-                      value={normalizeStatusValue(v.status)}
-                      onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
-                      className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
-                    >
-                      <option value="Active">Active</option>
-                      <option value="Suspended">Suspended</option>
-                    </select>
+                    {!isPendingVendorReview(v.status) && (
+                      <select
+                        value={normalizeStatusValue(v.status)}
+                        onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
+                        className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Suspended">Suspended</option>
+                        <option value="Rejected">Rejected</option>
+                      </select>
+                    )}
                   </div>
                 </div>
 
@@ -1104,14 +1112,17 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                   <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       {renderStatusBadge(v.status)}
-                      <select
-                        value={normalizeStatusValue(v.status)}
-                        onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
-                        className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
-                      >
-                        <option value="Active">Active</option>
-                        <option value="Suspended">Suspended</option>
-                      </select>
+                      {!isPendingVendorReview(v.status) && (
+                        <select
+                          value={normalizeStatusValue(v.status)}
+                          onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
+                          className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
+                        >
+                          <option value="Active">Active</option>
+                          <option value="Suspended">Suspended</option>
+                          <option value="Rejected">Rejected</option>
+                        </select>
+                      )}
                     </div>
                   </td>
                   <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
@@ -1492,20 +1503,30 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
             {/* Modal Footer Actions */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-800 flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-400">Update Status:</span>
-                <select
-                  value={normalizeStatusValue(selectedVendorDetails.status)}
-                  onChange={e => {
-                    handleUpdateVendorStatus(selectedVendorDetails, e.target.value);
-                    setSelectedVendorDetails(prev => prev ? ({ ...prev, status: e.target.value }) : null);
-                  }}
-                  className="text-xs font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 cursor-pointer focus:outline-none"
-                >
-                  <option value="Active">🟢 Active</option>
-                  <option value="Suspended">⚫ Suspended</option>
-                </select>
-              </div>
+              {!isPendingVendorReview(selectedVendorDetails.status) ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-400">Update Status:</span>
+                  <select
+                    value={normalizeStatusValue(selectedVendorDetails.status)}
+                    onChange={e => {
+                      handleUpdateVendorStatus(selectedVendorDetails, e.target.value);
+                      setSelectedVendorDetails(prev => prev ? ({ ...prev, status: e.target.value }) : null);
+                    }}
+                    className="text-xs font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 cursor-pointer focus:outline-none"
+                  >
+                    <option value="Active">🟢 Active</option>
+                    <option value="Suspended">⚫ Suspended</option>
+                    <option value="Rejected">🔴 Rejected</option>
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-400">Request Status:</span>
+                  <span className="text-xs font-extrabold uppercase px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                    Pending Review
+                  </span>
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <button
@@ -1700,19 +1721,28 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                           </button>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold text-slate-400">Status:</span>
-                          <select
-                            value={normalizeStatusValue(v.status)}
-                            onChange={e => handleUpdateVendorStatus(v, e.target.value)}
-                            onClick={e => e.stopPropagation()}
-                            className="text-xs font-extrabold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 cursor-pointer focus:outline-none shadow-2xs"
-                          >
-                            <option value="Active">🟢 Active</option>
-                            <option value="Suspended">⚫ Suspend</option>
-                            <option value="Rejected">🔴 Reject</option>
-                          </select>
-                        </div>
+                        {isPendingVendorReview(v.status) ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-slate-400">Request:</span>
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                              Pending Review
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-slate-400">Status:</span>
+                            <select
+                              value={normalizeStatusValue(v.status)}
+                              onChange={e => handleUpdateVendorStatus(v, e.target.value)}
+                              onClick={e => e.stopPropagation()}
+                              className="text-xs font-extrabold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 cursor-pointer focus:outline-none shadow-2xs"
+                            >
+                              <option value="Active">🟢 Active</option>
+                              <option value="Suspended">⚫ Suspend</option>
+                              <option value="Rejected">🔴 Reject</option>
+                            </select>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))

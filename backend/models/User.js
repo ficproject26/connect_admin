@@ -57,12 +57,24 @@ const UserSchema = new mongoose.Schema({
         cancelledCheque: { type: String }
     },
 
-    status: { type: String, default: 'pending' }, // 'pending', 'approved', 'rejected', 'Pending', 'Approved', 'Rejected'
+    status: { type: String, default: 'pending' }, // 'pending', 'approved', 'rejected', 'suspended', 'revoked'
     rejectionReason: { type: String, default: '' },
     isActive: { type: Boolean, default: false },
     isPaid: { type: Boolean, default: false },
     balance: { type: Number, default: 0 },
     commissionEarned: { type: Number, default: 0 },
+    // Territory history for revoked agents (retaining history while releasing active slot)
+    previousAssignedArea: { type: String },
+    previousAssignedPincode: { type: mongoose.Schema.Types.ObjectId, ref: 'Pincode' },
+    previousAssignedState: { type: String },
+    previousAssignedDistrict: { type: String },
+    previousAssignedDivision: { type: String },
+    revokedAt: { type: Date },
+    revokedBy: { type: String },
+    revocationReason: { type: String },
+    suspendedAt: { type: Date },
+    suspendedBy: { type: String },
+    suspensionReason: { type: String },
     // Security & Auth Fields
     failedLoginAttempts: { type: Number, default: 0 },
     lockUntil: { type: Date, default: null },

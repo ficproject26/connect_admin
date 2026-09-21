@@ -46,6 +46,7 @@ const getBackendUrl = () => {
 };
 
 const API_BASE = getBackendUrl();
+const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
 const TAXONOMY = {
   "Services": {},
@@ -518,6 +519,7 @@ function App() {
   const [selectedPlanTab, setSelectedPlanTab] = useState(0);
   const [kycPreviewImage, setKycPreviewImage] = useState(null);
   const [showVendorRequestsModal, setShowVendorRequestsModal] = useState(false);
+  const [highlightedVendorRequestId, setHighlightedVendorRequestId] = useState(null);
 
   // Admin Management Sub-Tab States
   const [adminSubTab, setAdminSubTab] = useState('overview'); // 'overview' | 'agent'
@@ -1612,12 +1614,21 @@ function App() {
                       </div>
                     ))}
                     {vendors.filter(v => v.status?.toLowerCase() === 'pending').map(v => (
-                      <div key={v._id} onClick={() => { setActiveTab('vendors'); setShowNotificationsPanel(false); }} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1">
+                      <div 
+                        key={v._id} 
+                        onClick={() => { 
+                          setActiveTab('vendors'); 
+                          setHighlightedVendorRequestId(v._id || v.registrationId);
+                          setShowVendorRequestsModal(true); 
+                          setShowNotificationsPanel(false); 
+                        }} 
+                        className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1"
+                      >
                         <div className="flex justify-between items-center">
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Vendor Tie-Up Pending</span>
                           <span className="text-[10px] text-amber-500 font-semibold">Review</span>
                         </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{v.businessName} requested vendor registration.</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">{v.businessName || v.name} requested vendor registration.</p>
                       </div>
                     ))}
                     {agents.filter(isPendingAgent).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
@@ -2488,7 +2499,7 @@ function App() {
                       </div>
 
                       <div className="flex gap-2 justify-end flex-wrap items-center">
-                        {vendor.status?.toLowerCase() === 'approved' ? (
+                        {['approved', 'active'].includes((vendor.status || '').toLowerCase()) ? (
                           <button
                             onClick={() => executeAction(`/admin/vendors/${vendor._id}/suspend`, 'PUT', {})}
                             className="bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 text-xs font-semibold px-3 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1"
@@ -9045,7 +9056,7 @@ function App() {
                     <RotateCcw className="w-3.5 h-3.5" /> Refresh List
                   </button>
                   <button 
-                    onClick={() => setShowVendorRequestsModal(false)}
+                    onClick={() => { setShowVendorRequestsModal(false); setHighlightedVendorRequestId(null); }}
                     className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg cursor-pointer"
                   >
                     ✕
@@ -9060,9 +9071,10 @@ function App() {
                   const subtitle = `${reqItem.contactName || reqItem.name || ''} • ${reqItem.phone || ''} • ${reqItem.email || ''}`;
                   const badgeText = isAgentReq ? `${reqItem.level || 'State'} Agent` : (reqItem.category || 'Vendor');
                   const regId = reqItem.registrationId || reqItem.vendorId || reqItem._id;
+                  const isHighlighted = highlightedVendorRequestId && (String(reqItem._id) === String(highlightedVendorRequestId) || String(reqItem.registrationId) === String(highlightedVendorRequestId));
 
                   return (
-                    <div key={reqItem._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div key={reqItem._id} className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${isHighlighted ? 'bg-primary-500/10 border-primary-500 ring-2 ring-primary-500/30 shadow-md' : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'}`}>
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-slate-800 dark:text-slate-100 text-base">{title}</span>

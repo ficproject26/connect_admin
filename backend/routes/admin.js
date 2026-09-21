@@ -28,6 +28,8 @@ const Announcement = require('../models/Announcement');
 const ExclusiveOffer = require('../models/ExclusiveOffer');
 const Category = require('../models/Category');
 const Product = require('../models/Product');
+const TerritoryAuditLog = require('../models/TerritoryAuditLog');
+const AuditLog = require('../models/AuditLog');
 const { validateIndianMobile } = require('../utils/inputValidator');
 
 const adminAuth = async (req, res, next) => {
@@ -1436,8 +1438,15 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
             return res.status(404).json({ success: false, msg: 'Agent onboarding request not found.' });
         }
 
+        const isRevoked = (targetStatus === 'revoked');
+        const isSuspended = (targetStatus === 'suspended');
         const isApprovedVal = (targetStatus === 'approved');
         const isActiveVal = typeof body.isActive !== 'undefined' ? !!body.isActive : isApprovedVal;
+
+        const prevStatus = agent.status || 'pending';
+        const prevArea = agent.assignedArea || agent.previousAssignedArea || '';
+        const prevPincode = agent.assignedPincode || agent.previousAssignedPincode || null;
+        const prevLevel = agent.level || 'pincode';
 
         if (isApprovedVal && agent.status !== 'approved') {
             try {
@@ -1463,38 +1472,67 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
             agent.rejectionReason = rejectionReason;
         }
 
+        const updateSet = {
+            status: targetStatus,
+            kycStatus: targetStatus,
+            isApproved: isApprovedVal,
+            isActive: isActiveVal,
+            isPaid: isApprovedVal ? true : agent.isPaid,
+            rejectionReason: rejectionReason,
+            updatedAt: new Date()
+        };
+
+        if (isRevoked) {
+            // Preserve historical territory for audit/history
+            agent.previousAssignedArea = prevArea;
+            agent.previousAssignedPincode = prevPincode;
+            agent.previousAssignedState = agent.assignedState || agent.territory?.state || '';
+            agent.previousAssignedDistrict = agent.assignedDistrict || agent.territory?.district || '';
+            agent.previousAssignedDivision = agent.assignedDivision || agent.territory?.division || '';
+
+            // Release active territory fields so territory slot is completely vacated
+            agent.assignedArea = null;
+            agent.assignedPincode = null;
+            agent.assignedState = null;
+            agent.assignedDistrict = null;
+            agent.assignedDivision = null;
+            agent.revokedAt = new Date();
+            agent.revokedBy = req.user?.id || 'admin';
+            agent.revocationReason = body.reason || rejectionReason || 'Revoked by administrator';
+
+            updateSet.previousAssignedArea = prevArea;
+            updateSet.previousAssignedPincode = prevPincode;
+            updateSet.previousAssignedState = agent.previousAssignedState;
+            updateSet.previousAssignedDistrict = agent.previousAssignedDistrict;
+            updateSet.previousAssignedDivision = agent.previousAssignedDivision;
+            updateSet.assignedArea = null;
+            updateSet.assignedPincode = null;
+            updateSet.assignedState = null;
+            updateSet.assignedDistrict = null;
+            updateSet.assignedDivision = null;
+            updateSet.revokedAt = agent.revokedAt;
+            updateSet.revokedBy = agent.revokedBy;
+            updateSet.revocationReason = agent.revocationReason;
+        } else if (isSuspended) {
+            agent.suspendedAt = new Date();
+            agent.suspendedBy = req.user?.id || 'admin';
+            agent.suspensionReason = body.reason || 'Suspended by administrator';
+            updateSet.suspendedAt = agent.suspendedAt;
+            updateSet.suspendedBy = agent.suspendedBy;
+            updateSet.suspensionReason = agent.suspensionReason;
+            // Note: For suspended agents, territory assignment is retained as per requirement
+        }
+
         await agent.save().catch(async (saveErr) => {
             console.warn('agent.save warning, using direct updateOne:', saveErr.message);
-            await User.updateOne(
-                { _id: agent._id },
-                {
-                    $set: {
-                        status: targetStatus,
-                        kycStatus: targetStatus,
-                        isApproved: isApprovedVal,
-                        isActive: isActiveVal,
-                        isPaid: isApprovedVal ? true : agent.isPaid,
-                        rejectionReason: rejectionReason
-                    }
-                }
-            ).catch(() => {});
+            await User.updateOne({ _id: agent._id }, { $set: updateSet }).catch(() => {});
         });
 
         // Also update native collection 'users' to guarantee synchronization
         if (db) {
             await db.collection('users').updateOne(
                 { _id: agent._id },
-                {
-                    $set: {
-                        status: targetStatus,
-                        kycStatus: targetStatus,
-                        isApproved: isApprovedVal,
-                        isActive: isActiveVal,
-                        isPaid: isApprovedVal ? true : agent.isPaid,
-                        rejectionReason: rejectionReason,
-                        updatedAt: new Date()
-                    }
-                }
+                { $set: updateSet }
             ).catch(() => {});
         }
 
@@ -1512,16 +1550,7 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
 
                 await db.collection('agents').updateMany(
                     { $or: agentSyncConds },
-                    {
-                        $set: {
-                            kycStatus: targetStatus,
-                            status: targetStatus,
-                            isActive: isActiveVal,
-                            isApproved: isApprovedVal,
-                            rejectionReason: rejectionReason,
-                            updatedAt: new Date()
-                        }
-                    }
+                    { $set: updateSet }
                 );
             } catch (aErr) {
                 console.error("Error updating standalone agents collection:", aErr.message);
@@ -1529,13 +1558,56 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
         }
 
         // Unbind or bind pincode assignment
-        if (!isActiveVal || targetStatus === 'suspended' || targetStatus === 'rejected' || targetStatus === 'inactive') {
-            if (agent.assignedPincode) {
-                await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: null }).catch(() => {});
+        // For REVOKED or REJECTED: release active slot immediately so replacement agent can be onboarded
+        if (isRevoked || targetStatus === 'rejected' || targetStatus === 'inactive') {
+            const targetPin = prevPincode || agent.assignedPincode;
+            if (targetPin) {
+                await Pincode.findByIdAndUpdate(targetPin, { activeAgentId: null }).catch(() => {});
             }
             await Pincode.updateMany({ activeAgentId: agent._id }, { $set: { activeAgentId: null } }).catch(() => {});
         } else if (isApprovedVal && agent.assignedPincode) {
             await Pincode.findByIdAndUpdate(agent.assignedPincode, { activeAgentId: agent._id }).catch(() => {});
+        }
+
+        // Record Audit Logs
+        try {
+            const auditAction = isRevoked ? 'agent_revoked' : (isSuspended ? 'agent_suspended' : (isApprovedVal ? 'agent_approved' : 'agent_rejected'));
+            await TerritoryAuditLog.create({
+                action: isRevoked ? 'Agent Access Revoked' : (isSuspended ? 'Agent Account Suspended' : `Agent Status: ${targetStatus}`),
+                actorId: req.user?.id || null,
+                actorName: req.user?.name || 'Super Admin',
+                actorRole: req.user?.role || 'superadmin',
+                territoryId: String(prevPincode || agent._id),
+                territoryType: prevLevel === 'pincode' ? 'Pincode' : (prevLevel === 'district' ? 'District' : (prevLevel === 'division' ? 'Division' : 'State')),
+                territoryName: prevArea || agent.name || 'Territory',
+                previousValue: { status: prevStatus, level: prevLevel, territory: prevArea },
+                newValue: { status: targetStatus, level: prevLevel, territory: isRevoked ? 'RELEASED' : prevArea },
+                reason: body.reason || rejectionReason || `${targetStatus} by administrator`,
+                ipAddress: req.ip || '127.0.0.1',
+                timestamp: new Date()
+            }).catch(e => console.warn('TerritoryAuditLog create error:', e.message));
+
+            await AuditLog.create({
+                userId: agent._id,
+                userEmail: agent.email || '',
+                userRole: 'agent',
+                action: auditAction,
+                status: 'success',
+                details: `Agent ${agent.name || ''} (${agent.registrationId || agent._id}) marked as ${targetStatus}. Level: ${prevLevel}. Territory: ${prevArea || 'N/A'}`,
+                metadata: {
+                    agentId: agent._id,
+                    agentName: agent.name,
+                    agentLevel: prevLevel,
+                    territory: prevArea,
+                    previousStatus: prevStatus,
+                    newStatus: targetStatus,
+                    adminId: req.user?.id,
+                    reason: body.reason || rejectionReason
+                },
+                timestamp: new Date()
+            }).catch(e => console.warn('AuditLog create error:', e.message));
+        } catch (audErr) {
+            console.warn('Audit logging warning:', audErr.message);
         }
 
         return res.json({ success: true, msg: `Agent status updated to ${targetStatus}`, agent });
@@ -1549,6 +1621,7 @@ router.put('/agents/:id/status', [auth, adminAuth], (req, res) => handleAgentSta
 router.put('/approve-agent/:id', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'approved'));
 router.put('/agents/:id/approve', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'approved'));
 router.put('/agents/:id/suspend', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'suspended'));
+router.put('/agents/:id/revoke', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'revoked'));
 router.put('/agents/:id/reject', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'rejected'));
 
 // ==========================================
@@ -2900,8 +2973,11 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
             role: { $in: ['agent', 'Agent'] },
             level: lvl,
             assignedArea: { $regex: new RegExp('^' + cleanArea.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + '$', 'i') },
-            status: { $in: ['approved', 'Approved', 'active', 'Active'] },
-            isActive: { $ne: false }
+            status: { $in: ['approved', 'Approved', 'active', 'Active', 'suspended', 'Suspended'] },
+            $or: [
+                { isActive: { $ne: false } },
+                { status: { $in: ['suspended', 'Suspended'] } }
+            ]
         };
         if (excludeList.length > 0) {
             query._id = { $nin: excludeList };
@@ -2910,7 +2986,7 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
         if (existing) {
             return {
                 allowed: false,
-                msg: "This territory is already assigned to another Active Agent. Please select a different territory."
+                msg: "This territory is already assigned to an Agent. Please select a different territory."
             };
         }
     }
@@ -2925,10 +3001,13 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
                 return { allowed: true };
             }
             const activePinAgent = await User.findById(pinDoc.activeAgentId);
-            if (activePinAgent && ['approved', 'Approved', 'active', 'Active'].includes(activePinAgent.status) && activePinAgent.isActive !== false) {
+            if (activePinAgent && (
+                (['approved', 'Approved', 'active', 'Active'].includes(activePinAgent.status) && activePinAgent.isActive !== false) ||
+                ['suspended', 'Suspended'].includes(activePinAgent.status)
+            )) {
                 return {
                     allowed: false,
-                    msg: "This territory is already assigned to another Active Agent. Please select a different territory."
+                    msg: "This territory is already assigned to an Agent. Please select a different territory."
                 };
             }
         }
@@ -2938,8 +3017,11 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
                 role: { $in: ['agent', 'Agent'] },
                 level: 'pincode',
                 assignedPincode: pinDoc._id,
-                status: { $in: ['approved', 'Approved', 'active', 'Active'] },
-                isActive: { $ne: false }
+                status: { $in: ['approved', 'Approved', 'active', 'Active', 'suspended', 'Suspended'] },
+                $or: [
+                    { isActive: { $ne: false } },
+                    { status: { $in: ['suspended', 'Suspended'] } }
+                ]
             };
             if (excludeList.length > 0) {
                 query._id = { $nin: excludeList };
@@ -2948,7 +3030,7 @@ async function checkAgentLimitation(level, assignedArea, pincode, excludeUserId 
             if (existing) {
                 return {
                     allowed: false,
-                    msg: "This territory is already assigned to another Active Agent. Please select a different territory."
+                    msg: "This territory is already assigned to an Agent. Please select a different territory."
                 };
             }
         }

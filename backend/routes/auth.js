@@ -522,10 +522,23 @@ router.post('/login', async (req, res) => {
             }
 
             const userStatus = (user.status || 'pending').toLowerCase();
-            if (userStatus === 'suspended' || (!user.isActive && userStatus !== 'approved')) {
+            if (userStatus === 'revoked') {
+                return res.status(403).json({
+                    title: 'Access Revoked',
+                    message: 'Your agent access has been revoked. Please contact the administrator.',
+                    msg: 'Your agent access has been revoked. Please contact the administrator.',
+                    error: 'Access Revoked',
+                    status: 'revoked',
+                    isRevoked: true,
+                    registrationId: user.registrationId || 'N/A',
+                    role: user.level || 'pincode'
+                });
+            }
+            if (userStatus === 'suspended' || (!user.isActive && userStatus !== 'approved' && userStatus !== 'active')) {
                 return res.status(403).json({
                     title: 'Account Suspended',
-                    message: 'Your agent account has been suspended by the Administrator. Your access to the Agent Portal has been temporarily disabled. Please contact the Administration Team to reactivate your account.',
+                    message: 'Your account has been suspended. Please contact the administrator.',
+                    msg: 'Your account has been suspended. Please contact the administrator.',
                     error: 'Account Suspended',
                     status: 'suspended',
                     isSuspended: true,
@@ -872,10 +885,21 @@ router.get('/me', async (req, res) => {
 
         if (user.role === 'agent' || user.role === 'Agent') {
             const uStatus = (user.status || '').toLowerCase();
-            if (uStatus === 'suspended') {
+            if (uStatus === 'revoked') {
+                return res.status(403).json({
+                    title: 'Access Revoked',
+                    message: 'Your agent access has been revoked. Please contact the administrator.',
+                    msg: 'Your agent access has been revoked. Please contact the administrator.',
+                    error: 'Access Revoked',
+                    status: 'revoked',
+                    isRevoked: true
+                });
+            }
+            if (uStatus === 'suspended' || (!user.isActive && uStatus !== 'approved' && uStatus !== 'active')) {
                 return res.status(403).json({
                     title: 'Account Suspended',
-                    message: 'Your agent account has been suspended by the Administrator. Your access to the Agent Portal has been temporarily disabled. Please contact the Administration Team to reactivate your account.',
+                    message: 'Your account has been suspended. Please contact the administrator.',
+                    msg: 'Your account has been suspended. Please contact the administrator.',
                     error: 'Account Suspended',
                     status: 'suspended',
                     isSuspended: true

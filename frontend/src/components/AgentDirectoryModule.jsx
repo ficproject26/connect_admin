@@ -67,6 +67,16 @@ export default function AgentDirectoryModule({
   const [scorecardData, setScorecardData] = useState(null);
   const [scorecardError, setScorecardError] = useState(null);
 
+  // Agent Status Action Confirmation Modal State (Suspend / Revoke / Reactivate)
+  const [actionConfirmModal, setActionConfirmModal] = useState({
+    isOpen: false,
+    agent: null,
+    action: null, // 'suspend' | 'revoke' | 'reactivate'
+    reason: '',
+    loading: false,
+    error: null
+  });
+
   const openAgentScorecard = useCallback(async (agentObj) => {
     if (!agentObj) return;
     setSelectedScorecardAgent(agentObj);
@@ -300,13 +310,112 @@ export default function AgentDirectoryModule({
     loadAgentData(false);
   }, [loadAgentData]);
 
+  const handleOpenActionConfirm = useCallback((agent, action) => {
+    setActionConfirmModal({
+      isOpen: true,
+      agent,
+      action,
+      reason: '',
+      loading: false,
+      error: null
+    });
+  }, []);
+
+  const handleExecuteAgentAction = useCallback(async () => {
+    const { agent, action, reason } = actionConfirmModal;
+    if (!agent || !agent._id) return;
+    setActionConfirmModal(prev => ({ ...prev, loading: true, error: null }));
+
+    try {
+      let endpoint = '';
+      let targetStatus = '';
+      if (action === 'suspend') {
+        endpoint = `/api/admin/agents/${agent._id}/suspend`;
+        targetStatus = 'suspended';
+      } else if (action === 'revoke') {
+        endpoint = `/api/admin/agents/${agent._id}/revoke`;
+        targetStatus = 'revoked';
+      } else if (action === 'reactivate') {
+        endpoint = `/api/admin/agents/${agent._id}/approve`;
+        targetStatus = 'approved';
+      }
+
+      const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+      const body = JSON.stringify({
+        status: targetStatus,
+        agentId: agent._id,
+        reason: reason || `${action} by administrator`,
+        rejectionReason: reason || `${action} by administrator`
+      });
+
+      const urls = [
+        endpoint,
+        `${API_BASE}${endpoint.replace('/api', '')}`
+      ];
+
+      let resSuccess = false;
+      let errMsg = '';
+      for (const u of urls) {
+        try {
+          const res = await fetch(u, { method: 'PUT', headers, body });
+          const resData = await res.json().catch(() => ({}));
+          if (res.ok) {
+            resSuccess = true;
+            break;
+          } else {
+            errMsg = resData.msg || resData.message || 'Action failed';
+          }
+        } catch (e) {
+          errMsg = e.message;
+        }
+      }
+
+      if (!resSuccess) {
+        setActionConfirmModal(prev => ({ ...prev, loading: false, error: errMsg || 'Failed to update agent status' }));
+        return;
+      }
+
+      // Update local agent list
+      setAgents(prev => {
+        const updated = prev.map(a => {
+          if (a._id === agent._id || (a.registrationId && a.registrationId === agent.registrationId)) {
+            return {
+              ...a,
+              status: targetStatus,
+              kycStatus: targetStatus,
+              isActive: targetStatus === 'approved',
+              isApproved: targetStatus === 'approved',
+              assignedArea: targetStatus === 'revoked' ? null : a.assignedArea,
+              assignedPincode: targetStatus === 'revoked' ? null : a.assignedPincode
+            };
+          }
+          return a;
+        });
+        setCachedAgents(updated);
+        if (typeof onAgentsUpdated === 'function') onAgentsUpdated(updated);
+        return updated;
+      });
+
+      // Close confirmation modal
+      setActionConfirmModal({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null });
+      if (selectedScorecardAgent && (selectedScorecardAgent._id === agent._id || selectedScorecardAgent.registrationId === agent.registrationId)) {
+        setSelectedScorecardAgent(null);
+      }
+
+      // Reload fresh data from backend
+      loadAgentData(true);
+    } catch (err) {
+      setActionConfirmModal(prev => ({ ...prev, loading: false, error: err.message }));
+    }
+  }, [actionConfirmModal, token, API_BASE, loadAgentData, onAgentsUpdated, selectedScorecardAgent]);
+
   // Helper Filters
   const isApprovedAgent = (agent) => {
     if (!agent) return false;
     const status = (agent.status || '').toLowerCase().trim();
     const kycStatus = (agent.kycStatus || '').toLowerCase().trim();
-    return !['rejected', 'suspended', 'deactivated', 'blocked'].includes(status) &&
-           !['rejected', 'suspended', 'deactivated', 'blocked'].includes(kycStatus);
+    return !['rejected', 'suspended', 'deactivated', 'blocked', 'revoked'].includes(status) &&
+           !['rejected', 'suspended', 'deactivated', 'blocked', 'revoked'].includes(kycStatus);
   };
 
   const isPendingAgent = (agent) => {
@@ -349,7 +458,9 @@ export default function AgentDirectoryModule({
     district: approvedAgents.filter(a => a.level === 'district').length,
     division: approvedAgents.filter(a => a.level === 'division').length,
     pincode: approvedAgents.filter(a => a.level === 'pincode').length,
-    rejected: agents.filter(a => (a.status || '').toLowerCase() === 'rejected').length
+    suspended: agents.filter(a => (a.status || '').toLowerCase() === 'suspended').length,
+    revoked: agents.filter(a => (a.status || '').toLowerCase() === 'revoked').length,
+    rejected: agents.filter(a => ['rejected', 'inactive'].includes((a.status || '').toLowerCase())).length
   };
 
   // Filtered Agent List
@@ -368,8 +479,12 @@ export default function AgentDirectoryModule({
       terr.pincode.includes(query);
 
     const aStatus = (a.status || '').toLowerCase();
-    if (agentLevelFilter === 'rejected') {
-      return matchesSearch && aStatus === 'rejected';
+    if (agentLevelFilter === 'suspended') {
+      return matchesSearch && aStatus === 'suspended';
+    } else if (agentLevelFilter === 'revoked') {
+      return matchesSearch && aStatus === 'revoked';
+    } else if (agentLevelFilter === 'rejected') {
+      return matchesSearch && ['rejected', 'inactive'].includes(aStatus);
     } else {
       if (!isApprovedAgent(a)) return false;
       let matchesLevel = true;
@@ -657,6 +772,8 @@ export default function AgentDirectoryModule({
             { id: 'district', label: 'District Agents', count: counts.district },
             { id: 'division', label: 'Divisional Agents', count: counts.division },
             { id: 'pincode', label: 'Pincode Agents', count: counts.pincode },
+            { id: 'suspended', label: 'Suspended Agents', count: counts.suspended },
+            { id: 'revoked', label: 'Revoked Agents', count: counts.revoked },
             { id: 'rejected', label: 'Rejected Agents', count: counts.rejected }
           ].map(f => (
             <button
@@ -665,7 +782,7 @@ export default function AgentDirectoryModule({
               onClick={() => setAgentLevelFilter(f.id)}
               className={`px-3 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
                 agentLevelFilter === f.id
-                  ? f.id === 'rejected' ? 'bg-rose-600 text-white font-bold' : 'bg-primary-600 text-white font-bold'
+                  ? f.id === 'rejected' ? 'bg-rose-600 text-white font-bold' : (f.id === 'suspended' ? 'bg-amber-600 text-white font-bold' : (f.id === 'revoked' ? 'bg-purple-700 text-white font-bold' : 'bg-primary-600 text-white font-bold'))
                   : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-100'
               }`}
             >
@@ -823,7 +940,7 @@ export default function AgentDirectoryModule({
                             <div className="space-y-2">
                               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-500 block px-1">State Level Assigned Agents</span>
                               {st.stateAgents.map(ag => (
-                                <AgentCardItem key={ag._id} agent={ag} levelBadge="State Agent" levelColor="purple" onOpenScorecard={openAgentScorecard} />
+                                <AgentCardItem key={ag._id} agent={ag} levelBadge="State Agent" levelColor="purple" onOpenScorecard={openAgentScorecard} onAction={handleOpenActionConfirm} />
                               ))}
                             </div>
                           )}
@@ -895,7 +1012,7 @@ export default function AgentDirectoryModule({
                                         <div className="space-y-2">
                                           <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500 block px-1">District Level Assigned Agents</span>
                                           {dist.districtAgents.map(ag => (
-                                            <AgentCardItem key={ag._id} agent={ag} levelBadge="District Agent" levelColor="blue" onOpenScorecard={openAgentScorecard} />
+                                            <AgentCardItem key={ag._id} agent={ag} levelBadge="District Agent" levelColor="blue" onOpenScorecard={openAgentScorecard} onAction={handleOpenActionConfirm} />
                                           ))}
                                         </div>
                                       )}
@@ -967,7 +1084,7 @@ export default function AgentDirectoryModule({
                                                     <div className="space-y-2">
                                                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500 block px-1">Divisional Level Assigned Agents</span>
                                                       {div.divisionAgents.map(ag => (
-                                                        <AgentCardItem key={ag._id} agent={ag} levelBadge="Divisional Agent" levelColor="indigo" onOpenScorecard={openAgentScorecard} />
+                                                        <AgentCardItem key={ag._id} agent={ag} levelBadge="Divisional Agent" levelColor="indigo" onOpenScorecard={openAgentScorecard} onAction={handleOpenActionConfirm} />
                                                       ))}
                                                     </div>
                                                   )}
@@ -1035,7 +1152,7 @@ export default function AgentDirectoryModule({
                                                             <div className="pl-4 space-y-2 pt-1">
                                                               {pin.pincodeAgents.length > 0 ? (
                                                                 pin.pincodeAgents.map(ag => (
-                                                                  <AgentCardItem key={ag._id} agent={ag} levelBadge="Pincode Agent" levelColor="emerald" onOpenScorecard={openAgentScorecard} />
+                                                                  <AgentCardItem key={ag._id} agent={ag} levelBadge="Pincode Agent" levelColor="emerald" onOpenScorecard={openAgentScorecard} onAction={handleOpenActionConfirm} />
                                                                 ))
                                                               ) : (
                                                                 <p className="text-[11px] text-slate-400 italic px-2">No agents available.</p>
@@ -1086,6 +1203,7 @@ export default function AgentDirectoryModule({
                       <th className="px-5 py-3.5">Contact</th>
                       <th className="px-5 py-3.5">Status</th>
                       <th className="px-5 py-3.5">Reg. Date</th>
+                      <th className="px-5 py-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
@@ -1117,6 +1235,8 @@ export default function AgentDirectoryModule({
                           <td className="px-5 py-3.5">
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
                               ag.status?.toLowerCase() === 'approved' || ag.status?.toLowerCase() === 'active' ? 'bg-emerald-500/10 text-emerald-500' :
+                              ag.status?.toLowerCase() === 'suspended' ? 'bg-amber-500/10 text-amber-500' :
+                              ag.status?.toLowerCase() === 'revoked' ? 'bg-rose-500/10 text-rose-500' :
                               ag.status?.toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' : 'bg-amber-500/10 text-amber-500'
                             }`}>
                               {ag.status}
@@ -1124,6 +1244,52 @@ export default function AgentDirectoryModule({
                           </td>
                           <td className="px-5 py-3.5 text-slate-400 text-[10px]">
                             {new Date(ag.createdAt).toLocaleDateString()}
+                          </td>
+                          <td className="px-5 py-3.5 text-right" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openAgentScorecard(ag)}
+                                className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors"
+                              >
+                                View
+                              </button>
+                              {ag.status?.toLowerCase() === 'suspended' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenActionConfirm(ag, 'reactivate')}
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 transition-colors"
+                                  >
+                                    Reactivate
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenActionConfirm(ag, 'revoke')}
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors"
+                                  >
+                                    Revoke
+                                  </button>
+                                </>
+                              ) : ag.status?.toLowerCase() !== 'revoked' && ag.status?.toLowerCase() !== 'rejected' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenActionConfirm(ag, 'suspend')}
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 border border-amber-500/20 transition-colors"
+                                  >
+                                    Suspend
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenActionConfirm(ag, 'revoke')}
+                                    className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors"
+                                  >
+                                    Revoke
+                                  </button>
+                                </>
+                              ) : null}
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1140,7 +1306,7 @@ export default function AgentDirectoryModule({
               {filteredAgents.map(ag => (
                 <AgentCardItem key={ag._id} agent={ag} levelBadge={`${ag.level.toUpperCase()} AGENT`} levelColor={
                   ag.level === 'state' ? 'purple' : ag.level === 'district' ? 'blue' : ag.level === 'division' ? 'indigo' : 'emerald'
-                } onOpenScorecard={openAgentScorecard} />
+                } onOpenScorecard={openAgentScorecard} onAction={handleOpenActionConfirm} />
               ))}
             </div>
           )}
@@ -1483,12 +1649,62 @@ export default function AgentDirectoryModule({
                 </>
               )}
 
-              {/* FOOTER BUTTON */}
-              <div className="pt-2 flex justify-end">
+              {/* FOOTER ACTIONS */}
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!['suspended', 'revoked'].includes((selectedScorecardAgent.status || '').toLowerCase()) && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenActionConfirm(selectedScorecardAgent, 'suspend')}
+                        className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                        title="Temporarily suspend agent account access"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" /> Suspend Agent
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenActionConfirm(selectedScorecardAgent, 'revoke')}
+                        className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                        title="Permanently remove agent access and release territory"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Revoke Agent
+                      </button>
+                    </>
+                  )}
+
+                  {(selectedScorecardAgent.status || '').toLowerCase() === 'suspended' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenActionConfirm(selectedScorecardAgent, 'reactivate')}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                        title="Reactivate suspended agent"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" /> Reactivate Agent
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenActionConfirm(selectedScorecardAgent, 'revoke')}
+                        className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                        title="Permanently revoke agent access and release territory"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Revoke Agent
+                      </button>
+                    </>
+                  )}
+
+                  {(selectedScorecardAgent.status || '').toLowerCase() === 'revoked' && (
+                    <span className="px-3 py-1.5 bg-rose-500/10 text-rose-600 border border-rose-500/20 font-extrabold text-xs rounded-xl flex items-center gap-1.5">
+                      <XCircle className="w-3.5 h-3.5" /> Access Revoked (Territory Released)
+                    </span>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={() => setSelectedScorecardAgent(null)}
-                  className="bg-amber-900 hover:bg-amber-950 dark:bg-amber-800 dark:hover:bg-amber-700 text-white font-extrabold text-xs px-6 py-3 rounded-2xl shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
                 >
                   Close Scorecard
                 </button>
@@ -1498,12 +1714,158 @@ export default function AgentDirectoryModule({
           </div>
         );
       })()}
+
+      {/* AGENT STATUS ACTION CONFIRMATION MODAL */}
+      {actionConfirmModal.isOpen && actionConfirmModal.agent && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl">
+            <div className="flex justify-between items-start">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                  actionConfirmModal.action === 'revoke'
+                    ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                    : actionConfirmModal.action === 'suspend'
+                    ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                    : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                }`}>
+                  {actionConfirmModal.action === 'revoke' ? (
+                    <XCircle className="w-5 h-5" />
+                  ) : actionConfirmModal.action === 'suspend' ? (
+                    <AlertTriangle className="w-5 h-5" />
+                  ) : (
+                    <CheckCircle className="w-5 h-5" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">
+                    {actionConfirmModal.action === 'revoke'
+                      ? 'Revoke Agent Access'
+                      : actionConfirmModal.action === 'suspend'
+                      ? 'Suspend Agent Account'
+                      : 'Reactivate Agent Account'}
+                  </h3>
+                  <p className="text-xs text-slate-400 font-semibold">
+                    Target: {actionConfirmModal.agent.name} ({actionConfirmModal.agent.level?.toUpperCase()} AGENT)
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActionConfirmModal({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null })}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Warning Message Box */}
+            <div className={`p-4 rounded-2xl text-xs font-semibold space-y-1.5 ${
+              actionConfirmModal.action === 'revoke'
+                ? 'bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300'
+                : actionConfirmModal.action === 'suspend'
+                ? 'bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300'
+                : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+            }`}>
+              {actionConfirmModal.action === 'revoke' ? (
+                <>
+                  <p className="font-bold">⚠️ CRITICAL: Territory Slot Release & Permanent Access Removal</p>
+                  <p className="text-[11px] opacity-90">
+                    1. The agent will lose access immediately and all active sessions will be invalidated.<br/>
+                    2. The territory assignment ({extractAgentTerritory(actionConfirmModal.agent).state} / {extractAgentTerritory(actionConfirmModal.agent).district} / {extractAgentTerritory(actionConfirmModal.agent).pincode}) will be <strong>RELEASED IMMEDIATELY</strong> so a replacement agent can be onboarded.<br/>
+                    3. Historical performance, orders, and audits remain preserved in database records.
+                  </p>
+                </>
+              ) : actionConfirmModal.action === 'suspend' ? (
+                <>
+                  <p className="font-bold">⚠️ Temporary Access Block</p>
+                  <p className="text-[11px] opacity-90">
+                    1. The agent will be immediately logged out and blocked from logging in.<br/>
+                    2. Territory assignment is <strong>RETAINED</strong> and remains allocated.<br/>
+                    3. Account can be reactivated at any time by Admin.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-bold">✓ Restore Active Access</p>
+                  <p className="text-[11px] opacity-90">
+                    The agent account status will be restored to Approved/Active. The agent will be able to log in and access the portal normally.
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* Target Agent Summary */}
+            <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs space-y-1">
+              <div className="flex justify-between"><span className="text-slate-400">Agent ID:</span><span className="font-mono font-bold">{actionConfirmModal.agent.registrationId || actionConfirmModal.agent._id}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-bold">{actionConfirmModal.agent.email || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-slate-400">Territory:</span><span className="font-bold">{extractAgentTerritory(actionConfirmModal.agent).state} / {extractAgentTerritory(actionConfirmModal.agent).district}</span></div>
+            </div>
+
+            {/* Optional Reason Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                Administrative Reason (Recorded in Audit History):
+              </label>
+              <textarea
+                rows={2}
+                value={actionConfirmModal.reason}
+                onChange={e => setActionConfirmModal(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder={
+                  actionConfirmModal.action === 'revoke'
+                    ? 'Enter reason for territory release and access revocation...'
+                    : actionConfirmModal.action === 'suspend'
+                    ? 'Enter reason for temporary suspension...'
+                    : 'Reason for reactivation...'
+                }
+                className="w-full text-xs p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
+            </div>
+
+            {actionConfirmModal.error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-bold rounded-xl">
+                {actionConfirmModal.error}
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex justify-end items-center gap-3 pt-2">
+              <button
+                type="button"
+                disabled={actionConfirmModal.loading}
+                onClick={() => setActionConfirmModal({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null })}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actionConfirmModal.loading}
+                onClick={handleExecuteAgentAction}
+                className={`px-5 py-2.5 rounded-xl text-xs font-extrabold text-white shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 ${
+                  actionConfirmModal.action === 'revoke'
+                    ? 'bg-rose-600 hover:bg-rose-700'
+                    : actionConfirmModal.action === 'suspend'
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {actionConfirmModal.loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                {actionConfirmModal.action === 'revoke'
+                  ? 'Confirm Revoke & Release'
+                  : actionConfirmModal.action === 'suspend'
+                  ? 'Confirm Suspend'
+                  : 'Confirm Reactivation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // Sub-Component for Rendering Individual Agent Item Cards (Matches exact user screenshot design)
-function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel, onOpenScorecard }) {
+function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel, onOpenScorecard, onAction }) {
   const levelStyles = {
     purple: {
       border: 'border-l-purple-600',
@@ -1557,7 +1919,15 @@ function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel,
           <span className="text-[11px] font-mono text-slate-400 font-bold">
             ID: {formattedId}
           </span>
-          {isApproved ? (
+          {agent.status === 'revoked' ? (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-600 border border-rose-500/20 flex items-center gap-1">
+              <XCircle className="w-3 h-3 text-rose-500" /> Revoked
+            </span>
+          ) : agent.status === 'suspended' ? (
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3 text-amber-500" /> Suspended
+            </span>
+          ) : isApproved ? (
             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
               <CheckCircle className="w-3 h-3 text-emerald-500" /> Approved
             </span>
@@ -1599,7 +1969,7 @@ function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel,
       </div>
 
       {/* Right Actions */}
-      <div className="flex items-center gap-2.5 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0" onClick={e => e.stopPropagation()}>
+      <div className="flex items-center gap-2 shrink-0 w-full md:w-auto justify-end pt-2 md:pt-0 flex-wrap" onClick={e => e.stopPropagation()}>
         <button
           type="button"
           onClick={() => onOpenScorecard && onOpenScorecard(agent)}
@@ -1607,6 +1977,54 @@ function AgentCardItem({ agent, levelBadge, levelColor, onExplore, exploreLabel,
         >
           <Eye className="w-3.5 h-3.5 text-slate-500" /> Details
         </button>
+
+        {onAction && agent.status !== 'revoked' && agent.status !== 'suspended' && (
+          <>
+            <button
+              type="button"
+              onClick={() => onAction(agent, 'suspend')}
+              className="px-2.5 py-2 rounded-xl text-xs font-bold bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 border border-amber-500/20 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Suspend Agent"
+            >
+              Suspend
+            </button>
+            <button
+              type="button"
+              onClick={() => onAction(agent, 'revoke')}
+              className="px-2.5 py-2 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Revoke Agent & Release Territory"
+            >
+              Revoke
+            </button>
+          </>
+        )}
+
+        {onAction && agent.status === 'suspended' && (
+          <>
+            <button
+              type="button"
+              onClick={() => onAction(agent, 'reactivate')}
+              className="px-2.5 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Reactivate Agent"
+            >
+              Reactivate
+            </button>
+            <button
+              type="button"
+              onClick={() => onAction(agent, 'revoke')}
+              className="px-2.5 py-2 rounded-xl text-xs font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-all cursor-pointer shadow-xs active:scale-95"
+              title="Revoke Agent & Release Territory"
+            >
+              Revoke
+            </button>
+          </>
+        )}
+
+        {agent.status === 'revoked' && (
+          <span className="px-2.5 py-1 text-[10px] font-extrabold uppercase rounded-lg bg-rose-500/10 text-rose-600 border border-rose-500/20">
+            Revoked
+          </span>
+        )}
 
         {onExplore && (
           <button

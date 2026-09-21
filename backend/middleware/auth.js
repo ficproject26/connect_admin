@@ -32,10 +32,20 @@ module.exports = async function(req, res, next) {
                 const uStatus = (dbUser.status || '').toLowerCase();
 
                 if (uRole === 'agent') {
+                    if (uStatus === 'revoked') {
+                        return res.status(403).json({
+                            title: 'Access Revoked',
+                            message: 'Your agent access has been revoked. Please contact the administrator.',
+                            msg: 'Your agent access has been revoked. Please contact the administrator.',
+                            status: 'revoked',
+                            isRevoked: true
+                        });
+                    }
                     if (uStatus === 'suspended' || (!dbUser.isActive && uStatus !== 'approved' && uStatus !== 'active')) {
                         return res.status(403).json({
                             title: 'Account Suspended',
-                            message: 'Your agent account has been suspended by the Administrator. Access to the Agent Portal has been temporarily disabled.',
+                            message: 'Your account has been suspended. Please contact the administrator.',
+                            msg: 'Your account has been suspended. Please contact the administrator.',
                             status: 'suspended',
                             isSuspended: true
                         });
