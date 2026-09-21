@@ -7893,12 +7893,24 @@ function App() {
                 {(() => {
                   const rawRes = modalData.resumeUrl || modalData.candidateResume;
                   let fullUrl = null;
-                  if (rawRes && typeof rawRes === 'string' && rawRes.trim() && !rawRes.includes('dummy') && !rawRes.includes('unsplash')) {
+
+                  if (
+                    rawRes &&
+                    typeof rawRes === 'string' &&
+                    rawRes.trim() &&
+                    !rawRes.includes('dummy') &&
+                    !rawRes.includes('unsplash')
+                  ) {
                     const clean = rawRes.trim();
-                    if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:')) {
+
+                    if (
+                      clean.startsWith('http://') ||
+                      clean.startsWith('https://') ||
+                      clean.startsWith('data:')
+                    ) {
                       fullUrl = clean;
                     } else {
-                      fullUrl = `http://localhost:5000${clean.startsWith('/') ? '' : '/'}${clean}`;
+                      fullUrl = `${API_ORIGIN}${clean.startsWith('/') ? '' : '/'}${clean}`;
                     }
                   }
                   return fullUrl ? (
