@@ -847,7 +847,13 @@ function App() {
           if (Array.isArray(data) && data.length > 0) {
             handleSetAgents(data);
           } else {
-            safeFetch(`${API_BASE}/admin/agent-performance/overview`, handleSetAgents);
+            safeFetch(`${API_BASE}/admin/agent-performance/overview`, (perfData) => {
+              if (perfData && Array.isArray(perfData.agents)) {
+                handleSetAgents(perfData.agents);
+              } else if (Array.isArray(perfData)) {
+                handleSetAgents(perfData);
+              }
+            });
           }
         }, 'agents'),
         swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors'),
@@ -983,7 +989,7 @@ function App() {
     if (activeTab === 'dashboard' || activeTab === 'overview') {
       fetchData();
     }
-    if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-performance' || activeTab === 'agent-payment') {
+    if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-payment') {
       if (!Array.isArray(agents) || agents.length === 0) {
         delete apiCacheRef.current['agents'];
       }
@@ -991,7 +997,13 @@ function App() {
         if (Array.isArray(data) && data.length > 0) {
           handleSetAgents(data);
         } else {
-          safeFetch(`${API_BASE}/admin/agent-performance/overview`, handleSetAgents);
+          safeFetch(`${API_BASE}/admin/agent-performance/overview`, (perfData) => {
+            if (perfData && Array.isArray(perfData.agents)) {
+              handleSetAgents(perfData.agents);
+            } else if (Array.isArray(perfData)) {
+              handleSetAgents(perfData);
+            }
+          });
         }
       }, 'agents');
       if (!Array.isArray(agents) || agents.length === 0) {
@@ -999,7 +1011,13 @@ function App() {
           if (Array.isArray(data) && data.length > 0) {
             handleSetAgents(data);
           } else {
-            safeFetch(`${API_BASE}/admin/agent-performance/overview`, handleSetAgents);
+            safeFetch(`${API_BASE}/admin/agent-performance/overview`, (perfData) => {
+              if (perfData && Array.isArray(perfData.agents)) {
+                handleSetAgents(perfData.agents);
+              } else if (Array.isArray(perfData)) {
+                handleSetAgents(perfData);
+              }
+            });
           }
         });
       }

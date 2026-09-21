@@ -17,4 +17,7 @@ const AgentTargetSchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
 });
 
+AgentTargetSchema.index({ agentId: 1, period: 1 });
+AgentTargetSchema.index({ agentId: 1 });
+
 module.exports = mongoose.model('AgentTarget', AgentTargetSchema);

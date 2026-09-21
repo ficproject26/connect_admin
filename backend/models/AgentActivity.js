@@ -25,5 +25,7 @@ const AgentActivitySchema = new mongoose.Schema({
 
 AgentActivitySchema.index({ agentId: 1, actionType: 1 });
 AgentActivitySchema.index({ timestamp: -1 });
+AgentActivitySchema.index({ agentId: 1, timestamp: -1, actionType: 1 });
+AgentActivitySchema.index({ agentId: 1, timestamp: -1 });
 
 module.exports = mongoose.model('AgentActivity', AgentActivitySchema);

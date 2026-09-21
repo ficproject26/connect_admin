@@ -5156,10 +5156,30 @@ const calculateAgentPerformanceScore = (metrics, target) => {
     return { score, rating, colorClass, targetCompletionPct: score };
 };
 
-// GET Performance Overview (100% Real Database Calculations)
-router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) => {
+// In-memory cache for fast agent performance overview responses
+const agentPerfOverviewCache = new Map();
+const AGENT_PERF_CACHE_TTL_MS = 30 * 1000;
+const clearAgentPerfOverviewCache = () => {
+    agentPerfOverviewCache.clear();
+};
+
+// GET Performance Overview (Optimized MongoDB Aggregation & Real Database Calculations)
+const handleAgentPerformanceOverview = async (req, res) => {
     try {
-        const { period = 'monthly', startDate, endDate, agentType, state, district, division, pincode, search, status } = req.query;
+        const { period = 'monthly', startDate, endDate, agentType, state, district, division, pincode, search, status, refresh } = req.query;
+
+        // In-memory cache lookup (bypassed if refresh=true)
+        const activePerfUser = req.adminUser || req.user;
+        const userScopeKey = activePerfUser ? (activePerfUser._id || activePerfUser.id || activePerfUser.email) : 'super';
+        const cacheKey = `${userScopeKey}_${period}_${startDate || ''}_${endDate || ''}_${agentType || ''}_${status || ''}_${state || ''}_${district || ''}_${division || ''}_${pincode || ''}_${search || ''}`;
+
+        const isRefresh = refresh === 'true' || refresh === true;
+        if (!isRefresh && agentPerfOverviewCache.has(cacheKey)) {
+            const cachedItem = agentPerfOverviewCache.get(cacheKey);
+            if (Date.now() - cachedItem.timestamp < AGENT_PERF_CACHE_TTL_MS) {
+                return res.json(cachedItem.data);
+            }
+        }
 
         let start = new Date();
         let end = new Date();
@@ -5170,25 +5190,26 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         } else if (period === 'weekly') {
             const day = start.getDay();
             const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-            start = new Date(start.setDate(diff));
-            start.setHours(0, 0, 0, 0);
+            start = new Date(start.getFullYear(), start.getMonth(), diff, 0, 0, 0, 0);
+            end = new Date(start.getTime() + 6 * 86400000);
             end.setHours(23, 59, 59, 999);
         } else if (period === 'monthly') {
-            start = new Date(start.getFullYear(), start.getMonth(), 1);
+            start = new Date(start.getFullYear(), start.getMonth(), 1, 0, 0, 0, 0);
             end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
         } else if (period === 'quarterly') {
             const quarterMonth = Math.floor(start.getMonth() / 3) * 3;
-            start = new Date(start.getFullYear(), quarterMonth, 1);
+            start = new Date(start.getFullYear(), quarterMonth, 1, 0, 0, 0, 0);
             end = new Date(start.getFullYear(), quarterMonth + 3, 0, 23, 59, 59, 999);
         } else if (period === 'half-yearly') {
             const halfMonth = start.getMonth() < 6 ? 0 : 6;
-            start = new Date(start.getFullYear(), halfMonth, 1);
+            start = new Date(start.getFullYear(), halfMonth, 1, 0, 0, 0, 0);
             end = new Date(start.getFullYear(), halfMonth + 6, 0, 23, 59, 59, 999);
         } else if (period === 'yearly') {
-            start = new Date(start.getFullYear(), 0, 1);
+            start = new Date(start.getFullYear(), 0, 1, 0, 0, 0, 0);
             end = new Date(start.getFullYear(), 11, 31, 23, 59, 59, 999);
         } else if (period === 'custom' && startDate && endDate) {
             start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
             end = new Date(endDate);
             end.setHours(23, 59, 59, 999);
         }
@@ -5247,7 +5268,6 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         }
 
         // Role-based territory scoping for logged-in agent / branch admin users
-        const activePerfUser = req.adminUser || req.user;
         const isPerfSuperAdmin = !activePerfUser || req.adminUser || (
             activePerfUser.adminRole === 'super-admin' ||
             activePerfUser.role === 'super-admin' ||
@@ -5306,14 +5326,42 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
             agentFilter.$or = orConditions;
         }
 
+        // Optimized projection to only retrieve needed fields (avoids fetching massive KYC images, base64 blobs, documents)
+        const agentProjection = {
+            _id: 1,
+            name: 1,
+            email: 1,
+            phone: 1,
+            role: 1,
+            level: 1,
+            assignedArea: 1,
+            assignedPincode: 1,
+            assignedState: 1,
+            assignedDistrict: 1,
+            assignedDivision: 1,
+            state: 1,
+            district: 1,
+            division: 1,
+            pincode: 1,
+            territory: 1,
+            status: 1,
+            isActive: 1,
+            vendorsAdded: 1,
+            balance: 1,
+            commissionEarned: 1,
+            'kyc.selfie': 1,
+            createdAt: 1,
+            registrationId: 1
+        };
+
         let allAgents = [];
         const db = mongoose.connection.db;
         try {
-            const userAgents = await User.find(agentFilter).lean();
+            const userAgents = await User.find(agentFilter, agentProjection).lean();
             let rawAgents = [];
             if (db) {
                 try {
-                    rawAgents = await db.collection('agents').find({}).toArray();
+                    rawAgents = await db.collection('agents').find({}, { projection: agentProjection }).toArray();
                 } catch (aErr) {}
             }
             const agentMap = new Map();
@@ -5350,43 +5398,115 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
         }
 
         const agentIds = allAgents.map(a => a._id);
+        const objectIds = agentIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+        const stringIds = agentIds.map(id => id.toString());
+        const matchIds = [...new Set([...objectIds, ...stringIds])];
 
-        // Fetch targets for these agents
-        const targets = await AgentTarget.find({ agentId: { $in: agentIds } });
-        const targetMap = {};
-        targets.forEach(t => { targetMap[t.agentId.toString()] = t; });
-
-        // Fetch activities
-        const activities = await AgentActivity.find({ 
-            agentId: { $in: agentIds },
-            timestamp: { $gte: start, $lte: end }
-        }).sort({ timestamp: -1 });
-
-        // Fetch tasks
         const Task = require('../models/Task');
-        const pendingTasksCount = await Task.countDocuments({
-            assignedTo: { $in: agentIds },
-            status: 'pending'
+
+        // Fetch targets, activities aggregation, and pending tasks in parallel
+        const [targets, activityAggregation, pendingTasksCount] = await Promise.all([
+            AgentTarget.find({ agentId: { $in: matchIds } }).lean(),
+            AgentActivity.aggregate([
+                {
+                    $match: {
+                        agentId: { $in: matchIds },
+                        timestamp: { $gte: start, $lte: end }
+                    }
+                },
+                {
+                    $group: {
+                        _id: {
+                            agentId: '$agentId',
+                            actionType: '$actionType'
+                        },
+                        count: { $sum: 1 },
+                        revenue: {
+                            $sum: {
+                                $cond: [
+                                    { $eq: ['$actionType', 'revenue_generated'] },
+                                    { $ifNull: ['$metadata.amount', 0] },
+                                    0
+                                ]
+                            }
+                        },
+                        lastTimestamp: { $max: '$timestamp' }
+                    }
+                }
+            ]),
+            Task.countDocuments({
+                assignedTo: { $in: matchIds },
+                status: 'pending'
+            })
+        ]);
+
+        const targetMap = {};
+        targets.forEach(t => {
+            if (t.agentId) targetMap[t.agentId.toString()] = t;
         });
 
-        // Compute metrics per agent strictly from DB records
+        // Fast O(1) activity stats lookup map per agent
+        const activityStatsMap = {};
+        for (const item of activityAggregation) {
+            const agId = item._id.agentId ? item._id.agentId.toString() : '';
+            if (!agId) continue;
+            if (!activityStatsMap[agId]) {
+                activityStatsMap[agId] = {
+                    registrations: 0,
+                    membershipSales: 0,
+                    vendorOnboarding: 0,
+                    orders: 0,
+                    revenue: 0,
+                    loginCount: 0,
+                    lastLogin: null,
+                    callsMade: 0,
+                    meetingsConducted: 0
+                };
+            }
+            const stat = activityStatsMap[agId];
+            const action = item._id.actionType;
+            if (action === 'register_customer') stat.registrations += item.count;
+            else if (action === 'membership_sold') stat.membershipSales += item.count;
+            else if (action === 'add_vendor') stat.vendorOnboarding += item.count;
+            else if (action === 'order_generated') stat.orders += item.count;
+            else if (action === 'revenue_generated') stat.revenue += (item.revenue || 0);
+            else if (action === 'call_made') stat.callsMade += item.count;
+            else if (action === 'meeting_conducted') stat.meetingsConducted += item.count;
+            else if (action === 'login') {
+                stat.loginCount += item.count;
+                if (!stat.lastLogin || (item.lastTimestamp && item.lastTimestamp > stat.lastLogin)) {
+                    stat.lastLogin = item.lastTimestamp;
+                }
+            }
+        }
+
+        // Compute metrics per agent strictly from DB records in linear time
         const agentMetricsList = allAgents.map(agent => {
             const agentIdStr = agent._id.toString();
-            const agActivities = activities.filter(act => act.agentId.toString() === agentIdStr);
+            const stat = activityStatsMap[agentIdStr] || {
+                registrations: 0,
+                membershipSales: 0,
+                vendorOnboarding: 0,
+                orders: 0,
+                revenue: 0,
+                loginCount: 0,
+                lastLogin: null,
+                callsMade: 0,
+                meetingsConducted: 0
+            };
             const tgt = targetMap[agentIdStr] || { targets: { registrations: 100, membershipSales: 50, vendorOnboarding: 25, orders: 500, revenue: 500000 } };
 
-            const registrations = agActivities.filter(a => a.actionType === 'register_customer').length;
-            const membershipSales = agActivities.filter(a => a.actionType === 'membership_sold').length;
-            const vendorOnboarding = agent.vendorsAdded || agActivities.filter(a => a.actionType === 'add_vendor').length;
-            const orders = agActivities.filter(a => a.actionType === 'order_generated').length;
-            const revenue = agent.balance || agActivities.filter(a => a.actionType === 'revenue_generated').reduce((acc, a) => acc + (a.metadata?.amount || 0), 0);
+            const registrations = stat.registrations;
+            const membershipSales = stat.membershipSales;
+            const vendorOnboarding = agent.vendorsAdded || stat.vendorOnboarding;
+            const orders = stat.orders;
+            const revenue = agent.balance || stat.revenue;
             const commission = agent.commissionEarned || 0;
 
-            const loginActivities = agActivities.filter(a => a.actionType === 'login');
-            const attendancePct = loginActivities.length > 0 ? Math.min(100, Math.round((loginActivities.length / 25) * 100)) : (agent.isActive ? 100 : 0);
-            const loginDays = loginActivities.length || (agent.isActive ? 1 : 0);
-            const callsMade = agActivities.filter(a => a.actionType === 'call_made').length;
-            const meetingsConducted = agActivities.filter(a => a.actionType === 'meeting_conducted').length;
+            const attendancePct = stat.loginCount > 0 ? Math.min(100, Math.round((stat.loginCount / 25) * 100)) : (agent.isActive ? 100 : 0);
+            const loginDays = stat.loginCount || (agent.isActive ? 1 : 0);
+            const callsMade = stat.callsMade;
+            const meetingsConducted = stat.meetingsConducted;
 
             const perfScore = calculateAgentPerformanceScore({ registrations, membershipSales, vendorOnboarding, orders, revenue, attendancePct }, tgt);
 
@@ -5417,7 +5537,7 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
                     meetingsConducted,
                     attendancePct,
                     loginDays,
-                    lastLogin: loginActivities[0]?.timestamp || agent.createdAt
+                    lastLogin: stat.lastLogin || agent.createdAt
                 },
                 score: perfScore.score,
                 rating: perfScore.rating,
@@ -5453,19 +5573,32 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
 
         const avgScore = agentMetricsList.length > 0 ? Math.round(agentMetricsList.reduce((acc, c) => acc + c.score, 0) / agentMetricsList.length) : 0;
 
+        const highestAgentName = sortedByScore[0] && sortedByScore[0].score > 0 ? sortedByScore[0].agent?.name : 'N/A';
+        const lowestAgentName = sortedByScore.length > 1 && sortedByScore[sortedByScore.length - 1].score > 0 ? sortedByScore[sortedByScore.length - 1].agent?.name : 'N/A';
+
         const cards = {
             totalAgents,
+            registeredAgents: totalAgents,
             activeAgents,
             inactiveAgents,
             todaysPerformance: `${avgScore}% Achieved`,
+            dailyTargetProgress: `${avgScore}% Achieved`,
             weeklyPerformance: `${avgScore}% Achieved`,
+            weeklyTargetProgress: `${avgScore}% Achieved`,
             monthlyPerformance: `${avgScore}% Achieved`,
+            monthlyTargetProgress: `${avgScore}% Achieved`,
             yearlyPerformance: `${avgScore}% Achieved`,
-            highestPerformer: sortedByScore[0] && sortedByScore[0].score > 0 ? sortedByScore[0].agent?.name : 'N/A',
-            lowestPerformer: sortedByScore.length > 1 && sortedByScore[sortedByScore.length - 1].score > 0 ? sortedByScore[sortedByScore.length - 1].agent?.name : 'N/A',
+            yearlyTargetProgress: `${avgScore}% Achieved`,
+            highestPerformer: highestAgentName,
+            highestScoreAgent: highestAgentName,
+            lowestPerformer: lowestAgentName,
+            lowestScoreAgent: lowestAgentName,
             pendingTasks: pendingTasksCount,
+            assignedTasks: pendingTasksCount,
             totalRevenueGenerated: totalRevenue,
+            totalRevenue,
             totalLeads,
+            callsAndMeetings: totalLeads,
             totalRegistrations
         };
 
@@ -5515,32 +5648,53 @@ router.get('/agent-performance/overview', [auth, adminAuth], async (req, res) =>
             { month: 'Jun', Registrations: baseReg }
         ];
 
-        const activityHeatmap = Array.from({ length: 7 }, (_, dayIdx) => ({
-            day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][dayIdx],
-            hours: Array.from({ length: 12 }, (_, h) => ({
-                hour: `${h + 8}:00`,
-                activityCount: activities.filter(a => new Date(a.timestamp).getDay() === (dayIdx + 1) % 7).length
-            }))
-        }));
-
-        res.json({
+        const responsePayload = {
+            success: true,
             cards,
             leaderboards,
             charts: {
                 lineChartData,
                 barChartRevenue,
                 pieChartCategory,
-                areaChartRegistrations,
-                activityHeatmap
+                areaChartRegistrations
             },
-            agents: agentMetricsList
-        });
+            agents: agentMetricsList,
+            data: {
+                summary: {
+                    registeredAgents: totalAgents,
+                    activeAgents,
+                    inactiveAgents
+                },
+                cards,
+                leaderboards,
+                charts: {
+                    lineChartData,
+                    barChartRevenue,
+                    pieChartCategory,
+                    areaChartRegistrations
+                },
+                agents: agentMetricsList
+            }
+        };
+
+        // Cache response for 30 seconds
+        agentPerfOverviewCache.set(cacheKey, { timestamp: Date.now(), data: responsePayload });
+        if (agentPerfOverviewCache.size > 100) {
+            const firstKey = agentPerfOverviewCache.keys().next().value;
+            agentPerfOverviewCache.delete(firstKey);
+        }
+
+        return res.json(responsePayload);
 
     } catch (err) {
         console.error('Agent performance overview error:', err);
-        res.status(500).send('Server error');
+        res.status(500).json({ success: false, msg: 'Server error loading agent performance' });
     }
-});
+};
+
+// Mount both routes
+router.get('/agent-performance/overview', [auth, adminAuth], handleAgentPerformanceOverview);
+router.get('/agent-performance', [auth, adminAuth], handleAgentPerformanceOverview);
 
 // GET Detailed Performance Profile for single Agent (11 tabs drilldown)
 router.get('/agent-performance/agent/:id', [auth, adminAuth], async (req, res) => {
@@ -5625,6 +5779,8 @@ router.post('/agent-performance/targets', [auth, adminAuth], async (req, res) =>
         if (io) {
             io.emit('target_updated', { agentId, targets: targetDoc.targets });
         }
+
+        clearAgentPerfOverviewCache();
 
         res.json(targetDoc);
     } catch (err) {

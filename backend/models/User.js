@@ -89,6 +89,8 @@ const UserSchema = new mongoose.Schema({
 }, { strict: false, strictPopulate: false });
 
 UserSchema.index({ role: 1, status: 1, level: 1 });
+UserSchema.index({ role: 1, level: 1 });
+UserSchema.index({ role: 1, status: 1 });
 UserSchema.index({ role: 1, isApproved: 1, isActive: 1 });
 UserSchema.index({ role: 1, level: 1, status: 1, isActive: 1 });
 UserSchema.index({ role: 1, branchId: 1, status: 1 });
