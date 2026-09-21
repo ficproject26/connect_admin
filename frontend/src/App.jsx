@@ -25,49 +25,11 @@ import AgentPaymentModule from './components/AgentPaymentModule';
 import { PincodeTerritoryManagement } from './components/PincodeTerritoryManagement';
 import dataSyncManager from './utils/dataSyncManager';
 
-const getBackendUrl = () => {
-  const isLocalDev = typeof window !== 'undefined' && (
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1'
-  );
+const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE)
+  ? import.meta.env.VITE_API_BASE
+  : 'http://3.110.88.42:8004/api';
 
-  if (isLocalDev) {
-    const envApiUrl = typeof import.meta !== 'undefined' && import.meta.env
-      ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
-      : null;
-    if (envApiUrl && envApiUrl.startsWith('http')) {
-      return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
-    }
-    return 'http://localhost:8004/api';
-  }
-
-  // Detect HTTPS production origin (e.g., Vercel)
-  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-
-  const envApiUrl = typeof import.meta !== 'undefined' && import.meta.env
-    ? import.meta.env.VITE_API_BASE || import.meta.env.NEXT_PUBLIC_API_URL || import.meta.env.VITE_API_URL
-    : null;
-
-  if (envApiUrl && envApiUrl.startsWith('http')) {
-    // If the webpage is loaded over HTTPS, calling an insecure http:// endpoint causes Mixed Content block!
-    if (isHttps && envApiUrl.startsWith('http://')) {
-      return '/api';
-    }
-    return envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl.replace(/\/$/, '')}/api`;
-  }
-
-  // When hosted on HTTPS (like Vercel), use relative /api proxy
-  if (isHttps) {
-    return '/api';
-  }
-
-  return 'https://connect-admin-qlcy.onrender.com/api';
-};
-
-const API_BASE = getBackendUrl();
-const API_ORIGIN = (API_BASE && API_BASE.startsWith('http'))
-  ? API_BASE.replace(/\/api\/?$/, '')
-  : (typeof window !== 'undefined' ? window.location.origin : '');
+const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
 const TAXONOMY = {
   "Services": {},
@@ -782,12 +744,7 @@ function App() {
         targetUrls.push(`${API_ORIGIN}${cleanPath}`);
       }
 
-      // 3. Add HTTPS Render fallback for 100% production uptime without Mixed Content
-      if (cleanPath) {
-        targetUrls.push(`https://connect-admin-qlcy.onrender.com${cleanPath}`);
-      }
-
-      // 4. Fallback original URL if not already present and not insecure http on https
+      // 3. Fallback original URL if not already present and not insecure http on https
       if (!targetUrls.includes(url) && (!isHttps || !url.startsWith('http://'))) {
         targetUrls.push(url);
       }
@@ -1130,19 +1087,10 @@ function App() {
     setLoading(true);
     setAuthError('');
     try {
-      const isLocalDev = typeof window !== 'undefined' && (
-        window.location.hostname === 'localhost' ||
-        window.location.hostname === '127.0.0.1'
-      );
-      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const targets = [
-        '/api/auth/login',
         `${API_BASE}/auth/login`,
-        'https://connect-admin-qlcy.onrender.com/api/auth/login',
-        ...(isLocalDev ? [
-          'http://localhost:8004/api/auth/login'
-        ] : [])
-      ].filter(t => !isHttps || !t.startsWith('http://'));
+        '/api/auth/login'
+      ].filter(Boolean);
       const uniqueTargets = [...new Set(targets)];
 
       let res = null;

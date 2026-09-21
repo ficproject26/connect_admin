@@ -299,13 +299,10 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
   const fetchDirectRequests = async () => {
     try {
-      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-      const primaryUrl = baseClean ? `${baseClean}/admin/enterprise/vendors?isDirectRequest=true&limit=50` : null;
       const urls = [
-        '/api/admin/enterprise/vendors?isDirectRequest=true&limit=50',
-        (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
-        'https://connect-admin-qlcy.onrender.com/api/admin/enterprise/vendors?isDirectRequest=true&limit=50'
+        `${baseClean}/admin/enterprise/vendors?isDirectRequest=true&limit=50`,
+        '/api/admin/enterprise/vendors?isDirectRequest=true&limit=50'
       ];
       const uniqueUrls = [...new Set(urls.filter(Boolean))];
 
@@ -343,13 +340,10 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
   const fetchAgentOnboardedVendors = async () => {
     try {
-      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-      const primaryUrl = baseClean ? `${baseClean}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500` : null;
       const urls = [
-        '/api/admin/enterprise/vendors?isAgentOnboarded=true&limit=500',
-        (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
-        'https://connect-admin-qlcy.onrender.com/api/admin/enterprise/vendors?isAgentOnboarded=true&limit=500'
+        `${baseClean}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500`,
+        '/api/admin/enterprise/vendors?isAgentOnboarded=true&limit=500'
       ];
       const uniqueUrls = [...new Set(urls.filter(Boolean))];
 
@@ -386,13 +380,10 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const fetchVendorBusinessRequests = async () => {
     setBusinessRequestsLoading(true);
     try {
-      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
       const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-      const primaryUrl = baseClean ? `${baseClean}/admin/vendors/business-requests` : null;
       const urls = [
-        '/api/admin/vendors/business-requests',
-        (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
-        'https://connect-admin-qlcy.onrender.com/api/admin/vendors/business-requests'
+        `${baseClean}/admin/vendors/business-requests`,
+        '/api/admin/vendors/business-requests'
       ];
       const uniqueUrls = [...new Set(urls.filter(Boolean))];
 

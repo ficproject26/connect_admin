@@ -72,13 +72,10 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
-    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-    const primaryUrl = baseClean ? `${baseClean}/admin/agents` : null;
     const urls = [
-      '/api/admin/agents',
-      (primaryUrl && (!isHttps || primaryUrl.startsWith('https://'))) ? primaryUrl : null,
-      'https://connect-admin-qlcy.onrender.com/api/admin/agents'
+      `${baseClean}/admin/agents`,
+      '/api/admin/agents'
     ];
 
     const uniqueUrls = [...new Set(urls.filter(Boolean))];

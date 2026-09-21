@@ -82,14 +82,10 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       if (endDate) queryParams.append('endDate', endDate);
 
       const queryString = queryParams.toString();
-      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-      const cleanRelativeUrl = `/api/admin/agent-performance/overview?${queryString}`;
-      const primaryUrl = `${API_BASE}/admin/agent-performance/overview?${queryString}`;
-
+      const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
       const urlsToTry = [
-        cleanRelativeUrl,
-        (!isHttps || primaryUrl.startsWith('https://')) ? primaryUrl : null,
-        `https://connect-admin-qlcy.onrender.com/api/admin/agent-performance/overview?${queryString}`
+        `${baseClean}/admin/agent-performance/overview?${queryString}`,
+        `/api/admin/agent-performance/overview?${queryString}`
       ].filter(Boolean);
 
       let successData = null;
