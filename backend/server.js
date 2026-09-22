@@ -157,27 +157,59 @@ io.on('connection', (socket) => {
 // Define Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/auth', require('./routes/auth'));
+app.use('/admin-api/auth', require('./routes/auth'));
+
 app.use('/api/security', require('./routes/security'));
 app.use('/api/admin/security', require('./routes/security'));
+app.use('/admin-api/security', require('./routes/security'));
+app.use('/admin-api/admin/security', require('./routes/security'));
+
 app.use('/api/admin/enterprise', require('./routes/enterpriseModules'));
+app.use('/admin-api/enterprise', require('./routes/enterpriseModules'));
+app.use('/admin-api/admin/enterprise', require('./routes/enterpriseModules'));
+
 app.use('/api/admin/territory', require('./routes/territory'));
 app.use('/api/territory', require('./routes/territory'));
+app.use('/admin-api/territory', require('./routes/territory'));
+app.use('/admin-api/admin/territory', require('./routes/territory'));
+
 app.use('/api/admin', require('./routes/admin'));
+app.use('/admin-api/admin', require('./routes/admin'));
+app.use('/admin-api', require('./routes/admin'));
+
 app.use('/api/public', require('./routes/admin'));
+app.use('/admin-api/public', require('./routes/admin'));
+
 app.use('/api/agent', require('./routes/agent'));
+app.use('/admin-api/agent', require('./routes/agent'));
+
 app.use('/api/pincodes', require('./routes/pincodes'));
+app.use('/admin-api/pincodes', require('./routes/pincodes'));
+
 app.use('/api/payment', require('./routes/payment'));
+app.use('/admin-api/payment', require('./routes/payment'));
 
 // Top-level Route Aliases for Standard REST Paths
 app.use('/api/orders', require('./routes/admin'));
+app.use('/admin-api/orders', require('./routes/admin'));
+
 app.use('/api/bookings', require('./routes/admin'));
+app.use('/admin-api/bookings', require('./routes/admin'));
+
 app.use('/api/jobs', require('./routes/admin'));
+app.use('/admin-api/jobs', require('./routes/admin'));
+
 app.use('/api/products', require('./routes/admin'));
+app.use('/admin-api/products', require('./routes/admin'));
+
 app.use('/api/vendors', require('./routes/admin'));
+app.use('/admin-api/vendors', require('./routes/admin'));
+
 app.use('/api/users', require('./routes/admin'));
+app.use('/admin-api/users', require('./routes/admin'));
 
 // 404 Handler for unmapped API routes
-app.use('/api', (req, res) => {
+app.use(['/api', '/admin-api'], (req, res) => {
     res.status(404).json({
         success: false,
         message: `API route not found: ${req.method} ${req.originalUrl}`,

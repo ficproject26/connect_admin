@@ -7,6 +7,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/admin-api': {
+        target: 'https://api.ficapp.in',
+        changeOrigin: true,
+        secure: true
+      },
       '/api': {
         target: 'https://api.ficapp.in',
         changeOrigin: true,

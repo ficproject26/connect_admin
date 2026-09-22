@@ -3,6 +3,10 @@
   "outputDirectory": "frontend/dist",
   "rewrites": [
     {
+      "source": "/admin-api/:path*",
+      "destination": "https://api.ficapp.in/admin-api/:path*"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://api.ficapp.in/api/:path*"
     },
