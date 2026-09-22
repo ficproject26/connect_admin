@@ -6,10 +6,7 @@ const SecurityLog = require('../models/SecurityLog');
 const SecuritySession = require('../models/SecuritySession');
 const User = require('../models/User');
 
-// @route   GET /api/security/dashboard-stats
-// @desc    Get real-time security dashboard metrics
-// @access  Private (Admin)
-router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
+const handleSecurityDashboardStats = async (req, res) => {
   try {
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -43,7 +40,10 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
     console.error('Security dashboard stats error:', err);
     res.status(500).send('Server error');
   }
-});
+};
+
+router.get('/dashboard-stats', [auth, adminAuth], handleSecurityDashboardStats);
+router.get('/overview', [auth, adminAuth], handleSecurityDashboardStats);
 
 // @route   GET /api/security/audit-logs
 // @desc    Get paginated security logs with filtering

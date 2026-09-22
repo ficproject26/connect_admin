@@ -1959,7 +1959,7 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
 });
 
 // GET all vendor business requests & branch outlets across registered vendors
-router.get('/vendors/business-requests', [auth, adminAuth], async (req, res) => {
+const handleGetVendorBusinessRequests = async (req, res) => {
     try {
         const users = await User.find({
             $or: [
@@ -1984,7 +1984,6 @@ router.get('/vendors/business-requests', [auth, adminAuth], async (req, res) => 
 
             bizList.forEach((biz, idx) => {
                 const isPrimary = biz.isPrimary === true || idx === 0;
-                // Exclude primary onboarded business outlets from secondary business requests list
                 if (isPrimary) return;
 
                 const statusStr = biz.status || 'Pending Approval';
@@ -2016,7 +2015,10 @@ router.get('/vendors/business-requests', [auth, adminAuth], async (req, res) => 
         console.error('Error fetching vendor business requests:', err);
         res.status(500).json({ success: false, error: 'Server error fetching business requests', message: err.message });
     }
-});
+};
+
+router.get('/vendors/business-requests', [auth, adminAuth], handleGetVendorBusinessRequests);
+router.get('/enterprise/vendors/business-requests', [auth, adminAuth], handleGetVendorBusinessRequests);
 
 // PUT update business status of a vendor business profile/outlet
 router.put('/vendors/business-status', [auth, adminAuth], async (req, res) => {
