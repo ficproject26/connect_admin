@@ -17,7 +17,13 @@ module.exports = async function(req, res, next) {
     // Verify token
     try {
         const secret = process.env.JWT_SECRET || 'connect_secret_key_prod_2026';
-        const decoded = jwt.verify(token, secret);
+        let decoded;
+        try {
+            decoded = jwt.verify(token, secret);
+        } catch (jwtErr) {
+            // Dual-secret fallback for legacy tokens signed with secretKey123
+            decoded = jwt.verify(token, 'secretKey123');
+        }
         req.user = decoded.user || { id: decoded.agentId, role: 'agent' };
 
         // Suspension Access Control Check for Agents & Vendors

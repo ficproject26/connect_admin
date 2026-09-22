@@ -346,7 +346,7 @@ router.post('/register-customer', async (req, res) => {
         await newUser.save();
 
         const payload = { user: { id: newUser.id, role: 'customer' } };
-        const token = jwt.sign(payload, process.env.JWT_SECRET || 'secretKey123', { expiresIn: '30d' });
+        const token = jwt.sign(payload, process.env.JWT_SECRET || 'connect_secret_key_prod_2026', { expiresIn: '30d' });
 
         return res.status(201).json({
             status: 'success',
