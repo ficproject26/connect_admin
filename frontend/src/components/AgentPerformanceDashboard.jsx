@@ -106,38 +106,42 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
       const queryString = queryParams.toString();
       const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
-      const urlsToTry = [
-        `${baseClean}/admin/agent-performance/overview?${queryString}`,
-        `${baseClean}/admin/agent-performance?${queryString}`
-      ].filter(Boolean);
+      const targetUrl = `${baseClean}/admin/agent-performance/overview?${queryString}`;
+      const authToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
 
       let successData = null;
       let lastErrorMsg = null;
 
-      for (const targetUrl of [...new Set(urlsToTry)]) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000);
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-          if (externalSignal) {
-            externalSignal.addEventListener('abort', () => controller.abort());
-          }
+        if (externalSignal) {
+          externalSignal.addEventListener('abort', () => controller.abort());
+        }
 
-          const res = await fetch(targetUrl, {
-            headers: { 'x-auth-token': token, 'Content-Type': 'application/json' },
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          if (res.ok) {
-            successData = await res.json();
-            if (successData) break;
-          } else {
-            lastErrorMsg = `Server responded with status ${res.status}`;
-          }
-        } catch (e) {
-          if (e.name === 'AbortError' && externalSignal?.aborted) {
-            return;
-          }
+        const res = await fetch(targetUrl, {
+          headers: {
+            'x-auth-token': authToken,
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (res.ok) {
+          successData = await res.json();
+        } else if (res.status === 401 || res.status === 403) {
+          lastErrorMsg = 'Session expired. Please log in again.';
+        } else {
+          lastErrorMsg = `Server responded with status ${res.status}`;
+        }
+      } catch (e) {
+        if (e.name === 'AbortError' && externalSignal?.aborted) {
+          return;
+        }
+        if (e.name !== 'AbortError') {
           lastErrorMsg = e.message;
         }
       }
