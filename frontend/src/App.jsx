@@ -771,7 +771,12 @@ function App() {
     }
 
     const fetchPromise = (async () => {
-      const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
+      const headers = {
+        'x-auth-token': activeToken || '',
+        'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+        'Content-Type': 'application/json'
+      };
       
       let targetUrl = url;
       if (url.startsWith('http://3.110.88.42:8004')) {

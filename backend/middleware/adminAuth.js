@@ -7,15 +7,16 @@ module.exports = async function(req, res, next) {
             return res.status(401).json({ msg: 'Authorization denied' });
         }
 
-        const user = await User.findById(req.user.id).select('role adminRole');
+        const user = await User.findById(req.user.id).select('role adminRole branchId email name status isActive');
 
-        if (!user) {
+        const activeUser = user || req.user;
+        if (!activeUser) {
             return res.status(401).json({ msg: 'User not found' });
         }
 
         // Allow admin, superadmin, super-admin, or any adminRole
-        const r = (user.role || '').toLowerCase().replace(/[-_]/g, '');
-        const ar = (user.adminRole || '').toLowerCase().replace(/[-_]/g, '');
+        const r = (activeUser.role || '').toLowerCase().replace(/[-_]/g, '');
+        const ar = (activeUser.adminRole || '').toLowerCase().replace(/[-_]/g, '');
         const isAdmin = 
             r === 'admin' || 
             r === 'superadmin' || 
@@ -27,7 +28,7 @@ module.exports = async function(req, res, next) {
             return res.status(403).json({ msg: 'Access denied. Admin privileges required.' });
         }
 
-        req.adminUser = user;
+        req.adminUser = activeUser;
         next();
     } catch (err) {
         console.error('Admin auth middleware error:', err.message);

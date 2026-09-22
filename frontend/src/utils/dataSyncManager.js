@@ -49,8 +49,10 @@ class DataSyncManager {
   }
 
   getHeaders() {
+    const activeToken = this.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
     return {
-      'x-auth-token': this.token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : ''),
+      'x-auth-token': activeToken || '',
+      'Authorization': activeToken ? `Bearer ${activeToken}` : '',
       'Content-Type': 'application/json'
     };
   }
