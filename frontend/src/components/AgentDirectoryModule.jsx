@@ -86,31 +86,26 @@ export default function AgentDirectoryModule({
       return;
     }
 
-    const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-    const urls = [
-      `${baseClean}/admin/agents/${agId}/scorecard`,
-      `/api/admin/agents/${agId}/scorecard`
-    ];
-
-    const uniqueUrls = [...new Set(urls.filter(Boolean))];
+    const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+    const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+    const url = `${baseClean}/admin/agents/${agId}/scorecard`;
     let fetched = false;
 
-    for (const url of uniqueUrls) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000);
-        const res = await fetch(url, { headers, signal: controller.signal });
-        clearTimeout(timeoutId);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(url, { headers, signal: controller.signal });
+      clearTimeout(timeoutId);
 
-        if (res.ok) {
-          const data = await res.json();
-          if (data && data.success) {
-            setScorecardData(data);
-            fetched = true;
-            break;
-          }
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success) {
+          setScorecardData(data);
+          fetched = true;
         }
-      } catch (e) {}
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('Fetch scorecard warning:', e.message);
     }
 
     if (!fetched) {
@@ -143,30 +138,22 @@ export default function AgentDirectoryModule({
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
-    const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-    const urls = [
-      `${baseClean}/admin/agents`,
-      '/api/admin/agents'
-    ];
+    const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+    const url = `${baseClean}/admin/agents`;
 
-    const uniqueUrls = [...new Set(urls.filter(Boolean))];
-    for (const url of uniqueUrls) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
-        const res = await fetch(url, { headers, signal: controller.signal });
-        clearTimeout(timeoutId);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const res = await fetch(url, { headers, signal: controller.signal });
+      clearTimeout(timeoutId);
 
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            if (data !== null && data !== undefined) return data;
-          }
-        }
-      } catch (e) {
-        // Try next fallback endpoint
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.agents || data.data || []);
+        if (list.length > 0) return list;
       }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('Fetch agents warning:', e.message);
     }
     return null;
   }, [token, API_BASE]);
@@ -353,26 +340,21 @@ export default function AgentDirectoryModule({
         rejectionReason: reason || `${action} by administrator`
       });
 
-      const urls = [
-        endpoint,
-        `${API_BASE}${endpoint.replace('/api', '')}`
-      ];
+      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const url = `${baseClean}${endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint}`;
 
       let resSuccess = false;
       let errMsg = '';
-      for (const u of urls) {
-        try {
-          const res = await fetch(u, { method: 'PUT', headers, body });
-          const resData = await res.json().catch(() => ({}));
-          if (res.ok) {
-            resSuccess = true;
-            break;
-          } else {
-            errMsg = resData.msg || resData.message || 'Action failed';
-          }
-        } catch (e) {
-          errMsg = e.message;
+      try {
+        const res = await fetch(url, { method: 'PUT', headers, body });
+        const resData = await res.json().catch(() => ({}));
+        if (res.ok) {
+          resSuccess = true;
+        } else {
+          errMsg = resData.msg || resData.message || 'Action failed';
         }
+      } catch (e) {
+        errMsg = e.message;
       }
 
       if (!resSuccess) {
@@ -1411,13 +1393,11 @@ export default function AgentDirectoryModule({
                               phone: pAgent.phone,
                               registrationId: pAgent.registrationId
                             });
-                            const urls = [`/api/admin/approve-agent/${pAgent._id}`, `${API_BASE}/admin/approve-agent/${pAgent._id}`];
-                            for (const u of urls) {
-                              try {
-                                const res = await fetch(u, { method: 'PUT', headers, body });
-                                if (res.ok) break;
-                              } catch (e) {}
-                            }
+                            const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+                            const u = `${baseClean}/admin/approve-agent/${pAgent._id}`;
+                            try {
+                              const res = await fetch(u, { method: 'PUT', headers, body });
+                            } catch (e) {}
                             loadAgentData(true);
                           } catch (err) {
                           } finally {
@@ -1443,13 +1423,11 @@ export default function AgentDirectoryModule({
                               phone: pAgent.phone,
                               registrationId: pAgent.registrationId
                             });
-                            const urls = [`/api/admin/approve-agent/${pAgent._id}`, `${API_BASE}/admin/approve-agent/${pAgent._id}`];
-                            for (const u of urls) {
-                              try {
-                                const res = await fetch(u, { method: 'PUT', headers, body });
-                                if (res.ok) break;
-                              } catch (e) {}
-                            }
+                            const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+                            const u = `${baseClean}/admin/approve-agent/${pAgent._id}`;
+                            try {
+                              const res = await fetch(u, { method: 'PUT', headers, body });
+                            } catch (e) {}
                             loadAgentData(true);
                           } catch (err) {
                           } finally {

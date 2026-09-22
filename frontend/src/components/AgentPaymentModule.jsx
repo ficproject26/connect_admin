@@ -72,30 +72,24 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
-    const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-    const urls = [
-      `${baseClean}/admin/agents`,
-      '/api/admin/agents'
-    ];
+    const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+    const url = `${baseClean}/admin/agents`;
 
-    const uniqueUrls = [...new Set(urls.filter(Boolean))];
-    for (const url of uniqueUrls) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 20000);
-        const res = await fetch(url, { headers, signal: controller.signal });
-        clearTimeout(timeoutId);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const res = await fetch(url, { headers, signal: controller.signal });
+      clearTimeout(timeoutId);
 
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            if (data !== null && data !== undefined) return data;
-          }
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data !== null && data !== undefined) return data;
         }
-      } catch (e) {
-        // Try fallback endpoint
       }
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('Fetch agent payments warning:', e.message);
     }
     return null;
   }, [token, API_BASE]);

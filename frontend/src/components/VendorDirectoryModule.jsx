@@ -432,80 +432,70 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
   const fetchDirectRequests = async () => {
     try {
-      const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-      const urls = [
-        `${baseClean}/admin/enterprise/vendors?isDirectRequest=true&limit=50`,
-        '/api/admin/enterprise/vendors?isDirectRequest=true&limit=50'
-      ];
-      const uniqueUrls = [...new Set(urls.filter(Boolean))];
+      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const url = `${baseClean}/admin/enterprise/vendors?isDirectRequest=true&limit=50`;
 
-      for (const url of uniqueUrls) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-          const res = await fetch(url, {
-            headers: { 'x-auth-token': token },
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(url, {
+          headers: { 'x-auth-token': token },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
 
-          if (res.ok) {
-            const contentType = res.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-              const data = await res.json();
-              const list = data.vendors || [];
-              const pendingOnly = list.filter(v => {
-                const s = (v.status || '').toLowerCase().trim();
-                const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-                return !isAgentOnboarded && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
-              });
-              setDirectRequests(pendingOnly);
-              break;
-            }
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await res.json();
+            const list = data.vendors || [];
+            const pendingOnly = list.filter(v => {
+              const s = (v.status || '').toLowerCase().trim();
+              const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+              return !isAgentOnboarded && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
+            });
+            setDirectRequests(pendingOnly);
           }
-        } catch (e) {}
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') console.error('Fetch direct requests warning:', e.message);
       }
     } catch (err) {
-      console.error('Fetch direct requests error:', err);
+      if (err.name !== 'AbortError') console.error('Fetch direct requests error:', err);
       setDirectRequests([]);
     }
   };
 
   const fetchAgentOnboardedVendors = async () => {
     try {
-      const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-      const urls = [
-        `${baseClean}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500`,
-        '/api/admin/enterprise/vendors?isAgentOnboarded=true&limit=500'
-      ];
-      const uniqueUrls = [...new Set(urls.filter(Boolean))];
+      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const url = `${baseClean}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500`;
 
-      for (const url of uniqueUrls) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-          const res = await fetch(url, {
-            headers: { 'x-auth-token': token },
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(url, {
+          headers: { 'x-auth-token': token },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
 
-          if (res.ok) {
-            const contentType = res.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-              const data = await res.json();
-              const pendingOnly = (data.vendors || []).filter(v => {
-                const s = (v.status || '').toLowerCase().trim();
-                return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
-              });
-              setAgentOnboardedVendorsList(pendingOnly);
-              break;
-            }
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await res.json();
+            const pendingOnly = (data.vendors || []).filter(v => {
+              const s = (v.status || '').toLowerCase().trim();
+              return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
+            });
+            setAgentOnboardedVendorsList(pendingOnly);
           }
-        } catch (e) {}
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') console.error('Fetch agent onboarded vendors warning:', e.message);
       }
     } catch (err) {
-      console.error('Fetch agent onboarded vendors error:', err);
+      if (err.name !== 'AbortError') console.error('Fetch agent onboarded vendors error:', err);
       setAgentOnboardedVendorsList([]);
     }
   };
@@ -513,41 +503,36 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const fetchVendorBusinessRequests = async () => {
     setBusinessRequestsLoading(true);
     try {
-      const baseClean = (API_BASE || '').trim().replace(/\/+$/, '');
-      const urls = [
-        `${baseClean}/admin/vendors/business-requests`,
-        '/api/admin/vendors/business-requests'
-      ];
-      const uniqueUrls = [...new Set(urls.filter(Boolean))];
+      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const url = `${baseClean}/admin/vendors/business-requests`;
 
-      for (const url of uniqueUrls) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 15000);
-          const res = await fetch(url, {
-            headers: {
-              'Content-Type': 'application/json',
-              'x-auth-token': token,
-              Authorization: `Bearer ${token}`
-            },
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(url, {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-auth-token': token,
+            Authorization: `Bearer ${token}`
+          },
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
 
-          if (res.ok) {
-            const contentType = res.headers.get('content-type') || '';
-            if (contentType.includes('application/json')) {
-              const data = await res.json();
-              if (data && data.success && Array.isArray(data.data)) {
-                setBusinessRequestsList(data.data);
-                break;
-              }
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data && data.success && Array.isArray(data.data)) {
+              setBusinessRequestsList(data.data);
             }
           }
-        } catch (e) {}
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') console.error('Fetch business requests warning:', e.message);
       }
     } catch (err) {
-      console.error('Fetch business requests error:', err);
+      if (err.name !== 'AbortError') console.error('Fetch business requests error:', err);
     } finally {
       setBusinessRequestsLoading(false);
     }

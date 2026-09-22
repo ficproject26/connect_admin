@@ -59,8 +59,17 @@ class DataSyncManager {
    * Safe fetch with request deduplication
    */
   async fetchQuery(key, url, options = {}) {
-    const fullUrl = url.startsWith('http') ? url : `${this.apiBase}${url.startsWith('/') ? '' : '/'}${url}`;
-    const { force = false, ttl = 3000 } = options;
+    const base = this.apiBase || 'https://api.ficapp.in/api';
+    let fullUrl = url;
+    if (url.startsWith('http://3.110.88.42:8004')) {
+      fullUrl = url.replace('http://3.110.88.42:8004', base);
+    } else if (url.startsWith('/api/')) {
+      fullUrl = `${base}${url.slice(4)}`;
+    } else if (!url.startsWith('http')) {
+      fullUrl = `${base}${url.startsWith('/') ? '' : '/'}${url}`;
+    }
+
+    const { force = false, ttl = 5000 } = options;
 
     // Check SWR Cache
     const cached = this.cache.get(key);
@@ -99,7 +108,9 @@ class DataSyncManager {
           return data;
         }
       } catch (err) {
-        console.warn(`[DataSyncManager] Fetch error for key '${key}':`, err.message || err);
+        if (err.name !== 'AbortError' && !err.message?.includes('aborted')) {
+          console.warn(`[DataSyncManager] Fetch error for key '${key}':`, err.message || err);
+        }
       } finally {
         this.pendingPromises.delete(key);
       }
@@ -178,11 +189,12 @@ class DataSyncManager {
    */
   startPolling() {
     this.stopPolling();
+    // 60-second periodic poll for active visible queries
     this.timerId = setInterval(() => {
       if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
         this.refetchAllActive();
       }
-    }, this.pollInterval);
+    }, 60000);
   }
 
   stopPolling() {

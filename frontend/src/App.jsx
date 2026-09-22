@@ -752,52 +752,44 @@ function App() {
 
     const fetchPromise = (async () => {
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-      const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-      const cleanPath = url.includes('/api/')
-        ? url.substring(url.indexOf('/api/'))
-        : (url.startsWith('/api') ? url : null);
-
-      const targetUrls = [];
-      // 1. Primary relative /api path (guaranteed same-origin HTTPS, zero mixed content)
-      if (cleanPath) {
-        targetUrls.push(cleanPath);
+      
+      let targetUrl = url;
+      if (url.startsWith('http://3.110.88.42:8004')) {
+        targetUrl = url.replace('http://3.110.88.42:8004', API_BASE);
+      } else if (url.startsWith('/api/')) {
+        targetUrl = `${API_BASE}${url.slice(4)}`;
+      } else if (url.startsWith('/')) {
+        targetUrl = `${API_BASE}${url}`;
+      } else if (!url.startsWith('http')) {
+        targetUrl = `${API_BASE}/${url}`;
       }
 
-      // 2. Add API_ORIGIN target if safe on HTTPS
-      if (API_ORIGIN && cleanPath && (!isHttps || API_ORIGIN.startsWith('https://'))) {
-        targetUrls.push(`${API_ORIGIN}${cleanPath}`);
-      }
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 15000);
+          const r = await fetch(targetUrl, { headers, signal: controller.signal });
+          clearTimeout(timeoutId);
 
-      // 3. Fallback original URL if not already present and not insecure http on https
-      if (!targetUrls.includes(url) && (!isHttps || !url.startsWith('http://'))) {
-        targetUrls.push(url);
-      }
-
-      for (const targetUrl of [...new Set(targetUrls)]) {
-        for (let attempt = 0; attempt <= retries; attempt++) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 12000);
-            const r = await fetch(targetUrl, { headers, signal: controller.signal });
-            clearTimeout(timeoutId);
-
-            if (r.status === 401 || r.status === 403) {
-              handleLogout();
-              return null;
+          if (r.status === 401 || r.status === 403) {
+            handleLogout();
+            return null;
+          }
+          if (r.ok) {
+            const contentType = r.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+              continue;
             }
-            if (r.ok) {
-              const contentType = r.headers.get('content-type') || '';
-              if (!contentType.includes('application/json')) {
-                continue;
-              }
-              const data = await r.json();
-              if (setter) setter(data);
-              return data;
-            }
-          } catch (e) {
-            if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
-              await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
-            }
+            const data = await r.json();
+            if (setter) setter(data);
+            return data;
+          }
+        } catch (e) {
+          if (e.name === 'AbortError' || e.message?.includes('aborted')) {
+            return null;
+          }
+          if (attempt < retries && (typeof navigator === 'undefined' || navigator.onLine)) {
+            await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
           }
         }
       }
@@ -810,7 +802,7 @@ function App() {
     } finally {
       inFlightRequestsRef.current.delete(url);
     }
-  }, [token, handleLogout]);
+  }, [token, API_BASE, handleLogout]);
 
   const swrFetch = useCallback((url, setter, cacheKey = url, retries = 2) => {
     if (apiCacheRef.current[cacheKey]) {
@@ -824,69 +816,31 @@ function App() {
     }, retries);
   }, [safeFetch]);
 
-  // Controlled Concurrency Staggered Background Prefetch Engine
+  // Controlled Concurrency Module Prefetch Engine (Lazy-loaded on demand)
   const startBackgroundPrefetchQueue = useCallback(() => {
-    if (!token) return;
+    // Heavy module prefetching disabled on initial boot to ensure fast page load.
+    return;
+  }, []);
 
-    // Phase 2: Priority 2 High-Frequency Modules (T+500ms)
-    setTimeout(() => {
-      swrFetch(`${API_BASE}/admin/customers`, setCustomers, 'customers');
-      swrFetch(`${API_BASE}/admin/orders`, setOrders, 'orders');
-      swrFetch(`${API_BASE}/admin/bookings`, setBookings, 'bookings');
-    }, 500);
-
-    // Phase 3: Priority 3 Management & System Modules (T+1500ms)
-    setTimeout(() => {
-      swrFetch(`${API_BASE}/admin/categories`, setCategories, 'categories');
-      swrFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals, 'payroll');
-      swrFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans, 'membershipPlans');
-      swrFetch(`${API_BASE}/admin/payments`, setPayments, 'payments');
-      swrFetch(`${API_BASE}/admin/queries`, setQueries, 'queries');
-      swrFetch(`${API_BASE}/admin/tickets`, setTickets, 'tickets');
-      swrFetch(`${API_BASE}/admin/banners`, setBanners, 'banners');
-      swrFetch(`${API_BASE}/admin/support-team`, setSupportTeam, 'supportTeam');
-      swrFetch(`${API_BASE}/pincodes`, setPincodes, 'pincodes');
-    }, 1500);
-  }, [token, API_BASE, swrFetch]);
-
-  // Fetch Dashboard Core Stats directly from Database via Backend API
+  // Fetch Core Dashboard Summary Stats directly from Database
   const fetchData = async (forceRefresh = false) => {
     if (!token) return;
     try {
       if (forceRefresh) {
         delete apiCacheRef.current['stats'];
-        delete apiCacheRef.current['agents'];
       } else {
         if (apiCacheRef.current['stats']) setStats(apiCacheRef.current['stats']);
-        if (Array.isArray(apiCacheRef.current['agents'])) setAgents(apiCacheRef.current['agents']);
       }
 
-      // Priority Core Dashboard Tasks (Phase 1 - Immediate)
-      await Promise.allSettled([
-        safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
+      await safeFetch(`${API_BASE}/admin/dashboard-stats`, (data) => {
+        if (data) {
           apiCacheRef.current['stats'] = data;
           setStats(data);
-        }),
-        swrFetch(`${API_BASE}/admin/agents`, (data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            handleSetAgents(data);
-          } else {
-            safeFetch(`${API_BASE}/admin/agent-performance/overview`, (perfData) => {
-              if (perfData && Array.isArray(perfData.agents)) {
-                handleSetAgents(perfData.agents);
-              } else if (Array.isArray(perfData)) {
-                handleSetAgents(perfData);
-              }
-            });
-          }
-        }, 'agents'),
-        swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors'),
-        swrFetch(`${API_BASE}/admin/customers`, setCustomers, 'customers'),
-      ]);
+        }
+      });
       setLoading(false);
-      startBackgroundPrefetchQueue();
     } catch (err) {
-      console.error("API Server not reachable:", err);
+      console.error("API Server error:", err);
       setLoading(false);
     }
   };
