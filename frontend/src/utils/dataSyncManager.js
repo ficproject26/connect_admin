@@ -59,10 +59,15 @@ class DataSyncManager {
    * Safe fetch with request deduplication
    */
   async fetchQuery(key, url, options = {}) {
-    const base = this.apiBase || 'https://api.ficapp.in/api';
+    let base = this.apiBase || 'https://api.ficapp.in/api';
+    const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    if (isHttps && (base.startsWith('http://3.110.88.42') || base.startsWith('http://api.ficapp.in') || base.startsWith('http://'))) {
+      base = 'https://api.ficapp.in/api';
+    }
+
     let fullUrl = url;
-    if (url.startsWith('http://3.110.88.42:8004')) {
-      fullUrl = url.replace('http://3.110.88.42:8004', base);
+    if (url.startsWith('http://3.110.88.42:8004') || url.startsWith('http://3.110.88.42')) {
+      fullUrl = url.replace(/http:\/\/3\.110\.88\.42(:8004)?/, base);
     } else if (url.startsWith('/api/')) {
       fullUrl = `${base}${url.slice(4)}`;
     } else if (!url.startsWith('http')) {

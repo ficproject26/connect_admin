@@ -25,10 +25,30 @@ import AgentPaymentModule from './components/AgentPaymentModule';
 import { PincodeTerritoryManagement } from './components/PincodeTerritoryManagement';
 import dataSyncManager from './utils/dataSyncManager';
 
-const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_BASE)
-  ? import.meta.env.VITE_API_BASE
-  : 'https://api.ficapp.in/api';
+const resolveSanitizedApiBase = () => {
+  let envUrl = '';
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    envUrl = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '';
+  }
+  if (!envUrl && typeof process !== 'undefined' && process.env) {
+    envUrl = process.env.VITE_API_BASE || process.env.VITE_API_URL || '';
+  }
+  if (!envUrl) envUrl = 'https://api.ficapp.in/api';
+  envUrl = envUrl.trim().replace(/\/+$/, '');
 
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  if (isHttps) {
+    if (envUrl.startsWith('http://3.110.88.42:8004') || envUrl.startsWith('http://3.110.88.42') || envUrl.startsWith('http://api.ficapp.in')) {
+      return 'https://api.ficapp.in/api';
+    }
+    if (envUrl.startsWith('http://')) {
+      return envUrl.replace(/^http:\/\//, 'https://');
+    }
+  }
+  return envUrl;
+};
+
+const API_BASE = resolveSanitizedApiBase();
 const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
 const TAXONOMY = {
