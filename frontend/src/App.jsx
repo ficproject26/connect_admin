@@ -28,12 +28,12 @@ import dataSyncManager from './utils/dataSyncManager';
 const resolveSanitizedApiBase = () => {
   let envUrl = '';
   if (typeof import.meta !== 'undefined' && import.meta.env) {
-    envUrl = import.meta.env.VITE_API_BASE || import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '';
+    envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || '';
   }
   if (!envUrl && typeof process !== 'undefined' && process.env) {
-    envUrl = process.env.VITE_API_BASE || process.env.VITE_API_URL || '';
+    envUrl = process.env.VITE_API_URL || process.env.VITE_API_BASE || '';
   }
-  if (!envUrl) envUrl = 'https://api.ficapp.in/api';
+  if (!envUrl) envUrl = '/api';
   envUrl = envUrl.trim().replace(/\/+$/, '');
 
   const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
