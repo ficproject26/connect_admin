@@ -5375,13 +5375,19 @@ const handleAgentPerformanceOverview = async (req, res) => {
         let allAgents = [];
         const db = mongoose.connection.db;
         try {
-            const userAgents = await User.find(agentFilter, agentProjection).lean();
+            let userAgents = [];
             let rawAgents = [];
             if (db) {
-                try {
-                    rawAgents = await db.collection('agents').find({}, { projection: agentProjection }).toArray();
-                } catch (aErr) {}
+                const [uRes, rRes] = await Promise.allSettled([
+                    User.find(agentFilter, agentProjection).lean(),
+                    db.collection('agents').find(agentFilter, { projection: agentProjection }).maxTimeMS(4000).toArray()
+                ]);
+                if (uRes.status === 'fulfilled' && Array.isArray(uRes.value)) userAgents = uRes.value;
+                if (rRes.status === 'fulfilled' && Array.isArray(rRes.value)) rawAgents = rRes.value;
+            } else {
+                userAgents = await User.find(agentFilter, agentProjection).lean();
             }
+
             const agentMap = new Map();
             userAgents.forEach(a => {
                 const key = (a.registrationId || a.email || (a._id ? a._id.toString() : '')).toLowerCase().trim();
@@ -5415,16 +5421,27 @@ const handleAgentPerformanceOverview = async (req, res) => {
             allAgents = allAgents.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
         }
 
-        const agentIds = allAgents.map(a => a._id);
-        const objectIds = agentIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
-        const stringIds = agentIds.map(id => id.toString());
-        const matchIds = [...new Set([...objectIds, ...stringIds])];
+        const matchIds = [];
+        const seenIdStrs = new Set();
+        allAgents.forEach(a => {
+            if (!a._id) return;
+            const idStr = a._id.toString();
+            if (!seenIdStrs.has(idStr)) {
+                seenIdStrs.add(idStr);
+                if (mongoose.Types.ObjectId.isValid(idStr)) {
+                    matchIds.push(new mongoose.Types.ObjectId(idStr));
+                } else {
+                    matchIds.push(idStr);
+                }
+            }
+        });
 
+        const objectIdsOnly = matchIds.filter(id => id instanceof mongoose.Types.ObjectId);
         const Task = require('../models/Task');
 
         // Fetch targets, activities aggregation, and pending tasks in parallel
         const [targets, activityAggregation, pendingTasksCount] = await Promise.all([
-            AgentTarget.find({ agentId: { $in: matchIds } }).lean(),
+            AgentTarget.find({ agentId: { $in: objectIdsOnly } }, { agentId: 1, targets: 1, period: 1 }).lean(),
             AgentActivity.aggregate([
                 {
                     $match: {
@@ -5453,7 +5470,7 @@ const handleAgentPerformanceOverview = async (req, res) => {
                 }
             ]),
             Task.countDocuments({
-                assignedTo: { $in: matchIds },
+                assignedTo: { $in: objectIdsOnly },
                 status: 'pending'
             })
         ]);

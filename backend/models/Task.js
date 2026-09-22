@@ -11,6 +11,5 @@ const TaskSchema = new mongoose.Schema({
 });
 
 TaskSchema.index({ assignedTo: 1, status: 1 });
-TaskSchema.index({ assignedTo: 1 });
 
 module.exports = mongoose.model('Task', TaskSchema);
