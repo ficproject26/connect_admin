@@ -438,24 +438,26 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
         const res = await fetch(url, {
-          headers: { 'x-auth-token': token },
+          headers: {
+            'x-auth-token': activeToken || '',
+            'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+            'Content-Type': 'application/json'
+          },
           signal: controller.signal
         });
         clearTimeout(timeoutId);
 
         if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            const list = data.vendors || [];
+          const data = await res.json().catch(() => ({}));
+          const list = data.vendors || [];
             const pendingOnly = list.filter(v => {
               const s = (v.status || '').toLowerCase().trim();
               const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
               return !isAgentOnboarded && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
             });
             setDirectRequests(pendingOnly);
-          }
         }
       } catch (e) {
         if (e.name !== 'AbortError') console.error('Fetch direct requests warning:', e.message);
@@ -474,22 +476,24 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
         const res = await fetch(url, {
-          headers: { 'x-auth-token': token },
+          headers: {
+            'x-auth-token': activeToken || '',
+            'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+            'Content-Type': 'application/json'
+          },
           signal: controller.signal
         });
         clearTimeout(timeoutId);
 
         if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            const pendingOnly = (data.vendors || []).filter(v => {
-              const s = (v.status || '').toLowerCase().trim();
-              return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
-            });
-            setAgentOnboardedVendorsList(pendingOnly);
-          }
+          const data = await res.json().catch(() => ({}));
+          const pendingOnly = (data.vendors || []).filter(v => {
+            const s = (v.status || '').toLowerCase().trim();
+            return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
+          });
+          setAgentOnboardedVendorsList(pendingOnly);
         }
       } catch (e) {
         if (e.name !== 'AbortError') console.error('Fetch agent onboarded vendors warning:', e.message);
@@ -509,23 +513,21 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
         const res = await fetch(url, {
           headers: {
             'Content-Type': 'application/json',
-            'x-auth-token': token,
-            Authorization: `Bearer ${token}`
+            'x-auth-token': activeToken || '',
+            'Authorization': activeToken ? `Bearer ${activeToken}` : ''
           },
           signal: controller.signal
         });
         clearTimeout(timeoutId);
 
         if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            const data = await res.json();
-            if (data && data.success && Array.isArray(data.data)) {
-              setBusinessRequestsList(data.data);
-            }
+          const data = await res.json().catch(() => ({}));
+          if (data && data.success && Array.isArray(data.data)) {
+            setBusinessRequestsList(data.data);
           }
         }
       } catch (e) {

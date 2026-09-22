@@ -801,13 +801,17 @@ function App() {
             return null;
           }
           if (r.ok) {
-            const contentType = r.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
-              continue;
+            let data = null;
+            try {
+              data = await r.json();
+            } catch (jsonErr) {
+              const txt = await r.text().catch(() => '');
+              try { data = JSON.parse(txt); } catch (e) { data = null; }
             }
-            const data = await r.json();
-            if (setter) setter(data);
-            return data;
+            if (data !== null && data !== undefined) {
+              if (setter) setter(data);
+              return data;
+            }
           }
         } catch (e) {
           if (e.name === 'AbortError' || e.message?.includes('aborted')) {
