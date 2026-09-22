@@ -13,6 +13,9 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
     'https://connect-admin-roan.vercel.app',
     'https://api.ficapp.in',
+    'https://ficapp.in',
+    'https://admin.ficapp.in',
+    'https://connectadmin.ficapp.in',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:5173',
@@ -35,7 +38,16 @@ const isOriginAllowed = (origin) => {
     if (!origin) return true;
     const cleanOrigin = origin.replace(/\/$/, '');
     if (allowedOrigins.includes(cleanOrigin)) return true;
-    if (cleanOrigin.endsWith('.vercel.app') || cleanOrigin.endsWith('.onrender.com') || cleanOrigin.endsWith('.ficapp.in')) return true;
+    if (
+        cleanOrigin.endsWith('.vercel.app') || 
+        cleanOrigin.endsWith('.onrender.com') || 
+        cleanOrigin.endsWith('.ficapp.in') ||
+        cleanOrigin === 'https://ficapp.in' ||
+        cleanOrigin.startsWith('http://localhost') ||
+        cleanOrigin.startsWith('http://127.0.0.1')
+    ) {
+        return true;
+    }
     return false;
 };
 
@@ -46,7 +58,7 @@ const corsOptions = {
             callback(null, origin);
         } else {
             console.warn(`[CORS Blocked] Origin not allowed: ${origin}`);
-            callback(new Error('Not allowed by CORS policy'));
+            callback(null, false);
         }
     },
     credentials: true,
@@ -61,12 +73,30 @@ const corsOptions = {
         'expires',
         'x-requested-with',
         'Accept',
-        'Origin'
+        'Origin',
+        'Access-Control-Allow-Origin',
+        'Access-Control-Allow-Headers',
+        'Access-Control-Allow-Methods'
     ],
-    optionsSuccessStatus: 204
+    exposedHeaders: ['x-auth-token', 'Authorization', 'Content-Type'],
+    optionsSuccessStatus: 200
 };
 
-// 1. Centralized CORS Middleware & Preflight Options
+// 1. Centralized CORS Middleware & Dynamic Response Headers
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && isOriginAllowed(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'x-auth-token, Authorization, Content-Type, Cache-Control, Pragma, Expires, x-requested-with, Accept, Origin');
+    }
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+    next();
+});
+
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
