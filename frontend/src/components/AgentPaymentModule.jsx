@@ -72,7 +72,7 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
-    const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+    const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
     const url = `${baseClean}/admin/agents`;
 
     try {
@@ -155,10 +155,15 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     }
   }, [initialAgents, normalizePaymentRecords]);
 
+  const paymentsRef = useRef(payments);
+  useEffect(() => {
+    paymentsRef.current = payments;
+  }, [payments]);
+
   // Primary Data Fetcher with Deduplication & Background Stale-While-Revalidate
   const loadPaymentData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    else if (payments.length === 0 && getCachedPayments().length === 0) setLoading(true);
+    else if ((!paymentsRef.current || paymentsRef.current.length === 0) && getCachedPayments().length === 0) setLoading(true);
 
     setError(null);
     setBgNotice(null);
@@ -197,24 +202,20 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
         setError(null);
         setBgNotice(null);
       } else {
-        if (payments.length === 0 && getCachedPayments().length === 0) {
+        if (!paymentsRef.current || paymentsRef.current.length === 0 && getCachedPayments().length === 0) {
           setError('Unable to load Agent Payment. Please check server connection.');
-        } else {
-          setBgNotice('Unable to refresh latest payment data. Showing cached records.');
         }
       }
     } catch (err) {
       inFlightPromiseRef.current = null;
-      if (payments.length === 0 && getCachedPayments().length === 0) {
+      if (!paymentsRef.current || paymentsRef.current.length === 0 && getCachedPayments().length === 0) {
         setError('Network error fetching payment records.');
-      } else {
-        setBgNotice('Network connection timed out. Showing cached payment records.');
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [safeFetchPaymentData, normalizePaymentRecords, payments.length, onAgentsUpdated]);
+  }, [safeFetchPaymentData, normalizePaymentRecords, onAgentsUpdated]);
 
   useEffect(() => {
     loadPaymentData(false);

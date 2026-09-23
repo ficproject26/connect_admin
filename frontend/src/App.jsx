@@ -33,23 +33,29 @@ const resolveSanitizedApiBase = () => {
   if (!envUrl && typeof process !== 'undefined' && process.env) {
     envUrl = process.env.VITE_API_URL || process.env.VITE_API_BASE || '';
   }
-  if (!envUrl) envUrl = '/api';
+  if (!envUrl) envUrl = 'https://api.ficapp.in/admin-api';
   envUrl = envUrl.trim().replace(/\/+$/, '');
 
   const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
   if (isHttps) {
-    if (envUrl.startsWith('http://3.110.88.42:8004') || envUrl.startsWith('http://3.110.88.42') || envUrl.startsWith('http://api.ficapp.in')) {
-      return 'https://api.ficapp.in/api';
+    if (envUrl.startsWith('http://3.110.88.42') || envUrl.startsWith('http://api.ficapp.in')) {
+      return 'https://api.ficapp.in/admin-api';
     }
     if (envUrl.startsWith('http://')) {
       return envUrl.replace(/^http:\/\//, 'https://');
     }
   }
+  if (envUrl.startsWith('http://3.110.88.42')) {
+    return 'https://api.ficapp.in/admin-api';
+  }
+  if (envUrl.endsWith('/api')) {
+    return envUrl.replace(/\/api$/, '/admin-api');
+  }
   return envUrl;
 };
 
 const API_BASE = resolveSanitizedApiBase();
-const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
+const API_ORIGIN = API_BASE.replace(/\/admin-api\/?$/, '').replace(/\/api\/?$/, '');
 
 const TAXONOMY = {
   "Services": {},
@@ -779,8 +785,10 @@ function App() {
       };
       
       let targetUrl = url;
-      if (url.startsWith('http://3.110.88.42:8004')) {
-        targetUrl = url.replace('http://3.110.88.42:8004', API_BASE);
+      if (url.startsWith('http://3.110.88.42:8004') || url.startsWith('http://3.110.88.42')) {
+        targetUrl = url.replace(/http:\/\/3\.110\.88\.42(:8004)?/, API_BASE);
+      } else if (url.startsWith('/admin-api/')) {
+        targetUrl = `${API_BASE.replace(/\/admin-api$/, '')}${url}`;
       } else if (url.startsWith('/api/')) {
         targetUrl = `${API_BASE}${url.slice(4)}`;
       } else if (url.startsWith('/')) {
@@ -788,6 +796,8 @@ function App() {
       } else if (!url.startsWith('http')) {
         targetUrl = `${API_BASE}/${url}`;
       }
+      targetUrl = targetUrl.replace('https://api.ficapp.in/api/', 'https://api.ficapp.in/admin-api/');
+      targetUrl = targetUrl.replace(/([^:])\/\//g, '$1/').replace(/\/admin-api\/admin-api\//g, '/admin-api/');
 
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
@@ -852,7 +862,7 @@ function App() {
   }, []);
 
   // Fetch Core Dashboard Summary Stats directly from Database
-  const fetchData = async (forceRefresh = false) => {
+  const fetchData = async (forceRefresh = false, isBackground = false) => {
     if (!token) return;
     try {
       if (forceRefresh) {
@@ -867,42 +877,16 @@ function App() {
           setStats(data);
         }
       });
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     } catch (err) {
       console.error("API Server error:", err);
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
   useEffect(() => {
     dataSyncManager.setAuthConfig(token, API_BASE);
     fetchData();
-
-    if (!token) return;
-
-    // Periodic dashboard stats sync when tab is active (60s)
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
-        safeFetch(`${API_BASE}/admin/dashboard-stats`, setStats);
-      }
-    }, 60000);
-
-    const handleSyncTrigger = () => {
-      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
-        fetchData();
-      }
-    };
-
-    window.addEventListener('focus', handleSyncTrigger);
-    window.addEventListener('online', handleSyncTrigger);
-    document.addEventListener('visibilitychange', handleSyncTrigger);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleSyncTrigger);
-      window.removeEventListener('online', handleSyncTrigger);
-      document.removeEventListener('visibilitychange', handleSyncTrigger);
-    };
   }, [token]);
 
   const handleSetAgents = useCallback((data) => {
@@ -989,6 +973,91 @@ function App() {
     }
   }, []);
 
+  // Centralized Tab-Specific Silent Background Auto-Refresh Engine
+  const refetchActiveTabData = useCallback(async (isBackground = true) => {
+    if (!token) return;
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
+    if (activeTab === 'dashboard' || activeTab === 'overview') {
+      fetchData(false, isBackground);
+    } else if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-payment') {
+      safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+    } else if (activeTab === 'vendors' || activeTab === 'vendor-directory' || activeTab === 'vendor-directory-enterprise') {
+      safeFetch(`${API_BASE}/admin/vendors`, setVendors);
+    } else if (activeTab === 'customers' || activeTab === 'customer-directory') {
+      safeFetch(`${API_BASE}/admin/customers`, setCustomers);
+    } else if (activeTab === 'branches') {
+      safeFetch(`${API_BASE}/admin/branches`, setBranches);
+    } else if (activeTab === 'admins' || activeTab === 'admin-management') {
+      safeFetch(`${API_BASE}/admin/admins`, setAdmins);
+      safeFetch(`${API_BASE}/admin/branches`, setBranches);
+    } else if (activeTab === 'pincodes' || activeTab === 'pincode-management') {
+      safeFetch(`${API_BASE}/pincodes`, setPincodes);
+    } else if (activeTab === 'payroll' || activeTab === 'payroll-enterprise' || activeTab === 'payroll-management') {
+      safeFetch(`${API_BASE}/admin/enterprise/payroll`, setWithdrawals);
+    } else if (activeTab === 'memberships' || activeTab === 'membership-cards-enterprise' || activeTab === 'membership-cards') {
+      safeFetch(`${API_BASE}/admin/memberships/plans`, setMembershipPlans);
+    } else if (activeTab === 'payments' || activeTab === 'payment-enterprise' || activeTab === 'enterprise-payments') {
+      safeFetch(`${API_BASE}/admin/payments`, setPayments);
+    } else if (activeTab === 'categories' || activeTab === 'category-management') {
+      safeFetch(`${API_BASE}/admin/categories`, setCategories);
+    } else if (activeTab === 'queries' || activeTab === 'customer-queries') {
+      safeFetch(`${API_BASE}/admin/queries`, setQueries);
+    } else if (activeTab === 'tickets' || activeTab === 'support-tickets') {
+      safeFetch(`${API_BASE}/admin/tickets`, setTickets);
+    } else if (activeTab === 'banners') {
+      safeFetch(`${API_BASE}/admin/banners`, setBanners);
+    } else if (activeTab === 'reports') {
+      safeFetch(`${API_BASE}/admin/reports?type=${reportType}`, setReports);
+    } else if (activeTab === 'orders') {
+      safeFetch(`${API_BASE}/admin/orders`, setOrders);
+    } else if (activeTab === 'bookings') {
+      safeFetch(`${API_BASE}/admin/bookings`, setBookings);
+    } else if (activeTab === 'jobs') {
+      safeFetch(`${API_BASE}/admin/jobs`, setJobs);
+    } else if (activeTab === 'card-holders') {
+      safeFetch(`${API_BASE}/admin/card-holders`, setCardHolders);
+    } else if (activeTab === 'delivery-partners') {
+      safeFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners);
+    } else if (activeTab === 'support-team' || activeTab === 'support-team-enterprise') {
+      safeFetch(`${API_BASE}/admin/support-team`, setSupportTeam);
+    }
+  }, [activeTab, token, API_BASE, reportType, safeFetch, handleSetAgents]);
+
+  // Background Auto-Refresh Timer for Active Tab (45s sensible interval, tab-visibility aware)
+  useEffect(() => {
+    if (!token) return;
+
+    let lastFetchTime = Date.now();
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
+        lastFetchTime = Date.now();
+        refetchActiveTabData(true);
+      }
+    }, 45000);
+
+    const handleTabReactivation = () => {
+      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
+        if (Date.now() - lastFetchTime >= 20000) {
+          lastFetchTime = Date.now();
+          refetchActiveTabData(true);
+        }
+      }
+    };
+
+    window.addEventListener('focus', handleTabReactivation);
+    window.addEventListener('online', handleTabReactivation);
+    document.addEventListener('visibilitychange', handleTabReactivation);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleTabReactivation);
+      window.removeEventListener('online', handleTabReactivation);
+      document.removeEventListener('visibilitychange', handleTabReactivation);
+    };
+  }, [token, activeTab, refetchActiveTabData]);
+
   // Selective On-Demand Tab Data Loading with SWR Memory Cache (0ms Instant Switch)
   useEffect(() => {
     if (!token) return;
@@ -997,9 +1066,6 @@ function App() {
       fetchData();
     }
     if (activeTab === 'agents' || activeTab === 'agent-directory' || activeTab === 'agent-payment') {
-      if (!Array.isArray(agents) || agents.length === 0) {
-        delete apiCacheRef.current['agents'];
-      }
       swrFetch(`${API_BASE}/admin/agents`, (data) => {
         if (Array.isArray(data) && data.length > 0) {
           handleSetAgents(data);
@@ -1013,21 +1079,6 @@ function App() {
           });
         }
       }, 'agents');
-      if (!Array.isArray(agents) || agents.length === 0) {
-        safeFetch(`${API_BASE}/admin/agents`, (data) => {
-          if (Array.isArray(data) && data.length > 0) {
-            handleSetAgents(data);
-          } else {
-            safeFetch(`${API_BASE}/admin/agent-performance/overview`, (perfData) => {
-              if (perfData && Array.isArray(perfData.agents)) {
-                handleSetAgents(perfData.agents);
-              } else if (Array.isArray(perfData)) {
-                handleSetAgents(perfData);
-              }
-            });
-          }
-        });
-      }
     }
     if (activeTab === 'vendors' || activeTab === 'vendor-directory' || activeTab === 'vendor-directory-enterprise') {
       swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors');

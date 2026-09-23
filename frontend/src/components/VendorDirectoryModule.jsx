@@ -432,7 +432,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
   const fetchDirectRequests = async () => {
     try {
-      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
       const url = `${baseClean}/admin/enterprise/vendors?isDirectRequest=true&limit=50`;
 
       try {
@@ -470,7 +470,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
   const fetchAgentOnboardedVendors = async () => {
     try {
-      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
       const url = `${baseClean}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500`;
 
       try {
@@ -507,7 +507,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   const fetchVendorBusinessRequests = async () => {
     setBusinessRequestsLoading(true);
     try {
-      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
       const url = `${baseClean}/admin/vendors/business-requests`;
 
       try {
@@ -565,9 +565,6 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
 
   useEffect(() => {
     fetchVendors();
-    fetchDirectRequests();
-    fetchAgentOnboardedVendors();
-    fetchVendorBusinessRequests();
   }, [search, category, stateFilter, statusFilter, isDirectRequest, page]);
 
   useEffect(() => {
@@ -577,8 +574,6 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
       if (document.visibilityState === 'visible' && Date.now() - lastFocusSync > 30000) {
         lastFocusSync = Date.now();
         fetchVendors();
-        fetchDirectRequests();
-        fetchAgentOnboardedVendors();
       }
     };
 
@@ -593,6 +588,18 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
       fetchDirectRequests();
     }
   }, [showDirectModal]);
+
+  useEffect(() => {
+    if (showAgentOnboardedModal) {
+      fetchAgentOnboardedVendors();
+    }
+  }, [showAgentOnboardedModal]);
+
+  useEffect(() => {
+    if (showBusinessRequestsModal) {
+      fetchVendorBusinessRequests();
+    }
+  }, [showBusinessRequestsModal]);
 
   const handleAutoAssignPincodeAgent = async (vendorObj) => {
     const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;

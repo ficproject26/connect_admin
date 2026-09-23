@@ -87,7 +87,7 @@ export default function AgentDirectoryModule({
     }
 
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-    const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+    const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
     const url = `${baseClean}/admin/agents/${agId}/scorecard`;
     let fetched = false;
 
@@ -138,7 +138,7 @@ export default function AgentDirectoryModule({
     if (!token) return null;
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
     
-    const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+    const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
     const url = `${baseClean}/admin/agents`;
 
     try {
@@ -226,10 +226,15 @@ export default function AgentDirectoryModule({
     });
   }, []);
 
+  const agentsRef = useRef(agents);
+  useEffect(() => {
+    agentsRef.current = agents;
+  }, [agents]);
+
   // Primary Data Fetcher: Real-time database fetching with clean loading & retry states
   const loadAgentData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    else if (agents.length === 0) setLoading(true);
+    else if (!agentsRef.current || agentsRef.current.length === 0) setLoading(true);
 
     setError(null);
     setBgNotice(null);
@@ -267,7 +272,7 @@ export default function AgentDirectoryModule({
         setError(null);
         setBgNotice(null);
       } else {
-        if (agents.length === 0) {
+        if (!agentsRef.current || agentsRef.current.length === 0) {
           const fallback = getCachedAgents();
           if (fallback && fallback.length > 0) {
             setAgents(fallback);
@@ -275,13 +280,11 @@ export default function AgentDirectoryModule({
           } else {
             setError('Unable to load latest data. Please try again.');
           }
-        } else {
-          setBgNotice('Unable to load latest data. Please try again.');
         }
       }
     } catch (err) {
       inFlightPromiseRef.current = null;
-      if (agents.length === 0) {
+      if (!agentsRef.current || agentsRef.current.length === 0) {
         const fallback = getCachedAgents();
         if (fallback && fallback.length > 0) {
           setAgents(fallback);
@@ -289,14 +292,12 @@ export default function AgentDirectoryModule({
         } else {
           setError('Unable to load latest data. Please try again.');
         }
-      } else {
-        setBgNotice('Unable to load latest data. Please try again.');
       }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [safeFetchAgents, normalizeAgentList, agents.length, onAgentsUpdated]);
+  }, [safeFetchAgents, normalizeAgentList, onAgentsUpdated]);
 
   useEffect(() => {
     loadAgentData(false);
@@ -340,7 +341,7 @@ export default function AgentDirectoryModule({
         rejectionReason: reason || `${action} by administrator`
       });
 
-      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
       const url = `${baseClean}${endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint}`;
 
       let resSuccess = false;
@@ -1393,7 +1394,7 @@ export default function AgentDirectoryModule({
                               phone: pAgent.phone,
                               registrationId: pAgent.registrationId
                             });
-                            const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+                            const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
                             const u = `${baseClean}/admin/approve-agent/${pAgent._id}`;
                             try {
                               const res = await fetch(u, { method: 'PUT', headers, body });
@@ -1423,7 +1424,7 @@ export default function AgentDirectoryModule({
                               phone: pAgent.phone,
                               registrationId: pAgent.registrationId
                             });
-                            const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+                            const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
                             const u = `${baseClean}/admin/approve-agent/${pAgent._id}`;
                             try {
                               const res = await fetch(u, { method: 'PUT', headers, body });

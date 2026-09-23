@@ -1504,7 +1504,7 @@ router.get('/payroll', auth, async (req, res) => {
 
         // 1. Fetch Agents (Users with role='agent' or level)
         if (!isEmployeeFilter && !isCommissionFilter) {
-            const agents = await User.find({ role: { $in: ['agent', 'Agent'] } });
+            const agents = await User.find({ role: { $in: ['agent', 'Agent'] } }).select('_id name registrationId level commissionEarned isActive status').lean();
             agents.forEach((a, idx) => {
                 const code = a.registrationId || `AGT-${1000 + idx}`;
                 if (!existingCodes.has(code) && !existingCodes.has(a.name)) {
@@ -1538,7 +1538,7 @@ router.get('/payroll', auth, async (req, res) => {
 
         // 2. Fetch Vendors
         if (!isAgentFilter && !isEmployeeFilter) {
-            const vendors = await User.find({ role: { $in: ['vendor', 'Vendor'] } });
+            const vendors = await User.find({ role: { $in: ['vendor', 'Vendor'] } }).select('_id name registrationId businessName').lean();
             vendors.forEach((v, idx) => {
                 const code = v.registrationId || `VND-${2000 + idx}`;
                 if (!existingCodes.has(code) && !existingCodes.has(v.businessName || v.name)) {

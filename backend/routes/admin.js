@@ -244,7 +244,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             Branch.find().select('_id name').lean(),
             User.find({ role: 'agent' }).select('_id name').lean(),
             Vendor.find(isBranchScoped ? { branchId } : {}).sort({ createdAt: -1 }).limit(5).populate('agentId', 'name').lean(),
-            User.find({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) }).sort({ createdAt: -1 }).limit(5).lean(),
+            User.find({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) }).select('_id name email phone role level status kycStatus createdAt registrationId').sort({ createdAt: -1 }).limit(5).lean(),
             Order.find().sort({ createdAt: -1 }).limit(5).populate('vendorId', 'businessName').populate('customerId', 'name').lean()
         ]);
 
@@ -252,7 +252,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         let rawAgents = [];
         if (db) {
             try {
-                rawAgents = await db.collection('agents').find({}).toArray();
+                rawAgents = await db.collection('agents').find({}, { projection: { _id: 1, registrationId: 1, email: 1, level: 1, role: 1, status: 1, kycStatus: 1 } }).toArray();
             } catch (aErr) {}
         }
 
@@ -2524,28 +2524,23 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
 
-        // 1. Fetch from Customer collection (admin-created customers)
-        const customersFromModel = await Customer.find(filter).populate('branchId', 'name').catch(() => []);
+        const custProjection = {
+            _id: 1, name: 1, fullName: 1, username: 1, email: 1, phone: 1, mobileNumber: 1,
+            role: 1, customerType: 1, district: 1, city: 1, status: 1, aadhaar: 1, aadhaarNumber: 1,
+            aadhar: 1, aadharNumber: 1, pan: 1, panNumber: 1, branchId: 1, createdAt: 1
+        };
 
-        // 2. Fetch from User collection via Mongoose (Members/Customers registered via any portal)
-        const usersAsCustomers = await User.find({
-            role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
-        }).catch(() => []);
-
-        // 3. Fetch directly from raw MongoDB collections to capture Connect App registrations
-        let rawUsersCustomers = [];
-        let rawCustomers = [];
-        try {
-            const db = mongoose.connection.db;
-            if (db) {
-                rawUsersCustomers = await db.collection('users').find({
-                    role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
-                }).toArray();
-                rawCustomers = await db.collection('customers').find({}).toArray();
-            }
-        } catch (e) {
-            console.error('Raw collection fetch error:', e.message);
-        }
+        const db = mongoose.connection.db;
+        const [customersFromModel, usersAsCustomers, rawUsersCustomers, rawCustomers] = await Promise.all([
+            Customer.find(filter, custProjection).populate('branchId', 'name').lean().catch(() => []),
+            User.find({
+                role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
+            }, custProjection).lean().catch(() => []),
+            db ? db.collection('users').find({
+                role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
+            }, { projection: custProjection }).toArray().catch(() => []) : Promise.resolve([]),
+            db ? db.collection('customers').find({}, { projection: custProjection }).toArray().catch(() => []) : Promise.resolve([])
+        ]);
 
         const combined = [];
         const seenEmails = new Set();

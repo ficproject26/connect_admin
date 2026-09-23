@@ -17,11 +17,11 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
   const [logStatusFilter, setLogStatusFilter] = useState('all');
   const [logSearchQuery, setLogSearchQuery] = useState('');
 
-  const fetchSecurityData = async () => {
-    setLoading(true);
+  const fetchSecurityData = async (isBackground = false) => {
+    if (!isBackground) setLoading(true);
     try {
-      // 1. Fetch Overview
-      const resOverview = await fetch(`${API_BASE}/admin/security/overview`, {
+      // 1. Fetch Overview Stats
+      const resOverview = await fetch(`${API_BASE}/security/dashboard-stats`, {
         headers: { 'x-auth-token': token }
       });
       if (resOverview.ok) {
@@ -30,7 +30,7 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
       }
 
       // 2. Fetch Sessions
-      const resSessions = await fetch(`${API_BASE}/admin/security/sessions`, {
+      const resSessions = await fetch(`${API_BASE}/security/active-sessions`, {
         headers: { 'x-auth-token': token }
       });
       if (resSessions.ok) {
@@ -45,12 +45,12 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
         search: logSearchQuery,
         limit: 50
       });
-      const resLogs = await fetch(`${API_BASE}/admin/security/logs?${query.toString()}`, {
+      const resLogs = await fetch(`${API_BASE}/security/audit-logs?${query.toString()}`, {
         headers: { 'x-auth-token': token }
       });
       if (resLogs.ok) {
         const data = await resLogs.json();
-        setLogs(data);
+        setLogs(data.logs || data);
       }
 
     } catch (err) {
@@ -61,15 +61,15 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
   };
 
   useEffect(() => {
-    fetchSecurityData();
+    fetchSecurityData(false);
   }, [logActionFilter, logStatusFilter, logSearchQuery]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        fetchSecurityData();
+      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
+        fetchSecurityData(true);
       }
-    }, 5000);
+    }, 45000);
 
     return () => clearInterval(interval);
   }, []);
@@ -77,7 +77,7 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
   // Unlock Account Handler
   const handleUnlockAccount = async (userId) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/security/unlock-account`, {
+      const res = await fetch(`${API_BASE}/security/unlock-account`, {
         method: 'POST',
         headers: {
           'x-auth-token': token,
@@ -86,7 +86,7 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
         body: JSON.stringify({ userId })
       });
       if (res.ok) {
-        fetchSecurityData();
+        fetchSecurityData(true);
       }
     } catch (err) {
       console.error('Unlock account error:', err);
@@ -96,7 +96,7 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
   // Terminate Session Handler
   const handleTerminateSession = async (sessionId) => {
     try {
-      const res = await fetch(`${API_BASE}/admin/security/terminate-session`, {
+      const res = await fetch(`${API_BASE}/security/revoke-session`, {
         method: 'POST',
         headers: {
           'x-auth-token': token,
@@ -105,7 +105,7 @@ export const AdminSecurityDashboard = React.memo(({ token, API_BASE }) => {
         body: JSON.stringify({ sessionId })
       });
       if (res.ok) {
-        fetchSecurityData();
+        fetchSecurityData(true);
       }
     } catch (err) {
       console.error('Terminate session error:', err);

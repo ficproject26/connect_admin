@@ -105,7 +105,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       if (isBypassCache) queryParams.append('refresh', 'true');
 
       const queryString = queryParams.toString();
-      const baseClean = (API_BASE || 'https://api.ficapp.in/api').trim().replace(/\/+$/, '');
+      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
       const targetUrl = `${baseClean}/admin/agent-performance/overview?${queryString}`;
       const authToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
 
