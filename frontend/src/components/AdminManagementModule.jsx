@@ -675,28 +675,6 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
               {admins.length}
             </span>
           </button>
-
-          <button
-            onClick={() => setActiveTab('managers')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-extrabold transition-all cursor-pointer shrink-0 ${activeTab === 'managers' ? 'bg-primary-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
-          >
-            <Users className="w-3.5 h-3.5" /> Managers
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeTab === 'managers' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>
-              {managers.length}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('requests')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-extrabold transition-all cursor-pointer shrink-0 ${activeTab === 'requests' ? 'bg-primary-600 text-white shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
-          >
-            <Clock className="w-3.5 h-3.5" /> Manager Requests
-            {pendingRequestsCount > 0 && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-rose-500 text-white animate-pulse">
-                {pendingRequestsCount}
-              </span>
-            )}
-          </button>
         </div>
 
         {/* Search & Filter Bar */}
