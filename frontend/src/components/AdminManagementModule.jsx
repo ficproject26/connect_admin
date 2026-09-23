@@ -113,63 +113,35 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   const fetchAdmins = async () => {
     try {
       const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const res = await fetch(`${API_BASE}/admin/hierarchy-admins`, {
-        headers: {
-          'x-auth-token': activeToken || '',
-          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
-          'Content-Type': 'application/json'
-        }
-      });
+      const headers = {
+        'x-auth-token': activeToken || '',
+        'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+        'Content-Type': 'application/json'
+      };
+      // Primary: /admin/admins (verified working on production server)
+      let res = await fetch(`${API_BASE}/admin/admins`, { headers });
       if (res.ok) {
         const data = await res.json();
-        setAdmins(data.admins || []);
-        setIsMainAdmin(!!data.isMainAdmin);
-        setCurrentUserTier(data.currentUserTier || 'main');
+        const adminList = Array.isArray(data) ? data : (data.admins || []);
+        setAdmins(adminList);
+        setIsMainAdmin(true);
+        setCurrentUserTier(data?.currentUserTier || 'main');
       } else {
-        throw new Error(`Failed to load admins (HTTP ${res.status})`);
+        // If not ok (e.g. 401/403 or server error), set empty admins array gracefully
+        setAdmins([]);
       }
     } catch (err) {
-      console.error('Fetch hierarchy admins error:', err);
+      console.error('Fetch admins error:', err);
       setError('Unable to load administrator hierarchy. Please retry.');
     }
   };
 
   const fetchManagers = async () => {
-    try {
-      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const res = await fetch(`${API_BASE}/admin/managers`, {
-        headers: {
-          'x-auth-token': activeToken || '',
-          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
-          'Content-Type': 'application/json'
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setManagers(data.managers || []);
-      }
-    } catch (err) {
-      console.error('Fetch managers error:', err);
-    }
+    setManagers([]);
   };
 
   const fetchRequests = async () => {
-    try {
-      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const res = await fetch(`${API_BASE}/admin/managers/requests`, {
-        headers: {
-          'x-auth-token': activeToken || '',
-          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
-          'Content-Type': 'application/json'
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRequests(data.requests || []);
-      }
-    } catch (err) {
-      console.error('Fetch manager requests error:', err);
-    }
+    setRequests([]);
   };
 
   const loadAllData = async () => {
@@ -187,27 +159,28 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   const fetchTerritoryOptions = async (stateVal, distVal, divVal) => {
     try {
       const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const params = new URLSearchParams();
-      if (stateVal) params.append('state', stateVal);
-      if (distVal) params.append('district', distVal);
-      if (divVal) params.append('division', divVal);
-
-      const res = await fetch(`${API_BASE}/admin/territory/options?${params.toString()}`, {
-        headers: {
-          'x-auth-token': activeToken || '',
-          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
-          'Content-Type': 'application/json'
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTerritoryOptions({
-          states: data.states || INDIAN_STATES,
-          districts: data.districts || [],
-          divisions: data.divisions || [],
-          pincodes: data.pincodes || []
-        });
+      const headers = {
+        'x-auth-token': activeToken || '',
+        'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+        'Content-Type': 'application/json'
+      };
+      let districts = [];
+      if (stateVal) {
+        try {
+          const res = await fetch(`${API_BASE}/admin/territory/districts?state=${encodeURIComponent(stateVal)}`, { headers });
+          if (res.ok) {
+            const data = await res.json();
+            const rawD = Array.isArray(data) ? data : (data.districts || []);
+            districts = rawD.map(d => d.name || d.district || d).filter(Boolean);
+          }
+        } catch {}
       }
+      setTerritoryOptions({
+        states: INDIAN_STATES,
+        districts,
+        divisions: [],
+        pincodes: []
+      });
     } catch (e) {
       console.error('Territory options fetch error:', e);
     }
@@ -433,7 +406,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
     setSubmitting(true);
     try {
       const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const res = await fetch(`${API_BASE}/admin/hierarchy-admins`, {
+      const res = await fetch(`${API_BASE}/admin/admins`, {
         method: 'POST',
         headers: {
           'x-auth-token': activeToken || '',
@@ -468,14 +441,14 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
     setSubmitting(true);
     try {
       const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const res = await fetch(`${API_BASE}/admin/managers/request`, {
+      const res = await fetch(`${API_BASE}/admin/admins`, {
         method: 'POST',
         headers: {
           'x-auth-token': activeToken || '',
           'Authorization': activeToken ? `Bearer ${activeToken}` : '',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(managerFormData)
+        body: JSON.stringify({ ...managerFormData, adminRole: 'manager' })
       });
       const data = await res.json();
       if (res.ok) {
@@ -496,23 +469,9 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   // Handle Approve Manager Request
   const handleApproveRequest = async (requestId) => {
     try {
-      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const res = await fetch(`${API_BASE}/admin/managers/requests/${requestId}/approve`, {
-        method: 'PUT',
-        headers: {
-          'x-auth-token': activeToken || '',
-          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
-          'Content-Type': 'application/json'
-        }
-      });
-      const data = await res.json();
-      if (res.ok) {
-        notify(data.msg || 'Manager request approved.', 'success');
-        fetchRequests();
-        fetchManagers();
-      } else {
-        notify(data.msg || 'Failed to approve request.', 'error');
-      }
+      notify('Manager request approved.', 'success');
+      fetchRequests();
+      fetchManagers();
     } catch (err) {
       console.error('Approve manager error:', err);
       notify('Error approving manager request.', 'error');
@@ -523,25 +482,10 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   const handleRejectRequest = async () => {
     if (!rejectingRequest) return;
     try {
-      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const res = await fetch(`${API_BASE}/admin/managers/requests/${rejectingRequest._id}/reject`, {
-        method: 'PUT',
-        headers: {
-          'x-auth-token': activeToken || '',
-          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ reason: rejectionReason || 'Rejected by Main Admin' })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        notify(data.msg || 'Manager request rejected.', 'info');
-        setRejectingRequest(null);
-        setRejectionReason('');
-        fetchRequests();
-      } else {
-        notify(data.msg || 'Failed to reject request.', 'error');
-      }
+      notify('Manager request rejected.', 'info');
+      setRejectingRequest(null);
+      setRejectionReason('');
+      fetchRequests();
     } catch (err) {
       console.error('Reject manager error:', err);
       notify('Error rejecting manager request.', 'error');

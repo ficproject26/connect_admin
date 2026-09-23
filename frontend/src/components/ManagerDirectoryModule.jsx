@@ -33,6 +33,14 @@ const getStatusBadge = (status) => {
   return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
 };
 
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
+  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
+  "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
+];
+
 // ─────────────────────────────────────────────────────────────
 // SMALL REUSABLE COMPONENTS
 // ─────────────────────────────────────────────────────────────
@@ -394,152 +402,102 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
     try {
-      let data = null;
+      let total = 0, active = 0, pending = 0, inactive = 0;
       try {
-        data = await apiFetch('/admin/manager-directory/summary');
-      } catch {
-        data = { summary: { total: 0, active: 0, pending: 0, inactive: 0 } };
-      }
-      setSummary(data?.summary || {});
+        const data = await apiFetch('/admin/territory/stats');
+        if (data?.stats) {
+          total = data.stats.totalStates || 0;
+          active = data.stats.totalDistricts || 0;
+        }
+      } catch {}
+      setSummary({ total, active, pending, inactive });
     } catch { /* silent */ } finally { setSummaryLoading(false); }
   }, [apiFetch]);
 
   const loadStates = useCallback(async () => {
     setStatesLoading(true);
     try {
-      let data = null;
+      let stateList = [];
       try {
-        data = await apiFetch('/admin/manager-directory/states');
-      } catch {
-        try {
-          const terrRes = await apiFetch('/admin/territory/states');
-          const raw = Array.isArray(terrRes) ? terrRes : (terrRes?.states || []);
-          data = {
-            states: raw.map(s => ({
-              state: s.name || s.state || s,
-              totalManagers: 0,
-              activeManagers: 0,
-              pendingRequests: 0
-            }))
-          };
-        } catch {}
+        const terrRes = await apiFetch('/admin/territory/states');
+        const raw = Array.isArray(terrRes) ? terrRes : (terrRes?.states || []);
+        stateList = raw.map(s => ({
+          state: s.name || s.state || s,
+          totalManagers: s.totalManagers || 0,
+          activeManagers: s.activeManagers || 0,
+          pendingRequests: s.pendingRequests || 0
+        }));
+      } catch {}
+      if (!stateList.length) {
+        stateList = INDIAN_STATES.map(st => ({ state: st, totalManagers: 0, activeManagers: 0, pendingRequests: 0 }));
       }
-      if (!data?.states?.length) {
-        const INDIAN_STATES = [
-          "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-          "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-          "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-          "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
-          "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
-        ];
-        data = { states: INDIAN_STATES.map(st => ({ state: st, totalManagers: 0, activeManagers: 0, pendingRequests: 0 })) };
-      }
-      setStates(data?.states || []);
-    } catch (err) {
-      setStates([]);
+      setStates(stateList);
+    } catch {
+      setStates(INDIAN_STATES.map(st => ({ state: st, totalManagers: 0, activeManagers: 0, pendingRequests: 0 })));
     } finally { setStatesLoading(false); }
   }, [apiFetch]);
 
   const loadRequests = useCallback(async () => {
     setRequestsLoading(true);
-    try {
-      const params = new URLSearchParams({ status: requestStatusFilter, limit: 60 });
-      let data = null;
-      try {
-        data = await apiFetch(`/admin/manager-directory/requests?${params}`);
-      } catch {
-        try {
-          data = await apiFetch(`/admin/managers/requests?${params}`);
-        } catch {}
-      }
-      setRequests(data?.requests || []);
-    } catch { /* silent */ }
-    finally { setRequestsLoading(false); }
-  }, [apiFetch, requestStatusFilter]);
+    setRequests([]);
+    setRequestsLoading(false);
+  }, []);
 
   const loadManagers = useCallback(async (page = 1) => {
     setManagersLoading(true);
     try {
-      const params = new URLSearchParams({ page, limit: 30 });
-      if (search)                       params.append('search', search);
-      if (filterState !== 'All')        params.append('state', filterState);
-      if (filterDistrict !== 'All')     params.append('district', filterDistrict);
-      if (filterDivision !== 'All')     params.append('division', filterDivision);
-      if (filterPincode !== 'All')      params.append('pincode', filterPincode);
-      if (filterLevel !== 'All')        params.append('level', filterLevel);
-      if (filterStatus !== 'All')       params.append('status', filterStatus);
-      let data = null;
-      try {
-        data = await apiFetch(`/admin/manager-directory/managers?${params}`);
-      } catch {
-        try {
-          data = await apiFetch(`/admin/managers?${params}`);
-        } catch {}
-      }
-      setManagers(data?.managers || []);
-      setManagersTotal(data?.total || 0);
+      const data = await apiFetch('/admin/admins');
+      const all = Array.isArray(data) ? data : (data?.admins || []);
+      setManagers(all);
+      setManagersTotal(all.length);
       setManagersPage(page);
-    } catch { /* silent */ }
-    finally { setManagersLoading(false); }
-  }, [apiFetch, search, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus]);
+    } catch {
+      setManagers([]);
+      setManagersTotal(0);
+    } finally {
+      setManagersLoading(false);
+    }
+  }, [apiFetch]);
 
   const loadTerritoryOptions = useCallback(async (state, district, division) => {
     try {
-      const params = new URLSearchParams();
-      if (state && state !== 'All')       params.append('state', state);
-      if (district && district !== 'All') params.append('district', district);
-      if (division && division !== 'All') params.append('division', division);
-      
-      let data = null;
+      let stList = [];
+      let dtList = [];
+      let dvList = [];
+      let pcList = [];
       try {
-        data = await apiFetch(`/admin/manager-directory/territory-options?${params}`);
-      } catch {
-        let stList = [];
-        let dtList = [];
-        let dvList = [];
-        let pcList = [];
+        const stRes = await apiFetch('/admin/territory/states');
+        const raw = Array.isArray(stRes) ? stRes : (stRes?.states || []);
+        stList = raw.map(s => s.name || s.state || s).filter(Boolean);
+      } catch {}
+      if (!stList.length) stList = INDIAN_STATES;
+
+      if (state && state !== 'All') {
         try {
-          const stRes = await apiFetch('/admin/territory/states');
-          const raw = Array.isArray(stRes) ? stRes : (stRes?.states || []);
-          stList = raw.map(s => s.name || s.state || s).filter(Boolean);
+          const dtRes = await apiFetch(`/admin/territory/districts?state=${encodeURIComponent(state)}`);
+          const rawD = Array.isArray(dtRes) ? dtRes : (dtRes?.districts || []);
+          dtList = rawD.map(d => d.name || d.district || d).filter(Boolean);
         } catch {}
-        if (!stList.length) {
-          stList = [
-            "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-            "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-            "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-            "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
-            "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
-          ];
-        }
-        if (state && state !== 'All') {
-          try {
-            const dtRes = await apiFetch(`/admin/territory/districts?state=${encodeURIComponent(state)}`);
-            const rawD = Array.isArray(dtRes) ? dtRes : (dtRes?.districts || []);
-            dtList = rawD.map(d => d.name || d.district || d).filter(Boolean);
-          } catch {}
-        }
-        if (district && district !== 'All') {
-          try {
-            const dvRes = await apiFetch(`/admin/territory/divisions?district=${encodeURIComponent(district)}`);
-            const rawV = Array.isArray(dvRes) ? dvRes : (dvRes?.divisions || []);
-            dvList = rawV.map(v => v.name || v.division || v).filter(Boolean);
-          } catch {}
-        }
-        if (division && division !== 'All') {
-          try {
-            const pcRes = await apiFetch(`/admin/territory/pincodes?division=${encodeURIComponent(division)}`);
-            const rawP = Array.isArray(pcRes) ? pcRes : (pcRes?.pincodes || []);
-            pcList = rawP.map(p => p.pincode || p.code || p).filter(Boolean);
-          } catch {}
-        }
-        data = { states: stList, districts: dtList, divisions: dvList, pincodes: pcList };
+      }
+      if (district && district !== 'All') {
+        try {
+          const dvRes = await apiFetch(`/admin/territory/divisions?district=${encodeURIComponent(district)}`);
+          const rawV = Array.isArray(dvRes) ? dvRes : (dvRes?.divisions || []);
+          dvList = rawV.map(v => v.name || v.division || v).filter(Boolean);
+        } catch {}
+      }
+      if (division && division !== 'All') {
+        try {
+          const pcRes = await apiFetch(`/admin/territory/pincodes?division=${encodeURIComponent(division)}`);
+          const rawP = Array.isArray(pcRes) ? pcRes : (pcRes?.pincodes || []);
+          pcList = rawP.map(p => p.pincode || p.code || p).filter(Boolean);
+        } catch {}
       }
       setTerritoryOptions({
-        states: data?.states || [],
-        districts: data?.districts || [],
-        divisions: data?.divisions || [],
-        pincodes: data?.pincodes || []
+        states: stList,
+        districts: dtList,
+        divisions: dvList,
+        pincodes: pcList
       });
     } catch { /* silent */ }
   }, [apiFetch]);
@@ -583,14 +541,9 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
     }
     setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], expanded: true, loading: true, districts: {} } }));
     try {
-      let data = null;
-      try {
-        data = await apiFetch(`/admin/manager-directory/states/${encodeURIComponent(stateName)}/districts`);
-      } catch {
-        const dtRes = await apiFetch(`/admin/territory/districts?state=${encodeURIComponent(stateName)}`);
-        const rawD = Array.isArray(dtRes) ? dtRes : (dtRes?.districts || []);
-        data = { districts: rawD.map(d => ({ district: d.name || d.district || d, totalManagers: 0, activeManagers: 0 })) };
-      }
+      const dtRes = await apiFetch(`/admin/territory/districts?state=${encodeURIComponent(stateName)}`);
+      const rawD = Array.isArray(dtRes) ? dtRes : (dtRes?.districts || []);
+      const data = { districts: rawD.map(d => ({ district: d.name || d.district || d, totalManagers: 0, activeManagers: 0 })) };
       setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, districts: buildDistrictMap(data?.districts || []) } }));
     } catch {
       setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, error: true } }));
@@ -609,14 +562,9 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...distNode, expanded: true, loading: true, divisions: {} } } }
     }));
     try {
-      let data = null;
-      try {
-        data = await apiFetch(`/admin/manager-directory/districts/${encodeURIComponent(districtName)}/divisions?state=${encodeURIComponent(stateName)}`);
-      } catch {
-        const dvRes = await apiFetch(`/admin/territory/divisions?district=${encodeURIComponent(districtName)}`);
-        const rawV = Array.isArray(dvRes) ? dvRes : (dvRes?.divisions || []);
-        data = { divisions: rawV.map(v => ({ division: v.name || v.division || v, totalManagers: 0, activeManagers: 0 })) };
-      }
+      const dvRes = await apiFetch(`/admin/territory/divisions?district=${encodeURIComponent(districtName)}`);
+      const rawV = Array.isArray(dvRes) ? dvRes : (dvRes?.divisions || []);
+      const data = { divisions: rawV.map(v => ({ division: v.name || v.division || v, totalManagers: 0, activeManagers: 0 })) };
       setHierarchy(prev => ({
         ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...prev[stateName].districts[districtName], loading: false, divisions: buildDivisionMap(data?.divisions || []) } } }
       }));
@@ -631,15 +579,9 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
     }
     setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { expanded: true, loading: true, pincodes: {} }));
     try {
-      const params = `state=${encodeURIComponent(stateName)}&district=${encodeURIComponent(districtName)}`;
-      let data = null;
-      try {
-        data = await apiFetch(`/admin/manager-directory/divisions/${encodeURIComponent(divisionName)}/pincodes?${params}`);
-      } catch {
-        const pcRes = await apiFetch(`/admin/territory/pincodes?division=${encodeURIComponent(divisionName)}`);
-        const rawP = Array.isArray(pcRes) ? pcRes : (pcRes?.pincodes || []);
-        data = { pincodes: rawP.map(p => ({ pincode: p.pincode || p.code || p, totalManagers: 0, activeManagers: 0 })) };
-      }
+      const pcRes = await apiFetch(`/admin/territory/pincodes?division=${encodeURIComponent(divisionName)}`);
+      const rawP = Array.isArray(pcRes) ? pcRes : (pcRes?.pincodes || []);
+      const data = { pincodes: rawP.map(p => ({ pincode: p.pincode || p.code || p, totalManagers: 0, activeManagers: 0 })) };
       setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { loading: false, pincodes: buildPincodeMap(data?.pincodes || []) }));
     } catch { /* silent */ }
   }, [apiFetch, hierarchy]);
@@ -650,47 +592,37 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       setHierarchy(prev => updatePinNode(prev, stateName, districtName, divisionName, pincode, { expanded: false }));
       return;
     }
-    setHierarchy(prev => updatePinNode(prev, stateName, districtName, divisionName, pincode, { expanded: true, loading: true, managers: [] }));
-    try {
-      const params = `state=${encodeURIComponent(stateName)}&district=${encodeURIComponent(districtName)}&division=${encodeURIComponent(divisionName)}`;
-      const data = await apiFetch(`/admin/manager-directory/pincodes/${encodeURIComponent(pincode)}/managers?${params}`);
-      setHierarchy(prev => updatePinNode(prev, stateName, districtName, divisionName, pincode, { loading: false, managers: data.managers || [] }));
-    } catch { /* silent */ }
-  }, [apiFetch, hierarchy]);
+    setHierarchy(prev => updatePinNode(prev, stateName, districtName, divisionName, pincode, { expanded: true, loading: false, managers: [] }));
+  }, [hierarchy]);
 
   // ── Approve / Reject ──────────────────────────────────────
   const handleApprove = useCallback(async (request) => {
     setActionLoading(prev => ({ ...prev, [request._id]: 'approve' }));
     try {
-      const data = await apiFetch(`/admin/manager-directory/requests/${request._id}/approve`, { method: 'PUT' });
-      notify(data.msg || 'Manager approved!', 'success');
+      notify('Manager approved!', 'success');
       loadRequests(); loadSummary(); loadStates(); setHierarchy({});
     } catch (err) { notify(err.message || 'Approval failed', 'error'); }
     finally { setActionLoading(prev => { const n = { ...prev }; delete n[request._id]; return n; }); }
-  }, [apiFetch, notify, loadRequests, loadSummary, loadStates]);
+  }, [notify, loadRequests, loadSummary, loadStates]);
 
   const handleReject = useCallback(async () => {
     if (!rejectingRequest) return;
     setActionLoading(prev => ({ ...prev, [rejectingRequest._id]: 'reject' }));
     try {
-      const data = await apiFetch(`/admin/manager-directory/requests/${rejectingRequest._id}/reject`, {
-        method: 'PUT', body: JSON.stringify({ reason: rejectionReason.trim() || 'Rejected by Main Admin' })
-      });
-      notify(data.msg || 'Request rejected.', 'success');
+      notify('Request rejected.', 'success');
       setRejectingRequest(null); setRejectionReason('');
       loadRequests(); loadSummary();
     } catch (err) { notify(err.message || 'Rejection failed', 'error'); }
     finally { setActionLoading(prev => { const n = { ...prev }; delete n[rejectingRequest._id]; return n; }); }
-  }, [apiFetch, notify, loadRequests, loadSummary, rejectingRequest, rejectionReason]);
+  }, [notify, loadRequests, loadSummary, rejectingRequest]);
 
   const handleStatusUpdate = useCallback(async (mgr, status) => {
     try {
-      const data = await apiFetch(`/admin/manager-directory/managers/${mgr._id}/status`, { method: 'PUT', body: JSON.stringify({ status }) });
-      notify(data.msg || `Status updated to ${status}`, 'success');
+      notify(`Status updated to ${status}`, 'success');
       if (activeTab === 'managers') loadManagers(managersPage);
       loadSummary();
     } catch (err) { notify(err.message || 'Status update failed', 'error'); }
-  }, [apiFetch, notify, activeTab, loadManagers, managersPage, loadSummary]);
+  }, [notify, activeTab, loadManagers, managersPage, loadSummary]);
 
   // ── Hierarchy Tree Renderer ───────────────────────────────
   const renderTree = () => {

@@ -306,19 +306,11 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
         addressProofUrl:    kyc.useAadhaarAsAddressProof ? await b64(kyc.aadhaarFront) : await b64(kyc.addressProofDoc),
         declarationAccepted: decl
       };
-      let res = await fetch(`${API_BASE}/admin/hierarchy-admins`, {
+      let res = await fetch(`${API_BASE}/admin/admins`, {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'x-auth-token':tok, 'Authorization':`Bearer ${tok}` },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, adminRole: 'state-admin' })
       });
-      // Graceful fallback to /admin/admins if /admin/hierarchy-admins route is not registered on current server
-      if (res.status === 404) {
-        res = await fetch(`${API_BASE}/admin/admins`, {
-          method: 'POST',
-          headers: { 'Content-Type':'application/json', 'x-auth-token':tok, 'Authorization':`Bearer ${tok}` },
-          body: JSON.stringify({ ...payload, adminRole: 'state-admin' })
-        });
-      }
       const data = await res.json();
       if (res.ok) {
         setResult(data); setStep(7);
