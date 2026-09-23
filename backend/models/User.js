@@ -9,11 +9,14 @@ const UserSchema = new mongoose.Schema({
     role: { type: String, enum: ['admin', 'super-admin', 'agent', 'Vendor', 'Member', 'vendor', 'member', 'customer', 'Customer'], default: 'agent' },
     level: { type: String, enum: ['state', 'district', 'division', 'pincode'], default: 'pincode' },
     assignedArea: { type: String }, // For state, district, division
-    assignedPincode: { type: mongoose.Schema.Types.ObjectId, ref: 'Pincode' },
+    assignedPincode: { type: mongoose.Schema.Types.Mixed, ref: 'Pincode' },
     assignedDistrict: { type: String }, // For district agents / admin
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' }, // For branch admin / staff / agents
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Referred by agent / parent user
-    adminRole: { type: String, enum: ['super-admin', 'branch-admin', 'staff'], default: 'staff' },
+    adminRole: { type: String, enum: ['super-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'], default: 'staff' },
+    adminLevel: { type: String, enum: ['main', 'state', 'district', 'division', 'pincode'], default: null },
+    parentAdminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    lastLogin: { type: Date, default: null },
     registrationId: { type: String },
 
     // Agent extended profile fields
