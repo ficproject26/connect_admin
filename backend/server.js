@@ -206,6 +206,10 @@ app.use('/api/admin', require('./routes/hierarchyAdminRoutes'));
 app.use('/admin-api/admin', require('./routes/hierarchyAdminRoutes'));
 app.use('/admin-api', require('./routes/hierarchyAdminRoutes'));
 
+app.use('/api/admin', require('./routes/managerDirectoryRoutes'));
+app.use('/admin-api/admin', require('./routes/managerDirectoryRoutes'));
+app.use('/admin-api', require('./routes/managerDirectoryRoutes'));
+
 app.use('/api/admin', require('./routes/admin'));
 app.use('/admin-api/admin', require('./routes/admin'));
 app.use('/admin-api', require('./routes/admin'));

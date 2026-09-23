@@ -24,6 +24,7 @@ import AgentDirectoryModule from './components/AgentDirectoryModule';
 import AgentPaymentModule from './components/AgentPaymentModule';
 import { PincodeTerritoryManagement } from './components/PincodeTerritoryManagement';
 import AdminManagementModule from './components/AdminManagementModule';
+import ManagerDirectoryModule from './components/ManagerDirectoryModule';
 import dataSyncManager from './utils/dataSyncManager';
 
 const resolveSanitizedApiBase = () => {
@@ -1591,6 +1592,12 @@ function App() {
                 <ShieldCheck className="w-4 h-4 text-indigo-400" /> Admin Management
               </button>
               <button
+                onClick={() => handleTabSelect('manager-directory')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'manager-directory' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <Users className="w-4 h-4 text-fuchsia-400" /> Manager Directory
+              </button>
+              <button
                 onClick={() => handleTabSelect('orders')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'orders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
@@ -1729,7 +1736,7 @@ function App() {
             </button>
             <div className="min-w-0">
               <h2 className="text-base sm:text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight truncate">
-                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab === 'admin-management' ? 'Admin Management' : activeTab.replace('-', ' ')}
+                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab === 'admin-management' ? 'Admin Management' : activeTab === 'manager-directory' ? 'Manager Directory' : activeTab.replace('-', ' ')}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
                 {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -2317,6 +2324,15 @@ function App() {
               token={token}
               API_BASE={API_BASE}
               currentUser={user}
+              onToast={addToast}
+            />
+          )}
+
+          {/* MANAGER DIRECTORY */}
+          {activeTab === 'manager-directory' && (
+            <ManagerDirectoryModule
+              token={token}
+              API_BASE={API_BASE}
               onToast={addToast}
             />
           )}
