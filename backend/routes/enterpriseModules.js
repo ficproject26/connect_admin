@@ -118,6 +118,17 @@ const batchEnrichVendors = async (vendorsList = []) => {
                         ...(validObjectIds.length > 0 ? [{ _id: { $in: validObjectIds } }] : []),
                         ...(stringKeys.length > 0 ? [{ registrationId: { $in: stringKeys } }, { email: { $in: stringKeys } }] : [])
                     ]
+                }, {
+                    projection: {
+                        name: 1,
+                        registrationId: 1,
+                        pincode: 1,
+                        assignedArea: 1,
+                        territory: 1,
+                        level: 1,
+                        role: 1,
+                        email: 1
+                    }
                 }).toArray().then(rawAgents => {
                     rawAgents.forEach(a => {
                         if (a._id && !agentDocsMap.has(a._id.toString())) agentDocsMap.set(a._id.toString(), a);
@@ -129,8 +140,10 @@ const batchEnrichVendors = async (vendorsList = []) => {
     }
 
     if (pincodeCodesSet.size > 0) {
+        const pinCodesArr = Array.from(pincodeCodesSet);
+        pinCodesArr.forEach(c => pincodeMap.set(c, null));
         fetchPromises.push(
-            Pincode.find({ code: { $in: Array.from(pincodeCodesSet) } })
+            Pincode.find({ code: { $in: pinCodesArr } })
                 .populate('activeAgentId', 'name phone email level')
                 .lean()
                 .then(pins => {
@@ -250,7 +263,17 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
                         const filter = mongoose.Types.ObjectId.isValid(possibleAgentId)
                             ? { _id: new mongoose.Types.ObjectId(possibleAgentId) }
                             : { $or: [{ registrationId: possibleAgentId }, { email: possibleAgentId }] };
-                        agentDoc = await db.collection('agents').findOne(filter);
+                        agentDoc = await db.collection('agents').findOne(filter, {
+                            projection: {
+                                name: 1,
+                                registrationId: 1,
+                                pincode: 1,
+                                assignedArea: 1,
+                                territory: 1,
+                                level: 1,
+                                role: 1
+                            }
+                        });
                     } catch (e) {}
                 }
             }
@@ -362,31 +385,32 @@ router.get('/vendors', auth, async (req, res) => {
         const { search, category, state, status, isDirectRequest, isAgentOnboarded, page = 1, limit = 20 } = req.query;
 
         if (isAgentOnboarded === 'true') {
-            let agentVendorsFromUser = await User.find({
-                $or: [
-                    { joiningType: 'agent' },
-                    { createdVia: 'agent' },
-                    { registrationSource: 'agent' },
-                    { onboardedBy: { $exists: true, $ne: null } },
-                    { agentId: { $exists: true, $ne: null } },
-                    { assignedAgent: { $exists: true, $ne: null } },
-                    { onboardedByAgentId: { $exists: true, $ne: null } },
-                    { referredBy: { $exists: true, $ne: null } }
-                ]
-            }).sort({ createdAt: -1 }).lean();
-
-            let agentVendorsFromVendor = await Vendor.find({
-                $or: [
-                    { joiningType: 'agent' },
-                    { createdVia: 'agent' },
-                    { registrationSource: 'agent' },
-                    { onboardedBy: { $exists: true, $ne: null } },
-                    { agentId: { $exists: true, $ne: null } },
-                    { assignedAgent: { $exists: true, $ne: null } },
-                    { onboardedByAgentId: { $exists: true, $ne: null } },
-                    { referredBy: { $exists: true, $ne: null } }
-                ]
-            }).sort({ createdAt: -1 }).lean();
+            const [agentVendorsFromUser, agentVendorsFromVendor] = await Promise.all([
+                User.find({
+                    $or: [
+                        { joiningType: 'agent' },
+                        { createdVia: 'agent' },
+                        { registrationSource: 'agent' },
+                        { onboardedBy: { $exists: true, $ne: null } },
+                        { agentId: { $exists: true, $ne: null } },
+                        { assignedAgent: { $exists: true, $ne: null } },
+                        { onboardedByAgentId: { $exists: true, $ne: null } },
+                        { referredBy: { $exists: true, $ne: null } }
+                    ]
+                }).select('-password -__v').sort({ createdAt: -1 }).lean(),
+                Vendor.find({
+                    $or: [
+                        { joiningType: 'agent' },
+                        { createdVia: 'agent' },
+                        { registrationSource: 'agent' },
+                        { onboardedBy: { $exists: true, $ne: null } },
+                        { agentId: { $exists: true, $ne: null } },
+                        { assignedAgent: { $exists: true, $ne: null } },
+                        { onboardedByAgentId: { $exists: true, $ne: null } },
+                        { referredBy: { $exists: true, $ne: null } }
+                    ]
+                }).select('-__v').sort({ createdAt: -1 }).lean()
+            ]);
 
             let rawAgent = [...agentVendorsFromUser, ...agentVendorsFromVendor];
             
@@ -438,18 +462,19 @@ router.get('/vendors', auth, async (req, res) => {
 
         if (isDirectRequest === 'true') {
             // Aggregated direct vendor registration requests (strictly EXCLUDING agent-onboarded vendors)
-            let directVendors = await User.find({
-                $or: [
-                    { role: { $regex: /vendor|merchant/i } },
-                    { userType: { $regex: /vendor|merchant/i } },
-                    { isDirectRequest: true }
-                ],
-                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
-            }).sort({ createdAt: -1 }).lean();
-
-            let directVendorDocs = await Vendor.find({
-                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
-            }).sort({ createdAt: -1 }).lean();
+            const [directVendors, directVendorDocs] = await Promise.all([
+                User.find({
+                    $or: [
+                        { role: { $regex: /vendor|merchant/i } },
+                        { userType: { $regex: /vendor|merchant/i } },
+                        { isDirectRequest: true }
+                    ],
+                    status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
+                }).select('-password -__v').sort({ createdAt: -1 }).lean(),
+                Vendor.find({
+                    status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
+                }).select('-__v').sort({ createdAt: -1 }).lean()
+            ]);
 
             let rawDirect = [...directVendors, ...directVendorDocs];
             let allDirect = await batchEnrichVendors(rawDirect);
@@ -497,8 +522,10 @@ router.get('/vendors', auth, async (req, res) => {
             ];
         }
 
-        let userVendors = await User.find(query).sort({ createdAt: -1 }).lean();
-        let docVendors = await Vendor.find(query).sort({ createdAt: -1 }).lean();
+        const [userVendors, docVendors] = await Promise.all([
+            User.find(query).select('-password -__v').sort({ createdAt: -1 }).lean(),
+            Vendor.find(query).select('-__v').sort({ createdAt: -1 }).lean()
+        ]);
         let rawVendors = [...userVendors, ...docVendors];
 
         // Deduplicate vendors by _id or email

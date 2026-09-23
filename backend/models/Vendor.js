@@ -3,19 +3,21 @@ const mongoose = require('mongoose');
 const VendorSchema = new mongoose.Schema({
     id: { type: String },
     businessName: { type: String, required: true },
-    category: { type: String, enum: ['Hospitals', 'Hotels', 'Restaurants', 'Stores', 'Services'], required: true },
-    branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch', required: true },
+    category: { type: String, default: 'General Store' },
+    branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
     agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Agent reference
-    contactName: { type: String, required: true },
+    contactName: { type: String },
     phone: { type: String, required: true },
     email: { type: String, required: true },
-    status: { type: String, enum: ['pending', 'approved', 'rejected', 'suspended'], default: 'pending' },
+    status: { type: String, default: 'pending' },
+    isActive: { type: Boolean, default: false },
+    isApproved: { type: Boolean, default: false },
     membership: {
         planId: { type: mongoose.Schema.Types.ObjectId, ref: 'MembershipPlan' },
-        status: { type: String, enum: ['active', 'expired', 'none'], default: 'none' },
+        status: { type: String, default: 'none' },
         expiryDate: { type: Date }
     },
-    kycStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    kycStatus: { type: String, default: 'pending' },
     kycDocs: {
         aadhaarNumber: { type: String },
         aadhaarImage: { type: String },
@@ -28,7 +30,7 @@ const VendorSchema = new mongoose.Schema({
     totalRevenue: { type: Number, default: 0 },
     totalBookings: { type: Number, default: 0 },
     createdAt: { type: Date, default: Date.now }
-}, { strictPopulate: false });
+}, { strict: false, strictPopulate: false });
 
 VendorSchema.index({ status: 1, category: 1 });
 VendorSchema.index({ status: 1, branchId: 1 });

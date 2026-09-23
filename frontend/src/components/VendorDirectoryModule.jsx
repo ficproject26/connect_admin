@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Store, LayoutGrid, List, Search, Filter, Download, ArrowUpRight, CheckCircle,
   XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, AlertTriangle, RefreshCw, X, ChevronRight, Trash2,
@@ -369,8 +369,38 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   // Full Vendor Details Profile Modal
   const [selectedVendorDetails, setSelectedVendorDetails] = useState(null);
 
+  const activeControllerRef = useRef(null);
+  const inFlightKeyRef = useRef(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (activeControllerRef.current) {
+        try {
+          activeControllerRef.current.abort('unmount');
+        } catch (e) {}
+      }
+    };
+  }, []);
+
   const fetchVendors = async (forceRefresh = false) => {
     const cacheKey = `${search}_${category}_${stateFilter}_${statusFilter}_${isDirectRequest}_${page}`;
+    
+    // Prevent duplicate simultaneous requests for the exact same query
+    if (!forceRefresh && inFlightKeyRef.current === cacheKey) {
+      return;
+    }
+
+    // If there is an active in-flight request for a different query/filter, abort it cleanly as superseded
+    if (activeControllerRef.current) {
+      try {
+        activeControllerRef.current.abort('superseded');
+      } catch (e) {}
+      activeControllerRef.current = null;
+    }
+
     if (!forceRefresh && vendorModuleCacheMap.has(cacheKey)) {
       const cached = vendorModuleCacheMap.get(cacheKey);
       setVendors(cached.list);
@@ -382,7 +412,14 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
     setError(null);
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    activeControllerRef.current = controller;
+    inFlightKeyRef.current = cacheKey;
+
+    let isTimeout = false;
+    const timeoutId = setTimeout(() => {
+      isTimeout = true;
+      controller.abort('timeout');
+    }, 12000);
 
     try {
       const query = new URLSearchParams({
@@ -395,11 +432,19 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
         limit: 12
       });
 
+      const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : '');
+
       const res = await fetch(`${API_BASE}/admin/enterprise/vendors?${query.toString()}`, {
-        headers: { 'x-auth-token': token },
+        headers: {
+          'x-auth-token': activeToken || '',
+          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+          'Content-Type': 'application/json'
+        },
         signal: controller.signal
       });
       clearTimeout(timeoutId);
+
+      if (!isMountedRef.current) return;
 
       let list = [];
       let totalCount = 0;
@@ -418,15 +463,31 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
         throw new Error(`Server returned HTTP ${res.status}`);
       }
     } catch (err) {
-      console.error('Fetch vendor directory error:', err);
+      if (!isMountedRef.current) return;
       if (err.name === 'AbortError') {
-        setError('Request timed out after 12 seconds. Please retry.');
+        if (isTimeout) {
+          console.error('Fetch vendor directory timeout error:', err);
+          setError('Request timed out after 12 seconds. Please retry.');
+        } else {
+          // Intentionally cancelled (superseded by new search/filter, unmounted, etc.)
+          // Do NOT show error or false timeout message
+          return;
+        }
       } else {
+        console.error('Fetch vendor directory error:', err);
         setError('Unable to load latest data. Please try again.');
       }
     } finally {
       clearTimeout(timeoutId);
-      setLoading(false);
+      if (activeControllerRef.current === controller) {
+        activeControllerRef.current = null;
+      }
+      if (inFlightKeyRef.current === cacheKey) {
+        inFlightKeyRef.current = null;
+      }
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 

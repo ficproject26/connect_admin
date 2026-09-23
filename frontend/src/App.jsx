@@ -375,6 +375,8 @@ function App() {
   const [adVideoUrl, setAdVideoUrl] = useState("");
   const [offerImageUrl, setOfferImageUrl] = useState("");
   const [kycRoleTab, setKycRoleTab] = useState("agent"); // 'agent' or 'vendor'
+  const [processingKycId, setProcessingKycId] = useState(null);
+  const [kycActionType, setKycActionType] = useState(null); // 'approve' or 'reject'
   const [catSubFilter, setCatSubFilter] = useState("All");
   const [catStatusFilter, setCatStatusFilter] = useState("All Status");
   const [jobSearchTerm, setJobSearchTerm] = useState("");
@@ -1021,6 +1023,9 @@ function App() {
       safeFetch(`${API_BASE}/admin/delivery-partners`, setDeliveryPartners);
     } else if (activeTab === 'support-team' || activeTab === 'support-team-enterprise') {
       safeFetch(`${API_BASE}/admin/support-team`, setSupportTeam);
+    } else if (activeTab === 'kyc') {
+      safeFetch(`${API_BASE}/admin/vendors`, setVendors);
+      safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
     }
   }, [activeTab, token, API_BASE, reportType, safeFetch, handleSetAgents]);
 
@@ -1144,7 +1149,11 @@ function App() {
     if (activeTab === 'support-team' || activeTab === 'support-team-enterprise') {
       swrFetch(`${API_BASE}/admin/support-team`, setSupportTeam, 'supportTeam');
     }
-  }, [activeTab, token, reportType, swrFetch]);
+    if (activeTab === 'kyc') {
+      swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors');
+      swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
+    }
+  }, [activeTab, token, reportType, swrFetch, handleSetAgents]);
 
   // Selective revalidation when request modals open
   useEffect(() => {
@@ -1237,14 +1246,18 @@ function App() {
   const [toasts, setToasts] = useState([]);
 
   const addToast = (message, type = 'info') => {
-    const id = Date.now() + Math.random();
-    const text = typeof message === 'object' ? (message.message || message.text) : message;
+    const text = typeof message === 'object' ? (message.message || message.text || message.msg || message.error) : message;
     const msgType = typeof message === 'object' ? (message.type || type) : type;
-    const newToast = { id, text, type: msgType };
-    setToasts(prev => [...prev.slice(-4), newToast]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
+    if (!text) return;
+    setToasts(prev => {
+      if (prev.some(t => t.text === text && t.type === msgType)) return prev;
+      const id = Date.now() + Math.random();
+      const newToast = { id, text, type: msgType };
+      setTimeout(() => {
+        setToasts(current => current.filter(t => t.id !== id));
+      }, 4000);
+      return [...prev.slice(-3), newToast];
+    });
   };
 
   // API Action Mutators
@@ -1262,6 +1275,7 @@ function App() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        console.error(`API action [${method} ${endpoint}] failed:`, data);
         addToast(data.message || data.msg || data.error || "Action failed.", 'error');
         return { success: false, data };
       }
@@ -1273,11 +1287,112 @@ function App() {
         safeFetch(`${API_BASE}/pincodes`, setPincodes);
         safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
       }
+      if (endpoint.toLowerCase().includes('vendor')) {
+        delete apiCacheRef.current['vendors'];
+        safeFetch(`${API_BASE}/admin/vendors`, setVendors);
+      }
+      if (endpoint.toLowerCase().includes('agent')) {
+        delete apiCacheRef.current['agents'];
+        safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+      }
       return { success: true, data };
     } catch (err) {
       console.error("API action failed:", err);
       addToast(err.message || "API Action failed: Server unreachable or request rejected.", 'error');
       return { success: false, error: err.message };
+    }
+  };
+
+  // Dedicated KYC Handlers with single-flight locking, optimistic state updates & auto-refresh
+  const handleVendorKycAction = async (vendorId, action) => {
+    if (processingKycId) return;
+    setProcessingKycId(vendorId);
+    setKycActionType(action);
+    try {
+      const endpoint = action === 'approve' ? `/admin/vendors/${vendorId}/approve` : `/admin/vendors/${vendorId}/reject`;
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: 'PUT',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorMsg = data.message || data.msg || data.error || 'KYC verification action failed.';
+        console.error(`Vendor KYC ${action} API error:`, data);
+        addToast(errorMsg, 'error');
+        return;
+      }
+
+      const newStatus = action === 'approve' ? 'Approved' : 'Rejected';
+      const successMsg = action === 'approve'
+        ? 'Vendor KYC verified & approved successfully.'
+        : 'Vendor KYC rejected / re-upload requested.';
+
+      // Optimistically update vendor status so it leaves Pending and appears in Approved/Rejected immediately
+      setVendors(prev => prev.map(v => v._id === vendorId ? { ...v, status: newStatus, kycStatus: newStatus.toLowerCase() } : v));
+      addToast(successMsg, 'success');
+
+      delete apiCacheRef.current['vendors'];
+      delete apiCacheRef.current['stats'];
+      safeFetch(`${API_BASE}/admin/vendors`, setVendors);
+      fetchData(true);
+    } catch (err) {
+      console.error(`Vendor KYC ${action} exception:`, err);
+      addToast(err.message || 'Action failed: Server error or network issue.', 'error');
+    } finally {
+      setProcessingKycId(null);
+      setKycActionType(null);
+    }
+  };
+
+  const handleAgentKycAction = async (agent, action) => {
+    if (processingKycId) return;
+    setProcessingKycId(agent._id);
+    setKycActionType(action);
+    try {
+      const targetStatus = action === 'approve' ? 'approved' : 'rejected';
+      const res = await fetch(`${API_BASE}/admin/approve-agent/${agent._id}`, {
+        method: 'PUT',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: targetStatus,
+          agentId: agent._id,
+          email: agent.email,
+          phone: agent.phone,
+          registrationId: agent.registrationId
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errorMsg = data.message || data.msg || data.error || 'Agent KYC action failed.';
+        console.error(`Agent KYC ${action} API error:`, data);
+        addToast(errorMsg, 'error');
+        return;
+      }
+
+      const successMsg = action === 'approve'
+        ? 'Agent KYC verified & approved successfully.'
+        : 'Agent KYC rejected / re-upload requested.';
+
+      setAgents(prev => prev.map(a => a._id === agent._id ? { ...a, status: targetStatus, kycStatus: targetStatus, isActive: targetStatus === 'approved', isApproved: targetStatus === 'approved' } : a));
+      addToast(successMsg, 'success');
+
+      delete apiCacheRef.current['agents'];
+      delete apiCacheRef.current['stats'];
+      safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+      fetchData(true);
+    } catch (err) {
+      console.error(`Agent KYC ${action} exception:`, err);
+      addToast(err.message || 'Action failed: Server error or network issue.', 'error');
+    } finally {
+      setProcessingKycId(null);
+      setKycActionType(null);
     }
   };
 
@@ -2871,16 +2986,25 @@ function App() {
                             {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((agent.status || '').toLowerCase()) && (
                               <div className="flex gap-3 justify-end">
                                 <button
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'rejected', agentId: agent._id, email: agent.email, phone: agent.phone, registrationId: agent.registrationId })}
-                                  className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                                  onClick={() => handleAgentKycAction(agent, 'reject')}
+                                  disabled={processingKycId === agent._id}
+                                  className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                 >
-                                  Reject / Request Reupload
+                                  {processingKycId === agent._id && kycActionType === 'reject' ? 'Rejecting...' : 'Reject / Request Reupload'}
                                 </button>
                                 <button
-                                  onClick={() => executeAction(`/admin/approve-agent/${agent._id}`, 'PUT', { status: 'approved', agentId: agent._id, email: agent.email, phone: agent.phone, registrationId: agent.registrationId })}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                                  onClick={() => handleAgentKycAction(agent, 'approve')}
+                                  disabled={processingKycId === agent._id}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                 >
-                                  Verify & Approve KYC
+                                  {processingKycId === agent._id && kycActionType === 'approve' ? (
+                                    <>
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Verifying...</span>
+                                    </>
+                                  ) : (
+                                    <span>Verify & Approve KYC</span>
+                                  )}
                                 </button>
                               </div>
                             )}
@@ -2965,16 +3089,25 @@ function App() {
                             {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((vendor.status || '').toLowerCase()) && (
                               <div className="flex gap-3 justify-end">
                                 <button
-                                  onClick={() => executeAction(`/admin/vendors/${vendor._id}/reject`, 'PUT', {})}
-                                  className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                                  onClick={() => handleVendorKycAction(vendor._id, 'reject')}
+                                  disabled={processingKycId === vendor._id}
+                                  className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                 >
-                                  Reject / Request Reupload
+                                  {processingKycId === vendor._id && kycActionType === 'reject' ? 'Rejecting...' : 'Reject / Request Reupload'}
                                 </button>
                                 <button
-                                  onClick={() => executeAction(`/admin/vendors/${vendor._id}/approve`, 'PUT', {})}
-                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all"
+                                  onClick={() => handleVendorKycAction(vendor._id, 'approve')}
+                                  disabled={processingKycId === vendor._id}
+                                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                 >
-                                  Verify & Approve Vendor KYC
+                                  {processingKycId === vendor._id && kycActionType === 'approve' ? (
+                                    <>
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                      <span>Verifying...</span>
+                                    </>
+                                  ) : (
+                                    <span>Verify & Approve Vendor KYC</span>
+                                  )}
                                 </button>
                               </div>
                             )}

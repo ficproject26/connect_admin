@@ -98,7 +98,6 @@ app.use((req, res, next) => {
 });
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
 
 // 2. Express Body Parsers (Parse JSON & URL-encoded request bodies up to 50MB)
 app.use(express.json({ limit: '50mb' }));
