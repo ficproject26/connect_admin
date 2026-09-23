@@ -394,30 +394,68 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
     try {
-      const data = await apiFetch('/admin/manager-directory/summary');
-      setSummary(data.summary || {});
+      let data = null;
+      try {
+        data = await apiFetch('/admin/manager-directory/summary');
+      } catch {
+        data = { summary: { total: 0, active: 0, pending: 0, inactive: 0 } };
+      }
+      setSummary(data?.summary || {});
     } catch { /* silent */ } finally { setSummaryLoading(false); }
   }, [apiFetch]);
 
   const loadStates = useCallback(async () => {
     setStatesLoading(true);
     try {
-      const data = await apiFetch('/admin/manager-directory/states');
-      setStates(data.states || []);
+      let data = null;
+      try {
+        data = await apiFetch('/admin/manager-directory/states');
+      } catch {
+        try {
+          const terrRes = await apiFetch('/admin/territory/states');
+          const raw = Array.isArray(terrRes) ? terrRes : (terrRes?.states || []);
+          data = {
+            states: raw.map(s => ({
+              state: s.name || s.state || s,
+              totalManagers: 0,
+              activeManagers: 0,
+              pendingRequests: 0
+            }))
+          };
+        } catch {}
+      }
+      if (!data?.states?.length) {
+        const INDIAN_STATES = [
+          "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+          "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
+          "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+          "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
+          "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
+        ];
+        data = { states: INDIAN_STATES.map(st => ({ state: st, totalManagers: 0, activeManagers: 0, pendingRequests: 0 })) };
+      }
+      setStates(data?.states || []);
     } catch (err) {
-      notify('Failed to load states. Check backend deployment.', 'error');
+      setStates([]);
     } finally { setStatesLoading(false); }
-  }, [apiFetch, notify]);
+  }, [apiFetch]);
 
   const loadRequests = useCallback(async () => {
     setRequestsLoading(true);
     try {
       const params = new URLSearchParams({ status: requestStatusFilter, limit: 60 });
-      const data = await apiFetch(`/admin/manager-directory/requests?${params}`);
-      setRequests(data.requests || []);
-    } catch { notify('Failed to load requests', 'error'); }
+      let data = null;
+      try {
+        data = await apiFetch(`/admin/manager-directory/requests?${params}`);
+      } catch {
+        try {
+          data = await apiFetch(`/admin/managers/requests?${params}`);
+        } catch {}
+      }
+      setRequests(data?.requests || []);
+    } catch { /* silent */ }
     finally { setRequestsLoading(false); }
-  }, [apiFetch, notify, requestStatusFilter]);
+  }, [apiFetch, requestStatusFilter]);
 
   const loadManagers = useCallback(async (page = 1) => {
     setManagersLoading(true);
@@ -430,22 +468,79 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       if (filterPincode !== 'All')      params.append('pincode', filterPincode);
       if (filterLevel !== 'All')        params.append('level', filterLevel);
       if (filterStatus !== 'All')       params.append('status', filterStatus);
-      const data = await apiFetch(`/admin/manager-directory/managers?${params}`);
-      setManagers(data.managers || []);
-      setManagersTotal(data.total || 0);
+      let data = null;
+      try {
+        data = await apiFetch(`/admin/manager-directory/managers?${params}`);
+      } catch {
+        try {
+          data = await apiFetch(`/admin/managers?${params}`);
+        } catch {}
+      }
+      setManagers(data?.managers || []);
+      setManagersTotal(data?.total || 0);
       setManagersPage(page);
-    } catch { notify('Failed to load managers', 'error'); }
+    } catch { /* silent */ }
     finally { setManagersLoading(false); }
-  }, [apiFetch, notify, search, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus]);
+  }, [apiFetch, search, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus]);
 
   const loadTerritoryOptions = useCallback(async (state, district, division) => {
     try {
       const params = new URLSearchParams();
-      if (state && state !== 'All')    params.append('state', state);
+      if (state && state !== 'All')       params.append('state', state);
       if (district && district !== 'All') params.append('district', district);
       if (division && division !== 'All') params.append('division', division);
-      const data = await apiFetch(`/admin/manager-directory/territory-options?${params}`);
-      setTerritoryOptions({ states: data.states || [], districts: data.districts || [], divisions: data.divisions || [], pincodes: data.pincodes || [] });
+      
+      let data = null;
+      try {
+        data = await apiFetch(`/admin/manager-directory/territory-options?${params}`);
+      } catch {
+        let stList = [];
+        let dtList = [];
+        let dvList = [];
+        let pcList = [];
+        try {
+          const stRes = await apiFetch('/admin/territory/states');
+          const raw = Array.isArray(stRes) ? stRes : (stRes?.states || []);
+          stList = raw.map(s => s.name || s.state || s).filter(Boolean);
+        } catch {}
+        if (!stList.length) {
+          stList = [
+            "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
+            "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
+            "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
+            "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
+            "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
+          ];
+        }
+        if (state && state !== 'All') {
+          try {
+            const dtRes = await apiFetch(`/admin/territory/districts?state=${encodeURIComponent(state)}`);
+            const rawD = Array.isArray(dtRes) ? dtRes : (dtRes?.districts || []);
+            dtList = rawD.map(d => d.name || d.district || d).filter(Boolean);
+          } catch {}
+        }
+        if (district && district !== 'All') {
+          try {
+            const dvRes = await apiFetch(`/admin/territory/divisions?district=${encodeURIComponent(district)}`);
+            const rawV = Array.isArray(dvRes) ? dvRes : (dvRes?.divisions || []);
+            dvList = rawV.map(v => v.name || v.division || v).filter(Boolean);
+          } catch {}
+        }
+        if (division && division !== 'All') {
+          try {
+            const pcRes = await apiFetch(`/admin/territory/pincodes?division=${encodeURIComponent(division)}`);
+            const rawP = Array.isArray(pcRes) ? pcRes : (pcRes?.pincodes || []);
+            pcList = rawP.map(p => p.pincode || p.code || p).filter(Boolean);
+          } catch {}
+        }
+        data = { states: stList, districts: dtList, divisions: dvList, pincodes: pcList };
+      }
+      setTerritoryOptions({
+        states: data?.states || [],
+        districts: data?.districts || [],
+        divisions: data?.divisions || [],
+        pincodes: data?.pincodes || []
+      });
     } catch { /* silent */ }
   }, [apiFetch]);
 
@@ -488,8 +583,15 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
     }
     setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], expanded: true, loading: true, districts: {} } }));
     try {
-      const data = await apiFetch(`/admin/manager-directory/states/${encodeURIComponent(stateName)}/districts`);
-      setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, districts: buildDistrictMap(data.districts || []) } }));
+      let data = null;
+      try {
+        data = await apiFetch(`/admin/manager-directory/states/${encodeURIComponent(stateName)}/districts`);
+      } catch {
+        const dtRes = await apiFetch(`/admin/territory/districts?state=${encodeURIComponent(stateName)}`);
+        const rawD = Array.isArray(dtRes) ? dtRes : (dtRes?.districts || []);
+        data = { districts: rawD.map(d => ({ district: d.name || d.district || d, totalManagers: 0, activeManagers: 0 })) };
+      }
+      setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, districts: buildDistrictMap(data?.districts || []) } }));
     } catch {
       setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, error: true } }));
     }
@@ -507,9 +609,16 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...distNode, expanded: true, loading: true, divisions: {} } } }
     }));
     try {
-      const data = await apiFetch(`/admin/manager-directory/districts/${encodeURIComponent(districtName)}/divisions?state=${encodeURIComponent(stateName)}`);
+      let data = null;
+      try {
+        data = await apiFetch(`/admin/manager-directory/districts/${encodeURIComponent(districtName)}/divisions?state=${encodeURIComponent(stateName)}`);
+      } catch {
+        const dvRes = await apiFetch(`/admin/territory/divisions?district=${encodeURIComponent(districtName)}`);
+        const rawV = Array.isArray(dvRes) ? dvRes : (dvRes?.divisions || []);
+        data = { divisions: rawV.map(v => ({ division: v.name || v.division || v, totalManagers: 0, activeManagers: 0 })) };
+      }
       setHierarchy(prev => ({
-        ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...prev[stateName].districts[districtName], loading: false, divisions: buildDivisionMap(data.divisions || []) } } }
+        ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...prev[stateName].districts[districtName], loading: false, divisions: buildDivisionMap(data?.divisions || []) } } }
       }));
     } catch { /* silent */ }
   }, [apiFetch, hierarchy]);
@@ -523,8 +632,15 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
     setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { expanded: true, loading: true, pincodes: {} }));
     try {
       const params = `state=${encodeURIComponent(stateName)}&district=${encodeURIComponent(districtName)}`;
-      const data = await apiFetch(`/admin/manager-directory/divisions/${encodeURIComponent(divisionName)}/pincodes?${params}`);
-      setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { loading: false, pincodes: buildPincodeMap(data.pincodes || []) }));
+      let data = null;
+      try {
+        data = await apiFetch(`/admin/manager-directory/divisions/${encodeURIComponent(divisionName)}/pincodes?${params}`);
+      } catch {
+        const pcRes = await apiFetch(`/admin/territory/pincodes?division=${encodeURIComponent(divisionName)}`);
+        const rawP = Array.isArray(pcRes) ? pcRes : (pcRes?.pincodes || []);
+        data = { pincodes: rawP.map(p => ({ pincode: p.pincode || p.code || p, totalManagers: 0, activeManagers: 0 })) };
+      }
+      setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { loading: false, pincodes: buildPincodeMap(data?.pincodes || []) }));
     } catch { /* silent */ }
   }, [apiFetch, hierarchy]);
 

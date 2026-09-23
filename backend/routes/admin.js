@@ -63,6 +63,13 @@ try {
     console.warn('Hierarchy admin routes delegate notice:', hErr.message);
 }
 
+// Mount Manager Directory Routes (Directory hierarchy, KPI summary, territory options, requests)
+try {
+    router.use('/', require('./managerDirectoryRoutes'));
+} catch (mErr) {
+    console.warn('Manager directory routes delegate notice:', mErr.message);
+}
+
 // HELPER: Branch scoping helper (Super Admin unconstrained access)
 const getBranchFilter = (adminUser, defaultFilter = {}) => {
     return defaultFilter;
