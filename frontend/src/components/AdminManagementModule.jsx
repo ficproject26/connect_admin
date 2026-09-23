@@ -5,6 +5,7 @@ import {
   CheckCircle, XCircle, Clock, AlertTriangle, ArrowRight, Eye, Edit2, Lock,
   ChevronUp, UserCheck, Briefcase, FileText, Download, Layers
 } from 'lucide-react';
+import StateAdminOnboardingWizard from './StateAdminOnboardingWizard';
 
 const INDIAN_STATES = [
   "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
@@ -1354,7 +1355,21 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
       {/* ========================================================= */}
       {/* 6. MODAL: ADD ADMINISTRATOR (STATE / DISTRICT / DIVISION / PINCODE) */}
       {/* ========================================================= */}
-      {showAddAdminModal && (
+
+      {/* State Admin: full 6-step wizard */}
+      {showAddAdminModal && addAdminLevel === 'state' && (
+        <StateAdminOnboardingWizard
+          token={token}
+          API_BASE={API_BASE}
+          prefilledState={prefilledTerritory?.state || ''}
+          onClose={() => setShowAddAdminModal(false)}
+          onToast={onToast}
+          onSuccess={() => { setShowAddAdminModal(false); fetchAdmins(); }}
+        />
+      )}
+
+      {/* District / Division / Pincode: existing simple modal */}
+      {showAddAdminModal && addAdminLevel !== 'state' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-xl rounded-3xl p-6 shadow-2xl space-y-6 my-8 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">

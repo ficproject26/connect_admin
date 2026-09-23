@@ -257,7 +257,34 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
             assignedPincode,
             address,
             postOffice,
-            status = 'Active'
+            status = 'Active',
+            // Extended personal details
+            dateOfBirth,
+            gender,
+            fatherName,
+            bloodGroup,
+            nationality,
+            // Extended address fields
+            addressLine1,
+            addressLine2,
+            locality,
+            city,
+            taluk,
+            residentialState,
+            residentialDistrict,
+            residentialPincode,
+            // KYC document numbers (stored masked)
+            aadhaarNumber,
+            panNumber,
+            aadhaarFrontUrl,
+            aadhaarBackUrl,
+            panUrl,
+            addressProofType,
+            addressProofNumber,
+            addressProofUrl,
+            photoUrl,
+            // Declaration
+            declarationAccepted
         } = req.body;
 
         if (!name || !name.trim()) return res.status(400).json({ msg: 'Full Name is required' });
@@ -297,15 +324,10 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
         let finalPincode = (assignedPincode || '').trim();
 
         if (!req.adminUser.isMainAdmin) {
-            // Force state to match caller's state
-            if (req.adminUser.assignedState) {
-                finalState = req.adminUser.assignedState;
-            }
-            // If caller is District Admin, force district
+            if (req.adminUser.assignedState) finalState = req.adminUser.assignedState;
             if (req.adminUser.adminTier === 'district' && req.adminUser.assignedDistrict) {
                 finalDistrict = req.adminUser.assignedDistrict;
             }
-            // If caller is Division Admin, force division
             if (req.adminUser.adminTier === 'division' && req.adminUser.assignedDivision) {
                 finalDistrict = req.adminUser.assignedDistrict;
                 finalDivision = req.adminUser.assignedDivision;
@@ -336,11 +358,36 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
 
         if (existingUser) {
             return res.status(400).json({
-                msg: existingUser.email === cleanEmail ? 'An account with this email already exists.' : 'An account with this mobile number already exists.'
+                msg: existingUser.email === cleanEmail
+                    ? 'An account with this email address already exists.'
+                    : 'An account with this mobile number already exists.'
             });
         }
 
-        // 5. AUTO-ENSURE STATE IN STATE COLLECTION IF NOT EXISTS
+        // 5. KYC DUPLICATE CHECK (Aadhaar / PAN) — only if provided
+        if (aadhaarNumber) {
+            const cleanAadhaar = String(aadhaarNumber).replace(/\s/g, '');
+            if (cleanAadhaar.length !== 12 || !/^\d{12}$/.test(cleanAadhaar)) {
+                return res.status(400).json({ msg: 'Aadhaar number must be exactly 12 digits.' });
+            }
+            const aadhaarExists = await User.findOne({ 'kyc.aadhaarNumber': cleanAadhaar });
+            if (aadhaarExists) {
+                return res.status(400).json({ msg: 'An account with this Aadhaar number already exists.' });
+            }
+        }
+
+        if (panNumber) {
+            const cleanPan = String(panNumber).trim().toUpperCase();
+            if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleanPan)) {
+                return res.status(400).json({ msg: 'Invalid PAN number format. Expected format: ABCDE1234F' });
+            }
+            const panExists = await User.findOne({ 'kyc.panNumber': cleanPan });
+            if (panExists) {
+                return res.status(400).json({ msg: 'An account with this PAN number already exists.' });
+            }
+        }
+
+        // 6. AUTO-ENSURE STATE IN STATE COLLECTION IF NOT EXISTS
         if (finalState) {
             const stateExists = await State.findOne({ name: new RegExp(`^${finalState}$`, 'i') });
             if (!stateExists) {
@@ -354,19 +401,44 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
             }
         }
 
-        // 6. GENERATE REGISTRATION ID & ROLE
+        // 7. CHECK DUPLICATE STATE ADMIN (only one active State Admin per state by default)
+        if (targetLevel === 'state' && finalState) {
+            const existingStateAdmin = await User.findOne({
+                adminLevel: 'state',
+                adminRole: 'state-admin',
+                assignedState: new RegExp(`^${finalState.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
+                status: { $in: ['approved', 'Active', 'active'] }
+            });
+            if (existingStateAdmin) {
+                return res.status(400).json({
+                    msg: `An active State Administrator already exists for ${finalState}. Deactivate the existing State Admin before creating a new one.`
+                });
+            }
+        }
+
+        // 8. GENERATE REGISTRATION ID & ROLE
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const randDigits = Math.floor(1000 + Math.random() * 9000);
-        const registrationId = `ADM-${targetLevel.slice(0, 3).toUpperCase()}-${dateStr}-${randDigits}`;
+        const stateCode = finalState ? finalState.slice(0, 2).toUpperCase() : 'XX';
+        const registrationId = `ADM-${stateCode}-${dateStr}-${randDigits}`;
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
+
+        // Build full residential address string
+        const addressParts = [addressLine1, addressLine2, locality, city, taluk, residentialDistrict, residentialState, residentialPincode].filter(Boolean);
+        const fullResidentialAddress = address || addressParts.join(', ') || '';
+
+        // Mask Aadhaar for storage (only store last 4 digits visible)
+        const maskedAadhaar = aadhaarNumber
+            ? `XXXX XXXX ${String(aadhaarNumber).replace(/\s/g, '').slice(-4)}`
+            : undefined;
 
         const newAdmin = new User({
             name: name.trim(),
             email: cleanEmail,
             phone: cleanPhone || undefined,
-            altPhone: altPhone ? String(altPhone).trim() : '',
+            altPhone: altPhone ? String(altPhone).replace(/\D/g, '') : '',
             password: hashedPassword,
             role: 'admin',
             adminRole: `${targetLevel}-admin`,
@@ -376,8 +448,39 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
             assignedDivision: finalDivision,
             assignedPincode: finalPincode,
             postOffice: postOffice || '',
-            fullAddress: address || '',
-            status: status === 'Active' ? 'approved' : status,
+            fullAddress: fullResidentialAddress,
+            // Extended personal details stored in existing User model fields
+            dob: dateOfBirth || undefined,
+            gender: gender || undefined,
+            // Store additional details in kycDocs (Mixed field)
+            kycDocs: {
+                fatherName: fatherName || '',
+                bloodGroup: bloodGroup || '',
+                nationality: nationality || 'Indian',
+                addressLine1: addressLine1 || '',
+                addressLine2: addressLine2 || '',
+                locality: locality || '',
+                city: city || '',
+                taluk: taluk || '',
+                residentialDistrict: residentialDistrict || '',
+                residentialState: residentialState || '',
+                residentialPincode: residentialPincode || '',
+                photoUrl: photoUrl || '',
+                addressProofType: addressProofType || '',
+                addressProofNumber: addressProofNumber || '',
+                addressProofUrl: addressProofUrl || '',
+                declarationAccepted: !!declarationAccepted,
+                onboardedAt: new Date().toISOString()
+            },
+            // KYC document data stored in existing kyc subdocument
+            kyc: {
+                aadhaarNumber: maskedAadhaar || '',
+                aadhaarImage: aadhaarFrontUrl || '',
+                panNumber: panNumber ? String(panNumber).trim().toUpperCase() : '',
+                panImage: panUrl || '',
+                selfie: photoUrl || ''
+            },
+            status: status === 'Active' ? 'approved' : (status === 'Pending Verification' ? 'pending' : status),
             isActive: status === 'Active',
             parentAdminId: req.adminUser._id,
             registrationId,
@@ -388,11 +491,17 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
 
         res.status(201).json({
             success: true,
-            msg: `${targetLevel.charAt(0).toUpperCase() + targetLevel.slice(1)} Admin created successfully.`,
+            msg: `${targetLevel.charAt(0).toUpperCase() + targetLevel.slice(1)} Administrator onboarded successfully.`,
+            registrationId,
             admin: await formatAdminForResponse(newAdmin.toObject())
         });
     } catch (err) {
         console.error('Create hierarchy admin error:', err);
+        if (err.code === 11000) {
+            const field = Object.keys(err.keyValue || {})[0];
+            const fieldLabels = { email: 'Email address', phone: 'Mobile number' };
+            return res.status(400).json({ msg: `${fieldLabels[field] || 'This'} is already registered.` });
+        }
         res.status(500).json({ msg: 'Server error creating administrator', error: err.message });
     }
 });

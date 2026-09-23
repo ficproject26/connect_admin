@@ -56,6 +56,13 @@ const adminAuth = async (req, res, next) => {
     }
 };
 
+// Mount Hierarchy Admin Routes (State/District/Division/Pincode Admins & Managers)
+try {
+    router.use('/', require('./hierarchyAdminRoutes'));
+} catch (hErr) {
+    console.warn('Hierarchy admin routes delegate notice:', hErr.message);
+}
+
 // HELPER: Branch scoping helper (Super Admin unconstrained access)
 const getBranchFilter = (adminUser, defaultFilter = {}) => {
     return defaultFilter;
@@ -624,16 +631,50 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
             });
         }
 
+        const targetLevel = (req.body.adminLevel || (adminRole === 'state-admin' ? 'state' : 'branch')).toLowerCase();
+        const finalState = req.body.assignedState || req.body.state || undefined;
+
+        // Auto-generate registrationId if State Admin
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randDigits = Math.floor(1000 + Math.random() * 9000);
+        const stateCode = finalState ? finalState.slice(0, 2).toUpperCase() : 'ADM';
+        const registrationId = req.body.registrationId || `ADM-${stateCode}-${dateStr}-${randDigits}`;
+
         user = new User({
             name,
             email: lowerEmail,
             phone: cleanPhone || undefined,
             password,
             role: 'admin',
-            adminRole,
+            adminRole: adminRole || (targetLevel === 'state' ? 'state-admin' : 'branch-admin'),
+            adminLevel: targetLevel,
+            assignedState: finalState,
             branchId,
-            isActive: true,
-            status: 'approved'
+            registrationId,
+            dob: req.body.dateOfBirth || req.body.dob || undefined,
+            gender: req.body.gender || undefined,
+            fullAddress: req.body.address || req.body.fullAddress || '',
+            kyc: req.body.kyc || (req.body.aadhaarNumber || req.body.panNumber ? {
+                aadhaarNumber: req.body.aadhaarNumber ? `XXXX XXXX ${String(req.body.aadhaarNumber).replace(/\s/g, '').slice(-4)}` : '',
+                aadhaarImage: req.body.aadhaarFrontUrl || '',
+                panNumber: req.body.panNumber ? String(req.body.panNumber).trim().toUpperCase() : '',
+                panImage: req.body.panUrl || '',
+                selfie: req.body.photoUrl || ''
+            } : undefined),
+            kycDocs: req.body.kycDocs || {
+                fatherName: req.body.fatherName || '',
+                bloodGroup: req.body.bloodGroup || '',
+                nationality: req.body.nationality || 'Indian',
+                addressLine1: req.body.addressLine1 || '',
+                addressLine2: req.body.addressLine2 || '',
+                city: req.body.city || '',
+                residentialState: req.body.residentialState || '',
+                residentialPincode: req.body.residentialPincode || '',
+                photoUrl: req.body.photoUrl || '',
+                onboardedAt: new Date().toISOString()
+            },
+            isActive: req.body.status !== 'Inactive',
+            status: req.body.status === 'Active' ? 'approved' : (req.body.status === 'Pending Verification' ? 'pending' : (req.body.status || 'approved'))
         });
 
         const salt = await bcrypt.genSalt(10);
