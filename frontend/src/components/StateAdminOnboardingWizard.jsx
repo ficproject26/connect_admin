@@ -174,6 +174,42 @@ const SH = ({icon:Icon, color, title, sub}) => (
 );
 
 // ════════════════════════════════════════════════════════════════════
+// DYNAMIC 18+ AGE VALIDATION HELPERS
+// ════════════════════════════════════════════════════════════════════
+const getMaxDobFor18Years = () => {
+  const today = new Date();
+  const yyyy = today.getFullYear() - 18;
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const calculateAge = (dobString) => {
+  if (!dobString) return 0;
+  const parts = String(dobString).split('T')[0].split('-');
+  const today = new Date();
+  if (parts.length === 3 && !isNaN(parseInt(parts[0], 10))) {
+    const birthYear = parseInt(parts[0], 10);
+    const birthMonth = parseInt(parts[1], 10) - 1;
+    const birthDay = parseInt(parts[2], 10);
+    let age = today.getFullYear() - birthYear;
+    const m = today.getMonth() - birthMonth;
+    if (m < 0 || (m === 0 && today.getDate() < birthDay)) {
+      age--;
+    }
+    return age;
+  }
+  const birthDate = new Date(dobString);
+  if (isNaN(birthDate.getTime())) return 0;
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+// ════════════════════════════════════════════════════════════════════
 // MAIN WIZARD COMPONENT
 // ════════════════════════════════════════════════════════════════════
 const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose, onSuccess, onToast}) => {
@@ -233,8 +269,14 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
     if (step===1) {
       if (!pers.fullName.trim()) e.fullName='Full name is required';
       else if (!/^[a-zA-Z\s.'-]{2,80}$/.test(pers.fullName.trim())) e.fullName='2-80 chars, letters only';
-      if (!pers.dateOfBirth) e.dateOfBirth='Date of birth is required';
-      else if (new Date(pers.dateOfBirth)>=new Date()) e.dateOfBirth='Cannot be a future date';
+      if (!pers.dateOfBirth) {
+        e.dateOfBirth = 'Date of birth is required';
+      } else {
+        const age = calculateAge(pers.dateOfBirth);
+        if (isNaN(age) || age < 18) {
+          e.dateOfBirth = 'You must be 18 years or older to register.';
+        }
+      }
       if (!pers.gender) e.gender='Gender is required';
       if (!cont.email.trim()) e.email='Email address is required';
       else if (!validateEmail(cont.email)) e.email='Enter a valid email address';
@@ -414,7 +456,7 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
                 </div>
                 <div>
                   <Lbl req>Date of Birth</Lbl>
-                  <Inp type="date" max={new Date().toISOString().split('T')[0]} value={pers.dateOfBirth} onChange={e=>{upP('dateOfBirth',e.target.value);clrErr('dateOfBirth');}} err={errors.dateOfBirth}/>
+                  <Inp type="date" max={getMaxDobFor18Years()} value={pers.dateOfBirth} onChange={e=>{upP('dateOfBirth',e.target.value);clrErr('dateOfBirth');}} err={errors.dateOfBirth}/>
                   <ErrMsg msg={errors.dateOfBirth}/>
                 </div>
               </FG>

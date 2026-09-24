@@ -58,6 +58,76 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   // Form Submitting States
   const [submitting, setSubmitting] = useState(false);
 
+  // Dynamic 18+ validation helpers
+  const getMaxDobFor18Years = () => {
+    const today = new Date();
+    const yyyy = today.getFullYear() - 18;
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const calculateAge = (dobString) => {
+    if (!dobString) return 0;
+    const parts = String(dobString).split('T')[0].split('-');
+    const today = new Date();
+    if (parts.length === 3 && !isNaN(parseInt(parts[0], 10))) {
+      const birthYear = parseInt(parts[0], 10);
+      const birthMonth = parseInt(parts[1], 10) - 1;
+      const birthDay = parseInt(parts[2], 10);
+      let age = today.getFullYear() - birthYear;
+      const m = today.getMonth() - birthMonth;
+      if (m < 0 || (m === 0 && today.getDate() < birthDay)) {
+        age--;
+      }
+      return age;
+    }
+    const birthDate = new Date(dobString);
+    if (isNaN(birthDate.getTime())) return 0;
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const m = today.getMonth() - birthDate.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  // Full admin record fetched on View Details
+  const [fullAdminDetails, setFullAdminDetails] = useState(null);
+  const [loadingAdminDetails, setLoadingAdminDetails] = useState(false);
+
+  useEffect(() => {
+    if (!selectedAdmin) {
+      setFullAdminDetails(null);
+      return;
+    }
+    const adminId = selectedAdmin._id || selectedAdmin.id;
+    if (!adminId) return;
+
+    let isMounted = true;
+    setLoadingAdminDetails(true);
+    const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
+    fetch(`${API_BASE}/admin/admins/${adminId}`, {
+      headers: {
+        'x-auth-token': activeToken || '',
+        'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+        'Content-Type': 'application/json'
+      }
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (isMounted && data && data.admin) {
+          setFullAdminDetails(data.admin);
+        }
+      })
+      .catch(err => console.warn('Could not fetch full admin record:', err))
+      .finally(() => {
+        if (isMounted) setLoadingAdminDetails(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [selectedAdmin]);
+
   // Add Admin Form Fields (for District / Division / Pincode admins)
   const [adminFormData, setAdminFormData] = useState({
     name: '',
@@ -72,6 +142,8 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
     assignedPincode: '',
     postOffice: '',
     address: '',
+    dateOfBirth: '',
+    gender: '',
     status: 'Active'
   });
 
@@ -343,6 +415,13 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
     if (!adminFormData.name || !adminFormData.email || !adminFormData.password) {
       notify('Please fill in all required fields.', 'error');
       return;
+    }
+    if (adminFormData.dateOfBirth) {
+      const age = calculateAge(adminFormData.dateOfBirth);
+      if (isNaN(age) || age < 18) {
+        notify('You must be 18 years or older to register.', 'error');
+        return;
+      }
     }
     setSubmitting(true);
     try {
@@ -1108,104 +1187,228 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
       {/* ========================================================= */}
       {/* 5. SLIDE-OUT PROFILE DETAILS DRAWER (Section 9) */}
       {/* ========================================================= */}
-      {selectedAdmin && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs p-0 overflow-y-auto" onClick={() => setSelectedAdmin(null)}>
-          <div 
-            className="bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 w-full max-w-lg h-full overflow-y-auto p-6 shadow-2xl space-y-6 animate-in slide-in-from-right duration-200"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Header */}
-            <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary-600 to-indigo-600 text-white font-black text-lg flex items-center justify-center shadow-md">
-                  {(selectedAdmin.name || 'A')[0].toUpperCase()}
-                </div>
-                <div>
-                  <h3 className="text-base font-black text-slate-850 dark:text-slate-100">
-                    {selectedAdmin.name}
-                  </h3>
-                  <p className="text-xs text-slate-400 font-semibold">{selectedAdmin.email}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedAdmin(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      {/* 5. SLIDE-OUT PROFILE DETAILS DRAWER (VIEW DETAILS) */}
+      {/* ========================================================= */}
+      {selectedAdmin && (() => {
+        const adminView = fullAdminDetails ? { ...selectedAdmin, ...fullAdminDetails } : selectedAdmin;
+        const dobVal = adminView.dob || adminView.dateOfBirth;
+        const formattedDob = dobVal
+          ? `${new Date(dobVal).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} (${calculateAge(dobVal)} yrs)`
+          : '—';
 
-            {/* Badges */}
-            <div className="flex items-center gap-2">
-              <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border ${getRoleBadge(selectedAdmin.adminLevel || selectedAdmin.level)}`}>
-                {selectedAdmin.adminLevel ? `${selectedAdmin.adminLevel.toUpperCase()} ADMIN` : 'ADMIN'}
-              </span>
-              <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md ${selectedAdmin.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-500/10 text-slate-500'}`}>
-                {selectedAdmin.status}
-              </span>
-              {selectedAdmin.registrationId && (
-                <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                  {selectedAdmin.registrationId}
+        // Safe masked Aadhaar: never display raw 12 digits, format as XXXX XXXX 1234
+        const rawAadhaar = adminView.kyc?.aadhaarNumber || adminView.aadhaarNumber;
+        let maskedAadhaar = 'Not Provided';
+        if (rawAadhaar) {
+          const s = String(rawAadhaar).trim();
+          if (s.startsWith('XXXX')) {
+            maskedAadhaar = s;
+          } else {
+            const digits = s.replace(/\D/g, '');
+            maskedAadhaar = digits.length >= 4 ? `XXXX XXXX ${digits.slice(-4)}` : s;
+          }
+        }
+
+        const panVal = adminView.kyc?.panNumber || adminView.panNumber;
+        const formattedPan = panVal ? String(panVal).trim().toUpperCase() : 'Not Provided';
+
+        const kycDocs = adminView.kycDocs || {};
+        const kycObj = adminView.kyc || {};
+
+        return (
+          <div className="fixed inset-0 z-50 flex justify-end bg-black/50 backdrop-blur-xs p-0 overflow-y-auto" onClick={() => setSelectedAdmin(null)}>
+            <div 
+              className="bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 w-full max-w-xl h-full overflow-y-auto p-6 shadow-2xl space-y-5 animate-in slide-in-from-right duration-200"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  {adminView.photoUrl || kycDocs.photoUrl || kycObj.selfie ? (
+                    <img 
+                      src={adminView.photoUrl || kycDocs.photoUrl || kycObj.selfie} 
+                      alt={adminView.name} 
+                      className="w-12 h-12 rounded-2xl object-cover border-2 border-primary-500 shadow-md"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-primary-600 to-indigo-600 text-white font-black text-lg flex items-center justify-center shadow-md">
+                      {(adminView.name || 'A')[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <h3 className="text-base font-black text-slate-850 dark:text-slate-100 flex items-center gap-2">
+                      {adminView.name}
+                      {loadingAdminDetails && <RefreshCw className="w-3.5 h-3.5 animate-spin text-primary-500" />}
+                    </h3>
+                    <p className="text-xs text-slate-400 font-semibold">{adminView.email}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedAdmin(null)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Badges */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-md border ${getRoleBadge(adminView.adminLevel || adminView.level)}`}>
+                  {adminView.adminLevel ? `${adminView.adminLevel.toUpperCase()} ADMIN` : 'ADMIN'}
                 </span>
-              )}
-            </div>
-
-            {/* Section: Territory Scope */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2 text-xs">
-              <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px]">Territory Assignment</h5>
-              <div className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
-                <span className="text-emerald-600">{selectedAdmin.assignedState || 'India'}</span>
-                {selectedAdmin.assignedDistrict && <><span>→</span><span className="text-blue-600">{selectedAdmin.assignedDistrict}</span></>}
-                {selectedAdmin.assignedDivision && <><span>→</span><span className="text-purple-600">{selectedAdmin.assignedDivision}</span></>}
-                {selectedAdmin.assignedPincode && <><span>→</span><span className="text-amber-600 font-mono">{selectedAdmin.assignedPincode}</span></>}
-              </div>
-            </div>
-
-            {/* Section: Account & Administrative Info */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2.5 text-xs">
-              <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px]">Account Information</h5>
-              <div className="grid grid-cols-2 gap-2 text-slate-700 dark:text-slate-300">
-                <div><span className="text-slate-400 block text-[10px]">Primary Mobile:</span><strong>{selectedAdmin.phone || '—'}</strong></div>
-                <div><span className="text-slate-400 block text-[10px]">Created By:</span><strong>{selectedAdmin.createdByName || 'Main Admin'}</strong></div>
-                <div><span className="text-slate-400 block text-[10px]">Creation Date:</span><strong>{new Date(selectedAdmin.createdAt || Date.now()).toLocaleDateString()}</strong></div>
-                <div><span className="text-slate-400 block text-[10px]">Last Login:</span><strong>{selectedAdmin.lastLogin ? new Date(selectedAdmin.lastLogin).toLocaleDateString() : '—'}</strong></div>
-              </div>
-            </div>
-
-            {/* Section: Identity & KYC Documents (Masked) */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2.5 text-xs">
-              <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px]">KYC & Identification</h5>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
-                  <span className="text-slate-400">Aadhaar Number:</span>
-                  <strong className="font-mono">{selectedAdmin.kyc?.aadhaarNumber || 'XXXX XXXX 4756'}</strong>
-                </div>
-                <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
-                  <span className="text-slate-400">PAN Number:</span>
-                  <strong className="font-mono">{selectedAdmin.kyc?.panNumber || 'LKJHG1234K'}</strong>
-                </div>
-                <div className="flex justify-between items-center py-1">
-                  <span className="text-slate-400">KYC Status:</span>
-                  <span className="text-emerald-600 font-extrabold flex items-center gap-1">
-                    <CheckCircle className="w-3.5 h-3.5" /> Verified
+                <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md ${adminView.status === 'Active' || adminView.status === 'approved' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-500/10 text-slate-500'}`}>
+                  {adminView.status === 'approved' ? 'Approved' : adminView.status}
+                </span>
+                {adminView.registrationId && (
+                  <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                    {adminView.registrationId}
                   </span>
+                )}
+              </div>
+
+              {/* 1. PERSONAL INFORMATION */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2.5 text-xs">
+                <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-primary-500" /> Personal Information
+                </h5>
+                <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
+                  <div><span className="text-slate-400 block text-[10px]">Full Name:</span><strong>{adminView.name || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Date of Birth (Age):</span><strong>{formattedDob}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Gender:</span><strong>{adminView.gender || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Primary Mobile:</span><strong>{adminView.phone || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Alternate Mobile:</span><strong>{adminView.altPhone || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Father / Spouse Name:</span><strong>{kycDocs.fatherName || adminView.fatherName || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Blood Group:</span><strong>{kycDocs.bloodGroup || adminView.bloodGroup || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Nationality:</span><strong>{kycDocs.nationality || adminView.nationality || 'Indian'}</strong></div>
                 </div>
               </div>
-            </div>
 
-            {/* Actions */}
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setSelectedAdmin(null)}
-                className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl cursor-pointer"
-              >
-                Close
-              </button>
+              {/* 2. ACCOUNT INFORMATION */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2.5 text-xs">
+                <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Account Information
+                </h5>
+                <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
+                  <div><span className="text-slate-400 block text-[10px]">Admin ID:</span><strong className="font-mono">{adminView.registrationId || `ADM-${String(adminView._id || '').slice(-6).toUpperCase()}`}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Admin Tier:</span><strong>{(adminView.adminLevel || adminView.level || 'Admin').toUpperCase()}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Login Email:</span><strong>{adminView.email || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Account Status:</span><strong className="text-emerald-600">{adminView.status}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Created By:</span><strong>{adminView.createdByName || adminView.parentAdmin?.name || 'Main Admin'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Creation Date:</span><strong>{new Date(adminView.createdAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Last Login:</span><strong>{adminView.lastLogin ? new Date(adminView.lastLogin).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</strong></div>
+                </div>
+              </div>
+
+              {/* 3. TERRITORY ASSIGNMENT */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2 text-xs">
+                <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-emerald-500" /> Territory Assignment
+                </h5>
+                <div className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-emerald-600">{adminView.assignedState || 'India'}</span>
+                  {adminView.assignedDistrict && adminView.assignedDistrict !== '—' && <><span>→</span><span className="text-blue-600">{adminView.assignedDistrict}</span></>}
+                  {adminView.assignedDivision && adminView.assignedDivision !== '—' && <><span>→</span><span className="text-purple-600">{adminView.assignedDivision}</span></>}
+                  {adminView.assignedPincode && adminView.assignedPincode !== '—' && <><span>→</span><span className="text-amber-600 font-mono">{adminView.assignedPincode}</span></>}
+                  {adminView.postOffice && adminView.postOffice !== '—' && <span className="text-slate-400 text-[11px] font-normal">({adminView.postOffice})</span>}
+                </div>
+              </div>
+
+              {/* 4. ADDRESS DETAILS */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2.5 text-xs">
+                <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
+                  <Building className="w-3.5 h-3.5 text-blue-500" /> Address Details
+                </h5>
+                <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
+                  <div><span className="text-slate-400 block text-[10px]">Address Line 1:</span><strong>{kycDocs.addressLine1 || adminView.addressLine1 || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Address Line 2:</span><strong>{kycDocs.addressLine2 || adminView.addressLine2 || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Locality / Taluk:</span><strong>{kycDocs.locality || kycDocs.taluk || adminView.locality || adminView.taluk || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">City / Town:</span><strong>{kycDocs.city || adminView.city || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">District:</span><strong>{kycDocs.residentialDistrict || adminView.assignedDistrict || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">State:</span><strong>{kycDocs.residentialState || adminView.assignedState || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Pincode:</span><strong className="font-mono">{kycDocs.residentialPincode || adminView.assignedPincode || '—'}</strong></div>
+                </div>
+                {(adminView.fullAddress || adminView.address || adminView.permanentAddress) && (
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                    <span className="text-slate-400 block text-[10px]">Complete Registered Address:</span>
+                    <p className="text-slate-700 dark:text-slate-300 font-medium text-[11px] mt-0.5">
+                      {adminView.fullAddress || adminView.address || adminView.permanentAddress}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* 5. KYC & IDENTIFICATION */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2.5 text-xs">
+                <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-emerald-500" /> KYC & Identification
+                </h5>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                    <span className="text-slate-400">Aadhaar Number:</span>
+                    <strong className="font-mono">{maskedAadhaar}</strong>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                    <span className="text-slate-400">PAN Number:</span>
+                    <strong className="font-mono">{formattedPan}</strong>
+                  </div>
+                  {(kycDocs.addressProofType || adminView.addressProofType) && (
+                    <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                      <span className="text-slate-400">Address Proof ({kycDocs.addressProofType || adminView.addressProofType}):</span>
+                      <strong className="font-mono">
+                        {kycDocs.addressProofNumber || adminView.addressProofNumber
+                          ? `•••• ${String(kycDocs.addressProofNumber || adminView.addressProofNumber).slice(-4)}`
+                          : 'Submitted'}
+                      </strong>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800">
+                    <span className="text-slate-400">KYC Status:</span>
+                    <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" /> Verified
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center py-1">
+                    <span className="text-slate-400">Declaration:</span>
+                    <span className="text-emerald-600 font-extrabold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> Accepted
+                    </span>
+                  </div>
+                </div>
+
+                {/* Document Indicators */}
+                <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400 block text-[10px] mb-1.5">Submitted Documents:</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${rawAadhaar || kycObj.aadhaarImage || adminView.aadhaarFrontUrl ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-200/50 text-slate-400'}`}>
+                      <Check className="w-3 h-3" /> Aadhaar Card
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${panVal || kycObj.panImage || adminView.panUrl ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-200/50 text-slate-400'}`}>
+                      <Check className="w-3 h-3" /> PAN Card
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${kycDocs.addressProofType || kycDocs.addressProofUrl ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-200/50 text-slate-400'}`}>
+                      <Check className="w-3 h-3" /> Address Proof
+                    </span>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1 ${adminView.photoUrl || kycDocs.photoUrl || kycObj.selfie ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-200/50 text-slate-400'}`}>
+                      <Check className="w-3 h-3" /> Profile Photo
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAdmin(null)}
+                  className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ========================================================= */}
       {/* 6. MODALS: ADD ADMINISTRATOR WIZARD / SIMPLE MODAL */}
@@ -1295,6 +1498,32 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                     placeholder="Initial password"
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-medium"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    max={getMaxDobFor18Years()}
+                    value={adminFormData.dateOfBirth || ''}
+                    onChange={e => setAdminFormData(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Gender</label>
+                  <select
+                    value={adminFormData.gender || ''}
+                    onChange={e => setAdminFormData(prev => ({ ...prev, gender: e.target.value }))}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-medium"
+                  >
+                    <option value="">Select gender…</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
               </div>
 

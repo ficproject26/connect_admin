@@ -615,6 +615,29 @@ router.get('/admins', [auth, adminAuth], async (req, res) => {
     }
 });
 
+router.get('/admins/:id', auth, async (req, res) => {
+    try {
+        let adminId = req.params.id;
+        const query = mongoose.Types.ObjectId.isValid(adminId) 
+            ? { _id: new mongoose.Types.ObjectId(adminId) }
+            : { _id: adminId };
+
+        const adminDoc = await User.findOne(query)
+            .select('-password -passwordHash')
+            .populate('parentAdminId', 'name email role adminRole')
+            .populate('branchId', 'name')
+            .lean();
+
+        if (!adminDoc) return res.status(404).json({ success: false, msg: 'Administrator not found' });
+        delete adminDoc.password;
+        delete adminDoc.passwordHash;
+        res.json({ success: true, admin: adminDoc });
+    } catch (err) {
+        console.error('Get admin by id error:', err);
+        res.status(500).json({ success: false, msg: 'Server error loading admin details', message: err.message });
+    }
+});
+
 router.post('/admins', [auth, adminAuth], async (req, res) => {
     const { name, email, phone, password, adminRole, branchId } = req.body;
     try {
@@ -636,6 +659,40 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
                 msg: isPhoneMatch ? 'A user with this phone number already exists.' : 'Admin user already exists with this email.',
                 message: isPhoneMatch ? 'A user with this phone number already exists.' : 'Admin user already exists with this email.'
             });
+        }
+
+        // Minimum Age 18 Years Validation
+        const rawDob = req.body.dateOfBirth || req.body.dob;
+        if (rawDob) {
+            const parts = String(rawDob).split('T')[0].split('-');
+            const today = new Date();
+            let age = 0;
+            if (parts.length === 3 && !isNaN(parseInt(parts[0], 10))) {
+                const birthYear = parseInt(parts[0], 10);
+                const birthMonth = parseInt(parts[1], 10) - 1;
+                const birthDay = parseInt(parts[2], 10);
+                age = today.getFullYear() - birthYear;
+                const m = today.getMonth() - birthMonth;
+                if (m < 0 || (m === 0 && today.getDate() < birthDay)) {
+                    age--;
+                }
+            } else {
+                const birthDate = new Date(rawDob);
+                if (!isNaN(birthDate.getTime())) {
+                    age = today.getFullYear() - birthDate.getFullYear();
+                    const m = today.getMonth() - birthDate.getMonth();
+                    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                        age--;
+                    }
+                }
+            }
+            if (age < 18) {
+                return res.status(400).json({
+                    success: false,
+                    msg: 'You must be 18 years or older to register.',
+                    message: 'You must be 18 years or older to register.'
+                });
+            }
         }
 
         const targetLevel = (req.body.adminLevel || (adminRole === 'state-admin' ? 'state' : 'branch')).toLowerCase();

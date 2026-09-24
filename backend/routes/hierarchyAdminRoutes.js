@@ -96,6 +96,12 @@ const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap
         assignedPincode: adminDoc.assignedPincode ? String(adminDoc.assignedPincode) : (adminDoc.pincode || '—'),
         postOffice: adminDoc.postOffice || '—',
         address: adminDoc.fullAddress || adminDoc.address || '',
+        fullAddress: adminDoc.fullAddress || adminDoc.address || '',
+        dob: adminDoc.dob || adminDoc.dateOfBirth || null,
+        dateOfBirth: adminDoc.dateOfBirth || adminDoc.dob || null,
+        gender: adminDoc.gender || null,
+        kyc: adminDoc.kyc || {},
+        kycDocs: adminDoc.kycDocs || {},
         registrationId: adminDoc.registrationId || `ADM-${String(adminDoc._id).slice(-6).toUpperCase()}`,
         parentAdmin: parentInfo,
         parentAdminId: adminDoc.parentAdminId,
@@ -240,6 +246,60 @@ router.get('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
 });
 
 // ============================================================
+// 1B. GET SINGLE ADMINISTRATOR DETAILS (ALL NON-SENSITIVE FIELDS)
+// ============================================================
+const getSingleAdminHandler = async (req, res) => {
+    try {
+        let adminId = req.params.id;
+        const query = mongoose.Types.ObjectId.isValid(adminId) 
+            ? { _id: new mongoose.Types.ObjectId(adminId) }
+            : { _id: adminId };
+
+        const adminDoc = await User.findOne(query)
+            .select('-password -passwordHash')
+            .populate('parentAdminId', 'name email role adminRole')
+            .populate('branchId', 'name')
+            .lean();
+
+        if (!adminDoc) {
+            return res.status(404).json({ success: false, msg: 'Administrator not found' });
+        }
+
+        // Territory isolation check for lower admins
+        if (!req.adminUser.isMainAdmin) {
+            const adminState = adminDoc.assignedState || adminDoc.state;
+            if (req.adminUser.assignedState && adminState && 
+                adminState.toLowerCase() !== req.adminUser.assignedState.toLowerCase()) {
+                return res.status(403).json({ success: false, msg: 'Access denied to administrator outside your territory' });
+            }
+        }
+
+        const parentMap = new Map();
+        if (adminDoc.parentAdminId) {
+            parentMap.set(String(adminDoc.parentAdminId._id || adminDoc.parentAdminId), adminDoc.parentAdminId);
+        }
+
+        const formatted = await formatAdminForResponse(adminDoc, parentMap, {});
+        const completeRecord = {
+            ...formatted,
+            ...adminDoc,
+            password: undefined,
+            passwordHash: undefined
+        };
+        delete completeRecord.password;
+        delete completeRecord.passwordHash;
+
+        res.json({ success: true, admin: completeRecord });
+    } catch (err) {
+        console.error('Get single admin error:', err);
+        res.status(500).json({ success: false, msg: 'Server error retrieving administrator details', error: err.message });
+    }
+};
+
+router.get('/hierarchy-admins/:id', [auth, territoryScope], getSingleAdminHandler);
+router.get('/admins/:id', [auth, territoryScope], getSingleAdminHandler);
+
+// ============================================================
 // 2. CREATE HIERARCHY ADMIN (STRICT ONBOARDING ACCESS CONTROL)
 // ============================================================
 router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
@@ -291,6 +351,40 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
         if (!email || !email.trim()) return res.status(400).json({ msg: 'Email is required' });
         if (!password || password.length < 6) return res.status(400).json({ msg: 'Password of at least 6 characters is required' });
         if (!adminLevel) return res.status(400).json({ msg: 'Admin Level is required' });
+
+        // Minimum Age 18 Years Validation
+        const rawDob = dateOfBirth || req.body.dob;
+        if (rawDob) {
+            const parts = String(rawDob).split('T')[0].split('-');
+            const today = new Date();
+            let age = 0;
+            if (parts.length === 3 && !isNaN(parseInt(parts[0], 10))) {
+                const birthYear = parseInt(parts[0], 10);
+                const birthMonth = parseInt(parts[1], 10) - 1;
+                const birthDay = parseInt(parts[2], 10);
+                age = today.getFullYear() - birthYear;
+                const m = today.getMonth() - birthMonth;
+                if (m < 0 || (m === 0 && today.getDate() < birthDay)) {
+                    age--;
+                }
+            } else {
+                const birthDate = new Date(rawDob);
+                if (!isNaN(birthDate.getTime())) {
+                    age = today.getFullYear() - birthDate.getFullYear();
+                    const m = today.getMonth() - birthDate.getMonth();
+                    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+                        age--;
+                    }
+                }
+            }
+            if (age < 18) {
+                return res.status(400).json({
+                    success: false,
+                    msg: 'You must be 18 years or older to register.',
+                    message: 'You must be 18 years or older to register.'
+                });
+            }
+        }
 
         const targetLevel = adminLevel.toLowerCase().trim();
         const callerRank = getTierRank(req.adminUser.adminTier);
