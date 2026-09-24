@@ -12,19 +12,19 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
-import { AgentPerformanceDashboard } from './components/AgentPerformanceDashboard';
-import { SecurityDashboard } from './components/SecurityDashboard';
-import { AdminSecurityDashboard } from './components/AdminSecurityDashboard';
-import { VendorDirectoryModule } from './components/VendorDirectoryModule';
-import { MembershipCardManagement } from './components/MembershipCardManagement';
-import { EnterprisePaymentDashboard } from './components/EnterprisePaymentDashboard';
-import { PayrollManagement } from './components/PayrollManagement';
-import { CustomerSupportTeamManagement } from './components/CustomerSupportTeamManagement';
-import AgentDirectoryModule from './components/AgentDirectoryModule';
-import AgentPaymentModule from './components/AgentPaymentModule';
-import { PincodeTerritoryManagement } from './components/PincodeTerritoryManagement';
-import AdminManagementModule from './components/AdminManagementModule';
-import ManagerDirectoryModule from './components/ManagerDirectoryModule';
+const AgentPerformanceDashboard = React.lazy(() => import('./components/AgentPerformanceDashboard').then(m => ({ default: m.AgentPerformanceDashboard })));
+const SecurityDashboard = React.lazy(() => import('./components/SecurityDashboard').then(m => ({ default: m.SecurityDashboard })));
+const AdminSecurityDashboard = React.lazy(() => import('./components/AdminSecurityDashboard').then(m => ({ default: m.AdminSecurityDashboard })));
+const VendorDirectoryModule = React.lazy(() => import('./components/VendorDirectoryModule').then(m => ({ default: m.VendorDirectoryModule })));
+const MembershipCardManagement = React.lazy(() => import('./components/MembershipCardManagement').then(m => ({ default: m.MembershipCardManagement })));
+const EnterprisePaymentDashboard = React.lazy(() => import('./components/EnterprisePaymentDashboard').then(m => ({ default: m.EnterprisePaymentDashboard })));
+const PayrollManagement = React.lazy(() => import('./components/PayrollManagement').then(m => ({ default: m.PayrollManagement })));
+const CustomerSupportTeamManagement = React.lazy(() => import('./components/CustomerSupportTeamManagement').then(m => ({ default: m.CustomerSupportTeamManagement })));
+const AgentDirectoryModule = React.lazy(() => import('./components/AgentDirectoryModule'));
+const AgentPaymentModule = React.lazy(() => import('./components/AgentPaymentModule'));
+const PincodeTerritoryManagement = React.lazy(() => import('./components/PincodeTerritoryManagement').then(m => ({ default: m.PincodeTerritoryManagement })));
+const AdminManagementModule = React.lazy(() => import('./components/AdminManagementModule'));
+const ManagerDirectoryModule = React.lazy(() => import('./components/ManagerDirectoryModule'));
 import dataSyncManager from './utils/dataSyncManager';
 
 const resolveSanitizedApiBase = () => {
@@ -1853,8 +1853,13 @@ function App() {
           </div>
         </header>
 
-        {/* PAGE VIEWS */}
         <main className="px-3 py-4 sm:p-6 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6 overflow-x-hidden min-w-0">
+          <React.Suspense fallback={
+            <div className="flex flex-col items-center justify-center min-h-[300px] text-slate-400 gap-3">
+              <RefreshCw className="w-6 h-6 animate-spin text-primary-500" />
+              <span className="text-xs font-semibold uppercase tracking-wider">Loading View...</span>
+            </div>
+          }>
 
 
 
@@ -6106,7 +6111,7 @@ function App() {
           )}
 
           {/* SYSTEM SETTINGS VIEW */}
-
+          </React.Suspense>
         </main>
       </div>
 

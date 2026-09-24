@@ -17,6 +17,7 @@ const UserSession = require('../models/UserSession');
 const AuditLog = require('../models/AuditLog');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
+const cacheService = require('../utils/cacheService');
 
 // Helper to get Socket.IO instance
 const getIo = (req) => req.app.get('io');
@@ -452,11 +453,18 @@ router.get('/vendors', auth, async (req, res) => {
                 );
             }
 
+            const pageNum = Math.max(1, parseInt(page, 10) || 1);
+            const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+            const total = enriched.length;
+            const paginated = (req.query.limit && limitNum < total)
+                ? enriched.slice((pageNum - 1) * limitNum, pageNum * limitNum)
+                : enriched;
+
             return res.json({
-                vendors: enriched,
-                total: enriched.length,
-                page: 1,
-                pages: 1
+                vendors: paginated,
+                total,
+                page: pageNum,
+                pages: Math.ceil(total / limitNum) || 1
             });
         }
 
@@ -498,11 +506,18 @@ router.get('/vendors', auth, async (req, res) => {
                 );
             }
 
+            const pageNum = Math.max(1, parseInt(page, 10) || 1);
+            const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+            const total = pendingDirect.length;
+            const paginated = (req.query.limit && limitNum < total)
+                ? pendingDirect.slice((pageNum - 1) * limitNum, pageNum * limitNum)
+                : pendingDirect;
+
             return res.json({
-                vendors: pendingDirect,
-                total: pendingDirect.length,
-                page: 1,
-                pages: 1
+                vendors: paginated,
+                total,
+                page: pageNum,
+                pages: Math.ceil(total / limitNum) || 1
             });
         }
 
@@ -541,11 +556,18 @@ router.get('/vendors', auth, async (req, res) => {
         // Attach Pincode Agent information & normalize profile fields
         const enrichedVendors = await batchEnrichVendors(vendors);
 
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+        const total = enrichedVendors.length;
+        const paginated = (req.query.limit && limitNum < total)
+            ? enrichedVendors.slice((pageNum - 1) * limitNum, pageNum * limitNum)
+            : enrichedVendors;
+
         res.json({
-            vendors: enrichedVendors,
-            total: enrichedVendors.length,
-            page: Number(page),
-            pages: Math.ceil(enrichedVendors.length / Number(limit))
+            vendors: paginated,
+            total,
+            page: pageNum,
+            pages: Math.ceil(total / limitNum) || 1
         });
     } catch (err) {
         console.error('Vendor directory error:', err);
@@ -1357,66 +1379,85 @@ router.get('/membership-requests', auth, async (req, res) => {
     try {
         const { membershipType, paymentMode, paymentStatus, status, search } = req.query;
 
-        // Auto-sync any real payments from membership_payments into MembershipRequest & CardHolder
-        try {
-            const paymentsCol = mongoose.connection.collection('membership_payments');
-            const payments = await paymentsCol.find({ status: 'SUCCESS' }).toArray();
-            for (const p of payments) {
-                const memId = p.membershipId || ('FIC-MEM-' + (p._id ? p._id.toString().slice(-6) : Date.now().toString().slice(-6)));
-                const exists = await MembershipRequest.findOne({
-                    $or: [
-                        { membershipId: memId },
-                        { transactionId: p.paymentId || (p._id ? p._id.toString() : '') }
-                    ]
-                });
-                if (!exists) {
-                    const planStr = (p.plan || p.planName || '').toLowerCase();
-                    const normTier = planStr.includes('diamond') ? 'Diamond'
-                        : planStr.includes('gold') ? 'Gold'
-                        : 'Silver';
-                    const rawMode = (p.paymentMethod || 'UPI').toString().toLowerCase();
-                    const normMode = rawMode.includes('card') ? 'Card'
-                        : rawMode.includes('wallet') ? 'Wallet'
-                        : rawMode.includes('bank') ? 'Net Banking'
-                        : 'UPI';
-                    await MembershipRequest.create({
-                        customerId: p.userId && mongoose.Types.ObjectId.isValid(p.userId) ? new mongoose.Types.ObjectId(p.userId) : null,
-                        customerName: p.customerName || 'Customer Member',
-                        customerEmail: p.customerEmail || '',
-                        customerPhone: p.customerPhone || '',
-                        membershipId: memId,
-                        membershipType: normTier,
-                        paymentMode: normMode,
-                        paymentStatus: 'Paid',
-                        validityStartDate: p.startDate ? new Date(p.startDate) : new Date(p.createdAt || Date.now()),
-                        validityExpiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                        amount: Number(p.amount || 0),
-                        status: 'Approved',
-                        transactionId: p.paymentId || '',
-                        createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+        // Auto-sync any real payments from membership_payments into MembershipRequest & CardHolder (throttled to at most once per 60s)
+        const shouldSync = !cacheService.get('membership_sync_cooldown');
+        if (shouldSync) {
+            cacheService.set('membership_sync_cooldown', true, 60);
+            try {
+                const paymentsCol = mongoose.connection.collection('membership_payments');
+                const payments = await paymentsCol.find({ status: 'SUCCESS' }).toArray();
+                if (payments.length > 0) {
+                    const memIds = payments.map(p => p.membershipId || ('FIC-MEM-' + (p._id ? p._id.toString().slice(-6) : ''))).filter(Boolean);
+                    const txIds = payments.map(p => p.paymentId || (p._id ? p._id.toString() : '')).filter(Boolean);
+
+                    const existing = await MembershipRequest.find({
+                        $or: [
+                            { membershipId: { $in: memIds } },
+                            { transactionId: { $in: txIds } }
+                        ]
+                    }).select('membershipId transactionId').lean();
+
+                    const existingSet = new Set();
+                    existing.forEach(e => {
+                        if (e.membershipId) existingSet.add(e.membershipId);
+                        if (e.transactionId) existingSet.add(e.transactionId);
                     });
 
-                    // Ensure cardholders collection also has the card
-                    await CardHolder.findOneAndUpdate(
-                        { cardNumber: memId },
-                        {
-                            $setOnInsert: {
-                                name: p.customerName || 'Customer Member',
-                                email: p.customerEmail || '',
-                                phone: p.customerPhone || '',
-                                cardType: normTier === 'Diamond' ? 'Platinum' : normTier,
-                                cardNumber: memId,
-                                expiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                                status: 'active',
+                    for (const p of payments) {
+                        const memId = p.membershipId || ('FIC-MEM-' + (p._id ? p._id.toString().slice(-6) : Date.now().toString().slice(-6)));
+                        const txId = p.paymentId || (p._id ? p._id.toString() : '');
+                        if (!existingSet.has(memId) && !existingSet.has(txId)) {
+                            existingSet.add(memId);
+                            existingSet.add(txId);
+                            const planStr = (p.plan || p.planName || '').toLowerCase();
+                            const normTier = planStr.includes('diamond') ? 'Diamond'
+                                : planStr.includes('gold') ? 'Gold'
+                                : 'Silver';
+                            const rawMode = (p.paymentMethod || 'UPI').toString().toLowerCase();
+                            const normMode = rawMode.includes('card') ? 'Card'
+                                : rawMode.includes('wallet') ? 'Wallet'
+                                : rawMode.includes('bank') ? 'Net Banking'
+                                : 'UPI';
+                            await MembershipRequest.create({
+                                customerId: p.userId && mongoose.Types.ObjectId.isValid(p.userId) ? new mongoose.Types.ObjectId(p.userId) : null,
+                                customerName: p.customerName || 'Customer Member',
+                                customerEmail: p.customerEmail || '',
+                                customerPhone: p.customerPhone || '',
+                                membershipId: memId,
+                                membershipType: normTier,
+                                paymentMode: normMode,
+                                paymentStatus: 'Paid',
+                                validityStartDate: p.startDate ? new Date(p.startDate) : new Date(p.createdAt || Date.now()),
+                                validityExpiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                amount: Number(p.amount || 0),
+                                status: 'Approved',
+                                transactionId: txId,
                                 createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
-                            }
-                        },
-                        { upsert: true }
-                    ).catch(() => {});
+                            });
+
+                            // Ensure cardholders collection also has the card
+                            await CardHolder.findOneAndUpdate(
+                                { cardNumber: memId },
+                                {
+                                    $setOnInsert: {
+                                        name: p.customerName || 'Customer Member',
+                                        email: p.customerEmail || '',
+                                        phone: p.customerPhone || '',
+                                        cardType: normTier === 'Diamond' ? 'Platinum' : normTier,
+                                        cardNumber: memId,
+                                        expiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                        status: 'active',
+                                        createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+                                    }
+                                },
+                                { upsert: true }
+                            ).catch(() => {});
+                        }
+                    }
                 }
+            } catch (syncErr) {
+                console.warn('[Membership] Auto-sync membership_payments error:', syncErr.message);
             }
-        } catch (syncErr) {
-            console.warn('[Membership] Auto-sync membership_payments error:', syncErr.message);
         }
 
         const filter = {};
@@ -1435,7 +1476,7 @@ router.get('/membership-requests', auth, async (req, res) => {
             ];
         }
 
-        const requests = await MembershipRequest.find(filter).sort({ createdAt: -1 });
+        const requests = await MembershipRequest.find(filter).sort({ createdAt: -1 }).lean();
         res.json(requests);
     } catch (err) {
         console.error('Fetch membership requests error:', err);
@@ -1510,23 +1551,27 @@ router.post('/membership-requests/action', auth, async (req, res) => {
 // GET 13 KPI Cards Payment Overview
 router.get('/payments/kpi', auth, async (req, res) => {
     try {
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-
-        const monthStart = new Date();
-        monthStart.setDate(1);
-        monthStart.setHours(0, 0, 0, 0);
-
-        // Aggregate real transactions / payments from MongoDB
-        const completedOrders = await Order.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } });
-        const pendingOrders = await Order.find({ status: { $in: ['pending', 'Pending'] } });
-        const membershipReqs = await MembershipRequest.find({ paymentStatus: 'Paid' });
-        const payrolls = await PayrollRecord.find({ paymentStatus: 'Paid' });
+        const cached = await cacheService.get('admin_payment_kpis');
+        if (cached) {
+            return res.json(cached);
+        }
 
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
 
         const startOfMonth = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), 1);
+
+        // Aggregate real transactions / payments from MongoDB concurrently with lean projections
+        const [completedOrders, pendingOrders, membershipReqs, payrolls] = await Promise.all([
+            Order.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } })
+                .select('finalAmount totalAmount amount status createdAt').lean(),
+            Order.find({ status: { $in: ['pending', 'Pending'] } })
+                .select('finalAmount totalAmount amount status createdAt').lean(),
+            MembershipRequest.find({ paymentStatus: 'Paid' })
+                .select('amount paymentStatus createdAt').lean(),
+            PayrollRecord.find({ paymentStatus: 'Paid' })
+                .select('commission netSalary paymentStatus createdAt').lean()
+        ]);
 
         const totalOrderRevenue = completedOrders.reduce((sum, o) => sum + Number(o.finalAmount || o.totalAmount || o.amount || 0), 0);
         const membershipRevenue = membershipReqs.reduce((acc, m) => acc + Number(m.amount || 0), 0);
@@ -1551,7 +1596,7 @@ router.get('/payments/kpi', auth, async (req, res) => {
         const balance = totalRevenue - (commissionPaid + salaryPaid + expenses);
         const pendingPayments = pendingOrders.reduce((sum, o) => sum + Number(o.finalAmount || o.totalAmount || o.amount || 0), 0);
 
-        res.json({
+        const result = {
             totalRevenue,
             todayRevenue,
             monthlyRevenue,
@@ -1565,7 +1610,10 @@ router.get('/payments/kpi', auth, async (req, res) => {
             expenses,
             balance,
             pendingPayments
-        });
+        };
+
+        await cacheService.set('admin_payment_kpis', result, 30);
+        res.json(result);
     } catch (err) {
         console.error('Payment KPI error:', err);
         res.status(500).send('Server error');
@@ -1582,173 +1630,177 @@ router.get('/payroll', auth, async (req, res) => {
     try {
         const { department, role, employeeType, status, search } = req.query;
 
-        // Fetch explicitly generated PayrollRecords
-        let payrolls = await PayrollRecord.find({}).sort({ createdAt: -1 });
-
-        // Map existing payroll codes for quick lookup
-        const existingCodes = new Set(payrolls.map(p => p.employeeCode || p.employeeName));
-
         const isAgentFilter = (employeeType && employeeType.toLowerCase() === 'agent') || (role && role.toLowerCase().includes('agent'));
         const isEmployeeFilter = (employeeType && employeeType.toLowerCase() === 'employee');
         const isCommissionFilter = (employeeType && (employeeType.toLowerCase() === 'commission' || employeeType.toLowerCase() === 'commission based'));
 
-        // 1. Fetch Agents (Users with role='agent' or level)
-        if (!isEmployeeFilter && !isCommissionFilter) {
-            const agents = await User.find({ role: { $in: ['agent', 'Agent'] } }).select('_id name registrationId level commissionEarned isActive status').lean();
-            agents.forEach((a, idx) => {
-                const code = a.registrationId || `AGT-${1000 + idx}`;
-                if (!existingCodes.has(code) && !existingCodes.has(a.name)) {
-                    const comm = a.commissionEarned || 0;
-                    const baseSal = 28000;
-                    const net = baseSal + comm - 2500;
-                    payrolls.push({
-                        _id: `agt-${a._id}`,
-                        employeeName: a.name || 'Agent',
-                        employeeCode: code,
-                        role: `${(a.level || 'Pincode').toUpperCase()} Agent`,
-                        department: 'Agent Operations',
-                        employeeType: 'Agent',
-                        salary: baseSal,
-                        bonus: 0,
-                        commission: comm,
-                        incentive: 0,
-                        pf: 1800,
-                        esi: 500,
-                        professionalTax: 200,
-                        advance: 0,
-                        deduction: 0,
-                        netSalary: net,
-                        paymentStatus: (a.isActive || a.status === 'approved') ? 'Paid' : 'Pending',
-                        month: 'August',
-                        year: 2026
-                    });
-                }
-            });
-        }
+        // Fetch explicitly generated PayrollRecords and all related roles concurrently with lean projections
+        const [payrollsRaw, agents, vendors, supportEmps, delPartners, technicians] = await Promise.all([
+            PayrollRecord.find({}).sort({ createdAt: -1 }).lean(),
+            (!isEmployeeFilter && !isCommissionFilter)
+                ? User.find({ role: { $in: ['agent', 'Agent'] } }).select('_id name registrationId level commissionEarned isActive status').lean()
+                : Promise.resolve([]),
+            (!isAgentFilter && !isEmployeeFilter)
+                ? User.find({ role: { $in: ['vendor', 'Vendor'] } }).select('_id name registrationId businessName').lean()
+                : Promise.resolve([]),
+            (!isAgentFilter && !isCommissionFilter)
+                ? SupportTeam.find({}).select('_id name employeeId designation department salary').lean()
+                : Promise.resolve([]),
+            (!isAgentFilter && !isEmployeeFilter)
+                ? DeliveryPartner.find({}).select('_id name').lean()
+                : Promise.resolve([]),
+            (!isAgentFilter && !isCommissionFilter)
+                ? CardHolder.find({}).select('_id name cardNumber').lean()
+                : Promise.resolve([])
+        ]);
 
-        // 2. Fetch Vendors
-        if (!isAgentFilter && !isEmployeeFilter) {
-            const vendors = await User.find({ role: { $in: ['vendor', 'Vendor'] } }).select('_id name registrationId businessName').lean();
-            vendors.forEach((v, idx) => {
-                const code = v.registrationId || `VND-${2000 + idx}`;
-                if (!existingCodes.has(code) && !existingCodes.has(v.businessName || v.name)) {
-                    payrolls.push({
-                        _id: `vnd-${v._id}`,
-                        employeeName: v.businessName || v.name || 'Vendor Partner',
-                        employeeCode: code,
-                        role: 'Merchant Partner',
-                        department: 'Vendor Network',
-                        employeeType: 'Commission Based',
-                        salary: 0,
-                        bonus: 0,
-                        commission: 15000,
-                        incentive: 0,
-                        pf: 0,
-                        esi: 0,
-                        professionalTax: 200,
-                        advance: 0,
-                        deduction: 0,
-                        netSalary: 14800,
-                        paymentStatus: 'Paid',
-                        month: 'August',
-                        year: 2026
-                    });
-                }
-            });
-        }
+        let payrolls = [...payrollsRaw];
 
-        // 3. Fetch Support Employees
-        if (!isAgentFilter && !isCommissionFilter) {
-            const supportEmps = await SupportTeam.find({});
-            supportEmps.forEach((s, idx) => {
-                const code = s.employeeId || `SUP-${3000 + idx}`;
-                if (!existingCodes.has(code) && !existingCodes.has(s.name)) {
-                    payrolls.push({
-                        _id: `sup-${s._id}`,
-                        employeeName: s.name,
-                        employeeCode: code,
-                        role: s.designation || 'Staff',
-                        department: s.department || 'Customer Support',
-                        employeeType: 'Employee',
-                        salary: s.salary || 32000,
-                        bonus: 0,
-                        commission: 0,
-                        incentive: 0,
-                        pf: 1800,
-                        esi: 500,
-                        professionalTax: 200,
-                        advance: 0,
-                        deduction: 0,
-                        netSalary: (s.salary || 32000) - 2500,
-                        paymentStatus: 'Paid',
-                        month: 'August',
-                        year: 2026
-                    });
-                }
-            });
-        }
+        // Map existing payroll codes for quick lookup
+        const existingCodes = new Set(payrolls.map(p => p.employeeCode || p.employeeName));
 
-        // 4. Fetch Delivery Partners
-        if (!isAgentFilter && !isEmployeeFilter) {
-            const delPartners = await DeliveryPartner.find({});
-            delPartners.forEach((d, idx) => {
-                const code = `DEL-${4000 + idx}`;
-                if (!existingCodes.has(code) && !existingCodes.has(d.name)) {
-                    payrolls.push({
-                        _id: `del-${d._id}`,
-                        employeeName: d.name,
-                        employeeCode: code,
-                        role: 'Delivery Executive',
-                        department: 'Logistics',
-                        employeeType: 'Commission Based',
-                        salary: 18000,
-                        bonus: 0,
-                        commission: 5000,
-                        incentive: 0,
-                        pf: 1200,
-                        esi: 300,
-                        professionalTax: 200,
-                        advance: 0,
-                        deduction: 0,
-                        netSalary: 21300,
-                        paymentStatus: 'Paid',
-                        month: 'August',
-                        year: 2026
-                    });
-                }
-            });
-        }
+        // 1. Map Agents
+        agents.forEach((a, idx) => {
+            const code = a.registrationId || `AGT-${1000 + idx}`;
+            if (!existingCodes.has(code) && !existingCodes.has(a.name)) {
+                const comm = a.commissionEarned || 0;
+                const baseSal = 28000;
+                const net = baseSal + comm - 2500;
+                payrolls.push({
+                    _id: `agt-${a._id}`,
+                    employeeName: a.name || 'Agent',
+                    employeeCode: code,
+                    role: `${(a.level || 'Pincode').toUpperCase()} Agent`,
+                    department: 'Agent Operations',
+                    employeeType: 'Agent',
+                    salary: baseSal,
+                    bonus: 0,
+                    commission: comm,
+                    incentive: 0,
+                    pf: 1800,
+                    esi: 500,
+                    professionalTax: 200,
+                    advance: 0,
+                    deduction: 0,
+                    netSalary: net,
+                    paymentStatus: (a.isActive || a.status === 'approved') ? 'Paid' : 'Pending',
+                    month: 'August',
+                    year: 2026
+                });
+            }
+        });
 
-        // 5. Fetch Technicians
-        if (!isAgentFilter && !isCommissionFilter) {
-            const technicians = await CardHolder.find({});
-            technicians.forEach((t, idx) => {
-                const code = t.cardNumber || `TEC-${5000 + idx}`;
-                if (!existingCodes.has(code) && !existingCodes.has(t.name)) {
-                    payrolls.push({
-                        _id: `tec-${t._id}`,
-                        employeeName: t.name,
-                        employeeCode: code,
-                        role: 'Technical Specialist',
-                        department: 'Technical Support',
-                        employeeType: 'Employee',
-                        salary: 26000,
-                        bonus: 0,
-                        commission: 3000,
-                        incentive: 0,
-                        pf: 1500,
-                        esi: 400,
-                        professionalTax: 200,
-                        advance: 0,
-                        deduction: 0,
-                        netSalary: 26900,
-                        paymentStatus: 'Paid',
-                        month: 'August',
-                        year: 2026
-                    });
-                }
-            });
-        }
+        // 2. Map Vendors
+        vendors.forEach((v, idx) => {
+            const code = v.registrationId || `VND-${2000 + idx}`;
+            if (!existingCodes.has(code) && !existingCodes.has(v.businessName || v.name)) {
+                payrolls.push({
+                    _id: `vnd-${v._id}`,
+                    employeeName: v.businessName || v.name || 'Vendor Partner',
+                    employeeCode: code,
+                    role: 'Merchant Partner',
+                    department: 'Vendor Network',
+                    employeeType: 'Commission Based',
+                    salary: 0,
+                    bonus: 0,
+                    commission: 15000,
+                    incentive: 0,
+                    pf: 0,
+                    esi: 0,
+                    professionalTax: 200,
+                    advance: 0,
+                    deduction: 0,
+                    netSalary: 14800,
+                    paymentStatus: 'Paid',
+                    month: 'August',
+                    year: 2026
+                });
+            }
+        });
+
+        // 3. Map Support Employees
+        supportEmps.forEach((s, idx) => {
+            const code = s.employeeId || `SUP-${3000 + idx}`;
+            if (!existingCodes.has(code) && !existingCodes.has(s.name)) {
+                payrolls.push({
+                    _id: `sup-${s._id}`,
+                    employeeName: s.name,
+                    employeeCode: code,
+                    role: s.designation || 'Staff',
+                    department: s.department || 'Customer Support',
+                    employeeType: 'Employee',
+                    salary: s.salary || 32000,
+                    bonus: 0,
+                    commission: 0,
+                    incentive: 0,
+                    pf: 1800,
+                    esi: 500,
+                    professionalTax: 200,
+                    advance: 0,
+                    deduction: 0,
+                    netSalary: (s.salary || 32000) - 2500,
+                    paymentStatus: 'Paid',
+                    month: 'August',
+                    year: 2026
+                });
+            }
+        });
+
+        // 4. Map Delivery Partners
+        delPartners.forEach((d, idx) => {
+            const code = `DEL-${4000 + idx}`;
+            if (!existingCodes.has(code) && !existingCodes.has(d.name)) {
+                payrolls.push({
+                    _id: `del-${d._id}`,
+                    employeeName: d.name,
+                    employeeCode: code,
+                    role: 'Delivery Executive',
+                    department: 'Logistics',
+                    employeeType: 'Commission Based',
+                    salary: 18000,
+                    bonus: 0,
+                    commission: 5000,
+                    incentive: 0,
+                    pf: 1200,
+                    esi: 300,
+                    professionalTax: 200,
+                    advance: 0,
+                    deduction: 0,
+                    netSalary: 21300,
+                    paymentStatus: 'Paid',
+                    month: 'August',
+                    year: 2026
+                });
+            }
+        });
+
+        // 5. Map Technicians
+        technicians.forEach((t, idx) => {
+            const code = t.cardNumber || `TEC-${5000 + idx}`;
+            if (!existingCodes.has(code) && !existingCodes.has(t.name)) {
+                payrolls.push({
+                    _id: `tec-${t._id}`,
+                    employeeName: t.name,
+                    employeeCode: code,
+                    role: 'Technical Specialist',
+                    department: 'Technical Support',
+                    employeeType: 'Employee',
+                    salary: 26000,
+                    bonus: 0,
+                    commission: 3000,
+                    incentive: 0,
+                    pf: 1500,
+                    esi: 400,
+                    professionalTax: 200,
+                    advance: 0,
+                    deduction: 0,
+                    netSalary: 26900,
+                    paymentStatus: 'Paid',
+                    month: 'August',
+                    year: 2026
+                });
+            }
+        });
 
         // Apply filters
         if (department && department !== 'all') {

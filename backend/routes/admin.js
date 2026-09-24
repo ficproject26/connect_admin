@@ -31,6 +31,7 @@ const Product = require('../models/Product');
 const TerritoryAuditLog = require('../models/TerritoryAuditLog');
 const AuditLog = require('../models/AuditLog');
 const { validateIndianMobile } = require('../utils/inputValidator');
+const cacheService = require('../utils/cacheService');
 
 const adminAuth = async (req, res, next) => {
     try {
@@ -240,6 +241,12 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
 
         const agentBranchFilter = isBranchScoped ? { $or: [{ branchId }, { branchId: null }, { branchId: { $exists: false } }] } : {};
         const pendingStatusFilter = { status: { $in: ['pending', 'Pending'] } };
+
+        const cacheKey = `dashboard_stats_${isBranchScoped ? branchId : 'super'}`;
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
 
         // Execute all independent database queries concurrently in parallel
         const [
@@ -510,7 +517,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             revenue: agentRevMap[aName]
         })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
-        res.json({
+        const payload = {
             kpis: {
                 totalUsers: totalCustomers + totalVendors + combinedTotalAgents,
                 totalCustomers,
@@ -548,7 +555,10 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
                 latestAgents: (latestAgents || []).map(sanitizeHeavyFields),
                 latestOrders
             }
-        });
+        };
+
+        await cacheService.set(cacheKey, payload, 30);
+        res.json(payload);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error stats: ' + err.stack);
@@ -2800,6 +2810,14 @@ router.delete('/vendors', [auth, adminAuth], async (req, res) => {
 // ==========================================
 router.get('/customers', [auth, adminAuth], async (req, res) => {
     try {
+        const branchKey = req.adminUser?.branchId ? String(req.adminUser.branchId) : 'all';
+        const cacheKey = `admin_customers_${branchKey}`;
+
+        const cached = await cacheService.get(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
+
         const filter = getBranchFilter(req.adminUser);
 
         const custProjection = {
@@ -2809,16 +2827,11 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
             customerId: 1, registrationId: 1, id: 1
         };
 
-        const db = mongoose.connection.db;
-        const [customersFromModel, usersAsCustomers, rawUsersCustomers, rawCustomers] = await Promise.all([
+        const [customersFromModel, usersAsCustomers] = await Promise.all([
             Customer.find(filter, custProjection).populate('branchId', 'name').lean().catch(() => []),
             User.find({
                 role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
-            }, custProjection).lean().catch(() => []),
-            db ? db.collection('users').find({
-                role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
-            }, { projection: custProjection }).toArray().catch(() => []) : Promise.resolve([]),
-            db ? db.collection('customers').find({}, { projection: custProjection }).toArray().catch(() => []) : Promise.resolve([])
+            }, custProjection).lean().catch(() => [])
         ]);
 
         const combined = [];
@@ -2852,12 +2865,11 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
             combined.push(d);
         };
 
-        // Priority: admin Customer model first, then Mongoose User model, then raw collections
+        // Priority: admin Customer model first, then Mongoose User model
         customersFromModel.forEach(c => addDoc(c));
         usersAsCustomers.forEach(u => addDoc(u));
-        rawUsersCustomers.forEach(u => addDoc(u));
-        rawCustomers.forEach(c => addDoc(c));
 
+        await cacheService.set(cacheKey, combined, 30);
         res.json(combined);
     } catch (err) {
         console.error('Get customers error:', err);
@@ -2869,6 +2881,7 @@ router.post('/customers', [auth, adminAuth], async (req, res) => {
     try {
         const customer = new Customer({ ...req.body, branchId: req.adminUser.branchId || req.body.branchId });
         await customer.save();
+        await cacheService.delPattern('admin_customers_*');
         res.json(customer);
     } catch (err) {
         console.error(err);
@@ -3941,7 +3954,15 @@ router.get(['/orders', '/public/orders'], async (req, res) => {
             queryFilter.status = new RegExp(status, 'i');
         }
 
-        const rawOrders = await Order.find(queryFilter).sort({ createdAt: -1 });
+        const pageNum = parseInt(req.query.page, 10);
+        const limitNum = parseInt(req.query.limit, 10);
+        let rawOrders;
+        if (limitNum && limitNum > 0) {
+            const skipNum = Math.max(0, ((pageNum || 1) - 1) * limitNum);
+            rawOrders = await Order.find(queryFilter).sort({ createdAt: -1 }).skip(skipNum).limit(limitNum).lean();
+        } else {
+            rawOrders = await Order.find(queryFilter).sort({ createdAt: -1 }).lean();
+        }
         const resolvedOrders = await resolveVendorAndCustomer(rawOrders);
         res.json(resolvedOrders);
     } catch (err) {
@@ -4510,7 +4531,7 @@ router.delete('/jobs/:id', [auth, adminAuth], async (req, res) => {
 // GET all membership card holders
 router.get('/card-holders', [auth, adminAuth], async (req, res) => {
     try {
-        const holders = await CardHolder.find().sort({ createdAt: -1 });
+        const holders = await CardHolder.find().sort({ createdAt: -1 }).lean();
         res.json(holders);
     } catch (err) {
         console.error(err);
@@ -4557,7 +4578,8 @@ router.get('/payments', [auth, adminAuth], async (req, res) => {
     try {
         const payments = await Transaction.find()
             .populate('userId', 'name email role')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .lean();
         res.json(payments);
     } catch (err) {
         console.error(err);
@@ -5353,7 +5375,7 @@ router.delete('/queries/:id', [auth, adminAuth], async (req, res) => {
 // GET all support tickets
 router.get('/tickets', [auth, adminAuth], async (req, res) => {
     try {
-        const tickets = await SupportTicket.find().sort({ createdAt: -1 });
+        const tickets = await SupportTicket.find().sort({ createdAt: -1 }).lean();
         res.json(tickets);
     } catch (err) {
         console.error(err);
@@ -5369,12 +5391,12 @@ router.post('/tickets', [auth, adminAuth], async (req, res) => {
             customerName: req.body.customerName,
             issue: req.body.issue,
             createdAt: { $gte: tenSecAgo }
-        });
+        }).lean();
         if (duplicate) {
             return res.json(duplicate);
         }
 
-        const count = await SupportTicket.countDocuments();
+        const count = await SupportTicket.estimatedDocumentCount();
         const ticketId = 'TKT-' + (1000 + count + 1);
         const newTicket = new SupportTicket({ ...req.body, ticketId });
         const ticket = await newTicket.save();
