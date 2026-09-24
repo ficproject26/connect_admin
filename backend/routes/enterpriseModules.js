@@ -1356,6 +1356,69 @@ router.post('/vendors/delete', auth, async (req, res) => {
 router.get('/membership-requests', auth, async (req, res) => {
     try {
         const { membershipType, paymentMode, paymentStatus, status, search } = req.query;
+
+        // Auto-sync any real payments from membership_payments into MembershipRequest & CardHolder
+        try {
+            const paymentsCol = mongoose.connection.collection('membership_payments');
+            const payments = await paymentsCol.find({ status: 'SUCCESS' }).toArray();
+            for (const p of payments) {
+                const memId = p.membershipId || ('FIC-MEM-' + (p._id ? p._id.toString().slice(-6) : Date.now().toString().slice(-6)));
+                const exists = await MembershipRequest.findOne({
+                    $or: [
+                        { membershipId: memId },
+                        { transactionId: p.paymentId || (p._id ? p._id.toString() : '') }
+                    ]
+                });
+                if (!exists) {
+                    const planStr = (p.plan || p.planName || '').toLowerCase();
+                    const normTier = planStr.includes('diamond') ? 'Diamond'
+                        : planStr.includes('gold') ? 'Gold'
+                        : 'Silver';
+                    const rawMode = (p.paymentMethod || 'UPI').toString().toLowerCase();
+                    const normMode = rawMode.includes('card') ? 'Card'
+                        : rawMode.includes('wallet') ? 'Wallet'
+                        : rawMode.includes('bank') ? 'Net Banking'
+                        : 'UPI';
+                    await MembershipRequest.create({
+                        customerId: p.userId && mongoose.Types.ObjectId.isValid(p.userId) ? new mongoose.Types.ObjectId(p.userId) : null,
+                        customerName: p.customerName || 'Customer Member',
+                        customerEmail: p.customerEmail || '',
+                        customerPhone: p.customerPhone || '',
+                        membershipId: memId,
+                        membershipType: normTier,
+                        paymentMode: normMode,
+                        paymentStatus: 'Paid',
+                        validityStartDate: p.startDate ? new Date(p.startDate) : new Date(p.createdAt || Date.now()),
+                        validityExpiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                        amount: Number(p.amount || 0),
+                        status: 'Approved',
+                        transactionId: p.paymentId || '',
+                        createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+                    });
+
+                    // Ensure cardholders collection also has the card
+                    await CardHolder.findOneAndUpdate(
+                        { cardNumber: memId },
+                        {
+                            $setOnInsert: {
+                                name: p.customerName || 'Customer Member',
+                                email: p.customerEmail || '',
+                                phone: p.customerPhone || '',
+                                cardType: normTier === 'Diamond' ? 'Platinum' : normTier,
+                                cardNumber: memId,
+                                expiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                status: 'active',
+                                createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+                            }
+                        },
+                        { upsert: true }
+                    ).catch(() => {});
+                }
+            }
+        } catch (syncErr) {
+            console.warn('[Membership] Auto-sync membership_payments error:', syncErr.message);
+        }
+
         const filter = {};
 
         if (membershipType && membershipType !== 'all') filter.membershipType = membershipType;

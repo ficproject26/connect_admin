@@ -28,7 +28,7 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
       });
 
       const res = await fetch(`${API_BASE}/admin/enterprise/membership-requests?${query.toString()}`, {
-        headers: { 'x-auth-token': token }
+        headers: { 'x-auth-token': token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('admin_token') || '') : '') }
       });
       if (res.ok) {
         const data = await res.json();
@@ -60,7 +60,7 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
       const res = await fetch(`${API_BASE}/admin/enterprise/membership-requests/action`, {
         method: 'POST',
         headers: {
-          'x-auth-token': token,
+          'x-auth-token': token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('admin_token') || '') : ''),
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ requestId, status: newStatus })
