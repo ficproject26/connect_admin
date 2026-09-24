@@ -607,11 +607,11 @@ router.get('/admins', [auth, adminAuth], async (req, res) => {
         if (req.adminUser.adminRole !== 'super-admin') {
             return res.status(403).json({ msg: 'Access restricted to Super Admins' });
         }
-        const admins = await User.find({ role: 'admin' }).populate('branchId', 'name');
+        const admins = await User.find({ role: { $in: ['admin', 'super-admin'] } }).populate('branchId', 'name');
         res.json(admins);
     } catch (err) {
         console.error(err);
-        res.status(500).send('Server error');
+        res.status(500).json({ success: false, msg: 'Server error loading admins', message: err.message });
     }
 });
 
@@ -653,7 +653,8 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
             phone: cleanPhone || undefined,
             password,
             role: 'admin',
-            adminRole: adminRole || (targetLevel === 'state' ? 'state-admin' : 'branch-admin'),
+            adminRole: (adminRole === 'state-admin' || targetLevel === 'state') ? 'branch-admin' : (adminRole || 'branch-admin'),
+            level: targetLevel,
             adminLevel: targetLevel,
             assignedState: finalState,
             branchId,
@@ -701,8 +702,12 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
         }
         res.json(user);
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Server error');
+        console.error('Create admin error:', err);
+        res.status(err.status || 500).json({
+            success: false,
+            msg: err.message || 'Server error creating administrator',
+            message: err.message || 'Server error creating administrator'
+        });
     }
 });
 

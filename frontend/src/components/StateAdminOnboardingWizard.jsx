@@ -20,12 +20,12 @@ const ADDRESS_PROOF_TYPES = [
   'Utility Bill','Bank Statement','Rent Agreement','Other'
 ];
 const STEPS = [
-  { id:1, label:'Personal', icon:User },
-  { id:2, label:'Contact',  icon:Phone },
-  { id:3, label:'Territory',icon:Globe },
-  { id:4, label:'KYC Docs', icon:FileText },
-  { id:5, label:'Account',  icon:Lock },
-  { id:6, label:'Review',   icon:CheckCircle },
+  { id: 1, label: 'Personal',   icon: User },
+  { id: 2, label: 'Address',    icon: MapPin },
+  { id: 3, label: 'Identity / KYC', icon: FileText },
+  { id: 4, label: 'Territory',  icon: Globe },
+  { id: 5, label: 'Account',    icon: Lock },
+  { id: 6, label: 'Review',     icon: CheckCircle },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ const UploadBtn = ({label, value, onChange, accept='image/*,.pdf', optional}) =>
       ) : (
         <button type="button" onClick={()=>ref.current?.click()}
           className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl py-3 text-xs text-slate-500 hover:border-primary-400 hover:text-primary-600 transition-colors cursor-pointer">
-          <Upload className="w-4 h-4"/>{label}{optional&&<span className="text-slate-400">(Optional)</span>}
+          <Upload className="w-4 h-4"/>{label}{optional&&<span className="text-slate-400"> (Optional)</span>}
         </button>
       )}
       <input ref={ref} type="file" accept={accept} className="hidden" onChange={e=>e.target.files?.[0]&&onChange(e.target.files[0])}/>
@@ -130,7 +130,7 @@ const RR = ({label, value, mono}) => (
 );
 
 const RS = ({title, icon:Icon, color, children}) => (
-  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden mb-3">
     <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
       <div className={`p-1.5 rounded-lg ${color}`}><Icon className="w-3.5 h-3.5"/></div>
       <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300">{title}</span>
@@ -146,15 +146,15 @@ const SuccessScreen = ({result, onClose}) => (
       <CheckCircle className="w-8 h-8 text-emerald-500"/>
     </div>
     <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-1">State Administrator Created!</h3>
-    <p className="text-xs text-slate-400 mb-6">Onboarding complete. The account is now active.</p>
+    <p className="text-xs text-slate-400 mb-6">Onboarding complete. The account is now active and permanently assigned.</p>
     <div className="w-full max-w-sm bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-0.5 text-left mb-6">
       <RR label="Admin ID"       value={result?.registrationId||result?.admin?.registrationId} mono/>
-      <RR label="Full Name"      value={result?.admin?.name}/>
+      <RR label="Full Name"      value={result?.admin?.name||result?.name}/>
       <RR label="Role"           value="STATE ADMINISTRATOR"/>
-      <RR label="Assigned State" value={result?.admin?.assignedState}/>
-      <RR label="Email"          value={result?.admin?.email}/>
-      <RR label="Mobile"         value={result?.admin?.phone} mono/>
-      <RR label="Status"         value={result?.admin?.status==='approved'?'Active':result?.admin?.status}/>
+      <RR label="Assigned State" value={result?.admin?.assignedState||result?.assignedState}/>
+      <RR label="Email"          value={result?.admin?.email||result?.email}/>
+      <RR label="Mobile"         value={result?.admin?.phone||result?.phone} mono/>
+      <RR label="Status"         value={result?.admin?.status==='approved'?'Active':(result?.status||'Active')}/>
     </div>
     <button onClick={onClose} className="px-6 py-2.5 bg-primary-600 hover:bg-primary-500 text-white text-xs font-extrabold rounded-xl shadow-sm transition-colors cursor-pointer">
       Close &amp; View Administrators
@@ -187,25 +187,38 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
   }, [onToast]);
 
   // ── Form state ─────────────────────────────────────────────────────
+  // Step 1: Personal
   const [pers, setPers] = useState({
     fullName:'', dateOfBirth:'', gender:'', fatherName:'',
     bloodGroup:'', nationality:'Indian', profilePhoto:null
   });
+
+  // Step 2: Address
   const [cont, setCont] = useState({
     primaryMobile:'', alternateMobile:'', email:'',
     addressLine1:'', addressLine2:'', locality:'', city:'',
     taluk:'', residentialDistrict:'', residentialState:'',
-    residentialPincode:'', postOffice:''
+    residentialPincode:'', postOffice:'',
+    permanentAddress:'', currentAddress:'', sameAsPermanent:true
   });
-  const [terr, setTerr] = useState({ assignedState: prefilledState });
-  const [kyc,  setKyc]  = useState({
+
+  // Step 3: Identity / KYC
+  const [kyc, setKyc] = useState({
     aadhaarNumber:'', aadhaarFront:null, aadhaarBack:null,
     panNumber:'', panDoc:null, useAadhaarAsAddressProof:false,
-    addressProofType:'', addressProofNumber:'', addressProofDoc:null
+    addressProofType:'', addressProofNumber:'', addressProofDoc:null,
+    passportPhoto:null, drivingLicence:'', voterId:''
   });
-  const [acc,  setAcc]  = useState({
-    password:'', confirmPassword:'', showPw:false, showCf:false, status:'Active'
+
+  // Step 4: Territory
+  const [terr, setTerr] = useState({ assignedState: prefilledState });
+
+  // Step 5: Account Setup
+  const [acc, setAcc] = useState({
+    loginEmail:'', password:'', confirmPassword:'', showPw:false, showCf:false, status:'Active'
   });
+
+  // Step 6: Review
   const [decl, setDecl] = useState(false);
 
   const upP = (k,v) => setPers(p=>({...p,[k]:v}));
@@ -223,30 +236,37 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
       if (!pers.dateOfBirth) e.dateOfBirth='Date of birth is required';
       else if (new Date(pers.dateOfBirth)>=new Date()) e.dateOfBirth='Cannot be a future date';
       if (!pers.gender) e.gender='Gender is required';
-    }
-    if (step===2) {
+      if (!cont.email.trim()) e.email='Email address is required';
+      else if (!validateEmail(cont.email)) e.email='Enter a valid email address';
       if (!cont.primaryMobile) e.primaryMobile='Primary mobile is required';
       else if (!validatePhone(cont.primaryMobile)) e.primaryMobile='Enter a valid 10-digit mobile';
       if (cont.alternateMobile && !validatePhone(cont.alternateMobile)) e.alternateMobile='Enter valid 10-digit mobile';
-      if (!cont.email) e.email='Email is required';
-      else if (!validateEmail(cont.email)) e.email='Enter a valid email address';
+    }
+    if (step===2) {
       if (!cont.addressLine1.trim()) e.addressLine1='Address Line 1 is required';
-      if (!cont.city.trim()) e.city='City / Village is required';
-      if (!cont.residentialState) e.residentialState='State is required';
+      if (!cont.city.trim()) e.city='City / Town is required';
+      if (!cont.residentialDistrict.trim()) e.residentialDistrict='District is required';
+      if (!cont.residentialState) e.residentialState='Select a residential state';
       if (!cont.residentialPincode) e.residentialPincode='Pincode is required';
-      else if (!/^\d{6}$/.test(cont.residentialPincode)) e.residentialPincode='Must be exactly 6 digits';
+      else if (!/^\d{6}$/.test(cont.residentialPincode)) e.residentialPincode='Must be 6 digits';
+      if (!cont.sameAsPermanent && !cont.currentAddress.trim()) {
+        e.currentAddress = 'Please enter your current address';
+      }
     }
     if (step===3) {
-      if (!terr.assignedState) e.assignedState='Please select the assigned state';
-    }
-    if (step===4) {
       if (!kyc.aadhaarNumber) e.aadhaarNumber='Aadhaar number is required';
       else if (!validateAadhaar(kyc.aadhaarNumber)) e.aadhaarNumber='Must be exactly 12 digits';
       if (!kyc.panNumber) e.panNumber='PAN number is required';
       else if (!validatePAN(kyc.panNumber)) e.panNumber='Invalid format (e.g. ABCDE1234F)';
       if (!kyc.useAadhaarAsAddressProof && !kyc.addressProofType) e.addressProofType='Select an address proof type';
     }
+    if (step===4) {
+      if (!terr.assignedState) e.assignedState='Please select the assigned state';
+    }
     if (step===5) {
+      const emailToUse = acc.loginEmail.trim() || cont.email.trim();
+      if (!emailToUse) e.loginEmail = 'Login email is required';
+      else if (!validateEmail(emailToUse)) e.loginEmail = 'Enter a valid email address';
       const pw = acc.password;
       if (!pw) e.password='Password is required';
       else if (pw.length<8) e.password='Minimum 8 characters required';
@@ -261,7 +281,15 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
     return Object.keys(e).length===0;
   };
 
-  const next = () => { if (validate()) setStep(s=>Math.min(s+1,6)); };
+  const next = () => { 
+    if (validate()) {
+      // Auto-propagate email to loginEmail if not yet customized
+      if (step === 2 && !acc.loginEmail && cont.email) {
+        upA('loginEmail', cont.email.trim());
+      }
+      setStep(s=>Math.min(s+1,6)); 
+    }
+  };
   const prev = () => setStep(s=>Math.max(s-1,1));
 
   // ── Submit ─────────────────────────────────────────────────────────
@@ -269,23 +297,31 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
     if (!validate()) return;
     setSaving(true);
     try {
-      const tok = token || localStorage.getItem('token') || '';
+      const tok = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
       const b64 = async f => f ? await fileToBase64(f) : '';
+
+      const fullAddr = [cont.addressLine1, cont.addressLine2, cont.locality, cont.city, cont.residentialState, cont.residentialPincode].filter(Boolean).join(', ');
+      const permAddr = cont.permanentAddress || fullAddr;
+      const currAddr = cont.sameAsPermanent ? permAddr : (cont.currentAddress || fullAddr);
+
       const payload = {
         name:           pers.fullName.trim(),
-        email:          cont.email.trim().toLowerCase(),
+        email:          (acc.loginEmail || cont.email).trim().toLowerCase(),
         phone:          cont.primaryMobile.replace(/\D/g,''),
         altPhone:       cont.alternateMobile.replace(/\D/g,''),
         password:       acc.password,
+        role:           'admin',
+        adminRole:      'branch-admin', // Resilient enum compatible with all server tiers
         adminLevel:     'state',
+        level:          'state',
         assignedState:  terr.assignedState,
-        status:         acc.status,
+        status:         acc.status === 'Active' ? 'approved' : 'pending',
         dateOfBirth:    pers.dateOfBirth,
         gender:         pers.gender,
         fatherName:     pers.fatherName,
         bloodGroup:     pers.bloodGroup,
         nationality:    pers.nationality || 'Indian',
-        photoUrl:       await b64(pers.profilePhoto),
+        photoUrl:       await b64(pers.profilePhoto || kyc.passportPhoto),
         addressLine1:   cont.addressLine1,
         addressLine2:   cont.addressLine2,
         locality:       cont.locality,
@@ -295,7 +331,9 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
         residentialState:    cont.residentialState,
         residentialPincode:  cont.residentialPincode,
         postOffice:     cont.postOffice,
-        address:        [cont.addressLine1,cont.addressLine2,cont.locality,cont.city,cont.residentialState,cont.residentialPincode].filter(Boolean).join(', '),
+        permanentAddress: permAddr,
+        currentAddress: currAddr,
+        address:        fullAddr,
         aadhaarNumber:  kyc.aadhaarNumber.replace(/\s/g,''),
         panNumber:      kyc.panNumber.trim().toUpperCase(),
         aadhaarFrontUrl: await b64(kyc.aadhaarFront),
@@ -304,25 +342,38 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
         addressProofType:   kyc.useAadhaarAsAddressProof ? 'Aadhaar Card' : kyc.addressProofType,
         addressProofNumber: kyc.useAadhaarAsAddressProof ? kyc.aadhaarNumber.replace(/\s/g,'') : kyc.addressProofNumber,
         addressProofUrl:    kyc.useAadhaarAsAddressProof ? await b64(kyc.aadhaarFront) : await b64(kyc.addressProofDoc),
+        drivingLicence: kyc.drivingLicence || '',
+        voterId:        kyc.voterId || '',
         declarationAccepted: decl
       };
-      let res = await fetch(`${API_BASE}/admin/admins`, {
+
+      const res = await fetch(`${API_BASE}/admin/admins`, {
         method: 'POST',
         headers: { 'Content-Type':'application/json', 'x-auth-token':tok, 'Authorization':`Bearer ${tok}` },
-        body: JSON.stringify({ ...payload, adminRole: 'state-admin' })
+        body: JSON.stringify(payload)
       });
-      const data = await res.json();
+
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = { msg: `Request completed with status ${res.status}` };
+      }
+
       if (res.ok) {
-        setResult(data); setStep(7);
-        notify(data.msg||'State Administrator created successfully!', 'success');
-        if (typeof onSuccess==='function') onSuccess(data);
+        setResult(data); 
+        setStep(7);
+        notify(data.msg || 'State Administrator created successfully!', 'success');
+        if (typeof onSuccess === 'function') onSuccess(data);
       } else {
-        notify(data.msg||data.message||'Failed to create administrator.', 'error');
+        notify(data.msg || data.message || `Failed to create administrator (HTTP ${res.status}).`, 'error');
       }
     } catch(err) {
       console.error('Create state admin error:', err);
-      notify('Network error. Please try again.', 'error');
-    } finally { setSaving(false); }
+      notify(err.message || 'Unable to connect to the server. Please verify network and try again.', 'error');
+    } finally { 
+      setSaving(false); 
+    }
   };
 
   const pws = pwScore(acc.password);
@@ -351,10 +402,10 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
           {step===7&&result&&<SuccessScreen result={result} onClose={onClose}/>}
           {step<=6&&<StepBar current={step}/>}
 
-          {/* STEP 1: Personal */}
+          {/* STEP 1: Personal Information */}
           {step===1&&(
             <div className="space-y-4">
-              <SH icon={User} color="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" title="Personal Details" sub="Basic identity information of the State Administrator"/>
+              <SH icon={User} color="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400" title="Personal Information" sub="Administrator identity and direct contact details"/>
               <FG>
                 <div>
                   <Lbl req>Full Name</Lbl>
@@ -377,141 +428,127 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
                   <ErrMsg msg={errors.gender}/>
                 </div>
                 <div>
-                  <Lbl>Father / Mother / Spouse Name</Lbl>
-                  <Inp value={pers.fatherName} onChange={e=>upP('fatherName',e.target.value)} placeholder="Guardian or spouse name"/>
+                  <Lbl req>Email Address</Lbl>
+                  <Inp type="email" value={cont.email} onChange={e=>{upC('email',e.target.value);clrErr('email');}} placeholder="admin@example.com" err={errors.email}/>
+                  <ErrMsg msg={errors.email}/>
                 </div>
               </FG>
               <FG>
                 <div>
-                  <Lbl>Blood Group</Lbl>
-                  <Sel value={pers.bloodGroup} onChange={e=>upP('bloodGroup',e.target.value)}>
-                    <option value="">Select…</option>
-                    {BLOOD_GROUPS.map(b=><option key={b} value={b}>{b}</option>)}
-                  </Sel>
-                </div>
-                <div>
-                  <Lbl>Nationality</Lbl>
-                  <Inp value={pers.nationality} onChange={e=>upP('nationality',e.target.value)} placeholder="e.g. Indian"/>
-                </div>
-              </FG>
-              <UploadBtn label="Profile Photo" value={pers.profilePhoto} onChange={f=>upP('profilePhoto',f)} accept="image/*" optional/>
-            </div>
-          )}
-
-          {/* STEP 2: Contact & Address */}
-          {step===2&&(
-            <div className="space-y-4">
-              <SH icon={Phone} color="bg-blue-500/10 text-blue-600 dark:text-blue-400" title="Contact & Residential Address" sub="Mobile, email, and permanent residential address"/>
-              <FG>
-                <div>
-                  <Lbl req>Primary Mobile</Lbl>
+                  <Lbl req>Primary Mobile Number</Lbl>
                   <Inp type="tel" maxLength={10} value={cont.primaryMobile} onChange={e=>{upC('primaryMobile',e.target.value.replace(/\D/g,''));clrErr('primaryMobile');}} placeholder="10-digit mobile" err={errors.primaryMobile}/>
                   <ErrMsg msg={errors.primaryMobile}/>
                 </div>
                 <div>
-                  <Lbl>Alternate Mobile</Lbl>
-                  <Inp type="tel" maxLength={10} value={cont.alternateMobile} onChange={e=>{upC('alternateMobile',e.target.value.replace(/\D/g,''));clrErr('alternateMobile');}} placeholder="Optional" err={errors.alternateMobile}/>
+                  <Lbl>Alternate Mobile Number</Lbl>
+                  <Inp type="tel" maxLength={10} value={cont.alternateMobile} onChange={e=>{upC('alternateMobile',e.target.value.replace(/\D/g,''));clrErr('alternateMobile');}} placeholder="Optional alternate mobile" err={errors.alternateMobile}/>
                   <ErrMsg msg={errors.alternateMobile}/>
                 </div>
               </FG>
-              <div>
-                <Lbl req>Email Address</Lbl>
-                <Inp type="email" value={cont.email} onChange={e=>{upC('email',e.target.value);clrErr('email');}} placeholder="admin@example.com" err={errors.email}/>
-                <ErrMsg msg={errors.email}/>
-              </div>
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-3">Residential Address</p>
-                <div className="space-y-3">
-                  <div>
-                    <Lbl req>Address Line 1</Lbl>
-                    <Inp value={cont.addressLine1} onChange={e=>{upC('addressLine1',e.target.value);clrErr('addressLine1');}} placeholder="House No., Street Name" err={errors.addressLine1}/>
-                    <ErrMsg msg={errors.addressLine1}/>
-                  </div>
-                  <div>
-                    <Lbl>Address Line 2</Lbl>
-                    <Inp value={cont.addressLine2} onChange={e=>upC('addressLine2',e.target.value)} placeholder="Apartment, Block (optional)"/>
-                  </div>
-                  <FG>
-                    <div>
-                      <Lbl>Area / Locality</Lbl>
-                      <Inp value={cont.locality} onChange={e=>upC('locality',e.target.value)} placeholder="Colony or Locality"/>
-                    </div>
-                    <div>
-                      <Lbl req>Village / Town / City</Lbl>
-                      <Inp value={cont.city} onChange={e=>{upC('city',e.target.value);clrErr('city');}} placeholder="City or Village" err={errors.city}/>
-                      <ErrMsg msg={errors.city}/>
-                    </div>
-                  </FG>
-                  <FG>
-                    <div><Lbl>Post Office</Lbl><Inp value={cont.postOffice} onChange={e=>upC('postOffice',e.target.value)} placeholder="Post Office name"/></div>
-                    <div><Lbl>Taluk / Tehsil</Lbl><Inp value={cont.taluk} onChange={e=>upC('taluk',e.target.value)} placeholder="Taluk or Tehsil"/></div>
-                  </FG>
-                  <FG>
-                    <div><Lbl>District</Lbl><Inp value={cont.residentialDistrict} onChange={e=>upC('residentialDistrict',e.target.value)} placeholder="Residential district"/></div>
-                    <div>
-                      <Lbl req>State</Lbl>
-                      <Sel value={cont.residentialState} onChange={e=>{upC('residentialState',e.target.value);clrErr('residentialState');}} err={errors.residentialState}>
-                        <option value="">Select state…</option>
-                        {INDIAN_STATES.map(s=><option key={s} value={s}>{s}</option>)}
-                      </Sel>
-                      <ErrMsg msg={errors.residentialState}/>
-                    </div>
-                  </FG>
-                  <div className="w-48">
-                    <Lbl req>Pincode</Lbl>
-                    <Inp maxLength={6} value={cont.residentialPincode} onChange={e=>{upC('residentialPincode',e.target.value.replace(/\D/g,''));clrErr('residentialPincode');}} placeholder="6-digit pincode" cls="font-mono" err={errors.residentialPincode}/>
-                    <ErrMsg msg={errors.residentialPincode}/>
-                  </div>
+              <UploadBtn label="Profile Photo" value={pers.profilePhoto} onChange={f=>upP('profilePhoto',f)} accept="image/*" optional/>
+              <FG>
+                <div>
+                  <Lbl>Father / Mother / Spouse Name</Lbl>
+                  <Inp value={pers.fatherName} onChange={e=>upP('fatherName',e.target.value)} placeholder="Guardian or spouse name (optional)"/>
                 </div>
-              </div>
+                <div>
+                  <Lbl>Blood Group</Lbl>
+                  <Sel value={pers.bloodGroup} onChange={e=>upP('bloodGroup',e.target.value)}>
+                    <option value="">Select blood group (optional)…</option>
+                    {BLOOD_GROUPS.map(b=><option key={b} value={b}>{b}</option>)}
+                  </Sel>
+                </div>
+              </FG>
             </div>
           )}
 
-          {/* STEP 3: Territory */}
-          {step===3&&(
-            <div className="space-y-5">
-              <SH icon={Globe} color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" title="Territory Assignment" sub="Assign the state this administrator will manage"/>
-              <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-4">
-                <p className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-500 mb-1">Role (Fixed)</p>
-                <div className="flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400"/>
-                  <span className="text-base font-black text-indigo-700 dark:text-indigo-300">STATE ADMINISTRATOR</span>
-                </div>
-                <p className="text-[10px] text-indigo-400 mt-1.5">Only the Main Admin can create State Administrators. This role is fixed.</p>
-              </div>
-              <div>
-                <Lbl req>Assigned State</Lbl>
-                <Sel value={terr.assignedState} onChange={e=>{setTerr({assignedState:e.target.value});clrErr('assignedState');}} err={errors.assignedState}>
-                  <option value="">Select state to assign…</option>
-                  {INDIAN_STATES.map(s=><option key={s} value={s}>{s}</option>)}
-                </Sel>
-                <ErrMsg msg={errors.assignedState}/>
-              </div>
-              {terr.assignedState&&(
-                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-1.5 text-xs">
-                  <p className="text-[10px] font-extrabold uppercase text-emerald-600 dark:text-emerald-400 mb-1">Access Preview</p>
-                  <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-semibold"><CheckCircle className="w-3.5 h-3.5"/>Full access to <strong>{terr.assignedState}</strong></div>
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-3.5 h-3.5"/>Manages Districts, Divisions, Pincodes in {terr.assignedState}</div>
-                  <div className="flex items-center gap-2 text-red-500"><AlertCircle className="w-3.5 h-3.5"/>No access to any other state</div>
-                </div>
-              )}
-              <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
-                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold">⚠ Only one active State Admin per state. If one already exists, creation will be blocked.</p>
-              </div>
-            </div>
-          )}
-
-          {/* STEP 4: KYC */}
-          {step===4&&(
+          {/* STEP 2: Address */}
+          {step===2&&(
             <div className="space-y-4">
-              <SH icon={FileText} color="bg-purple-500/10 text-purple-600 dark:text-purple-400" title="Identity & KYC Documents" sub="Aadhaar and PAN are mandatory. Aadhaar stored masked."/>
+              <SH icon={MapPin} color="bg-blue-500/10 text-blue-600 dark:text-blue-400" title="Address Information" sub="Permanent and current residential address details"/>
+              <div>
+                <Lbl req>Address Line 1</Lbl>
+                <Inp value={cont.addressLine1} onChange={e=>{upC('addressLine1',e.target.value);clrErr('addressLine1');}} placeholder="House No., Building, Street Name" err={errors.addressLine1}/>
+                <ErrMsg msg={errors.addressLine1}/>
+              </div>
+              <div>
+                <Lbl>Address Line 2</Lbl>
+                <Inp value={cont.addressLine2} onChange={e=>upC('addressLine2',e.target.value)} placeholder="Apartment, Suite, Unit, Landmark (optional)"/>
+              </div>
+              <FG>
+                <div>
+                  <Lbl req>City / Town / Village</Lbl>
+                  <Inp value={cont.city} onChange={e=>{upC('city',e.target.value);clrErr('city');}} placeholder="e.g. Dharmapuri" err={errors.city}/>
+                  <ErrMsg msg={errors.city}/>
+                </div>
+                <div>
+                  <Lbl req>District</Lbl>
+                  <Inp value={cont.residentialDistrict} onChange={e=>{upC('residentialDistrict',e.target.value);clrErr('residentialDistrict');}} placeholder="e.g. Dharmapuri" err={errors.residentialDistrict}/>
+                  <ErrMsg msg={errors.residentialDistrict}/>
+                </div>
+              </FG>
+              <FG>
+                <div>
+                  <Lbl req>State</Lbl>
+                  <Sel value={cont.residentialState} onChange={e=>{upC('residentialState',e.target.value);clrErr('residentialState');}} err={errors.residentialState}>
+                    <option value="">Select state…</option>
+                    {INDIAN_STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </Sel>
+                  <ErrMsg msg={errors.residentialState}/>
+                </div>
+                <div>
+                  <Lbl req>Pincode</Lbl>
+                  <Inp maxLength={6} value={cont.residentialPincode} onChange={e=>{upC('residentialPincode',e.target.value.replace(/\D/g,''));clrErr('residentialPincode');}} placeholder="6-digit pincode" cls="font-mono" err={errors.residentialPincode}/>
+                  <ErrMsg msg={errors.residentialPincode}/>
+                </div>
+              </FG>
+              <FG>
+                <div><Lbl>Locality / Area</Lbl><Inp value={cont.locality} onChange={e=>upC('locality',e.target.value)} placeholder="Colony or Locality (optional)"/></div>
+                <div><Lbl>Taluk / Tehsil</Lbl><Inp value={cont.taluk} onChange={e=>upC('taluk',e.target.value)} placeholder="Taluk or Tehsil (optional)"/></div>
+              </FG>
+
+              {/* Dual Address Controls */}
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                <label className="flex items-center gap-2.5 cursor-pointer p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/60 hover:border-primary-400 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={cont.sameAsPermanent} 
+                    onChange={e=>upC('sameAsPermanent',e.target.checked)} 
+                    className="w-4 h-4 rounded accent-primary-600 cursor-pointer"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Address same as permanent address</span>
+                    <p className="text-[10px] text-slate-400">Current residential address is identical to permanent address</p>
+                  </div>
+                </label>
+                {!cont.sameAsPermanent && (
+                  <div className="space-y-1">
+                    <Lbl req>Current Address</Lbl>
+                    <textarea 
+                      rows={3}
+                      value={cont.currentAddress} 
+                      onChange={e=>{upC('currentAddress',e.target.value);clrErr('currentAddress');}} 
+                      placeholder="Enter complete current residential address..."
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    />
+                    <ErrMsg msg={errors.currentAddress}/>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3: Identity / KYC */}
+          {step===3&&(
+            <div className="space-y-4">
+              <SH icon={FileText} color="bg-purple-500/10 text-purple-600 dark:text-purple-400" title="Identity & KYC Documents" sub="Sensitive numbers are securely masked in the portal"/>
               {/* Aadhaar */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-3">
                 <p className="text-[11px] font-extrabold uppercase text-slate-500 flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-blue-500"/>Aadhaar Card *</p>
                 <div>
                   <Lbl req>Aadhaar Number</Lbl>
                   <Inp maxLength={12} value={kyc.aadhaarNumber} onChange={e=>{upK('aadhaarNumber',e.target.value.replace(/\D/g,''));clrErr('aadhaarNumber');}} placeholder="12-digit Aadhaar number" cls="font-mono tracking-widest" err={errors.aadhaarNumber}/>
-                  {kyc.aadhaarNumber.length>0&&<p className="text-[10px] text-slate-400 mt-1">Will be stored as: <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{maskAadhaar(kyc.aadhaarNumber)}</span></p>}
+                  {kyc.aadhaarNumber.length>0&&<p className="text-[10px] text-slate-400 mt-1">Displayed in UI as: <span className="font-mono font-bold text-slate-600 dark:text-slate-300">{maskAadhaar(kyc.aadhaarNumber)}</span></p>}
                   <ErrMsg msg={errors.aadhaarNumber}/>
                 </div>
                 <FG>
@@ -551,15 +588,62 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
                   </div>
                 )}
               </div>
+              {/* Optional IDs */}
+              <FG>
+                <div>
+                  <Lbl>Driving Licence (Optional)</Lbl>
+                  <Inp value={kyc.drivingLicence} onChange={e=>upK('drivingLicence',e.target.value.toUpperCase())} placeholder="DL Number (optional)"/>
+                </div>
+                <div>
+                  <Lbl>Voter ID (Optional)</Lbl>
+                  <Inp value={kyc.voterId} onChange={e=>upK('voterId',e.target.value.toUpperCase())} placeholder="Voter ID (optional)"/>
+                </div>
+              </FG>
             </div>
           )}
 
-          {/* STEP 5: Account */}
+          {/* STEP 4: Territory Assignment */}
+          {step===4&&(
+            <div className="space-y-5">
+              <SH icon={Globe} color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" title="Territory Assignment" sub="Permanently bind this administrator to a specific State"/>
+              <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-2xl p-4">
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-500 mb-1">Role (Fixed)</p>
+                <div className="flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-indigo-600 dark:text-indigo-400"/>
+                  <span className="text-base font-black text-indigo-700 dark:text-indigo-300">STATE ADMINISTRATOR</span>
+                </div>
+                <p className="text-[10px] text-indigo-400 mt-1.5">Only Main Admin can create State Administrators. This role is strictly bound to state territory governance.</p>
+              </div>
+              <div>
+                <Lbl req>Assigned State</Lbl>
+                <Sel value={terr.assignedState} onChange={e=>{setTerr({assignedState:e.target.value});clrErr('assignedState');}} err={errors.assignedState}>
+                  <option value="">Select state to assign…</option>
+                  {INDIAN_STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                </Sel>
+                <ErrMsg msg={errors.assignedState}/>
+              </div>
+              {terr.assignedState&&(
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-1.5 text-xs">
+                  <p className="text-[10px] font-extrabold uppercase text-emerald-600 dark:text-emerald-400 mb-1">Access Scope Preview</p>
+                  <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-semibold"><CheckCircle className="w-3.5 h-3.5"/>Full operational access to <strong>{terr.assignedState}</strong></div>
+                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-3.5 h-3.5"/>Authorized to manage Districts, Divisions, Pincodes inside {terr.assignedState}</div>
+                  <div className="flex items-center gap-2 text-red-500 font-semibold"><AlertCircle className="w-3.5 h-3.5"/>Zero access to Kerala, Karnataka, Andhra Pradesh, or other states (403 Forbidden)</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP 5: Account Setup */}
           {step===5&&(
             <div className="space-y-5">
-              <SH icon={Lock} color="bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Account & Access Setup" sub="Set a temporary initial password for the State Administrator"/>
+              <SH icon={Lock} color="bg-amber-500/10 text-amber-600 dark:text-amber-400" title="Account & Access Setup" sub="Set login credentials and account status"/>
+              <div>
+                <Lbl req>Login Email</Lbl>
+                <Inp type="email" value={acc.loginEmail || cont.email} onChange={e=>{upA('loginEmail',e.target.value);clrErr('loginEmail');}} placeholder="admin@example.com" err={errors.loginEmail}/>
+                <ErrMsg msg={errors.loginEmail}/>
+              </div>
               <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3">
-                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold">📌 Temporary password — State Admin must change it on first login to the Sub-Admin portal.</p>
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold">📌 Passwords are securely hashed in the backend. State Admin must update credentials on first login.</p>
               </div>
               <div>
                 <Lbl req>Initial Password</Lbl>
@@ -623,10 +707,11 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
             </div>
           )}
 
-          {/* STEP 6: Review */}
+          {/* STEP 6: Review & Confirm */}
           {step===6&&(
             <div className="space-y-4">
               <SH icon={CheckCircle} color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" title="Review & Confirm" sub="Verify all details before creating the State Administrator"/>
+              
               <RS title="Personal Details" icon={User} color="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
                 <RR label="Full Name"     value={pers.fullName}/>
                 <RR label="Date of Birth" value={pers.dateOfBirth?new Date(pers.dateOfBirth).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}):''}/>
@@ -635,39 +720,42 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
                 <RR label="Blood Group"   value={pers.bloodGroup}/>
                 <RR label="Nationality"   value={pers.nationality}/>
               </RS>
-              <RS title="Contact Details" icon={Phone} color="bg-blue-500/10 text-blue-600 dark:text-blue-400">
+
+              <RS title="Address & Contact" icon={MapPin} color="bg-blue-500/10 text-blue-600 dark:text-blue-400">
                 <RR label="Primary Mobile"   value={cont.primaryMobile} mono/>
                 <RR label="Alternate Mobile" value={cont.alternateMobile} mono/>
-                <RR label="Email"            value={cont.email}/>
+                <RR label="Email Address"    value={cont.email}/>
+                <RR label="Full Address"     value={[cont.addressLine1,cont.addressLine2,cont.locality,cont.city,cont.residentialState,cont.residentialPincode].filter(Boolean).join(', ')}/>
+                <RR label="District"         value={cont.residentialDistrict}/>
+                <RR label="State"            value={cont.residentialState}/>
+                <RR label="Pincode"          value={cont.residentialPincode} mono/>
               </RS>
-              <RS title="Residential Address" icon={MapPin} color="bg-slate-500/10 text-slate-600 dark:text-slate-400">
-                <RR label="Address" value={[cont.addressLine1,cont.addressLine2].filter(Boolean).join(', ')}/>
-                <RR label="City"    value={cont.city}/>
-                <RR label="State"   value={cont.residentialState}/>
-                <RR label="Pincode" value={cont.residentialPincode} mono/>
-              </RS>
-              <RS title="Territory Assignment" icon={Globe} color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <RR label="Role"           value="STATE ADMINISTRATOR"/>
-                <RR label="Assigned State" value={terr.assignedState}/>
-              </RS>
-              <RS title="KYC Documents" icon={FileText} color="bg-purple-500/10 text-purple-600 dark:text-purple-400">
+
+              <RS title="Identity & KYC Documents" icon={FileText} color="bg-purple-500/10 text-purple-600 dark:text-purple-400">
                 <RR label="Aadhaar"       value={kyc.aadhaarNumber?maskAadhaar(kyc.aadhaarNumber):''} mono/>
                 <RR label="Aadhaar Front" value={kyc.aadhaarFront?('Uploaded: '+kyc.aadhaarFront.name):'Not uploaded'}/>
+                <RR label="Aadhaar Back"  value={kyc.aadhaarBack?('Uploaded: '+kyc.aadhaarBack.name):'Not uploaded'}/>
                 <RR label="PAN Number"    value={kyc.panNumber} mono/>
                 <RR label="Address Proof" value={kyc.useAadhaarAsAddressProof?'Using Aadhaar':kyc.addressProofType}/>
               </RS>
+
+              <RS title="Assigned Territory" icon={Globe} color="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <RR label="Role"           value="STATE ADMINISTRATOR"/>
+                <RR label="Assigned State" value={terr.assignedState}/>
+              </RS>
+
               <RS title="Account Setup" icon={Lock} color="bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <RR label="Login Email"       value={acc.loginEmail || cont.email}/>
                 <RR label="Account Status"    value={acc.status}/>
                 <RR label="Password Strength" value={strengthLabel(pws)}/>
               </RS>
-              {/* Declaration */}
-              <div className={`rounded-2xl border-2 p-4 transition-colors ${errors.declaration?'border-red-400 bg-red-50 dark:bg-red-900/20':'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'}`}>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 mb-3 leading-relaxed">
-                  <strong>Declaration:</strong> I confirm the information and documents submitted for this State Administrator onboarding are accurate and complete.
-                </p>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input type="checkbox" checked={decl} onChange={e=>{setDecl(e.target.checked);clrErr('declaration');}} className="w-4 h-4 rounded accent-primary-600"/>
-                  <span className="text-xs font-extrabold text-slate-800 dark:text-slate-100">I confirm the above information is correct.</span>
+
+              <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input type="checkbox" checked={decl} onChange={e=>{setDecl(e.target.checked);clrErr('declaration');}} className="w-4 h-4 rounded accent-primary-600 mt-0.5 flex-shrink-0"/>
+                  <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    I confirm that the above information is correct.
+                  </span>
                 </label>
                 <ErrMsg msg={errors.declaration}/>
               </div>
@@ -677,30 +765,29 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
 
         {/* ── Footer ── */}
         {step<=6&&(
-          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/60">
-            <button type="button" onClick={step===1?onClose:prev}
-              className="flex items-center gap-1.5 px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer">
-              <ChevronLeft className="w-4 h-4"/>{step===1?'Cancel':'Back'}
-            </button>
-            <span className="text-[10px] text-slate-400 font-semibold">{step} / 6</span>
-            {step<6?(
-              <button type="button" onClick={next}
-                className="flex items-center gap-1.5 px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white text-xs font-extrabold rounded-xl shadow-sm transition-colors cursor-pointer">
+          <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+            {step>1 ? (
+              <button onClick={prev} className="flex items-center gap-1.5 px-4 py-2 text-xs font-extrabold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors cursor-pointer">
+                <ChevronLeft className="w-4 h-4"/> Back
+              </button>
+            ) : <div/>}
+
+            <div className="text-[11px] text-slate-400 font-semibold">{step} / 6</div>
+
+            {step<6 ? (
+              <button onClick={next} className="flex items-center gap-1.5 px-5 py-2 text-xs font-extrabold text-white bg-primary-600 hover:bg-primary-500 rounded-xl shadow-sm transition-colors cursor-pointer">
                 Next <ChevronRight className="w-4 h-4"/>
               </button>
-            ):(
-              <button type="button" onClick={submit} disabled={saving}
-                className="flex items-center gap-1.5 px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-extrabold rounded-xl shadow-sm transition-colors cursor-pointer">
-                {saving?(<><Loader2 className="w-4 h-4 animate-spin"/>Creating…</>):(<><CheckCircle className="w-4 h-4"/>Create State Administrator</>)}
+            ) : (
+              <button onClick={submit} disabled={saving} className="flex items-center gap-2 px-6 py-2.5 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-xl shadow-md transition-all cursor-pointer">
+                {saving?<><Loader2 className="w-4 h-4 animate-spin"/>Creating…</>:<><CheckCircle className="w-4 h-4"/>CREATE STATE ADMINISTRATOR</>}
               </button>
             )}
           </div>
         )}
       </div>
-      <style>{`@keyframes fadeInScale{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}`}</style>
     </div>
   );
 };
 
 export default StateAdminOnboardingWizard;
-

@@ -551,4 +551,116 @@ router.get('/manager-directory/territory-options', auth, async (req, res) => {
     }
 });
 
+// ============================================================
+// 14. SUBMIT MANAGER ONBOARDING REQUEST
+// POST /manager-directory/requests and POST /manager-directory/requests/nominate
+// ============================================================
+const handleNominateManager = async (req, res) => {
+    try {
+        const {
+            name, email, phone, altPhone, level,
+            assignedState, assignedDistrict, assignedDivision, assignedPincode,
+            address, notes
+        } = req.body;
+
+        if (!name || !email || !phone || !level || !assignedState) {
+            return res.status(400).json({
+                msg: 'Name, email, phone, manager level, and assigned state are required.'
+            });
+        }
+
+        const validLevels = ['state', 'district', 'division', 'pincode'];
+        if (!validLevels.includes(level.toLowerCase())) {
+            return res.status(400).json({
+                msg: `Invalid manager level. Must be one of: ${validLevels.join(', ')}`
+            });
+        }
+
+        // Check manager quota limits (Section 12)
+        const MANAGER_LIMITS = { state: 8, district: 2, division: 2, pincode: 2 };
+        const maxLimit = MANAGER_LIMITS[level.toLowerCase()] || 2;
+
+        const countFilter = {
+            level: level.toLowerCase(),
+            status: 'Active',
+            assignedState: safeRegex(assignedState)
+        };
+        if (level.toLowerCase() === 'district') countFilter.assignedDistrict = safeRegex(assignedDistrict || '');
+        if (level.toLowerCase() === 'division') countFilter.assignedDivision = safeRegex(assignedDivision || '');
+        if (level.toLowerCase() === 'pincode') countFilter.assignedPincode = assignedPincode || '';
+
+        const currentCount = await Manager.countDocuments(countFilter);
+        if (currentCount >= maxLimit) {
+            return res.status(400).json({
+                msg: `Manager limit reached (${currentCount}/${maxLimit}). Cannot submit another onboarding request for this territory.`
+            });
+        }
+
+        // Duplicate check on email
+        const existingMgr = await Manager.findOne({ email: email.toLowerCase().trim() });
+        if (existingMgr) {
+            return res.status(409).json({ msg: 'A manager with this email already exists.' });
+        }
+
+        const existingReq = await ManagerRequest.findOne({
+            email: email.toLowerCase().trim(),
+            status: 'Pending'
+        });
+        if (existingReq) {
+            return res.status(409).json({ msg: 'A pending onboarding request already exists for this email.' });
+        }
+
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const rand = Math.floor(1000 + Math.random() * 9000);
+        const requestId = `REQ-MGR-${level.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
+
+        // Get requesting admin info
+        let requestingAdminName = req.user?.name || '';
+        let requestingAdminRole = req.user?.role || req.user?.adminRole || 'Administrator';
+        if (!requestingAdminName && req.user?.id) {
+            const u = await User.findById(req.user.id).select('name role adminRole').lean();
+            if (u) {
+                requestingAdminName = u.name || '';
+                requestingAdminRole = u.role || u.adminRole || requestingAdminRole;
+            }
+        }
+
+        const newRequest = new ManagerRequest({
+            requestId,
+            name: name.trim(),
+            email: email.toLowerCase().trim(),
+            phone: phone.trim(),
+            altPhone: (altPhone || '').trim(),
+            level: level.toLowerCase(),
+            assignedState: assignedState.trim(),
+            assignedDistrict: (assignedDistrict || '').trim(),
+            assignedDivision: (assignedDivision || '').trim(),
+            assignedPincode: (assignedPincode || '').trim(),
+            address: (address || '').trim(),
+            notes: (notes || '').trim(),
+            requestedBy: req.user.id,
+            requestingAdminName,
+            requestingAdminRole,
+            status: 'Pending'
+        });
+
+        await newRequest.save();
+
+        res.status(201).json({
+            success: true,
+            msg: `Manager onboarding request submitted successfully for ${name}.`,
+            request: newRequest,
+            currentCount,
+            limit: maxLimit
+        });
+    } catch (err) {
+        console.error('Submit manager request error:', err);
+        res.status(500).json({ msg: 'Error submitting manager request', error: err.message });
+    }
+};
+
+router.post('/manager-directory/requests', auth, handleNominateManager);
+router.post('/manager-directory/requests/nominate', auth, handleNominateManager);
+
 module.exports = router;
+
