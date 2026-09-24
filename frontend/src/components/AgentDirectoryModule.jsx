@@ -47,7 +47,7 @@ export default function AgentDirectoryModule({
   token, API_BASE, initialAgents = [], onAgentsUpdated,
   onOpenOnboardingModal, onOpenOnboardingRequests, onOpenAddAgentModal
 }) {
-  const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) && initialAgents.length > 0 ? initialAgents : []));
+  const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) && initialAgents.length > 0 ? initialAgents : getCachedAgents()));
   const [loading, setLoading] = useState(() => !(Array.isArray(initialAgents) && initialAgents.length > 0));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -86,7 +86,13 @@ export default function AgentDirectoryModule({
   const inFlightPromiseRef = useRef(null);
 
   useEffect(() => {
-    if (Array.isArray(initialAgents) && initialAgents.length > 0) { setAgents(initialAgents); setCachedAgents(initialAgents); setLoading(false); }
+    if (Array.isArray(initialAgents) && initialAgents.length > 0) {
+      setAgents(initialAgents);
+      setCachedAgents(initialAgents);
+      setLoading(false);
+      setBgNotice(null);
+      setError(null);
+    }
   }, [initialAgents]);
 
   useEffect(() => {
@@ -95,16 +101,38 @@ export default function AgentDirectoryModule({
   }, [searchTerm]);
 
   const safeFetchAgents = useCallback(async () => {
-    if (!token) return null;
-    const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+    const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('admin_token') || '') : '');
+    if (!activeToken) return null;
+    const headers = {
+      'x-auth-token': activeToken,
+      'Authorization': `Bearer ${activeToken}`,
+      'Content-Type': 'application/json'
+    };
     const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
-      const res = await fetch(`${baseClean}/admin/agents`, { headers, signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (res.ok) { const data = await res.json(); const list = Array.isArray(data) ? data : (data.agents || data.data || []); if (list.length > 0) return list; }
-    } catch (e) { if (e.name !== 'AbortError') console.warn('Fetch agents warning:', e.message); }
+    const candidates = [
+      `${baseClean}/admin/agents`,
+      `${baseClean}/agents`,
+      `${baseClean.replace(/\/admin-api$/, '')}/admin-api/agents`,
+      `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents`
+    ];
+    const urls = Array.from(new Set(candidates.map(u => u.replace(/([^:])\/\//g, '$1/').replace(/\/admin-api\/admin-api\//g, '/admin-api/'))));
+    for (const u of urls) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const res = await fetch(u, { headers, signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json().catch(() => null);
+          if (data) {
+            const list = Array.isArray(data) ? data : (data.agents || data.data || []);
+            return list;
+          }
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') console.warn('Fetch agents attempt warning:', u, e.message);
+      }
+    }
     return null;
   }, [token, API_BASE]);
 
@@ -151,25 +179,44 @@ export default function AgentDirectoryModule({
   const loadAgentData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else if (!agentsRef.current || agentsRef.current.length === 0) setLoading(true);
-    setError(null); setBgNotice(null);
+    setError(null);
     if (inFlightPromiseRef.current) {
-      try { const data = await inFlightPromiseRef.current; if (data) { const p = normalizeAgentList(data); if (p.length > 0) { setAgents(p); setCachedAgents(p); if (typeof onAgentsUpdated === 'function') onAgentsUpdated(p); setError(null); } } } catch (e) {}
+      try { const data = await inFlightPromiseRef.current; if (data) { const p = normalizeAgentList(data); if (p.length > 0) { setAgents(p); setCachedAgents(p); if (typeof onAgentsUpdated === 'function') onAgentsUpdated(p); setError(null); setBgNotice(null); } } } catch (e) {}
       setLoading(false); setRefreshing(false); return;
     }
     try {
       const fetchPromise = safeFetchAgents(); inFlightPromiseRef.current = fetchPromise;
       const data = await fetchPromise; inFlightPromiseRef.current = null;
       if (data !== null && data !== undefined) {
-        const p = normalizeAgentList(data); setAgents(p); setCachedAgents(p); if (typeof onAgentsUpdated === 'function') onAgentsUpdated(p); setError(null); setBgNotice(null);
+        const p = normalizeAgentList(data);
+        setAgents(p);
+        setCachedAgents(p);
+        if (typeof onAgentsUpdated === 'function') onAgentsUpdated(p);
+        setError(null);
+        setBgNotice(null);
       } else {
-        if (!agentsRef.current || agentsRef.current.length === 0) {
-          const fb = getCachedAgents(); if (fb && fb.length > 0) { setAgents(fb); setBgNotice('Unable to reach server. Showing offline snapshot.'); } else setError('Unable to load latest data. Please try again.');
+        if (isRefresh) {
+          setBgNotice('Unable to reach server. Showing offline snapshot.');
+        } else if (!agentsRef.current || agentsRef.current.length === 0) {
+          const fb = getCachedAgents();
+          if (fb && fb.length > 0) {
+            setAgents(fb);
+          } else {
+            setError('Unable to load latest data. Please try again.');
+          }
         }
       }
     } catch (err) {
       inFlightPromiseRef.current = null;
-      if (!agentsRef.current || agentsRef.current.length === 0) {
-        const fb = getCachedAgents(); if (fb && fb.length > 0) { setAgents(fb); setBgNotice('Unable to reach server. Showing offline snapshot.'); } else setError('Unable to load latest data. Please try again.');
+      if (isRefresh) {
+        setBgNotice('Unable to reach server. Showing offline snapshot.');
+      } else if (!agentsRef.current || agentsRef.current.length === 0) {
+        const fb = getCachedAgents();
+        if (fb && fb.length > 0) {
+          setAgents(fb);
+        } else {
+          setError('Unable to load latest data. Please try again.');
+        }
       }
     } finally { setLoading(false); setRefreshing(false); }
   }, [safeFetchAgents, normalizeAgentList, onAgentsUpdated]);

@@ -4282,7 +4282,6 @@ function App() {
                           <th className="px-6 py-4">Candidate & Cust ID</th>
                           <th className="px-6 py-4">Position & Company (HR)</th>
                           <th className="px-6 py-4">Status</th>
-                          <th className="px-6 py-4">Resume</th>
                           <th className="px-6 py-4">Applied Date</th>
                           <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
@@ -4323,16 +4322,6 @@ function App() {
                                   <option value="rejected">Rejected</option>
                                 </select>
                               </td>
-                              <td className="px-6 py-4">
-                                <a
-                                  href={resumeVal}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
-                                >
-                                  <FileText className="w-3.5 h-3.5" /> View Resume
-                                </a>
-                              </td>
                               <td className="px-6 py-4 text-xs text-slate-400">{new Date(job.createdAt || job.appliedDate).toLocaleDateString()}</td>
                               <td className="px-6 py-4 text-right">
                                 <div className="flex items-center justify-end gap-3">
@@ -4358,7 +4347,7 @@ function App() {
                         })}
                         {filteredJobs.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="text-center py-8 text-slate-400 text-sm">
+                            <td colSpan={6} className="text-center py-8 text-slate-400 text-sm">
                               No job applications found matching search and filters.
                             </td>
                           </tr>
@@ -7397,42 +7386,25 @@ function App() {
               </div>
             </div>
 
-            {/* Resume & Status */}
+            {/* Status */}
             <div className="space-y-4 pt-3 border-t dark:border-slate-800">
-              <h4 className="text-xs font-bold text-primary-500 uppercase tracking-wider">Status & Documents</h4>
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="flex-1">
-                  <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Resume / CV</span>
-                  {modalData.resumeUrl ? (
-                    <a
-                      href={modalData.resumeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-600 hover:text-white transition-all w-full justify-center"
-                    >
-                      <FileText className="w-4 h-4" /> View Resume Document
-                    </a>
-                  ) : (
-                    <span className="text-xs text-slate-400 italic block py-2">No resume provided.</span>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Application Status</span>
-                  <select
-                    value={modalData.status}
-                    onChange={(e) => {
-                      executeAction(`/admin/jobs/${modalData._id}`, 'PUT', { status: e.target.value });
-                      setModalData({ ...modalData, status: e.target.value });
-                    }}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm px-3.5 py-2.5 font-semibold text-slate-800 dark:text-slate-200"
-                  >
-                    <option value="APPLICATION RECEIVED">APPLICATION RECEIVED</option>
-                    <option value="UNDER REVIEW">UNDER REVIEW</option>
-                    <option value="SHORTLISTED">SHORTLISTED</option>
-                    <option value="SELECTED">SELECTED</option>
-                    <option value="REJECTED">REJECTED</option>
-                  </select>
-                </div>
+              <h4 className="text-xs font-bold text-primary-500 uppercase tracking-wider">Application Status</h4>
+              <div>
+                <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Application Status</span>
+                <select
+                  value={modalData.status}
+                  onChange={(e) => {
+                    executeAction(`/admin/jobs/${modalData._id}`, 'PUT', { status: e.target.value });
+                    setModalData({ ...modalData, status: e.target.value });
+                  }}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm px-3.5 py-2.5 font-semibold text-slate-800 dark:text-slate-200"
+                >
+                  <option value="APPLICATION RECEIVED">APPLICATION RECEIVED</option>
+                  <option value="UNDER REVIEW">UNDER REVIEW</option>
+                  <option value="SHORTLISTED">SHORTLISTED</option>
+                  <option value="SELECTED">SELECTED</option>
+                  <option value="REJECTED">REJECTED</option>
+                </select>
               </div>
               <div className="pt-2">
                 <span className="block text-[10px] text-slate-400 font-bold uppercase">Applied Date</span>
@@ -7873,7 +7845,7 @@ function App() {
             </div>
 
             <div className="space-y-2">
-              <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Application Status & Documents</h4>
+              <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Application Status</h4>
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 flex flex-wrap justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-slate-400 font-semibold">Update Status:</span>
@@ -7893,45 +7865,6 @@ function App() {
                     <option value="REJECTED">REJECTED</option>
                   </select>
                 </div>
-
-                {(() => {
-                  const rawRes = modalData.resumeUrl || modalData.candidateResume;
-                  let fullUrl = null;
-
-                  if (
-                    rawRes &&
-                    typeof rawRes === 'string' &&
-                    rawRes.trim() &&
-                    !rawRes.includes('dummy') &&
-                    !rawRes.includes('unsplash')
-                  ) {
-                    const clean = rawRes.trim();
-
-                    if (
-                      clean.startsWith('http://') ||
-                      clean.startsWith('https://') ||
-                      clean.startsWith('data:')
-                    ) {
-                      fullUrl = clean;
-                    } else {
-                      fullUrl = `${API_ORIGIN}${clean.startsWith('/') ? '' : '/'}${clean}`;
-                    }
-                  }
-                  return fullUrl ? (
-                    <a
-                      href={fullUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2"
-                    >
-                      <FileText className="w-4 h-4" /> View / Download Resume
-                    </a>
-                  ) : (
-                    <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-400 font-bold text-xs rounded-xl">
-                      No Resume Uploaded
-                    </span>
-                  );
-                })()}
               </div>
             </div>
 
