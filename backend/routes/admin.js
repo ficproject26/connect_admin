@@ -129,28 +129,78 @@ const filterActiveVendorItems = async (items) => {
     }
 };
 
-// HELPER: Deep sanitize heavy fields (Buffers, base64 strings, massive document objects)
+// HELPER: Deterministic Canonical Customer ID Generator (Matches Customer Portal FIC-CUST-XXXXXX)
+function getCanonicalCustomerId(userOrId) {
+    if (!userOrId) return 'FIC-CUST-100000';
+    if (typeof userOrId === 'object' && userOrId !== null) {
+        if (userOrId.customerId && !['FIC-CUST-750684', 'FIC-CUST-849201', 'FIC-CUST-100000'].includes(userOrId.customerId) && String(userOrId.customerId).startsWith('FIC-CUST-')) {
+            return String(userOrId.customerId);
+        }
+        if (userOrId.registrationId && !['FIC-CUST-750684', 'FIC-CUST-849201', 'FIC-CUST-100000'].includes(userOrId.registrationId) && String(userOrId.registrationId).startsWith('FIC-CUST-')) {
+            return String(userOrId.registrationId);
+        }
+        const target = userOrId.email || userOrId.phone || userOrId.mobileNumber || userOrId.mobile || userOrId.name || userOrId.username || userOrId._id || userOrId.id || '';
+        return getCanonicalCustomerId(target);
+    }
+    const clean = String(userOrId).trim().toLowerCase();
+    if (!clean) return 'FIC-CUST-100000';
+    if (clean.startsWith('fic-cust-') && !['fic-cust-750684', 'fic-cust-849201', 'fic-cust-100000'].includes(clean)) {
+        return clean.toUpperCase();
+    }
+    let hash = 0;
+    for (let i = 0; i < clean.length; i++) {
+        hash = ((hash << 5) - hash) + clean.charCodeAt(i);
+        hash |= 0;
+    }
+    const num = Math.abs(hash % 900000) + 100000;
+    return `FIC-CUST-${num}`;
+}
+
+// HELPER: Deep sanitize heavy fields while preserving usable document URLs (HTTP, local paths, and valid data URIs)
 function sanitizeHeavyFields(doc) {
     if (!doc || typeof doc !== 'object') return doc;
     const clean = { ...doc };
+
+    const processDocVal = (v) => {
+        if (!v) return '';
+        if (Buffer.isBuffer(v) || (v && v.type === 'Buffer') || (v && v._bsontype === 'Binary')) {
+            try {
+                const buf = Buffer.isBuffer(v) ? v : (v.data ? Buffer.from(v.data) : Buffer.from(v));
+                return `data:image/jpeg;base64,${buf.toString('base64')}`;
+            } catch (e) {
+                return '[Binary Document]';
+            }
+        }
+        if (typeof v === 'string') {
+            const s = v.trim();
+            // Preserve valid HTTP/HTTPS URLs, local upload paths, and base64 data URIs
+            if (s.startsWith('http://') || s.startsWith('https://') || s.startsWith('/uploads/') || s.startsWith('data:image/') || s.startsWith('data:application/pdf') || s.startsWith('data:application/octet-stream')) {
+                return s;
+            }
+            // If it's a raw base64 string without data prefix but looks like base64
+            if (s.length > 50 && /^[A-Za-z0-9+/=]+$/.test(s.slice(0, 100))) {
+                return `data:image/jpeg;base64,${s}`;
+            }
+            if (s === '[Uploaded Document]' || s === '[Binary Document]') {
+                return s;
+            }
+            return s;
+        }
+        if (typeof v === 'number' || typeof v === 'boolean') {
+            return v;
+        }
+        if (typeof v === 'object') {
+            if (v.url) return processDocVal(v.url);
+            if (v.path) return processDocVal(v.path);
+        }
+        return '';
+    };
 
     // Sanitize KYC
     if (clean.kyc && typeof clean.kyc === 'object') {
         const cleanKyc = {};
         for (const [k, v] of Object.entries(clean.kyc)) {
-            if (Buffer.isBuffer(v) || (v && v.type === 'Buffer') || (v && v._bsontype === 'Binary')) {
-                cleanKyc[k] = '[Binary Document]';
-            } else if (typeof v === 'string') {
-                if (v.startsWith('data:') || (v.length > 500 && !v.startsWith('http'))) {
-                    cleanKyc[k] = '[Uploaded Document]';
-                } else {
-                    cleanKyc[k] = v;
-                }
-            } else if (typeof v === 'number' || typeof v === 'boolean') {
-                cleanKyc[k] = v;
-            } else if (v && typeof v === 'object') {
-                cleanKyc[k] = '[Document Object]';
-            }
+            cleanKyc[k] = processDocVal(v);
         }
         clean.kyc = cleanKyc;
     }
@@ -159,19 +209,7 @@ function sanitizeHeavyFields(doc) {
     if (clean.kycDocs && typeof clean.kycDocs === 'object') {
         const cleanKycDocs = {};
         for (const [k, v] of Object.entries(clean.kycDocs)) {
-            if (Buffer.isBuffer(v) || (v && v.type === 'Buffer') || (v && v._bsontype === 'Binary')) {
-                cleanKycDocs[k] = '[Binary Document]';
-            } else if (typeof v === 'string') {
-                if (v.startsWith('data:') || (v.length > 500 && !v.startsWith('http'))) {
-                    cleanKycDocs[k] = '[Uploaded Document]';
-                } else {
-                    cleanKycDocs[k] = v;
-                }
-            } else if (typeof v === 'number' || typeof v === 'boolean') {
-                cleanKycDocs[k] = v;
-            } else if (v && typeof v === 'object') {
-                cleanKycDocs[k] = '[Document Object]';
-            }
+            cleanKycDocs[k] = processDocVal(v);
         }
         clean.kycDocs = cleanKycDocs;
     }
@@ -179,9 +217,12 @@ function sanitizeHeavyFields(doc) {
     // Sanitize any other top-level heavy string or buffer fields
     for (const [key, val] of Object.entries(clean)) {
         if (Buffer.isBuffer(val) || (val && val.type === 'Buffer') || (val && val._bsontype === 'Binary')) {
-            clean[key] = '[Binary Data]';
-        } else if (typeof val === 'string' && (val.startsWith('data:') || (val.length > 500 && !val.startsWith('http') && (key.toLowerCase().includes('doc') || key.toLowerCase().includes('image') || key.toLowerCase().includes('photo') || key.toLowerCase().includes('file'))))) {
-            clean[key] = '[Uploaded Document]';
+            try {
+                const buf = Buffer.isBuffer(val) ? val : (val.data ? Buffer.from(val.data) : Buffer.from(val));
+                clean[key] = `data:image/jpeg;base64,${buf.toString('base64')}`;
+            } catch (e) {
+                clean[key] = '[Binary Data]';
+            }
         }
     }
 
@@ -903,7 +944,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         const BranchModel = require('../models/Branch');
         const PincodeModel = require('../models/Pincode');
 
-        // Lightweight projection excluding base64 docs, photos, and heavy binary strings
+        // Projection including agent profile, kyc, and kycDocs
         const agentProjection = {
             _id: 1, name: 1, fullName: 1, email: 1, phone: 1, altPhone: 1, mobile: 1,
             role: 1, level: 1, agentLevel: 1, assignedRole: 1, agentType: 1, type: 1,
@@ -913,6 +954,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             balance: 1, commissionEarned: 1, wallet: 1, totalEarnings: 1, pendingPayout: 1, vendorsAdded: 1,
             dob: 1, dateOfBirth: 1, gender: 1, qualification: 1, experience: 1, previousCompany: 1,
             postOffice: 1, address: 1, fullAddress: 1, aadhaarNumber: 1, panNumber: 1,
+            kyc: 1, kycDocs: 1, documents: 1, documentUrls: 1, photo: 1, avatar: 1, selfie: 1, signature: 1,
             createdAt: 1, created_at: 1
         };
 
@@ -1331,6 +1373,84 @@ const findAgentByIdentifier = async (idParam, extraFields = {}) => {
 
     return agent;
 };
+
+// @route    GET api/admin/agents/:id
+// @desc     Fetch full agent details including complete kycDocs and verification history
+// @access   Private (Admin)
+router.get('/agents/:id', [auth, adminAuth], async (req, res) => {
+    try {
+        const idParam = req.params.id;
+        const db = mongoose.connection.db;
+
+        let agent = await findAgentByIdentifier(idParam);
+        if (agent && agent.toObject) agent = agent.toObject();
+
+        if (!agent && db) {
+            const isValidId = idParam && mongoose.Types.ObjectId.isValid(idParam);
+            const rawAgent = await db.collection('agents').findOne({
+                $or: [
+                    ...(isValidId ? [{ _id: new mongoose.Types.ObjectId(idParam) }] : []),
+                    { _id: idParam },
+                    { id: idParam },
+                    { registrationId: idParam },
+                    { email: String(idParam).toLowerCase() }
+                ]
+            });
+            if (rawAgent) agent = rawAgent;
+        }
+
+        // Also check if raw agent collection has documents that User might lack
+        if (agent && agent.email && db) {
+            try {
+                const counterpart = await db.collection('agents').findOne({ email: String(agent.email).toLowerCase() });
+                if (counterpart) {
+                    agent = {
+                        ...counterpart,
+                        ...agent,
+                        kyc: { ...(counterpart.kyc || {}), ...(agent.kyc || {}) },
+                        kycDocs: { ...(counterpart.kycDocs || {}), ...(agent.kycDocs || {}) }
+                    };
+                }
+            } catch (mergeErr) {}
+        }
+
+        if (!agent) {
+            return res.status(404).json({ success: false, message: 'Agent not found' });
+        }
+
+        // Remove passwords
+        delete agent.password;
+        delete agent.passwordHash;
+        delete agent.__v;
+
+        const kycObj = agent.kyc || agent.kycDocs || {};
+        const kycDocsObj = agent.kycDocs || agent.kyc || {};
+        const territoryObj = agent.territory || {};
+
+        const fullAgent = sanitizeHeavyFields({
+            ...agent,
+            name: agent.name || agent.fullName || 'Agent Partner',
+            fullName: agent.fullName || agent.name || 'Agent Partner',
+            territory: {
+                state: territoryObj.state || agent.assignedState || agent.state || '',
+                district: territoryObj.district || agent.assignedDistrict || agent.district || '',
+                division: territoryObj.division || agent.assignedDivision || agent.division || '',
+                pincode: territoryObj.pincode || agent.pincode || ''
+            },
+            assignedState: agent.assignedState || agent.state || territoryObj.state || '',
+            assignedDistrict: agent.assignedDistrict || agent.district || territoryObj.district || '',
+            assignedDivision: agent.assignedDivision || agent.division || territoryObj.division || '',
+            pincode: agent.pincode || territoryObj.pincode || '',
+            kyc: kycObj,
+            kycDocs: kycDocsObj
+        });
+
+        res.json({ success: true, agent: fullAgent, data: fullAgent });
+    } catch (err) {
+        console.error('Error fetching agent details:', err);
+        res.status(500).json({ success: false, message: 'Server error fetching agent', error: err.message });
+    }
+});
 
 // @route    GET api/admin/agents/:id/scorecard
 // @desc     Fetch real-time agent scorecard, territory metrics & downstream agent counts
@@ -2685,7 +2805,8 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
         const custProjection = {
             _id: 1, name: 1, fullName: 1, username: 1, email: 1, phone: 1, mobileNumber: 1,
             role: 1, customerType: 1, district: 1, city: 1, status: 1, aadhaar: 1, aadhaarNumber: 1,
-            aadhar: 1, aadharNumber: 1, pan: 1, panNumber: 1, branchId: 1, createdAt: 1
+            aadhar: 1, aadharNumber: 1, pan: 1, panNumber: 1, branchId: 1, createdAt: 1,
+            customerId: 1, registrationId: 1, id: 1
         };
 
         const db = mongoose.connection.db;
@@ -2707,6 +2828,9 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
         const sanitize = (doc) => {
             const d = doc.toObject ? doc.toObject() : { ...doc };
             delete d.password; // never expose passwords
+            const canonicalId = doc.customerId || doc.registrationId || getCanonicalCustomerId(doc);
+            d.customerId = canonicalId;
+            d.registrationId = canonicalId;
             d.aadhaarNumber = d.aadhaar || d.aadhaarNumber || d.aadhar || d.aadharNumber || d.adhaar || d.adhaarNumber || (d.kyc && (d.kyc.aadhaarNumber || d.kyc.aadhaar || d.kyc.aadhar)) || (d.kycDocs && (d.kycDocs.aadhaarNumber || d.kycDocs.aadhaar)) || '';
             d.panNumber = d.pan || d.panNumber || d.panCard || d.pancard || (d.kyc && (d.kyc.panNumber || d.kyc.pan)) || (d.kycDocs && (d.kycDocs.panNumber || d.kycDocs.pan)) || '';
             d.customerType = d.customerType || 'Standard';
@@ -3629,8 +3753,20 @@ const resolveVendorAndCustomer = async (items) => {
     const cStrArray = Array.from(customerIdsToFetch);
     const cObjIdArray = cStrArray.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
 
-    // Execute batch queries in parallel for User (including businesses._id), Vendor, and Customer collections
-    const [fetchedVendorUsers, fetchedVendors, fetchedCustomers] = await Promise.all([
+    const customerQueryConds = [
+        ...(cObjIdArray.length > 0 ? [{ _id: { $in: cObjIdArray } }] : []),
+        ...(cStrArray.length > 0 ? [
+            { _id: { $in: cStrArray } },
+            { customerId: { $in: cStrArray } },
+            { registrationId: { $in: cStrArray } },
+            { memberId: { $in: cStrArray } },
+            { phone: { $in: cStrArray } }
+        ] : []),
+        ...(customerEmailsToFetch.size > 0 ? [{ email: { $in: Array.from(customerEmailsToFetch) } }] : [])
+    ];
+
+    // Execute batch queries in parallel for User (including businesses._id), Vendor, Customer, and Customer User collections
+    const [fetchedVendorUsers, fetchedVendors, fetchedCustomers, fetchedCustomerUsers] = await Promise.all([
         (vObjIdArray.length > 0 || vStrArray.length > 0) ? User.find({
             $or: [
                 ...(vObjIdArray.length > 0 ? [{ _id: { $in: vObjIdArray } }, { 'businesses._id': { $in: vObjIdArray } }] : []),
@@ -3640,14 +3776,14 @@ const resolveVendorAndCustomer = async (items) => {
         (vObjIdArray.length > 0) ? Vendor.find({
             _id: { $in: vObjIdArray }
         }).select('_id name businessName email mobileNumber phone').lean() : [],
-        (cObjIdArray.length > 0 || cStrArray.length > 0 || customerEmailsToFetch.size > 0)
-            ? Customer.find({
-                $or: [
-                    ...(cObjIdArray.length > 0 ? [{ _id: { $in: cObjIdArray } }] : []),
-                    ...(cStrArray.length > 0 ? [{ memberId: { $in: cStrArray } }, { phone: { $in: cStrArray } }] : []),
-                    ...(customerEmailsToFetch.size > 0 ? [{ email: { $in: Array.from(customerEmailsToFetch) } }] : [])
-                ]
-            }).select('_id name email phone mobile mobileNumber contactNumber memberId').lean()
+        customerQueryConds.length > 0
+            ? Customer.find({ $or: customerQueryConds }).select('_id name email phone mobile mobileNumber contactNumber memberId customerId registrationId').lean().catch(() => [])
+            : [],
+        customerQueryConds.length > 0
+            ? User.find({
+                role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] },
+                $or: customerQueryConds
+            }).select('_id name email phone mobile mobileNumber contactNumber memberId customerId registrationId').lean().catch(() => [])
             : []
     ]);
 
@@ -3667,10 +3803,19 @@ const resolveVendorAndCustomer = async (items) => {
     });
 
     const customerMap = new Map();
-    fetchedCustomers.forEach(c => {
-        if (c._id) customerMap.set(c._id.toString(), c);
-        if (c.email) customerMap.set(c.email.toLowerCase().trim(), c);
-    });
+    const registerCustomer = (c) => {
+        if (!c) return;
+        const canonicalId = c.customerId || c.registrationId || getCanonicalCustomerId(c);
+        const enriched = { ...c, customerId: canonicalId, registrationId: canonicalId };
+        if (c._id) customerMap.set(c._id.toString(), enriched);
+        if (c.customerId) customerMap.set(c.customerId.toString().trim(), enriched);
+        if (c.registrationId) customerMap.set(c.registrationId.toString().trim(), enriched);
+        if (canonicalId) customerMap.set(canonicalId.toString().trim(), enriched);
+        if (c.email) customerMap.set(c.email.toLowerCase().trim(), enriched);
+        if (c.phone) customerMap.set(c.phone.toString().trim(), enriched);
+    };
+    (fetchedCustomers || []).forEach(registerCustomer);
+    (fetchedCustomerUsers || []).forEach(registerCustomer);
 
     const resolvedItems = items.map(item => {
         const doc = item.toObject ? item.toObject() : item;
@@ -3731,12 +3876,15 @@ const resolveVendorAndCustomer = async (items) => {
         const phoneVal = (customerObj ? (customerObj.phone || customerObj.mobile || customerObj.mobileNumber || customerObj.contactNumber) : null) || doc.customer_phone || doc.customerPhone || doc.phone || doc.mobile || '—';
         const nameVal = (customerObj ? customerObj.name : null) || doc.memberName || doc.customer_name || doc.customer?.name || 'Customer';
         const emailVal = (customerObj ? customerObj.email : null) || custEmailKey || '—';
+        const custCanonicalId = customerObj?.customerId || customerObj?.registrationId || (cKey && cKey.startsWith('FIC-CUST-') ? cKey : getCanonicalCustomerId(customerObj || doc));
 
         const customer = {
             ...(customerObj || {}),
             name: nameVal,
             phone: phoneVal,
-            email: emailVal
+            email: emailVal,
+            customerId: custCanonicalId,
+            registrationId: custCanonicalId
         };
 
         const amount = doc.amount !== undefined ? doc.amount : (doc.finalAmount !== undefined ? doc.finalAmount : (doc.totalAmount !== undefined ? doc.totalAmount : 0));
@@ -4118,7 +4266,7 @@ router.get(['/bookings', '/public/bookings'], async (req, res) => {
 
         const dbBookings = await Booking.find(filter)
             .populate('vendorId', 'businessName email phone')
-            .populate('customerId', 'name email phone')
+            .populate('customerId', 'name email phone customerId registrationId')
             .sort({ createdAt: -1 });
 
         const customBookings = await Order.find({
@@ -4137,7 +4285,14 @@ router.get(['/bookings', '/public/bookings'], async (req, res) => {
         const resolvedDbBookings = dbBookings.map((b, idx) => {
             const obj = b.toObject ? b.toObject() : b;
             const slot = (!obj.appointmentTimeSlot || String(obj.appointmentTimeSlot).toLowerCase().includes('standard')) ? defaultSlots[idx % defaultSlots.length] : obj.appointmentTimeSlot;
-            return { ...obj, appointmentTimeSlot: slot };
+            const cObj = obj.customerId;
+            const cId = cObj?.customerId || cObj?.registrationId || getCanonicalCustomerId(cObj || obj);
+            const enrichedCustomer = (cObj && typeof cObj === 'object') ? {
+                ...cObj,
+                customerId: cId,
+                registrationId: cId
+            } : cObj;
+            return { ...obj, customerId: enrichedCustomer, appointmentTimeSlot: slot };
         });
 
         const resolvedCustomBookings = (await resolveVendorAndCustomer(customBookings)).map((b, idx) => {
@@ -4214,7 +4369,7 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
 
         const mappedDbJobs = dbJobs.map((j) => {
             const obj = j.toObject ? j.toObject() : j;
-            const custIdVal = obj.customerId || (obj._id ? 'CUST-' + String(obj._id).substring(18, 24).toUpperCase() : '—');
+            const custIdVal = (obj.customerId && String(obj.customerId).startsWith('FIC-CUST-')) ? obj.customerId : getCanonicalCustomerId(obj);
             const posVal = obj.position || obj.title || obj.jobTitle || '—';
             const compVal = obj.companyName || obj.vendorName || obj.businessName || '—';
             const hrVal = obj.hrName || obj.contactPerson || obj.hr || '—';
@@ -4235,7 +4390,7 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
 
         const mappedCustomJobs = resolvedCustomJobs.map((order) => {
             const appId = order.applicationId || order.order_number || order.id || (order._id ? 'APP-' + String(order._id).substring(18, 24).toUpperCase() : '—');
-            const custIdVal = (order.customerId && (order.customerId.memberId || order.customerId._id || order.customerId.id)) || (order._id ? 'CUST-' + String(order._id).substring(18, 24).toUpperCase() : '—');
+            const custIdVal = (order.customerId && (order.customerId.customerId || order.customerId.registrationId)) || (order.customerId && String(order.customerId).startsWith('FIC-CUST-') ? order.customerId : getCanonicalCustomerId(order.customerId || order));
             const companyName = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || order.companyName || order.vendorName || '—';
             const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || order.hrName || '—';
             const posVal = order.jobTitle || (order.items && order.items[0]?.name) || order.product_details || order.position || order.title || 'Job Role';

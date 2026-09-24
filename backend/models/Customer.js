@@ -7,6 +7,8 @@ const CustomerSchema = new mongoose.Schema({
     password: { type: String },
     aadhaarNumber: { type: String, default: '' },
     panNumber: { type: String, default: '' },
+    customerId: { type: String },
+    registrationId: { type: String },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
     status: { type: String, enum: ['active', 'blocked'], default: 'active' },
     createdAt: { type: Date, default: Date.now }

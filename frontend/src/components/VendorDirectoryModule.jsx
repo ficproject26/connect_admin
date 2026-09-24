@@ -326,7 +326,7 @@ const getAgentInfo = (v) => {
 
 const vendorModuleCacheMap = new Map();
 
-export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
+export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSection = null, highlightVendorId = null }) => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -369,9 +369,13 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
   // Full Vendor Details Profile Modal
   const [selectedVendorDetails, setSelectedVendorDetails] = useState(null);
 
+  // Highlight state for notification-driven deep-link
+  const [highlightedVendorId, setHighlightedVendorId] = useState(highlightVendorId || null);
+
   const activeControllerRef = useRef(null);
   const inFlightKeyRef = useRef(null);
   const isMountedRef = useRef(true);
+  const initialSectionHandledRef = useRef(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -384,6 +388,20 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
       }
     };
   }, []);
+
+  // Auto-open the correct section when navigated from a notification
+  useEffect(() => {
+    if (!initialSection || initialSectionHandledRef.current) return;
+    initialSectionHandledRef.current = true;
+    if (initialSection === 'direct-requests') {
+      setShowDirectModal(true);
+    } else if (initialSection === 'agent-onboarded') {
+      setShowAgentOnboardedModal(true);
+    }
+    if (highlightVendorId) {
+      setHighlightedVendorId(highlightVendorId);
+    }
+  }, [initialSection, highlightVendorId]);
 
   const fetchVendors = async (forceRefresh = false) => {
     const cacheKey = `${search}_${category}_${stateFilter}_${statusFilter}_${isDirectRequest}_${page}`;
@@ -1509,8 +1527,10 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
               {directRequests.filter(dr => {
                 const s = (dr.status || '').toLowerCase().trim();
                 return s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended');
-              }).map(dr => (
-                <div key={dr._id} className="p-4 bg-slate-50 dark:bg-slate-950 border border-slate-200/60 dark:border-slate-850 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+              }).map(dr => {
+                const isHighlighted = highlightedVendorId && (String(dr._id) === String(highlightedVendorId) || String(dr.registrationId) === String(highlightedVendorId));
+                return (
+                <div key={dr._id} className={`p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border transition-all ${isHighlighted ? 'bg-amber-500/10 border-amber-500 ring-2 ring-amber-400/40 shadow-md' : 'bg-slate-50 dark:bg-slate-950 border-slate-200/60 dark:border-slate-850'}`}>
                   <div>
                     <div className="flex items-center gap-2">
                       <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{dr.businessName || dr.name}</h4>
@@ -1543,7 +1563,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE }) => {
                     </button>
                   </div>
                 </div>
-              ))}
+              ); })}
 
               {directRequests.length === 0 && (
                 <div className="text-center py-12 text-slate-400">

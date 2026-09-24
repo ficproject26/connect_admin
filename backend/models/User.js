@@ -18,6 +18,7 @@ const UserSchema = new mongoose.Schema({
     parentAdminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     lastLogin: { type: Date, default: null },
     registrationId: { type: String },
+    customerId: { type: String },
 
     // Agent extended profile fields
     altPhone: { type: String },

@@ -333,6 +333,9 @@ function App() {
   const [showOnboardingRequestsModal, setShowOnboardingRequestsModal] = useState(false);
   const [returnToOnboardingOnClose, setReturnToOnboardingOnClose] = useState(false);
   const [returnToVendorRequestsOnClose, setReturnToVendorRequestsOnClose] = useState(false);
+  // Vendor Directory deep-link state (replaces old showVendorRequestsModal)
+  const [vendorDirInitialSection, setVendorDirInitialSection] = useState(null);
+  const [vendorDirHighlightId, setVendorDirHighlightId] = useState(null);
   const [pincodeStateFilter, setPincodeStateFilter] = useState('');
 
   // Helper to determine if an agent is a pending onboarding request
@@ -533,8 +536,7 @@ function App() {
   // Refined UX States
   const [selectedPlanTab, setSelectedPlanTab] = useState(0);
   const [kycPreviewImage, setKycPreviewImage] = useState(null);
-  const [showVendorRequestsModal, setShowVendorRequestsModal] = useState(false);
-  const [highlightedVendorRequestId, setHighlightedVendorRequestId] = useState(null);
+  // showVendorRequestsModal removed — Vendor Directory is now the single source of truth
 
   // Admin Management Sub-Tab States
   const [adminSubTab, setAdminSubTab] = useState('overview'); // 'overview' | 'agent'
@@ -627,8 +629,10 @@ function App() {
     if (returnToOnboardingOnClose) {
       setShowOnboardingRequestsModal(true);
       setReturnToOnboardingOnClose(false);
-    } else if (returnToVendorRequestsOnClose) {
-      setShowVendorRequestsModal(true);
+    }
+    // returnToVendorRequestsOnClose: Vendor Directory is now the permanent destination,
+    // no separate modal needs to be re-opened on close.
+    if (returnToVendorRequestsOnClose) {
       setReturnToVendorRequestsOnClose(false);
     }
   };
@@ -638,8 +642,8 @@ function App() {
     if (returnToOnboardingOnClose) {
       setShowOnboardingRequestsModal(true);
       setReturnToOnboardingOnClose(false);
-    } else if (returnToVendorRequestsOnClose) {
-      setShowVendorRequestsModal(true);
+    }
+    if (returnToVendorRequestsOnClose) {
       setReturnToVendorRequestsOnClose(false);
     }
   };
@@ -1163,10 +1167,7 @@ function App() {
     if (showOnboardingRequestsModal) {
       safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
     }
-    if (showVendorRequestsModal) {
-      safeFetch(`${API_BASE}/admin/vendors`, setVendors);
-    }
-  }, [showOnboardingRequestsModal, showVendorRequestsModal, token]);
+  }, [showOnboardingRequestsModal, token]);
 
   // Auth Handling
   const handleLogin = async (e) => {
@@ -1794,13 +1795,16 @@ function App() {
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">{a.name} submitted registration/KYC documents for approval.</p>
                         </div>
                       ))}
-                      {vendors.filter(v => v.status?.toLowerCase() === 'pending').map(v => (
+                      {vendors.filter(v => v.status?.toLowerCase() === 'pending').map(v => {
+                        const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
+                        const section = isAgentOnboarded ? 'agent-onboarded' : 'direct-requests';
+                        return (
                         <div 
                           key={v._id} 
                           onClick={() => { 
-                            setActiveTab('vendors'); 
-                            setHighlightedVendorRequestId(v._id || v.registrationId);
-                            setShowVendorRequestsModal(true); 
+                            setVendorDirInitialSection(section);
+                            setVendorDirHighlightId(v._id || v.registrationId);
+                            setActiveTab('vendor-directory-enterprise');
                             setShowNotificationsPanel(false); 
                           }} 
                           className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1"
@@ -1811,7 +1815,8 @@ function App() {
                           </div>
                           <p className="text-[11px] text-slate-500 dark:text-slate-400">{v.businessName || v.name} requested vendor registration.</p>
                         </div>
-                      ))}
+                        );
+                      })}
                       {agents.filter(isPendingAgent).length === 0 && vendors.filter(v => v.status?.toLowerCase() === 'pending').length === 0 && (
                         <div className="text-center py-8 text-slate-400 text-xs">
                           <Bell className="w-8 h-8 mx-auto mb-2 text-slate-300 dark:text-slate-600" />
@@ -2305,7 +2310,13 @@ function App() {
 
           {/* ENTERPRISE VENDOR DIRECTORY */}
           {activeTab === 'vendor-directory-enterprise' && (
-            <VendorDirectoryModule token={token} API_BASE={API_BASE} />
+            <VendorDirectoryModule
+              key={`vdm-${vendorDirInitialSection || 'default'}-${vendorDirHighlightId || 'none'}`}
+              token={token}
+              API_BASE={API_BASE}
+              initialSection={vendorDirInitialSection}
+              highlightVendorId={vendorDirHighlightId}
+            />
           )}
 
           {/* MEMBERSHIP CARD MANAGEMENT */}
@@ -2402,10 +2413,14 @@ function App() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowVendorRequestsModal(true)}
+                  onClick={() => {
+                    setVendorDirInitialSection('direct-requests');
+                    setVendorDirHighlightId(null);
+                    setActiveTab('vendor-directory-enterprise');
+                  }}
                   className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer whitespace-nowrap flex items-center gap-1.5"
                 >
-                  <CheckCircle className="w-4 h-4" /> Vendor Requests ({vendors.filter(v => (v.status || '').toLowerCase() === 'pending').length})
+                  <CheckCircle className="w-4 h-4" /> View in Vendor Directory ({vendors.filter(v => (v.status || '').toLowerCase() === 'pending').length})
                 </button>
               </div>
 
@@ -8010,7 +8025,6 @@ function App() {
                 onClick={() => {
                   setShowModal(null);
                   if (returnToVendorRequestsOnClose) {
-                    setShowVendorRequestsModal(true);
                     setReturnToVendorRequestsOnClose(false);
                   }
                 }}
@@ -9036,153 +9050,6 @@ function App() {
           </div>
         </div>
       )}
-
-      {/* VENDOR & AGENT REGISTRATION REQUESTS MODAL */}
-      {showVendorRequestsModal && (() => {
-        const isPendingVendor = (v) => {
-          if (!v) return false;
-          const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-          if (isAgentOnboarded) return false;
-          const status = (v.status || v.kycStatus || 'pending').toLowerCase().trim();
-          return !['approved', 'active', 'rejected', 'suspended', 'deactivated', 'blocked'].includes(status);
-        };
-
-        const pendingVendorsList = vendors.filter(isPendingVendor);
-        const pendingAgentsList = agents.filter(isPendingAgent);
-        const combinedRequests = [
-          ...pendingVendorsList.map(v => ({ ...v, requestType: 'vendor' })),
-          ...pendingAgentsList.map(a => ({ ...a, requestType: 'agent' }))
-        ];
-
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-            <div className="bg-white dark:bg-slate-900 border dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 space-y-6 max-h-[90vh] overflow-y-auto shadow-2xl">
-              <div className="flex justify-between items-center border-b border-slate-200 dark:border-slate-800 pb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800 dark:text-slate-200">Direct Registration Requests ({combinedRequests.length})</h3>
-                  <p className="text-xs text-slate-400 mt-1">Review and directly approve pending vendor and agent onboarding applications</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={fetchData}
-                    className="flex items-center gap-1.5 text-xs font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-950/50 hover:bg-primary-100 dark:hover:bg-primary-900/50 px-3 py-1.5 rounded-xl border border-primary-200 dark:border-primary-800 transition-all cursor-pointer"
-                    title="Reload registration requests from server"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" /> Refresh List
-                  </button>
-                  <button 
-                    onClick={() => { setShowVendorRequestsModal(false); setHighlightedVendorRequestId(null); }}
-                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {combinedRequests.map((reqItem) => {
-                  const isAgentReq = reqItem.requestType === 'agent';
-                  const title = reqItem.businessName || reqItem.name || 'Applicant';
-                  const subtitle = `${reqItem.contactName || reqItem.name || ''} • ${reqItem.phone || ''} • ${reqItem.email || ''}`;
-                  const badgeText = isAgentReq ? `${reqItem.level || 'State'} Agent` : (reqItem.category || 'Vendor');
-                  const regId = reqItem.registrationId || reqItem.vendorId || reqItem._id;
-                  const isHighlighted = highlightedVendorRequestId && (String(reqItem._id) === String(highlightedVendorRequestId) || String(reqItem.registrationId) === String(highlightedVendorRequestId));
-
-                  return (
-                    <div key={reqItem._id} className={`p-4 rounded-2xl border transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${isHighlighted ? 'bg-primary-500/10 border-primary-500 ring-2 ring-primary-500/30 shadow-md' : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800'}`}>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-slate-800 dark:text-slate-100 text-base">{title}</span>
-                          <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${isAgentReq ? 'bg-purple-500/10 text-purple-500 border border-purple-500/20' : 'bg-primary-500/10 text-primary-500'}`}>
-                            {badgeText}
-                          </span>
-                          <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 capitalize">
-                            {reqItem.status || 'Pending Approval'}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-400">{subtitle}</p>
-                        {regId && <p className="text-[11px] font-mono text-slate-400">REG ID: {regId}</p>}
-                      </div>
-
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={() => {
-                            setReturnToVendorRequestsOnClose(true);
-                            setShowVendorRequestsModal(false);
-                            setModalData(reqItem);
-                            setShowModal(isAgentReq ? 'agent-profile' : 'vendor-details');
-                          }}
-                          className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
-                        >
-                          View Details
-                        </button>
-                        {isAgentReq && (
-                          <button
-                            onClick={() => {
-                              setReturnToVendorRequestsOnClose(true);
-                              setShowVendorRequestsModal(false);
-                              handleVerifyAgentPincode(reqItem);
-                            }}
-                            className="bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
-                          >
-                            <MapPin className="w-3.5 h-3.5" /> Verify Pincode
-                          </button>
-                        )}
-                        <button
-                          onClick={async () => {
-                            if (isAgentReq) {
-                              await executeAction(`/admin/approve-agent/${reqItem._id}`, 'PUT', { 
-                                status: 'rejected',
-                                agentId: reqItem._id,
-                                email: reqItem.email,
-                                phone: reqItem.phone,
-                                registrationId: reqItem.registrationId
-                              });
-                            } else {
-                              await executeAction(`/admin/vendors/${reqItem._id}/reject`, 'PUT', {});
-                            }
-                            fetchData();
-                          }}
-                          className="bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer"
-                        >
-                          Reject
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (isAgentReq) {
-                              await executeAction(`/admin/approve-agent/${reqItem._id}`, 'PUT', { 
-                                status: 'approved',
-                                agentId: reqItem._id,
-                                email: reqItem.email,
-                                phone: reqItem.phone,
-                                registrationId: reqItem.registrationId
-                              });
-                            } else {
-                              await executeAction(`/admin/vendors/${reqItem._id}/approve`, 'PUT', {});
-                            }
-                            fetchData();
-                          }}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" /> Direct Approval
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {combinedRequests.length === 0 && (
-                  <div className="text-center py-12 text-slate-400">
-                    <CheckCircle className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
-                    <p className="text-sm font-semibold">No pending registration requests at this time.</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* OFFICIAL PINCODE VERIFICATION MODAL */}
       {showPincodeVerifyModal && verifyingPincodeData && (
