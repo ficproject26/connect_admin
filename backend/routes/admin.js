@@ -838,6 +838,79 @@ router.put('/admins/:id', [auth, adminAuth], async (req, res) => {
     }
 });
 
+router.delete('/admins/state/:stateName', [auth, adminAuth], async (req, res) => {
+    try {
+        const stateName = decodeURIComponent(req.params.stateName || '').trim();
+        if (!stateName) {
+            return res.status(400).json({ success: false, msg: 'State name is required' });
+        }
+
+        const isGeneral = stateName.toLowerCase() === 'general state';
+
+        // 1. Delete non-super-admin users assigned to this state
+        const adminFilter = isGeneral
+            ? { 
+                role: { $in: ['admin'] }, 
+                adminRole: { $nin: ['super-admin'] }, 
+                $or: [
+                    { assignedState: { $exists: false } },
+                    { assignedState: null },
+                    { assignedState: '' },
+                    { assignedState: 'General State' }
+                ] 
+              }
+            : { 
+                role: { $in: ['admin'] }, 
+                adminRole: { $nin: ['super-admin'] }, 
+                $or: [
+                    { assignedState: new RegExp(`^${stateName}$`, 'i') },
+                    { state: new RegExp(`^${stateName}$`, 'i') }
+                ] 
+              };
+
+        const deleteResult = await User.deleteMany(adminFilter);
+
+        // 2. Clear state assignment from super-admins who may have had this state
+        if (isGeneral) {
+            await User.updateMany(
+                { role: 'super-admin', assignedState: 'General State' },
+                { $unset: { assignedState: 1, state: 1 } }
+            );
+        } else {
+            await User.updateMany(
+                { role: 'super-admin', $or: [{ assignedState: stateName }, { state: stateName }] },
+                { $unset: { assignedState: 1, state: 1 } }
+            );
+        }
+
+        // 3. If it's a real state in states collection, remove it from states collection
+        if (!isGeneral) {
+            const db = mongoose.connection.db;
+            if (db) {
+                try {
+                    await db.collection('states').deleteMany({
+                        $or: [
+                            { name: new RegExp(`^${stateName}$`, 'i') },
+                            { code: stateName.toUpperCase() }
+                        ]
+                    });
+                } catch (e) {
+                    console.error('Error deleting state from states collection:', e);
+                }
+            }
+        }
+
+        return res.json({
+            success: true,
+            msg: `State '${stateName}' deleted successfully (${deleteResult.deletedCount || 0} admins removed)`,
+            deletedCount: deleteResult.deletedCount
+        });
+    } catch (err) {
+        console.error('Delete state admins error:', err);
+        return res.status(500).json({ success: false, msg: 'Server error deleting state', message: err.message });
+    }
+});
+
 router.delete('/admins/:id', [auth, adminAuth], async (req, res) => {
     try {
         await User.findByIdAndDelete(req.params.id);
