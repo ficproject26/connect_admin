@@ -35,24 +35,29 @@ const cacheService = require('../utils/cacheService');
 
 const adminAuth = async (req, res, next) => {
     try {
-        let userId = req.user.id;
+        let userId = req.user?.id || req.user?._id;
+        if (!userId) {
+            return res.status(401).json({ msg: 'Unauthorized: User identity not found' });
+        }
         if (mongoose.Types.ObjectId.isValid(userId)) {
             userId = new mongoose.Types.ObjectId(userId);
         }
         const user = await User.findById(userId).select('role adminRole level branchId status isActive email name').lean();
         const roleVal = (user?.role || '').toLowerCase().trim();
         const adminRoleVal = (user?.adminRole || '').toLowerCase().trim();
-        const isSuperAdmin = roleVal === 'super-admin' || adminRoleVal === 'super-admin';
+        const isAdmin = ['admin', 'super-admin'].includes(roleVal) || ['admin', 'super-admin'].includes(adminRoleVal);
 
-        if (!user || !isSuperAdmin) {
-            return res.status(403).json({ msg: 'Access denied. Super Admin only.' });
+        if (!user || !isAdmin) {
+            return res.status(403).json({ msg: 'Access denied. Administrative privilege required.' });
         }
-        user.adminRole = 'super-admin';
-        user.role = 'super-admin';
+        if (roleVal === 'super-admin' || adminRoleVal === 'super-admin') {
+            user.adminRole = 'super-admin';
+            user.role = 'super-admin';
+        }
         req.adminUser = user;
         next();
     } catch (err) {
-        console.error(err);
+        console.error('[adminAuth Error]:', err);
         res.status(500).send('Server Error: ' + err.message);
     }
 };
@@ -134,14 +139,18 @@ const filterActiveVendorItems = async (items) => {
 function getCanonicalCustomerId(userOrId) {
     if (!userOrId) return 'FIC-CUST-100000';
     if (typeof userOrId === 'object' && userOrId !== null) {
+        // If it's a Mongoose ObjectId, BSON ObjectId, or has toHexString
+        if (userOrId._bsontype === 'ObjectID' || (mongoose.Types.ObjectId && userOrId instanceof mongoose.Types.ObjectId) || typeof userOrId.toHexString === 'function') {
+            return getCanonicalCustomerId(userOrId.toString());
+        }
         if (userOrId.customerId && !['FIC-CUST-750684', 'FIC-CUST-849201', 'FIC-CUST-100000'].includes(userOrId.customerId) && String(userOrId.customerId).startsWith('FIC-CUST-')) {
             return String(userOrId.customerId);
         }
         if (userOrId.registrationId && !['FIC-CUST-750684', 'FIC-CUST-849201', 'FIC-CUST-100000'].includes(userOrId.registrationId) && String(userOrId.registrationId).startsWith('FIC-CUST-')) {
             return String(userOrId.registrationId);
         }
-        const target = userOrId.email || userOrId.phone || userOrId.mobileNumber || userOrId.mobile || userOrId.name || userOrId.username || userOrId._id || userOrId.id || '';
-        return getCanonicalCustomerId(target);
+        const target = userOrId.email || userOrId.phone || userOrId.mobileNumber || userOrId.mobile || userOrId.name || userOrId.username || (userOrId._id ? String(userOrId._id) : (userOrId.id ? String(userOrId.id) : ''));
+        return getCanonicalCustomerId(String(target || ''));
     }
     const clean = String(userOrId).trim().toLowerCase();
     if (!clean) return 'FIC-CUST-100000';
@@ -2841,67 +2850,116 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
         const branchKey = req.adminUser?.branchId ? String(req.adminUser.branchId) : 'all';
         const cacheKey = `admin_customers_${branchKey}`;
 
-        const cached = await cacheService.get(cacheKey);
-        if (cached) {
-            return res.json(cached);
+        let combined = null;
+        try {
+            combined = await cacheService.get(cacheKey);
+        } catch (cErr) {
+            console.warn('[Cache Service Warning]:', cErr?.message);
         }
 
-        const filter = getBranchFilter(req.adminUser);
+        if (!Array.isArray(combined)) {
+            const filter = getBranchFilter(req.adminUser);
 
-        const custProjection = {
-            _id: 1, name: 1, fullName: 1, username: 1, email: 1, phone: 1, mobileNumber: 1,
-            role: 1, customerType: 1, district: 1, city: 1, status: 1, aadhaar: 1, aadhaarNumber: 1,
-            aadhar: 1, aadharNumber: 1, pan: 1, panNumber: 1, branchId: 1, createdAt: 1,
-            customerId: 1, registrationId: 1, id: 1
-        };
+            const custProjection = {
+                _id: 1, name: 1, fullName: 1, username: 1, email: 1, phone: 1, mobileNumber: 1,
+                role: 1, customerType: 1, district: 1, city: 1, status: 1, aadhaar: 1, aadhaarNumber: 1,
+                aadhar: 1, aadharNumber: 1, pan: 1, panNumber: 1, branchId: 1, createdAt: 1,
+                customerId: 1, registrationId: 1, id: 1
+            };
 
-        const [customersFromModel, usersAsCustomers] = await Promise.all([
-            Customer.find(filter, custProjection).populate('branchId', 'name').lean().catch(() => []),
-            User.find({
-                role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
-            }, custProjection).lean().catch(() => [])
-        ]);
+            const [customersFromModel, usersAsCustomers] = await Promise.all([
+                Customer.find(filter, custProjection).populate('branchId', 'name').lean().catch((e) => {
+                    console.warn('[Customer.find notice]:', e?.message);
+                    return [];
+                }),
+                User.find({
+                    role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
+                }, custProjection).lean().catch((e) => {
+                    console.warn('[User.find as customer notice]:', e?.message);
+                    return [];
+                })
+            ]);
 
-        const combined = [];
-        const seenEmails = new Set();
-        const seenPhones = new Set();
+            combined = [];
+            const seenEmails = new Set();
+            const seenPhones = new Set();
+            const seenIds = new Set();
 
-        const sanitize = (doc) => {
-            const d = doc.toObject ? doc.toObject() : { ...doc };
-            delete d.password; // never expose passwords
-            const canonicalId = doc.customerId || doc.registrationId || getCanonicalCustomerId(doc);
-            d.customerId = canonicalId;
-            d.registrationId = canonicalId;
-            d.aadhaarNumber = d.aadhaar || d.aadhaarNumber || d.aadhar || d.aadharNumber || d.adhaar || d.adhaarNumber || (d.kyc && (d.kyc.aadhaarNumber || d.kyc.aadhaar || d.kyc.aadhar)) || (d.kycDocs && (d.kycDocs.aadhaarNumber || d.kycDocs.aadhaar)) || '';
-            d.panNumber = d.pan || d.panNumber || d.panCard || d.pancard || (d.kyc && (d.kyc.panNumber || d.kyc.pan)) || (d.kycDocs && (d.kycDocs.panNumber || d.kycDocs.pan)) || '';
-            d.customerType = d.customerType || 'Standard';
-            d.district = d.district || d.city || 'Direct';
-            d.status = d.status || 'Active';
-            d.name = d.name || d.fullName || d.username || 'Customer';
-            d.phone = d.phone || d.mobileNumber || d.mobileContact || d.telephone || '';
-            return d;
-        };
+            const sanitize = (doc) => {
+                if (!doc) return null;
+                const d = doc.toObject ? doc.toObject() : { ...doc };
+                delete d.password; // never expose passwords
+                const canonicalId = doc.customerId || doc.registrationId || getCanonicalCustomerId(doc);
+                d.customerId = canonicalId;
+                d.registrationId = canonicalId;
+                d.aadhaarNumber = d.aadhaar || d.aadhaarNumber || d.aadhar || d.aadharNumber || d.adhaar || d.adhaarNumber || (d.kyc && (d.kyc.aadhaarNumber || d.kyc.aadhaar || d.kyc.aadhar)) || (d.kycDocs && (d.kycDocs.aadhaarNumber || d.kycDocs.aadhaar)) || '';
+                d.panNumber = d.pan || d.panNumber || d.panCard || d.pancard || (d.kyc && (d.kyc.panNumber || d.kyc.pan)) || (d.kycDocs && (d.kycDocs.panNumber || d.kycDocs.pan)) || '';
+                d.customerType = d.customerType || 'Standard';
+                d.district = d.district || d.city || 'Direct';
+                d.status = d.status || 'Active';
+                d.name = d.name || d.fullName || d.username || 'Customer';
+                d.phone = d.phone || d.mobileNumber || d.mobileContact || d.telephone || '';
+                return d;
+            };
 
-        const addDoc = (doc) => {
-            const d = sanitize(doc);
-            const email = (d.email || '').toLowerCase().trim();
-            const phone = (d.phone || '').trim();
-            if (email && seenEmails.has(email)) return;
-            if (phone && seenPhones.has(phone)) return;
-            if (email) seenEmails.add(email);
-            if (phone) seenPhones.add(phone);
-            combined.push(d);
-        };
+            const addDoc = (doc) => {
+                if (!doc) return;
+                const d = sanitize(doc);
+                if (!d) return;
 
-        // Priority: admin Customer model first, then Mongoose User model
-        customersFromModel.forEach(c => addDoc(c));
-        usersAsCustomers.forEach(u => addDoc(u));
+                const idKey = String(d._id || d.id || d.customerId || '');
+                if (idKey && seenIds.has(idKey)) return;
 
-        await cacheService.set(cacheKey, combined, 30);
-        res.json(combined);
+                const email = (d.email || '').toLowerCase().trim();
+                const phone = (d.phone || '').trim();
+                if (email && seenEmails.has(email)) return;
+                if (phone && seenPhones.has(phone)) return;
+
+                if (idKey) seenIds.add(idKey);
+                if (email) seenEmails.add(email);
+                if (phone) seenPhones.add(phone);
+                combined.push(d);
+            };
+
+            // Priority: admin Customer model first, then Mongoose User model
+            (customersFromModel || []).forEach(c => addDoc(c));
+            (usersAsCustomers || []).forEach(u => addDoc(u));
+
+            try {
+                await cacheService.set(cacheKey, combined, 30);
+            } catch (cErr) {
+                console.warn('[Cache Set Warning]:', cErr?.message);
+            }
+        }
+
+        // Apply optional server-side query filters while preserving full list for standard frontend calls
+        let result = Array.isArray(combined) ? combined : [];
+        const qSearch = (req.query?.search || req.query?.q || '').trim().toLowerCase();
+        const qStatus = (req.query?.status || '').trim();
+        const qType = (req.query?.customerType || req.query?.type || '').trim();
+
+        if (qSearch) {
+            result = result.filter(c =>
+                (c.name || '').toLowerCase().includes(qSearch) ||
+                (c.email || '').toLowerCase().includes(qSearch) ||
+                (c.phone || '').includes(qSearch) ||
+                (c.customerId || '').toLowerCase().includes(qSearch)
+            );
+        }
+        if (qStatus && qStatus.toLowerCase() !== 'all') {
+            result = result.filter(c => (c.status || '').toLowerCase() === qStatus.toLowerCase());
+        }
+        if (qType && qType.toLowerCase() !== 'all') {
+            result = result.filter(c => (c.customerType || '').toLowerCase() === qType.toLowerCase());
+        }
+
+        res.json(result);
     } catch (err) {
-        console.error('Get customers error:', err);
-        res.status(500).send('Server error');
+        console.error('[GET /admin-api/admin/customers Error]:', err);
+        res.status(500).json({
+            success: false,
+            message: 'Server error retrieving customer records'
+        });
     }
 });
 
