@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
+const jwt = require('jsonwebtoken');
 const auth = require('../middleware/auth');
 const State = require('../models/State');
 const District = require('../models/District');
@@ -9,6 +10,30 @@ const Pincode = require('../models/Pincode');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
 const TerritoryAuditLog = require('../models/TerritoryAuditLog');
+
+// Optional authentication middleware: Populates req.user if a valid token is provided, but allows public read-only territory access
+const optionalAuth = async (req, res, next) => {
+    try {
+        let token = req.header('x-auth-token');
+        const authHeader = req.header('Authorization') || req.header('authorization');
+        if (!token && authHeader && authHeader.startsWith('Bearer ')) {
+            token = authHeader.split(' ')[1];
+        }
+        if (token) {
+            const secret = process.env.JWT_SECRET || 'connect_secret_key_prod_2026';
+            let decoded;
+            try {
+                decoded = jwt.verify(token, secret);
+            } catch (jwtErr) {
+                decoded = jwt.verify(token, 'secretKey123');
+            }
+            req.user = decoded.user || { id: decoded.agentId, role: 'agent' };
+        }
+    } catch (e) {
+        // Guest access permitted for public territory dropdowns
+    }
+    next();
+};
 
 // Administrator authentication middleware
 const superAdminAuth = async (req, res, next) => {
@@ -131,16 +156,19 @@ const autoSyncExistingPincodes = async () => {
 // ============================================================
 // 1. TERRITORY HIERARCHY TREE & AGGREGATE SUMMARY
 // ============================================================
-router.get('/hierarchy', [auth], async (req, res) => {
+router.get('/hierarchy', [optionalAuth], async (req, res) => {
     try {
         await autoSyncExistingPincodes();
 
+        const onlyActive = req.query.status ? req.query.status.toLowerCase() !== 'all' : true;
+        const statusFilter = onlyActive ? { status: 'Active' } : {};
+
         // Fetch all states, districts, divisions, and pincodes
         const [states, districts, divisions, pincodes, agents, vendors] = await Promise.all([
-            State.find().sort({ name: 1 }).lean(),
-            District.find().sort({ name: 1 }).lean(),
-            Division.find().sort({ name: 1 }).lean(),
-            Pincode.find().populate('activeAgentId', 'name email phone level').sort({ code: 1 }).lean(),
+            State.find(statusFilter).sort({ name: 1 }).lean(),
+            District.find(statusFilter).sort({ name: 1 }).lean(),
+            Division.find(statusFilter).sort({ name: 1 }).lean(),
+            Pincode.find(statusFilter).populate('activeAgentId', 'name email phone level').sort({ code: 1 }).lean(),
             User.find({ role: 'agent', isActive: { $ne: false } }).select('name email phone level assignedState assignedDistrict assignedArea assignedPincode').lean(),
             Vendor.find().select('name businessName state district pincode status').lean()
         ]);
@@ -218,9 +246,11 @@ router.get('/hierarchy', [auth], async (req, res) => {
             }
         });
 
+        const hierarchyList = Object.values(stateMap);
         res.json({
             success: true,
-            states: Object.values(stateMap),
+            hierarchy: hierarchyList,
+            states: hierarchyList,
             rawDistricts: districts,
             rawDivisions: divisions,
             rawPincodes: pincodes,
@@ -239,7 +269,7 @@ router.get('/hierarchy', [auth], async (req, res) => {
 // ============================================================
 // 2. SUMMARY KPI STATS
 // ============================================================
-router.get('/stats', [auth], async (req, res) => {
+router.get('/stats', [optionalAuth], async (req, res) => {
     try {
         const [statesCount, districtsCount, divisionsCount, pincodesCount, activePincodesCount, assignedPincodesCount, agentsCount] = await Promise.all([
             State.countDocuments({ status: 'Active' }),
@@ -273,9 +303,15 @@ router.get('/stats', [auth], async (req, res) => {
 // ============================================================
 // 3. STATE CRUD
 // ============================================================
-router.get('/states', [auth], async (req, res) => {
+router.get('/states', [optionalAuth], async (req, res) => {
     try {
-        const states = await State.find().sort({ name: 1 });
+        const filter = {};
+        if (req.query.status && req.query.status.toLowerCase() !== 'all') {
+            filter.status = req.query.status;
+        } else if (!req.query.status) {
+            filter.status = 'Active'; // Requirement 12: default to Active
+        }
+        const states = await State.find(filter).sort({ name: 1 });
         res.json(states);
     } catch (err) {
         res.status(500).json({ msg: 'Server error retrieving states' });
@@ -392,9 +428,15 @@ router.delete('/states/:id', [auth, superAdminAuth], async (req, res) => {
 // ============================================================
 // 4. DISTRICT CRUD
 // ============================================================
-router.get('/districts', [auth], async (req, res) => {
+router.get('/districts', [optionalAuth], async (req, res) => {
     try {
         const filter = {};
+        if (req.query.status && req.query.status.toLowerCase() !== 'all') {
+            filter.status = req.query.status;
+        } else if (!req.query.status) {
+            filter.status = 'Active'; // Requirement 12: default to Active
+        }
+
         let targetStateId = req.query.stateId;
 
         // Support state name / code filter query (e.g. from Manager or Admin modules)
@@ -415,9 +457,6 @@ router.get('/districts', [auth], async (req, res) => {
 
         if (targetStateId) {
             filter.stateId = targetStateId;
-        }
-        if (req.query.status) {
-            filter.status = req.query.status;
         }
 
         const districts = await District.find(filter).populate('stateId', 'name code').sort({ name: 1 });
@@ -573,9 +612,15 @@ router.delete('/districts/:id', [auth, superAdminAuth], async (req, res) => {
 // ============================================================
 // 5. DIVISION CRUD (Fully manual entry supported)
 // ============================================================
-router.get('/divisions', [auth], async (req, res) => {
+router.get('/divisions', [optionalAuth], async (req, res) => {
     try {
         const filter = {};
+        if (req.query.status && req.query.status.toLowerCase() !== 'all') {
+            filter.status = req.query.status;
+        } else if (!req.query.status) {
+            filter.status = 'Active'; // Requirement 12: default to Active
+        }
+
         let targetDistrictId = req.query.districtId;
 
         // Support district name / code query
@@ -612,7 +657,6 @@ router.get('/divisions', [auth], async (req, res) => {
 
         if (targetDistrictId) filter.districtId = targetDistrictId;
         if (targetStateId) filter.stateId = targetStateId;
-        if (req.query.status) filter.status = req.query.status;
 
         const divisions = await Division.find(filter)
             .populate('stateId', 'name code')
@@ -776,9 +820,15 @@ router.delete('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
 // ============================================================
 // 6. PINCODE CRUD
 // ============================================================
-router.get('/pincodes', [auth], async (req, res) => {
+router.get('/pincodes', [optionalAuth], async (req, res) => {
     try {
         const filter = {};
+        if (req.query.status && req.query.status.toLowerCase() !== 'all') {
+            filter.status = req.query.status;
+        } else if (!req.query.status) {
+            filter.status = 'Active'; // Requirement 12: default to Active
+        }
+
         let targetDivisionId = req.query.divisionId;
         if (!targetDivisionId && req.query.division) {
             const trimmedDiv = req.query.division.trim();
@@ -827,11 +877,13 @@ router.get('/pincodes', [auth], async (req, res) => {
             }
         }
 
-        if (targetDivisionId) filter.divisionId = targetDivisionId;
-        else if (targetDistrictId) filter.districtId = targetDistrictId;
-        else if (targetStateId) filter.stateId = targetStateId;
-
-        if (req.query.status) filter.status = req.query.status;
+        if (targetDivisionId) {
+            filter.$or = [{ divisionId: targetDivisionId }, { division: req.query.division?.trim() }];
+        } else if (targetDistrictId) {
+            filter.$or = [{ districtId: targetDistrictId }, { district: req.query.district?.trim() }];
+        } else if (targetStateId) {
+            filter.$or = [{ stateId: targetStateId }, { state: req.query.state?.trim() }];
+        }
 
         const pincodes = await Pincode.find(filter)
             .populate('stateId', 'name code')

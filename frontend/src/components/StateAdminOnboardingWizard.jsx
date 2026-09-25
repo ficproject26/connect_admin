@@ -248,6 +248,26 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
 
   // Step 4: Territory
   const [terr, setTerr] = useState({ assignedState: prefilledState });
+  const [activeStates, setActiveStates] = useState([]);
+
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
+        const res = await fetch(`${API_BASE}/admin/territory/states`, {
+          headers: { 'x-auth-token': activeToken || '', Authorization: `Bearer ${activeToken}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : (data.states || []);
+          setActiveStates(list.map(s => s.name || s.state || s).filter(Boolean));
+        }
+      } catch (e) {
+        console.error('Failed to load active states for onboarding', e);
+      }
+    };
+    fetchStates();
+  }, [API_BASE, token]);
 
   // Step 5: Account Setup
   const [acc, setAcc] = useState({
@@ -534,7 +554,7 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
                   <Lbl req>State</Lbl>
                   <Sel value={cont.residentialState} onChange={e=>{upC('residentialState',e.target.value);clrErr('residentialState');}} err={errors.residentialState}>
                     <option value="">Select state…</option>
-                    {INDIAN_STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                    {(activeStates.length > 0 ? activeStates : [cont.residentialState]).filter(Boolean).map(s=><option key={s} value={s}>{s}</option>)}
                   </Sel>
                   <ErrMsg msg={errors.residentialState}/>
                 </div>
@@ -660,7 +680,7 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
                 <Lbl req>Assigned State</Lbl>
                 <Sel value={terr.assignedState} onChange={e=>{setTerr({assignedState:e.target.value});clrErr('assignedState');}} err={errors.assignedState}>
                   <option value="">Select state to assign…</option>
-                  {INDIAN_STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                  {activeStates.map(s=><option key={s} value={s}>{s}</option>)}
                 </Sel>
                 <ErrMsg msg={errors.assignedState}/>
               </div>

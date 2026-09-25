@@ -655,11 +655,11 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       }
 
       if (!stateList.length) {
-        stateList = INDIAN_STATES.map(st => ({ state: st, totalManagers: 0, activeManagers: 0, pendingRequests: 0 }));
+        stateList = [];
       }
       setStates(stateList);
     } catch {
-      setStates(INDIAN_STATES.map(st => ({ state: st, totalManagers: 0, activeManagers: 0, pendingRequests: 0 })));
+      setStates([]);
     } finally { setStatesLoading(false); }
   }, [apiFetch]);
 
@@ -722,7 +722,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         const raw = Array.isArray(stRes) ? stRes : (stRes?.states || []);
         stList = raw.map(s => s.name || s.state || s).filter(Boolean);
       } catch {}
-      if (!stList.length) stList = INDIAN_STATES;
+      if (!stList.length) stList = [];
 
       if (state && state !== 'All') {
         try {
@@ -1279,7 +1279,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
 
         {/* Global Nominate Action */}
         <button
-          onClick={() => setNominateTerritory({ level: 'state', state: INDIAN_STATES[0], currentCount: 0 })}
+          onClick={() => setNominateTerritory({ level: 'state', state: states[0]?.state || '', currentCount: 0 })}
           className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Request Manager

@@ -201,6 +201,11 @@ app.use('/api/admin/territory', require('./routes/territory'));
 app.use('/api/territory', require('./routes/territory'));
 app.use('/admin-api/territory', require('./routes/territory'));
 app.use('/admin-api/admin/territory', require('./routes/territory'));
+app.use('/territory', require('./routes/territory'));
+app.use('/territories', require('./routes/territory'));
+app.use('/api/territories', require('./routes/territory'));
+app.use('/admin-api/territories', require('./routes/territory'));
+app.use('/api/public/territory', require('./routes/territory'));
 
 app.use('/api/admin', require('./routes/hierarchyAdminRoutes'));
 app.use('/admin-api/admin', require('./routes/hierarchyAdminRoutes'));

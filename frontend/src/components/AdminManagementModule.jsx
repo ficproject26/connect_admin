@@ -149,7 +149,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
   // Territory Dynamic Options Cache
   const [territoryOptions, setTerritoryOptions] = useState({
-    states: INDIAN_STATES,
+    states: [],
     districts: [],
     divisions: [],
     pincodes: []
@@ -249,28 +249,63 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
     loadAllData();
   }, []);
 
-  // Fetch cascading territory options when state/district/division changes in form
+  // Fetch cascading territory options strictly from Admin Master Database
   const fetchTerritoryOptions = async (stateVal, distVal, divVal) => {
     try {
       const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
       const headers = { 'x-auth-token': activeToken || '', Authorization: `Bearer ${activeToken}` };
 
-      let districts = [];
+      // 1. Fetch active states
+      let statesList = [];
+      try {
+        const sRes = await fetch(`${API_BASE}/admin/territory/states?status=Active`, { headers });
+        if (sRes.ok) {
+          const sData = await sRes.json();
+          statesList = Array.isArray(sData) ? sData : (sData.states || []);
+        }
+      } catch {}
+
+      // 2. Fetch active districts if stateVal
+      let districtsList = [];
       if (stateVal) {
         try {
-          const res = await fetch(`${API_BASE}/admin/territory/districts?state=${encodeURIComponent(stateVal)}`, { headers });
-          if (res.ok) {
-            const data = await res.json();
-            districts = Array.isArray(data) ? data : (data.districts || []);
+          const dRes = await fetch(`${API_BASE}/admin/territory/districts?state=${encodeURIComponent(stateVal)}&status=Active`, { headers });
+          if (dRes.ok) {
+            const dData = await dRes.json();
+            districtsList = Array.isArray(dData) ? dData : (dData.districts || []);
+          }
+        } catch {}
+      }
+
+      // 3. Fetch active divisions if distVal
+      let divisionsList = [];
+      if (distVal) {
+        try {
+          const vRes = await fetch(`${API_BASE}/admin/territory/divisions?district=${encodeURIComponent(distVal)}&status=Active`, { headers });
+          if (vRes.ok) {
+            const vData = await vRes.json();
+            divisionsList = Array.isArray(vData) ? vData : (vData.divisions || []);
+          }
+        } catch {}
+      }
+
+      // 4. Fetch active pincodes if divVal
+      let pincodesList = [];
+      if (divVal) {
+        try {
+          const pRes = await fetch(`${API_BASE}/admin/territory/pincodes?division=${encodeURIComponent(divVal)}&status=Active`, { headers });
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            pincodesList = Array.isArray(pData) ? pData : (pData.pincodes || []);
           }
         } catch {}
       }
 
       setTerritoryOptions({
-        states: INDIAN_STATES,
-        districts: districts.map(d => d.name || d.district || d).filter(Boolean),
-        divisions: [],
-        pincodes: []
+        states: statesList.map(s => s.name || s.state || s).filter(Boolean),
+        districts: districtsList.map(d => d.name || d.district || d).filter(Boolean),
+        divisions: divisionsList.map(v => v.name || v.division || v).filter(Boolean),
+        pincodes: pincodesList.map(p => p.code || p.pincode || p).filter(Boolean)
       });
     } catch (e) {
       console.error('Territory options fetch error:', e);
