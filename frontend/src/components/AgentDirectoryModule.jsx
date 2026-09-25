@@ -112,16 +112,20 @@ export default function AgentDirectoryModule({
     const candidates = [
       `${baseClean}/admin/agents`,
       `${baseClean}/agents`,
+      `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents`,
       `${baseClean.replace(/\/admin-api$/, '')}/admin-api/agents`,
-      `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents`
+      ...(typeof window !== 'undefined' && window.location.origin.includes('localhost') ? ['/admin-api/admin/agents', '/admin-api/agents', '/api/admin/agents'] : [])
     ];
     const urls = Array.from(new Set(candidates.map(u => u.replace(/([^:])\/\//g, '$1/').replace(/\/admin-api\/admin-api\//g, '/admin-api/'))));
     for (const u of urls) {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 12000);
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
         const res = await fetch(u, { headers, signal: controller.signal });
         clearTimeout(timeoutId);
+        if (res.status === 401 || res.status === 403) {
+          throw new Error('Authentication session expired. Please log in again.');
+        }
         if (res.ok) {
           const data = await res.json().catch(() => null);
           if (data) {
@@ -130,6 +134,7 @@ export default function AgentDirectoryModule({
           }
         }
       } catch (e) {
+        if (e.message && e.message.includes('Authentication')) throw e;
         if (e.name !== 'AbortError') console.warn('Fetch agents attempt warning:', u, e.message);
       }
     }
@@ -258,18 +263,21 @@ export default function AgentDirectoryModule({
   const isApprovedAgent = (agent) => {
     if (!agent) return false;
     const s = (agent.status || '').toLowerCase().trim(), k = (agent.kycStatus || '').toLowerCase().trim();
-    return !['rejected', 'suspended', 'deactivated', 'blocked', 'revoked'].includes(s) && !['rejected', 'suspended', 'deactivated', 'blocked', 'revoked'].includes(k);
+    if (['rejected', 'suspended', 'deactivated', 'blocked', 'revoked', 'pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(s)) return false;
+    if (['rejected', 'suspended', 'deactivated', 'blocked', 'revoked', 'pending', 'under_verification', 'under verification', 'in_review'].includes(k)) return false;
+    return agent.isApproved === true || agent.isActive === true || s === 'approved' || s === 'active';
   };
   const isPendingAgent = (agent) => {
     if (!agent) return false;
     const s = (agent.status || '').toLowerCase().trim(), k = (agent.kycStatus || '').toLowerCase().trim();
-    return ['pending', 'pending_approval', 'under_verification', 'requested'].includes(s) || ['pending', 'under_verification'].includes(k);
+    return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(s) || ['pending', 'under_verification', 'under verification', 'in_review'].includes(k);
   };
   const extractAgentTerritory = (ag) => {
-    let state = (ag.assignedState || ag.territory?.state || '').trim();
-    let district = (ag.assignedDistrict || ag.territory?.district || '').trim();
-    let division = (ag.assignedDivision || ag.territory?.division || '').trim();
-    let pincode = (ag.assignedPincode?.code || ag.assignedPincode || ag.territory?.pincode || '').trim();
+    if (!ag) return { state: 'General State', district: 'General District', division: 'General Division', pincode: 'N/A' };
+    let state = (ag.assignedState || ag.state || ag.territory?.state || '').trim();
+    let district = (ag.assignedDistrict || ag.district || ag.territory?.district || '').trim();
+    let division = (ag.assignedDivision || ag.division || ag.territory?.division || '').trim();
+    let pincode = (ag.assignedPincode?.code || ag.assignedPincode || ag.pincode || ag.territory?.pincode || '').toString().trim();
     if (ag.assignedArea && typeof ag.assignedArea === 'string') {
       const parts = ag.assignedArea.split('/').map(s => s.trim()).filter(Boolean);
       if (!state && parts[0]) state = parts[0]; if (!district && parts[1]) district = parts[1];
@@ -293,7 +301,19 @@ export default function AgentDirectoryModule({
     if (!a) return false;
     const query = debouncedSearch.toLowerCase().trim();
     const terr = extractAgentTerritory(a);
-    const matchesSearch = !query || (a.name || '').toLowerCase().includes(query) || (a.email || '').toLowerCase().includes(query) || (a.phone && a.phone.includes(query)) || (a.registrationId && a.registrationId.toLowerCase().includes(query)) || terr.state.toLowerCase().includes(query) || terr.district.toLowerCase().includes(query) || terr.division.toLowerCase().includes(query) || terr.pincode.includes(query);
+    const matchesSearch = !query ||
+      (a.name || '').toLowerCase().includes(query) ||
+      (a.fullName || '').toLowerCase().includes(query) ||
+      (a.email || '').toLowerCase().includes(query) ||
+      (a.phone && String(a.phone).includes(query)) ||
+      (a.registrationId && String(a.registrationId).toLowerCase().includes(query)) ||
+      (a._id && String(a._id).toLowerCase().includes(query)) ||
+      (a.id && String(a.id).toLowerCase().includes(query)) ||
+      terr.state.toLowerCase().includes(query) ||
+      terr.district.toLowerCase().includes(query) ||
+      terr.division.toLowerCase().includes(query) ||
+      terr.pincode.toLowerCase().includes(query) ||
+      (a.assignedArea && String(a.assignedArea).toLowerCase().includes(query));
     const aStatus = (a.status || '').toLowerCase();
     if (agentLevelFilter === 'suspended') return matchesSearch && aStatus === 'suspended';
     if (agentLevelFilter === 'revoked') return matchesSearch && aStatus === 'revoked';
@@ -413,9 +433,9 @@ export default function AgentDirectoryModule({
               className={`p-3.5 rounded-2xl text-left cursor-pointer transition-all border ${active ? `${card.activeBg} shadow-sm` : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}`}>
               <div className="flex items-center justify-between mb-1.5">
                 <card.Icon className={`w-4 h-4 ${active ? card.color : 'text-slate-400'}`} />
-                <span className={`text-2xl font-black ${active ? card.color : 'text-slate-700 dark:text-slate-200'}`}>{loading && agents.length === 0 ? '&#8212;' : card.count}</span>
+                <span className={`text-2xl font-black ${active ? card.color : 'text-slate-700 dark:text-slate-200'}`}>{loading && agents.length === 0 ? '—' : (card.count ?? 0)}</span>
               </div>
-              <span className={`text-[11px] font-bold ${active ? card.color : 'text-slate-400'}`}>{card.label} Agents</span>
+              <span className={`text-[11px] font-bold ${active ? card.color : 'text-slate-400'}`}>{card.label.endsWith('Agents') ? card.label : `${card.label} Agents`}</span>
             </button>
           );
         })}

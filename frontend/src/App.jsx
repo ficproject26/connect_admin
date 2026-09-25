@@ -907,7 +907,12 @@ function App() {
     } else if (data && Array.isArray(data.data)) {
       list = data.data;
     }
-    if (Array.isArray(list) && list.length > 0) {
+    if (Array.isArray(list)) {
+      if (list.length === 0) {
+        setAgents([]);
+        if (apiCacheRef.current) apiCacheRef.current['agents'] = [];
+        return;
+      }
       const seen = new Set();
       const normalized = list.map(item => {
         if (!item) return null;
@@ -2384,14 +2389,14 @@ function App() {
                 safeFetch(`${API_BASE}/admin/agents`, handleSetAgents, 2);
                 setShowOnboardingRequestsModal(true);
               }}
-              onOpenAddAgentModal={() => setShowAddAgentModal(true)}
+              onOpenAddAgentModal={() => setShowModal('create-agent')}
             />
           )}
           {(activeTab === 'pincodes' || activeTab === 'pincode-management') && (
             <PincodeTerritoryManagement
               token={token}
               API_BASE={API_BASE}
-              onOpenAgentModal={() => setShowAddAgentModal(true)}
+              onOpenAgentModal={() => setShowModal('create-agent')}
             />
           )}
 

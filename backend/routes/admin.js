@@ -866,6 +866,18 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             ['state', 'district', 'division', 'pincode'].includes((activeUser.level || '').toLowerCase())
         );
 
+        const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+        const userScopeKey = isTerritoryScopedAgent ? (activeUser._id || activeUser.id || 'scoped') : 'super';
+        const cacheKey = `admin_agents_list_${userScopeKey}`;
+
+        if (!isRefresh && !req.query.page) {
+            const cached = await cacheService.get(cacheKey);
+            if (cached && Array.isArray(cached) && cached.length > 0) {
+                res.setHeader('Content-Type', 'application/json');
+                return res.status(200).json(cached);
+            }
+        }
+
         if (isTerritoryScopedAgent) {
             const userRole = (activeUser.role || activeUser.adminRole || '').toLowerCase();
             const userLevel = (activeUser.level || '').toLowerCase();
@@ -954,7 +966,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         const BranchModel = require('../models/Branch');
         const PincodeModel = require('../models/Pincode');
 
-        // Projection including agent profile, kyc, and kycDocs
+        // Clean high-performance projection excluding massive binary document uploads
         const agentProjection = {
             _id: 1, name: 1, fullName: 1, email: 1, phone: 1, altPhone: 1, mobile: 1,
             role: 1, level: 1, agentLevel: 1, assignedRole: 1, agentType: 1, type: 1,
@@ -964,7 +976,6 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             balance: 1, commissionEarned: 1, wallet: 1, totalEarnings: 1, pendingPayout: 1, vendorsAdded: 1,
             dob: 1, dateOfBirth: 1, gender: 1, qualification: 1, experience: 1, previousCompany: 1,
             postOffice: 1, address: 1, fullAddress: 1, aadhaarNumber: 1, panNumber: 1,
-            kyc: 1, kycDocs: 1, documents: 1, documentUrls: 1, photo: 1, avatar: 1, selfie: 1, signature: 1,
             createdAt: 1, created_at: 1
         };
 
@@ -1031,8 +1042,6 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             const cleanLevel = resolveAgentCleanLevel(agent);
             const key = (agent.registrationId || agent.email || (agent._id ? agent._id.toString() : '')).toLowerCase().trim();
             if (key) {
-                const kycObj = agent.kyc || agent.kycDocs || {};
-                const kycDocsObj = agent.kycDocs || agent.kyc || {};
                 const territoryObj = agent.territory || {};
                 const agentNameVal = resolveAgentName(agent);
 
@@ -1061,6 +1070,13 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     isActiveVal = true;
                     isApprovedVal = true;
                 }
+
+                const kycObj = {
+                    status: kycStatusVal,
+                    aadhaarNumber: agent.aadhaarNumber || '',
+                    panNumber: agent.panNumber || ''
+                };
+                const kycDocsObj = kycObj;
 
                 agentMap.set(key, {
                     ...agent,
@@ -1109,9 +1125,6 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             const rawNameVal = resolveAgentName(raw);
 
             const rawTerritory = raw.territory || {};
-            const rawKycDocs = raw.kycDocs || raw.kyc || {};
-            const rawKyc = raw.kyc || raw.kycDocs || {};
-
             let rawStatus = (raw.status && String(raw.status) !== 'undefined') ? String(raw.status) : (raw.kycStatus || 'pending');
             let rawKycStatus = (raw.kycStatus && String(raw.kycStatus) !== 'undefined') ? String(raw.kycStatus) : (raw.status || 'pending');
 
@@ -1137,6 +1150,13 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 rawIsActive = true;
                 rawIsApproved = true;
             }
+
+            const rawKycDocs = {
+                status: rawKycStatus,
+                aadhaarNumber: raw.aadhaarNumber || '',
+                panNumber: raw.panNumber || ''
+            };
+            const rawKyc = rawKycDocs;
 
             if (key) {
                 if (!agentMap.has(key)) {
@@ -1278,7 +1298,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 calcEarnings = isApproved ? (vendorEarnings + baseTierAccrual) : vendorEarnings;
             }
 
-            return sanitizeHeavyFields({
+            return {
                 ...agent,
                 vendorsAdded: vCount,
                 balance: (agent.balance !== undefined && agent.balance > 0) ? agent.balance : calcEarnings,
@@ -1286,7 +1306,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 wallet: (agent.wallet !== undefined && agent.wallet > 0) ? agent.wallet : calcEarnings,
                 totalEarnings: (agent.totalEarnings !== undefined && agent.totalEarnings > 0) ? agent.totalEarnings : calcEarnings,
                 pendingPayout: (agent.pendingPayout !== undefined && agent.pendingPayout > 0) ? agent.pendingPayout : calcEarnings
-            });
+            };
         });
 
         res.setHeader('Content-Type', 'application/json');
@@ -1306,6 +1326,10 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 limit,
                 totalPages: Math.ceil(enrichedAgents.length / limit)
             });
+        }
+
+        if (!page && !limit) {
+            await cacheService.set(cacheKey, enrichedAgents, 30).catch(() => {});
         }
 
         return res.status(200).json(enrichedAgents);
@@ -1893,6 +1917,10 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
         } catch (audErr) {
             console.warn('Audit logging warning:', audErr.message);
         }
+
+        try {
+            await cacheService.delPattern('admin_agents_list_*');
+        } catch (e) {}
 
         return res.json({ success: true, msg: `Agent status updated to ${targetStatus}`, agent });
     } catch (err) {
