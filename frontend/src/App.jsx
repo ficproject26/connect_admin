@@ -6,7 +6,7 @@ import {
   Search, Filter, ChevronRight, Download, CreditCard, Clock,
   ArrowUpRight, ArrowDownRight, UserX, AlertTriangle, Eye, EyeOff, UploadCloud, Bell, User,
   Briefcase, Truck, Headphones, Folder, HelpCircle, MessageSquare, Megaphone, ShoppingBag, Calendar, Contact,
-  MoreVertical, RotateCcw, LayoutGrid, List, Smartphone, Laptop, Tv, Home, Shirt, Sparkles, Package, Utensils, Tag, Activity, ArrowRight, ChevronLeft, Lock, Store, Shield, ShieldCheck, Ban, RefreshCw
+  MoreVertical, RotateCcw, LayoutGrid, List, Smartphone, Laptop, Tv, Home, Shirt, Sparkles, Package, Utensils, Tag, Activity, ArrowRight, ChevronLeft, Lock, Store, Shield, ShieldCheck, Ban, RefreshCw, CheckSquare
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -1577,6 +1577,27 @@ function App() {
                 <CreditCard className="w-4 h-4 text-purple-400" /> Membership Cards
               </button>
 
+              {/* ── SUB-ADMIN ── */}
+              <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Sub-Admin</p>
+              <button
+                onClick={() => handleTabSelect('admin-management')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'admin-management' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <ShieldCheck className="w-4 h-4 text-indigo-400" /> Admin Management
+              </button>
+              <button
+                onClick={() => handleTabSelect('admin-tasks')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'admin-tasks' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <CheckSquare className="w-4 h-4 text-blue-400" /> Admin Tasks
+              </button>
+              <button
+                onClick={() => handleTabSelect('admin-reports')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'admin-reports' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <BarChart3 className="w-4 h-4 text-emerald-400" /> Admin Reports
+              </button>
+
               {/* ── MANAGEMENT ── */}
               <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Management</p>
               <button
@@ -1591,18 +1612,24 @@ function App() {
               >
                 <DollarSign className="w-4 h-4 text-emerald-400" /> Payment Dashboard
               </button>
-              <button
-                onClick={() => handleTabSelect('admin-management')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'admin-management' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
-              >
-                <ShieldCheck className="w-4 h-4 text-indigo-400" /> Admin Management
-              </button>
+
+              {/* ── MANAGERS ── */}
+              <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Managers</p>
               <button
                 onClick={() => handleTabSelect('manager-directory')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'manager-directory' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
               >
                 <Users className="w-4 h-4 text-fuchsia-400" /> Managers
               </button>
+              <button
+                onClick={() => handleTabSelect('manager-reports')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'manager-reports' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <BarChart3 className="w-4 h-4 text-violet-400" /> Manager Reports
+              </button>
+
+              {/* ── OPERATIONS ── */}
+              <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Operations</p>
               <button
                 onClick={() => handleTabSelect('orders')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'orders' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
@@ -1742,7 +1769,7 @@ function App() {
             </button>
             <div className="min-w-0">
               <h2 className="text-base sm:text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight truncate">
-                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab === 'admin-management' ? 'Admin Management' : activeTab === 'manager-directory' ? 'Managers' : activeTab.replace('-', ' ')}
+                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab === 'admin-management' ? 'Admin Management' : activeTab === 'admin-tasks' ? 'Admin Tasks' : activeTab === 'admin-reports' ? 'Admin Reports' : activeTab === 'manager-directory' ? 'Managers' : activeTab === 'manager-reports' ? 'Manager Reports' : activeTab.replace('-', ' ')}
               </h2>
               <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
                 {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
@@ -2349,6 +2376,100 @@ function App() {
             />
           )}
 
+          {/* SUB-ADMIN TASKS */}
+          {activeTab === 'admin-tasks' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold">
+                      <CheckSquare className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                        Admin Tasks
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        Manage and track tasks assigned to Sub-Admins.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                      Module Initialized
+                    </span>
+                  </div>
+                </div>
+
+                {/* Clean Dashboard Empty State */}
+                <div className="py-16 text-center space-y-4 max-w-md mx-auto">
+                  <div className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto text-slate-400">
+                    <CheckSquare className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                      No Tasks Assigned Yet
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Tasks, regional action items, and verification workflows assigned to Sub-Admins will appear here.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => handleTabSelect('admin-management')}
+                      className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <ShieldCheck className="w-4 h-4" /> Go to Admin Management
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* SUB-ADMIN REPORTS */}
+          {activeTab === 'admin-reports' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
+                      <BarChart3 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                        Admin Reports
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        View reports and performance data for Sub-Admins.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      Module Initialized
+                    </span>
+                  </div>
+                </div>
+
+                {/* Clean Dashboard Empty State */}
+                <div className="py-16 text-center space-y-4 max-w-md mx-auto">
+                  <div className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto text-slate-400">
+                    <BarChart3 className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                      No Reports Available
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Sub-Admin administrative activity logs, verification metrics, and territory audit summaries will appear here once generated.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* MANAGER DIRECTORY */}
           {activeTab === 'manager-directory' && (
             <ManagerDirectoryModule
@@ -2356,6 +2477,57 @@ function App() {
               API_BASE={API_BASE}
               onToast={addToast}
             />
+          )}
+
+          {/* MANAGER REPORTS */}
+          {activeTab === 'manager-reports' && (
+            <div className="space-y-6 animate-fadeIn">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-violet-500/10 text-violet-500 flex items-center justify-center font-bold">
+                      <BarChart3 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+                        Manager Reports
+                      </h2>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        View manager activities, work progress and performance reports.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20">
+                      Module Initialized
+                    </span>
+                  </div>
+                </div>
+
+                {/* Clean Dashboard Empty State */}
+                <div className="py-16 text-center space-y-4 max-w-md mx-auto">
+                  <div className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto text-slate-400">
+                    <BarChart3 className="w-8 h-8" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <h4 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                      No Manager Reports Available
+                    </h4>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Manager activity logs, territory performance progress, and operational reviews will appear here once submitted.
+                    </p>
+                  </div>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => handleTabSelect('manager-directory')}
+                      className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm active:scale-95 inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Users className="w-4 h-4" /> Go to Managers Directory
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {/* PAYROLL MANAGEMENT */}
