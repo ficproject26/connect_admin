@@ -88,6 +88,11 @@ const UserSchema = new mongoose.Schema({
     twoFactorSecret: { type: String, default: '' },
     passwordChangedAt: { type: Date, default: Date.now },
     refreshToken: { type: String, default: '' },
+    // Payment Security PIN
+    paymentPinHash: { type: String, default: '' },
+    paymentPinConfigured: { type: Boolean, default: false },
+    paymentPinFailedAttempts: { type: Number, default: 0 },
+    paymentPinLockedUntil: { type: Date, default: null },
 
     createdAt: { type: Date, default: Date.now }
 }, { strict: false, strictPopulate: false });

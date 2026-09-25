@@ -197,6 +197,14 @@ app.use('/api/admin/enterprise', require('./routes/enterpriseModules'));
 app.use('/admin-api/enterprise', require('./routes/enterpriseModules'));
 app.use('/admin-api/admin/enterprise', require('./routes/enterpriseModules'));
 
+// Complete Production Payment Dashboard & Payroll Management Routes
+app.use('/api/admin/enterprise/payments', require('./routes/paymentRoutes'));
+app.use('/admin-api/admin/enterprise/payments', require('./routes/paymentRoutes'));
+app.use('/admin-api/enterprise/payments', require('./routes/paymentRoutes'));
+app.use('/api/admin/payments', require('./routes/paymentRoutes'));
+app.use('/admin-api/admin/payments', require('./routes/paymentRoutes'));
+app.use('/admin-api/payments', require('./routes/paymentRoutes'));
+
 app.use('/api/admin/territory', require('./routes/territory'));
 app.use('/api/territory', require('./routes/territory'));
 app.use('/admin-api/territory', require('./routes/territory'));

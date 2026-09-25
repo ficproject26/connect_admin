@@ -2363,7 +2363,7 @@ function App() {
 
           {/* ENTERPRISE PAYMENT DASHBOARD */}
           {activeTab === 'payment-enterprise' && (
-            <EnterprisePaymentDashboard token={token} API_BASE={API_BASE} />
+            <EnterprisePaymentDashboard token={token} API_BASE={API_BASE} currentUser={user} onToast={addToast} />
           )}
 
           {/* HIERARCHICAL ADMIN MANAGEMENT */}
@@ -2532,7 +2532,7 @@ function App() {
 
           {/* PAYROLL MANAGEMENT */}
           {activeTab === 'payroll-enterprise' && (
-            <PayrollManagement token={token} API_BASE={API_BASE} />
+            <PayrollManagement token={token} API_BASE={API_BASE} currentUser={user} onToast={addToast} />
           )}
 
           {/* CUSTOMER SUPPORT TEAM HIERARCHY */}

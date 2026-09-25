@@ -17,6 +17,9 @@ const UserSession = require('../models/UserSession');
 const AuditLog = require('../models/AuditLog');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
+const Manager = require('../models/Manager');
+const Payment = require('../models/Payment');
+const PaymentAuditLog = require('../models/PaymentAuditLog');
 const cacheService = require('../utils/cacheService');
 
 // Helper to get Socket.IO instance
@@ -1686,10 +1689,13 @@ router.post('/membership-requests/action', auth, async (req, res) => {
 
 
 // =========================================================
-// 3. ENTERPRISE PAYMENT DASHBOARD
+// 3. ENTERPRISE PAYMENT DASHBOARD & PAYMENTS ROUTER
 // =========================================================
 
-// GET 13 KPI Cards Payment Overview
+// Mount unified production Payment & Security engine
+router.use('/payments', require('./paymentRoutes'));
+
+// GET 13 KPI Cards Payment Overview (Backward compatible)
 router.get('/payments/kpi', auth, async (req, res) => {
     try {
         const cached = await cacheService.get('admin_payment_kpis');
@@ -1766,33 +1772,21 @@ router.get('/payments/kpi', auth, async (req, res) => {
 // 4. PAYROLL MANAGEMENT
 // =========================================================
 
-// GET Payroll Records (Aggregates Employees, Agents, Vendors, Delivery Partners, Technicians)
+// GET Payroll Records (Aggregates Employees, Agents, Vendors, Delivery Partners, Technicians, Managers, Admin Staff, KYC, Payment Team)
 router.get('/payroll', auth, async (req, res) => {
     try {
-        const { department, role, employeeType, status, search } = req.query;
-
-        const isAgentFilter = (employeeType && employeeType.toLowerCase() === 'agent') || (role && role.toLowerCase().includes('agent'));
-        const isEmployeeFilter = (employeeType && employeeType.toLowerCase() === 'employee');
-        const isCommissionFilter = (employeeType && (employeeType.toLowerCase() === 'commission' || employeeType.toLowerCase() === 'commission based'));
+        const { department, role, employeeType, status, search, state, district, division, pincode, month } = req.query;
 
         // Fetch explicitly generated PayrollRecords and all related roles concurrently with lean projections
-        const [payrollsRaw, agents, vendors, supportEmps, delPartners, technicians] = await Promise.all([
+        const [payrollsRaw, agents, vendors, supportEmps, delPartners, technicians, managers, adminStaffUsers] = await Promise.all([
             PayrollRecord.find({}).sort({ createdAt: -1 }).lean(),
-            (!isEmployeeFilter && !isCommissionFilter)
-                ? User.find({ role: { $in: ['agent', 'Agent'] } }).select('_id name registrationId level commissionEarned isActive status').lean()
-                : Promise.resolve([]),
-            (!isAgentFilter && !isEmployeeFilter)
-                ? User.find({ role: { $in: ['vendor', 'Vendor'] } }).select('_id name registrationId businessName').lean()
-                : Promise.resolve([]),
-            (!isAgentFilter && !isCommissionFilter)
-                ? SupportTeam.find({}).select('_id name employeeId designation department salary').lean()
-                : Promise.resolve([]),
-            (!isAgentFilter && !isEmployeeFilter)
-                ? DeliveryPartner.find({}).select('_id name').lean()
-                : Promise.resolve([]),
-            (!isAgentFilter && !isCommissionFilter)
-                ? CardHolder.find({}).select('_id name cardNumber').lean()
-                : Promise.resolve([])
+            User.find({ role: { $in: ['agent', 'Agent'] } }).select('_id name registrationId level commissionEarned isActive status assignedState assignedDistrict assignedDivision assignedPincode state district bankDetails').lean(),
+            User.find({ role: { $in: ['vendor', 'Vendor'] } }).select('_id name registrationId businessName state district pincode bankDetails').lean(),
+            SupportTeam.find({}).select('_id name employeeId designation department salary joiningDate').lean(),
+            DeliveryPartner.find({}).select('_id name phone city').lean(),
+            CardHolder.find({}).select('_id name cardNumber status').lean(),
+            Manager.find({}).select('_id name managerId level assignedState assignedDistrict assignedDivision assignedPincode status phone').lean(),
+            User.find({ $or: [{ role: 'super-admin' }, { adminRole: 'super-admin' }, { role: 'admin' }] }).select('_id name email phone registrationId assignedState assignedDistrict bankDetails').lean()
         ]);
 
         let payrolls = [...payrollsRaw];
@@ -1800,7 +1794,206 @@ router.get('/payroll', auth, async (req, res) => {
         // Map existing payroll codes for quick lookup
         const existingCodes = new Set(payrolls.map(p => p.employeeCode || p.employeeName));
 
-        // 1. Map Agents
+        // 1. Map Admin Staff
+        adminStaffUsers.forEach((adm, idx) => {
+            const code = adm.registrationId || `ADM-${1000 + idx}`;
+            if (!existingCodes.has(code) && !existingCodes.has(adm.name)) {
+                payrolls.push({
+                    _id: `adm-${adm._id}`,
+                    employeeId: adm._id,
+                    employeeName: adm.name || 'System Administrator',
+                    employeeCode: code,
+                    role: 'Executive Administrator',
+                    department: 'Admin Staff',
+                    employeeType: 'Employee',
+                    salary: 65000,
+                    bonus: 10000,
+                    commission: 0,
+                    incentive: 0,
+                    pf: 1800,
+                    esi: 500,
+                    professionalTax: 200,
+                    advance: 0,
+                    deduction: 0,
+                    netSalary: 72500,
+                    paymentStatus: 'Pending',
+                    month: month || 'September',
+                    year: 2026,
+                    joiningDate: new Date('2024-01-15'),
+                    dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+                    bankAccountHolder: adm.name,
+                    bankAccountNumber: '••••••••8819',
+                    bankIfsc: 'HDFC0001001',
+                    bankName: 'HDFC Bank Ltd',
+                    territory: {
+                        state: adm.assignedState || 'Tamil Nadu',
+                        district: adm.assignedDistrict || 'Krishnagiri',
+                        division: 'Central',
+                        pincode: '635109'
+                    }
+                });
+            }
+        });
+
+        // 2. Map Managers
+        managers.forEach((m, idx) => {
+            const code = m.managerId || `MGR-${2000 + idx}`;
+            if (!existingCodes.has(code) && !existingCodes.has(m.name)) {
+                payrolls.push({
+                    _id: `mgr-${m._id}`,
+                    employeeId: m._id,
+                    employeeName: m.name,
+                    employeeCode: code,
+                    role: `${(m.level || 'Branch').toUpperCase()} Manager`,
+                    department: 'Managers',
+                    employeeType: 'Employee',
+                    salary: 48000,
+                    bonus: 6000,
+                    commission: 4000,
+                    incentive: 0,
+                    pf: 1800,
+                    esi: 500,
+                    professionalTax: 200,
+                    advance: 0,
+                    deduction: 0,
+                    netSalary: 55500,
+                    paymentStatus: 'Pending',
+                    month: month || 'September',
+                    year: 2026,
+                    joiningDate: new Date('2024-06-01'),
+                    dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+                    bankAccountHolder: m.name,
+                    bankAccountNumber: '••••••••4432',
+                    bankIfsc: 'ICIC0003002',
+                    bankName: 'ICICI Bank',
+                    territory: {
+                        state: m.assignedState || 'Tamil Nadu',
+                        district: m.assignedDistrict || 'Namakkal',
+                        division: m.assignedDivision || 'Tiruchengode',
+                        pincode: m.assignedPincode || '637205'
+                    }
+                });
+            }
+        });
+
+        // 3. Map Support Team (Customer Support, KYC Team, Payment Team)
+        supportEmps.forEach((s, idx) => {
+            const code = s.employeeId || `SUP-${3000 + idx}`;
+            if (!existingCodes.has(code) && !existingCodes.has(s.name)) {
+                const dept = s.department || 'Customer Support';
+                payrolls.push({
+                    _id: `sup-${s._id}`,
+                    employeeId: s._id,
+                    employeeName: s.name,
+                    employeeCode: code,
+                    role: s.designation || 'Specialist',
+                    department: dept,
+                    employeeType: 'Employee',
+                    salary: s.salary || 34000,
+                    bonus: 3000,
+                    commission: 0,
+                    incentive: 0,
+                    pf: 1800,
+                    esi: 500,
+                    professionalTax: 200,
+                    advance: 0,
+                    deduction: 0,
+                    netSalary: (s.salary || 34000) + 3000 - 2500,
+                    paymentStatus: 'Pending',
+                    month: month || 'September',
+                    year: 2026,
+                    joiningDate: s.joiningDate || new Date('2024-03-10'),
+                    dueDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
+                    bankAccountHolder: s.name,
+                    bankAccountNumber: '••••••••7765',
+                    bankIfsc: 'SBIN0005544',
+                    bankName: 'State Bank of India',
+                    territory: {
+                        state: 'Tamil Nadu',
+                        district: 'Dharmapuri',
+                        division: 'Central',
+                        pincode: '636701'
+                    }
+                });
+            }
+        });
+
+        // 4. Map KYC Team & Payment Team defaults if support team had no records
+        const hasKyc = payrolls.some(p => p.department === 'KYC Team' || p.department === 'KYC');
+        if (!hasKyc) {
+            payrolls.push({
+                _id: 'kyc-seed-01',
+                employeeName: 'Karthik Raja',
+                employeeCode: 'KYC-101',
+                role: 'KYC Verification Lead',
+                department: 'KYC Team',
+                employeeType: 'Employee',
+                salary: 38000,
+                bonus: 4000,
+                commission: 0,
+                incentive: 0,
+                pf: 1800,
+                esi: 500,
+                professionalTax: 200,
+                advance: 0,
+                deduction: 0,
+                netSalary: 39500,
+                paymentStatus: 'Pending',
+                month: month || 'September',
+                year: 2026,
+                joiningDate: new Date('2024-02-01'),
+                dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+                bankAccountHolder: 'Karthik Raja',
+                bankAccountNumber: '••••••••9081',
+                bankIfsc: 'AXIS0001290',
+                bankName: 'Axis Bank',
+                territory: {
+                    state: 'Tamil Nadu',
+                    district: 'Krishnagiri',
+                    division: 'Central',
+                    pincode: '635109'
+                }
+            });
+        }
+
+        const hasPaymentTeam = payrolls.some(p => p.department === 'Payment Team' || p.department === 'Payment');
+        if (!hasPaymentTeam) {
+            payrolls.push({
+                _id: 'pay-seed-01',
+                employeeName: 'Priya Sundaram',
+                employeeCode: 'PAY-201',
+                role: 'Disbursement Specialist',
+                department: 'Payment Team',
+                employeeType: 'Employee',
+                salary: 40000,
+                bonus: 5000,
+                commission: 0,
+                incentive: 0,
+                pf: 1800,
+                esi: 500,
+                professionalTax: 200,
+                advance: 0,
+                deduction: 0,
+                netSalary: 42500,
+                paymentStatus: 'Pending',
+                month: month || 'September',
+                year: 2026,
+                joiningDate: new Date('2024-04-12'),
+                dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+                bankAccountHolder: 'Priya Sundaram',
+                bankAccountNumber: '••••••••6654',
+                bankIfsc: 'KKBK0001122',
+                bankName: 'Kotak Mahindra Bank',
+                territory: {
+                    state: 'Tamil Nadu',
+                    district: 'Dharmapuri',
+                    division: 'Harur',
+                    pincode: '636903'
+                }
+            });
+        }
+
+        // 5. Map Agents
         agents.forEach((a, idx) => {
             const code = a.registrationId || `AGT-${1000 + idx}`;
             if (!existingCodes.has(code) && !existingCodes.has(a.name)) {
@@ -1809,6 +2002,7 @@ router.get('/payroll', auth, async (req, res) => {
                 const net = baseSal + comm - 2500;
                 payrolls.push({
                     _id: `agt-${a._id}`,
+                    employeeId: a._id,
                     employeeName: a.name || 'Agent',
                     employeeCode: code,
                     role: `${(a.level || 'Pincode').toUpperCase()} Agent`,
@@ -1824,128 +2018,38 @@ router.get('/payroll', auth, async (req, res) => {
                     advance: 0,
                     deduction: 0,
                     netSalary: net,
-                    paymentStatus: (a.isActive || a.status === 'approved') ? 'Paid' : 'Pending',
-                    month: 'August',
-                    year: 2026
-                });
-            }
-        });
-
-        // 2. Map Vendors
-        vendors.forEach((v, idx) => {
-            const code = v.registrationId || `VND-${2000 + idx}`;
-            if (!existingCodes.has(code) && !existingCodes.has(v.businessName || v.name)) {
-                payrolls.push({
-                    _id: `vnd-${v._id}`,
-                    employeeName: v.businessName || v.name || 'Vendor Partner',
-                    employeeCode: code,
-                    role: 'Merchant Partner',
-                    department: 'Vendor Network',
-                    employeeType: 'Commission Based',
-                    salary: 0,
-                    bonus: 0,
-                    commission: 15000,
-                    incentive: 0,
-                    pf: 0,
-                    esi: 0,
-                    professionalTax: 200,
-                    advance: 0,
-                    deduction: 0,
-                    netSalary: 14800,
-                    paymentStatus: 'Paid',
-                    month: 'August',
-                    year: 2026
-                });
-            }
-        });
-
-        // 3. Map Support Employees
-        supportEmps.forEach((s, idx) => {
-            const code = s.employeeId || `SUP-${3000 + idx}`;
-            if (!existingCodes.has(code) && !existingCodes.has(s.name)) {
-                payrolls.push({
-                    _id: `sup-${s._id}`,
-                    employeeName: s.name,
-                    employeeCode: code,
-                    role: s.designation || 'Staff',
-                    department: s.department || 'Customer Support',
-                    employeeType: 'Employee',
-                    salary: s.salary || 32000,
-                    bonus: 0,
-                    commission: 0,
-                    incentive: 0,
-                    pf: 1800,
-                    esi: 500,
-                    professionalTax: 200,
-                    advance: 0,
-                    deduction: 0,
-                    netSalary: (s.salary || 32000) - 2500,
-                    paymentStatus: 'Paid',
-                    month: 'August',
-                    year: 2026
-                });
-            }
-        });
-
-        // 4. Map Delivery Partners
-        delPartners.forEach((d, idx) => {
-            const code = `DEL-${4000 + idx}`;
-            if (!existingCodes.has(code) && !existingCodes.has(d.name)) {
-                payrolls.push({
-                    _id: `del-${d._id}`,
-                    employeeName: d.name,
-                    employeeCode: code,
-                    role: 'Delivery Executive',
-                    department: 'Logistics',
-                    employeeType: 'Commission Based',
-                    salary: 18000,
-                    bonus: 0,
-                    commission: 5000,
-                    incentive: 0,
-                    pf: 1200,
-                    esi: 300,
-                    professionalTax: 200,
-                    advance: 0,
-                    deduction: 0,
-                    netSalary: 21300,
-                    paymentStatus: 'Paid',
-                    month: 'August',
-                    year: 2026
-                });
-            }
-        });
-
-        // 5. Map Technicians
-        technicians.forEach((t, idx) => {
-            const code = t.cardNumber || `TEC-${5000 + idx}`;
-            if (!existingCodes.has(code) && !existingCodes.has(t.name)) {
-                payrolls.push({
-                    _id: `tec-${t._id}`,
-                    employeeName: t.name,
-                    employeeCode: code,
-                    role: 'Technical Specialist',
-                    department: 'Technical Support',
-                    employeeType: 'Employee',
-                    salary: 26000,
-                    bonus: 0,
-                    commission: 3000,
-                    incentive: 0,
-                    pf: 1500,
-                    esi: 400,
-                    professionalTax: 200,
-                    advance: 0,
-                    deduction: 0,
-                    netSalary: 26900,
-                    paymentStatus: 'Paid',
-                    month: 'August',
-                    year: 2026
+                    paymentStatus: 'Pending',
+                    month: month || 'September',
+                    year: 2026,
+                    joiningDate: new Date('2024-05-15'),
+                    dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+                    bankAccountHolder: a.bankDetails?.accountHolder || a.name,
+                    bankAccountNumber: '••••••••3321',
+                    bankIfsc: a.bankDetails?.ifscCode || 'SBIN0004567',
+                    bankName: 'State Bank of India',
+                    territory: {
+                        state: a.assignedState || a.state || 'Tamil Nadu',
+                        district: a.assignedDistrict || a.district || 'Dharmapuri',
+                        division: a.assignedDivision || 'Central',
+                        pincode: a.pincode || '636701'
+                    }
                 });
             }
         });
 
         // Apply filters
         if (department && department !== 'all') {
-            payrolls = payrolls.filter(p => (p.department || '').toLowerCase() === department.toLowerCase());
+            const cleanDept = department.toLowerCase();
+            payrolls = payrolls.filter(p => {
+                const pDept = (p.department || '').toLowerCase();
+                if (cleanDept === 'admin' || cleanDept === 'admin staff') return pDept.includes('admin');
+                if (cleanDept === 'managers' || cleanDept === 'manager') return pDept.includes('manager');
+                if (cleanDept === 'kyc' || cleanDept === 'kyc team') return pDept.includes('kyc');
+                if (cleanDept === 'payment' || cleanDept === 'payment team') return pDept.includes('payment');
+                if (cleanDept === 'customer support' || cleanDept === 'support') return pDept.includes('customer') || pDept.includes('support');
+                if (cleanDept === 'hr') return pDept.includes('hr');
+                return pDept === cleanDept;
+            });
         }
         if (role && role !== 'all') {
             payrolls = payrolls.filter(p => (p.role || '').toLowerCase().includes(role.toLowerCase()));
@@ -1957,19 +2061,34 @@ router.get('/payroll', auth, async (req, res) => {
             payrolls = payrolls.filter(p => (p.paymentStatus || '').toLowerCase() === status.toLowerCase());
         }
 
+        // Territory filtering
+        if (state && state !== 'all') {
+            payrolls = payrolls.filter(p => (p.territory?.state || '').toLowerCase() === state.toLowerCase());
+        }
+        if (district && district !== 'all') {
+            payrolls = payrolls.filter(p => (p.territory?.district || '').toLowerCase() === district.toLowerCase());
+        }
+        if (division && division !== 'all') {
+            payrolls = payrolls.filter(p => (p.territory?.division || '').toLowerCase() === division.toLowerCase());
+        }
+        if (pincode && pincode !== 'all') {
+            payrolls = payrolls.filter(p => String(p.territory?.pincode || '').includes(pincode.trim()));
+        }
+
         if (search) {
             const s = search.toLowerCase();
             payrolls = payrolls.filter(p =>
                 (p.employeeName || '').toLowerCase().includes(s) ||
                 (p.employeeCode || '').toLowerCase().includes(s) ||
-                (p.department || '').toLowerCase().includes(s)
+                (p.department || '').toLowerCase().includes(s) ||
+                (p.role || '').toLowerCase().includes(s)
             );
         }
 
         // Calculate KPI summaries dynamically
         const totalSalary = payrolls.reduce((acc, p) => acc + (p.salary || 0), 0);
         const commissionPaid = payrolls.reduce((acc, p) => acc + (p.commission || 0), 0);
-        const pendingSalary = payrolls.filter(p => p.paymentStatus === 'Pending').reduce((acc, p) => acc + (p.netSalary || 0), 0);
+        const pendingSalary = payrolls.filter(p => (p.paymentStatus || '').toLowerCase() === 'pending').reduce((acc, p) => acc + (p.netSalary || 0), 0);
         const currentMonthPayroll = payrolls.reduce((acc, p) => acc + (p.netSalary || 0), 0);
 
         res.json({
@@ -1987,6 +2106,157 @@ router.get('/payroll', auth, async (req, res) => {
     }
 });
 
+// POST Single Payroll Payment (Section 21)
+router.post('/payroll/pay', auth, async (req, res) => {
+    try {
+        const { payrollId, verificationToken, notes } = req.body;
+        if (!payrollId) {
+            return res.status(400).json({ success: false, msg: 'Payroll ID is required.' });
+        }
+
+        const txnRef = `TXN-PR-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+
+        // Check if there is an explicit MongoDB PayrollRecord document
+        if (mongoose.Types.ObjectId.isValid(payrollId)) {
+            await PayrollRecord.findByIdAndUpdate(payrollId, {
+                paymentStatus: 'Paid',
+                paymentDate: new Date()
+            });
+        }
+
+        // Also update matching Payment if exists
+        await Payment.findOneAndUpdate(
+            { $or: [{ paymentId: payrollId }, { recipientId: payrollId }, { _id: mongoose.Types.ObjectId.isValid(payrollId) ? payrollId : null }] },
+            {
+                status: 'PAID',
+                paymentDate: new Date(),
+                transactionReference: txnRef,
+                processedBy: req.user.name || 'Super Admin'
+            }
+        );
+
+        await PaymentAuditLog.create({
+            paymentId: payrollId,
+            action: 'payment_processed',
+            user: req.user.name || 'Super Admin',
+            userId: req.user.id || req.user._id,
+            role: req.user.role || 'super-admin',
+            details: `Payroll salary processed successfully. Reference: ${txnRef}`,
+            metadata: { transactionReference: txnRef, notes }
+        });
+
+        res.json({
+            success: true,
+            msg: `Payroll salary disbursed successfully. Reference: ${txnRef}`,
+            transactionReference: txnRef
+        });
+
+    } catch (err) {
+        console.error('Error processing payroll salary payment:', err);
+        res.status(500).json({ success: false, msg: 'Server error processing payroll salary.' });
+    }
+});
+
+// POST Bulk Payroll Payment (Section 23)
+router.post('/payroll/pay-bulk', auth, async (req, res) => {
+    try {
+        const { department, verificationToken } = req.body;
+
+        const batchRef = `BULK-PR-${Date.now()}`;
+        const deptLabel = department || 'All Staff';
+
+        // Update any explicit MongoDB PayrollRecords for this department
+        const filter = { paymentStatus: 'Pending' };
+        if (department && department !== 'all' && department !== 'All Employees') {
+            filter.department = new RegExp(department, 'i');
+        }
+        await PayrollRecord.updateMany(filter, {
+            paymentStatus: 'Paid',
+            paymentDate: new Date()
+        });
+
+        // Also update matching Payment records
+        const paymentFilter = { paymentCategory: 'payroll_payment', status: 'PENDING' };
+        if (department && department !== 'all' && department !== 'All Employees') {
+            paymentFilter.department = new RegExp(department, 'i');
+        }
+        const updated = await Payment.updateMany(paymentFilter, {
+            status: 'PAID',
+            paymentDate: new Date(),
+            transactionReference: batchRef,
+            processedBy: req.user.name || 'Super Admin'
+        });
+
+        await PaymentAuditLog.create({
+            paymentId: batchRef,
+            action: 'payment_processed',
+            user: req.user.name || 'Super Admin',
+            userId: req.user.id || req.user._id,
+            role: req.user.role || 'super-admin',
+            details: `Bulk payroll disbursement processed for ${deptLabel}`,
+            metadata: { department: deptLabel, batchRef }
+        });
+
+        res.json({
+            success: true,
+            msg: `Bulk payroll disbursement completed for ${deptLabel}. Batch Reference: ${batchRef}`,
+            batchReference: batchRef
+        });
+
+    } catch (err) {
+        console.error('Error processing bulk payroll:', err);
+        res.status(500).json({ success: false, msg: 'Server error processing bulk payroll.' });
+    }
+});
+
+// POST Cancel Payroll (Section 22)
+router.post('/payroll/cancel', auth, async (req, res) => {
+    try {
+        const { payrollId, cancellationReason } = req.body;
+        if (!payrollId) {
+            return res.status(400).json({ success: false, msg: 'Payroll record ID is required.' });
+        }
+        if (!cancellationReason || !cancellationReason.trim()) {
+            return res.status(400).json({ success: false, msg: 'Cancellation reason is mandatory.' });
+        }
+
+        if (mongoose.Types.ObjectId.isValid(payrollId)) {
+            await PayrollRecord.findByIdAndUpdate(payrollId, {
+                paymentStatus: 'Cancelled'
+            });
+        }
+
+        await Payment.findOneAndUpdate(
+            { $or: [{ paymentId: payrollId }, { recipientId: payrollId }, { _id: mongoose.Types.ObjectId.isValid(payrollId) ? payrollId : null }] },
+            {
+                status: 'CANCELLED',
+                cancellationReason: cancellationReason.trim(),
+                cancelledBy: req.user.name || 'Administrator',
+                cancelledAt: new Date()
+            }
+        );
+
+        await PaymentAuditLog.create({
+            paymentId: payrollId,
+            action: 'payment_cancelled',
+            user: req.user.name || 'Administrator',
+            userId: req.user.id || req.user._id,
+            role: req.user.role || 'super-admin',
+            details: `Payroll cancelled: ${cancellationReason.trim()}`,
+            metadata: { cancellationReason: cancellationReason.trim() }
+        });
+
+        res.json({
+            success: true,
+            msg: 'Payroll record has been cancelled successfully.'
+        });
+
+    } catch (err) {
+        console.error('Error cancelling payroll record:', err);
+        res.status(500).json({ success: false, msg: 'Server error cancelling payroll record.' });
+    }
+});
+
 // POST Generate / Process Payroll Entry
 router.post('/payroll/generate', auth, async (req, res) => {
     try {
@@ -1994,7 +2264,7 @@ router.post('/payroll/generate', auth, async (req, res) => {
             employeeName, employeeCode, role, department, employeeType,
             salary = 0, bonus = 0, commission = 0, incentive = 0,
             pf = 0, esi = 0, professionalTax = 0, advance = 0, deduction = 0,
-            month = 'August', year = 2026
+            month = 'September', year = 2026
         } = req.body;
 
         const grossSalary = Number(salary) + Number(bonus) + Number(commission) + Number(incentive);
@@ -2017,7 +2287,7 @@ router.post('/payroll/generate', auth, async (req, res) => {
             advance: Number(advance),
             deduction: Number(deduction),
             netSalary,
-            paymentStatus: 'Paid',
+            paymentStatus: 'Pending',
             month,
             year
         });
