@@ -22,14 +22,14 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/admin-api': {
-        target: 'https://api.ficapp.in',
+        target: 'http://localhost:8004',
         changeOrigin: true,
-        secure: true
+        secure: false
       },
       '/api': {
-        target: 'https://api.ficapp.in',
+        target: 'http://localhost:8004',
         changeOrigin: true,
-        secure: true
+        secure: false
       }
     }
   }
