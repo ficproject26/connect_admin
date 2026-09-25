@@ -35,8 +35,6 @@ const StateSchema = new mongoose.Schema({
     timestamps: true
 });
 
-StateSchema.index({ name: 1 });
-StateSchema.index({ code: 1 });
 StateSchema.index({ status: 1 });
 
 module.exports = mongoose.model('State', StateSchema);

@@ -10,25 +10,31 @@ const User = require('../models/User');
 const Vendor = require('../models/Vendor');
 const TerritoryAuditLog = require('../models/TerritoryAuditLog');
 
-// Super admin authentication middleware
+// Administrator authentication middleware
 const superAdminAuth = async (req, res, next) => {
     try {
-        let userId = req.user.id;
+        let userId = req.user?.id || req.user?._id;
+        if (!userId) {
+            return res.status(401).json({ msg: 'Unauthorized: User identity not found' });
+        }
         if (mongoose.Types.ObjectId.isValid(userId)) {
             userId = new mongoose.Types.ObjectId(userId);
         }
         const user = await User.findById(userId).select('role adminRole level status isActive email name').lean();
-        const roleVal = (user?.role || '').toLowerCase().trim();
-        const adminRoleVal = (user?.adminRole || '').toLowerCase().trim();
-        const isSuperAdmin = roleVal === 'super-admin' || adminRoleVal === 'super-admin';
+        if (!user) {
+            return res.status(401).json({ msg: 'Unauthorized: User not found in database' });
+        }
+        const roleVal = (user.role || '').toLowerCase().trim();
+        const adminRoleVal = (user.adminRole || '').toLowerCase().trim();
+        const isAdmin = ['admin', 'super-admin'].includes(roleVal) || ['admin', 'super-admin'].includes(adminRoleVal);
 
-        if (!user || !isSuperAdmin) {
-            return res.status(403).json({ msg: 'Access denied. Super Admin territory modification privilege required.' });
+        if (!isAdmin) {
+            return res.status(403).json({ msg: 'Access denied. Administrative privilege required for geographic modification.' });
         }
         req.adminUser = user;
         next();
     } catch (err) {
-        console.error('SuperAdmin middleware error:', err);
+        console.error('Territory admin middleware error:', err);
         res.status(500).json({ msg: 'Server authentication failure' });
     }
 };
@@ -376,25 +382,11 @@ router.patch('/states/:id/status', [auth, superAdminAuth], async (req, res) => {
 });
 
 router.delete('/states/:id', [auth, superAdminAuth], async (req, res) => {
-    try {
-        const state = await State.findById(req.params.id);
-        if (!state) return res.status(404).json({ msg: 'State not found' });
-
-        // Safe delete validation: check for existing child districts
-        const childDistrictsCount = await District.countDocuments({ stateId: state._id });
-        if (childDistrictsCount > 0) {
-            return res.status(400).json({
-                msg: `This State contains ${childDistrictsCount} existing Districts. Please remove or reassign its child territories before deleting.`
-            });
-        }
-
-        await State.findByIdAndDelete(req.params.id);
-        await logAudit(req, 'Territory Deleted', 'State', state.stateId, state.name, state.toObject(), null);
-
-        res.json({ success: true, msg: `State "${state.name}" deleted successfully` });
-    } catch (err) {
-        res.status(500).json({ msg: 'Server error deleting state' });
-    }
+    // Requirement 8: State deletion/removal must NOT be allowed.
+    return res.status(403).json({
+        success: false,
+        msg: 'State deletion is not allowed. States are protected top-level geographic entities.'
+    });
 });
 
 // ============================================================
@@ -403,9 +395,31 @@ router.delete('/states/:id', [auth, superAdminAuth], async (req, res) => {
 router.get('/districts', [auth], async (req, res) => {
     try {
         const filter = {};
-        if (req.query.stateId) {
-            filter.stateId = req.query.stateId;
+        let targetStateId = req.query.stateId;
+
+        // Support state name / code filter query (e.g. from Manager or Admin modules)
+        if (!targetStateId && req.query.state) {
+            const trimmedState = req.query.state.trim();
+            const stateDoc = await State.findOne({
+                $or: [
+                    { name: new RegExp(`^${trimmedState}$`, 'i') },
+                    { code: trimmedState.toUpperCase() }
+                ]
+            }).select('_id');
+            if (stateDoc) {
+                targetStateId = stateDoc._id;
+            } else {
+                return res.json([]);
+            }
         }
+
+        if (targetStateId) {
+            filter.stateId = targetStateId;
+        }
+        if (req.query.status) {
+            filter.status = req.query.status;
+        }
+
         const districts = await District.find(filter).populate('stateId', 'name code').sort({ name: 1 });
         res.json(districts);
     } catch (err) {
@@ -515,13 +529,34 @@ router.patch('/districts/:id/status', [auth, superAdminAuth], async (req, res) =
 router.delete('/districts/:id', [auth, superAdminAuth], async (req, res) => {
     try {
         const district = await District.findById(req.params.id);
-        if (!district) return res.status(404).json({ msg: 'District not found' });
+        if (!district) return res.status(404).json({ success: false, msg: 'District not found' });
 
-        // Safe delete validation: check for existing child divisions
-        const childDivisionsCount = await Division.countDocuments({ districtId: district._id });
-        if (childDivisionsCount > 0) {
+        // Safe delete validation: check for existing child divisions, pincodes, assigned agents/managers/vendors
+        const [
+            childDivisionsCount,
+            childPincodesCount,
+            assignedAgentsCount,
+            assignedManagersCount,
+            assignedVendorsCount
+        ] = await Promise.all([
+            Division.countDocuments({ districtId: district._id }),
+            Pincode.countDocuments({ $or: [{ districtId: district._id }, { district: district.name }] }),
+            User.countDocuments({ role: 'agent', assignedDistrict: { $in: [district.name, district.code] } }),
+            User.countDocuments({ role: { $in: ['admin', 'manager', 'sub-admin'] }, assignedDistrict: { $in: [district.name, district.code] } }),
+            Vendor.countDocuments({ district: { $regex: new RegExp(`^${district.name}$`, 'i') } })
+        ]);
+
+        const dependencies = [];
+        if (childDivisionsCount > 0) dependencies.push(`${childDivisionsCount} Division${childDivisionsCount > 1 ? 's' : ''}`);
+        if (childPincodesCount > 0) dependencies.push(`${childPincodesCount} Pincode${childPincodesCount > 1 ? 's' : ''}`);
+        if (assignedAgentsCount > 0) dependencies.push(`${assignedAgentsCount} Agent${assignedAgentsCount > 1 ? 's' : ''}`);
+        if (assignedManagersCount > 0) dependencies.push(`${assignedManagersCount} Manager${assignedManagersCount > 1 ? 's' : ''}`);
+        if (assignedVendorsCount > 0) dependencies.push(`${assignedVendorsCount} Vendor${assignedVendorsCount > 1 ? 's' : ''}`);
+
+        if (dependencies.length > 0) {
             return res.status(400).json({
-                msg: `This District contains ${childDivisionsCount} existing Divisions. Please remove or reassign its child territories before deleting.`
+                success: false,
+                msg: `This district contains associated ${dependencies.join(', ')}. Please remove or reassign dependent records before deleting.`
             });
         }
 
@@ -530,7 +565,8 @@ router.delete('/districts/:id', [auth, superAdminAuth], async (req, res) => {
 
         res.json({ success: true, msg: `District "${district.name}" deleted successfully` });
     } catch (err) {
-        res.status(500).json({ msg: 'Server error deleting district' });
+        console.error('Delete District Error:', err);
+        res.status(500).json({ success: false, msg: 'Server error deleting district' });
     }
 });
 
@@ -540,8 +576,43 @@ router.delete('/districts/:id', [auth, superAdminAuth], async (req, res) => {
 router.get('/divisions', [auth], async (req, res) => {
     try {
         const filter = {};
-        if (req.query.districtId) filter.districtId = req.query.districtId;
-        if (req.query.stateId) filter.stateId = req.query.stateId;
+        let targetDistrictId = req.query.districtId;
+
+        // Support district name / code query
+        if (!targetDistrictId && req.query.district) {
+            const trimmedDistrict = req.query.district.trim();
+            const distDoc = await District.findOne({
+                $or: [
+                    { name: new RegExp(`^${trimmedDistrict}$`, 'i') },
+                    { code: trimmedDistrict.toUpperCase() }
+                ]
+            }).select('_id stateId');
+            if (distDoc) {
+                targetDistrictId = distDoc._id;
+            } else {
+                return res.json([]);
+            }
+        }
+
+        let targetStateId = req.query.stateId;
+        if (!targetStateId && req.query.state) {
+            const trimmedState = req.query.state.trim();
+            const stateDoc = await State.findOne({
+                $or: [
+                    { name: new RegExp(`^${trimmedState}$`, 'i') },
+                    { code: trimmedState.toUpperCase() }
+                ]
+            }).select('_id');
+            if (stateDoc) {
+                targetStateId = stateDoc._id;
+            } else {
+                return res.json([]);
+            }
+        }
+
+        if (targetDistrictId) filter.districtId = targetDistrictId;
+        if (targetStateId) filter.stateId = targetStateId;
+        if (req.query.status) filter.status = req.query.status;
 
         const divisions = await Division.find(filter)
             .populate('stateId', 'name code')
@@ -655,13 +726,40 @@ router.patch('/divisions/:id/status', [auth, superAdminAuth], async (req, res) =
 router.delete('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
     try {
         const division = await Division.findById(req.params.id);
-        if (!division) return res.status(404).json({ msg: 'Division not found' });
+        if (!division) return res.status(404).json({ success: false, msg: 'Division not found' });
 
-        // Safe delete validation: check for existing child pincodes
-        const childPincodesCount = await Pincode.countDocuments({ divisionId: division._id });
-        if (childPincodesCount > 0) {
+        // Safe delete validation: check for child pincodes and assigned agents/managers
+        const [
+            childPincodesCount,
+            assignedAgentsCount,
+            assignedManagersCount
+        ] = await Promise.all([
+            Pincode.countDocuments({ $or: [{ divisionId: division._id }, { division: division.name }] }),
+            User.countDocuments({
+                role: 'agent',
+                $or: [
+                    { assignedArea: { $regex: new RegExp(division.name, 'i') } },
+                    { assignedDistrict: division.name }
+                ]
+            }),
+            User.countDocuments({
+                role: { $in: ['admin', 'manager', 'sub-admin'] },
+                $or: [
+                    { assignedArea: { $regex: new RegExp(division.name, 'i') } },
+                    { assignedDistrict: division.name }
+                ]
+            })
+        ]);
+
+        const dependencies = [];
+        if (childPincodesCount > 0) dependencies.push(`${childPincodesCount} Pincode${childPincodesCount > 1 ? 's' : ''}`);
+        if (assignedAgentsCount > 0) dependencies.push(`${assignedAgentsCount} Agent${assignedAgentsCount > 1 ? 's' : ''}`);
+        if (assignedManagersCount > 0) dependencies.push(`${assignedManagersCount} Manager${assignedManagersCount > 1 ? 's' : ''}`);
+
+        if (dependencies.length > 0) {
             return res.status(400).json({
-                msg: `This Division contains ${childPincodesCount} existing Pincodes. Please remove or reassign its child territories before deleting.`
+                success: false,
+                msg: `This division contains associated ${dependencies.join(', ')}. Please remove or reassign dependent records before deleting.`
             });
         }
 
@@ -670,7 +768,8 @@ router.delete('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
 
         res.json({ success: true, msg: `Division "${division.name}" deleted successfully` });
     } catch (err) {
-        res.status(500).json({ msg: 'Server error deleting division' });
+        console.error('Delete Division Error:', err);
+        res.status(500).json({ success: false, msg: 'Server error deleting division' });
     }
 });
 
@@ -680,9 +779,58 @@ router.delete('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
 router.get('/pincodes', [auth], async (req, res) => {
     try {
         const filter = {};
-        if (req.query.divisionId) filter.divisionId = req.query.divisionId;
-        if (req.query.districtId) filter.districtId = req.query.districtId;
-        if (req.query.stateId) filter.stateId = req.query.stateId;
+        let targetDivisionId = req.query.divisionId;
+        if (!targetDivisionId && req.query.division) {
+            const trimmedDiv = req.query.division.trim();
+            const divDoc = await Division.findOne({
+                $or: [
+                    { name: new RegExp(`^${trimmedDiv}$`, 'i') },
+                    { code: trimmedDiv.toUpperCase() }
+                ]
+            }).select('_id');
+            if (divDoc) {
+                targetDivisionId = divDoc._id;
+            } else {
+                return res.json([]);
+            }
+        }
+
+        let targetDistrictId = req.query.districtId;
+        if (!targetDistrictId && req.query.district) {
+            const trimmedDistrict = req.query.district.trim();
+            const distDoc = await District.findOne({
+                $or: [
+                    { name: new RegExp(`^${trimmedDistrict}$`, 'i') },
+                    { code: trimmedDistrict.toUpperCase() }
+                ]
+            }).select('_id');
+            if (distDoc) {
+                targetDistrictId = distDoc._id;
+            } else {
+                return res.json([]);
+            }
+        }
+
+        let targetStateId = req.query.stateId;
+        if (!targetStateId && req.query.state) {
+            const trimmedState = req.query.state.trim();
+            const stateDoc = await State.findOne({
+                $or: [
+                    { name: new RegExp(`^${trimmedState}$`, 'i') },
+                    { code: trimmedState.toUpperCase() }
+                ]
+            }).select('_id');
+            if (stateDoc) {
+                targetStateId = stateDoc._id;
+            } else {
+                return res.json([]);
+            }
+        }
+
+        if (targetDivisionId) filter.divisionId = targetDivisionId;
+        else if (targetDistrictId) filter.districtId = targetDistrictId;
+        else if (targetStateId) filter.stateId = targetStateId;
+
         if (req.query.status) filter.status = req.query.status;
 
         const pincodes = await Pincode.find(filter)
@@ -836,10 +984,34 @@ router.patch('/pincodes/:id/status', [auth, superAdminAuth], async (req, res) =>
 router.delete('/pincodes/:id', [auth, superAdminAuth], async (req, res) => {
     try {
         const pin = await Pincode.findById(req.params.id);
-        if (!pin) return res.status(404).json({ msg: 'Pincode not found' });
+        if (!pin) return res.status(404).json({ success: false, msg: 'Pincode not found' });
 
-        if (pin.activeAgentId) {
-            await User.findByIdAndUpdate(pin.activeAgentId, { assignedPincode: null });
+        // Safe delete validation: check whether assigned to any agent, manager, or vendor territory
+        const [assignedAgent, assignedManager, assignedVendor] = await Promise.all([
+            User.findOne({
+                role: 'agent',
+                $or: [
+                    { assignedPincode: pin.code },
+                    { _id: pin.activeAgentId }
+                ]
+            }).select('name email phone'),
+            User.findOne({
+                role: { $in: ['admin', 'manager', 'sub-admin'] },
+                assignedPincode: pin.code
+            }).select('name email'),
+            Vendor.findOne({ pincode: pin.code }).select('name businessName')
+        ]);
+
+        const dependencies = [];
+        if (assignedAgent) dependencies.push(`Agent: ${assignedAgent.name}`);
+        if (assignedManager) dependencies.push(`Manager: ${assignedManager.name}`);
+        if (assignedVendor) dependencies.push(`Vendor: ${assignedVendor.businessName || assignedVendor.name}`);
+
+        if (dependencies.length > 0) {
+            return res.status(400).json({
+                success: false,
+                msg: `Cannot delete Pincode "${pin.code}". It is currently assigned to ${dependencies.join(', ')}. Please reassign or unassign before deleting.`
+            });
         }
 
         await Pincode.findByIdAndDelete(req.params.id);
@@ -847,7 +1019,8 @@ router.delete('/pincodes/:id', [auth, superAdminAuth], async (req, res) => {
 
         res.json({ success: true, msg: `Pincode ${pin.code} deleted successfully` });
     } catch (err) {
-        res.status(500).json({ msg: 'Server error deleting pincode' });
+        console.error('Delete Pincode Error:', err);
+        res.status(500).json({ success: false, msg: 'Server error deleting pincode' });
     }
 });
 
