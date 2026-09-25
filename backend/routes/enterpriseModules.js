@@ -292,7 +292,64 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
             pincode: pinCode
         };
     } else {
-        vObj.joiningType = vObj.joiningType || 'direct';
+        const isManagerOnboarded = vObj.joiningType === 'manager' ||
+            !!vObj.onboardedByManager ||
+            !!vObj.managerId ||
+            !!vObj.assignedManager ||
+            !!vObj.onboardedByManagerId ||
+            !!vObj.managerName ||
+            (vObj.createdVia && String(vObj.createdVia).toLowerCase() === 'manager') ||
+            (vObj.registrationSource && String(vObj.registrationSource).toLowerCase() === 'manager') ||
+            (vObj.addedBy && vObj.addedBy.role && String(vObj.addedBy.role).toLowerCase().includes('manager'));
+
+        if (isManagerOnboarded) {
+            vObj.joiningType = 'manager';
+            
+            let managerDoc = null;
+            const possibleManagerId = (vObj.assignedManager && typeof vObj.assignedManager === 'object' ? (vObj.assignedManager._id || vObj.assignedManager) : vObj.assignedManager) || vObj.managerId || vObj.onboardedByManager || vObj.onboardedByManagerId || (vObj.addedBy && vObj.addedBy.id);
+
+            if (possibleManagerId) {
+                const db = mongoose.connection.db;
+                if (db) {
+                    try {
+                        const filter = mongoose.Types.ObjectId.isValid(possibleManagerId)
+                            ? { _id: new mongoose.Types.ObjectId(possibleManagerId) }
+                            : { $or: [{ managerId: possibleManagerId }, { registrationId: possibleManagerId }, { email: possibleManagerId }] };
+                        managerDoc = await db.collection('managers').findOne(filter, {
+                            projection: {
+                                name: 1,
+                                managerId: 1,
+                                registrationId: 1,
+                                phone: 1,
+                                email: 1,
+                                level: 1,
+                                assignedPincode: 1,
+                                assignedDistrict: 1,
+                                assignedState: 1
+                            }
+                        });
+                        if (!managerDoc) {
+                            managerDoc = await User.findById(possibleManagerId).select('name registrationId phone email level role').lean();
+                        }
+                    } catch (e) {}
+                }
+            }
+
+            const managerName = managerDoc?.name || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.name : null) || (typeof vObj.onboardedByManager === 'object' ? vObj.onboardedByManager?.name : null) || vObj.managerName || (vObj.addedBy && vObj.addedBy.name) || 'Territory Manager';
+
+            const regId = managerDoc?.managerId || managerDoc?.registrationId || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.registrationId : null) || (vObj.managerId) || `MGR-${(managerDoc?.level || 'GEN').slice(0,3).toUpperCase()}-${String(managerDoc?._id || '1001').slice(-4)}`;
+
+            const pinCode = managerDoc?.assignedPincode || managerDoc?.pincode || '—';
+
+            vObj.onboardedByManager = {
+                name: managerName,
+                registrationId: regId,
+                pincode: pinCode,
+                level: managerDoc?.level || 'Manager'
+            };
+        } else {
+            vObj.joiningType = vObj.joiningType || 'direct';
+        }
     }
 
     sanitizeVendorAddressObj(vObj);
@@ -383,7 +440,7 @@ function sanitizeVendorPayload(vObj) {
 // GET Vendor Directory with filters, pagination, and direct requests / agent-onboarded requests
 router.get('/vendors', auth, async (req, res) => {
     try {
-        const { search, category, state, status, isDirectRequest, isAgentOnboarded, page = 1, limit = 20 } = req.query;
+        const { search, category, state, status, isDirectRequest, isAgentOnboarded, isManagerOnboarded, page = 1, limit = 20 } = req.query;
 
         if (isAgentOnboarded === 'true') {
             const [agentVendorsFromUser, agentVendorsFromVendor] = await Promise.all([
@@ -468,8 +525,91 @@ router.get('/vendors', auth, async (req, res) => {
             });
         }
 
+        if (isManagerOnboarded === 'true') {
+            const [managerVendorsFromUser, managerVendorsFromVendor] = await Promise.all([
+                User.find({
+                    $or: [
+                        { joiningType: 'manager' },
+                        { createdVia: 'manager' },
+                        { registrationSource: 'manager' },
+                        { onboardedByManager: { $exists: true, $ne: null } },
+                        { managerId: { $exists: true, $ne: null } },
+                        { assignedManager: { $exists: true, $ne: null } },
+                        { onboardedByManagerId: { $exists: true, $ne: null } },
+                        { 'addedBy.role': { $regex: /manager/i } }
+                    ]
+                }).select('-password -__v').sort({ createdAt: -1 }).lean(),
+                Vendor.find({
+                    $or: [
+                        { joiningType: 'manager' },
+                        { createdVia: 'manager' },
+                        { registrationSource: 'manager' },
+                        { onboardedByManager: { $exists: true, $ne: null } },
+                        { managerId: { $exists: true, $ne: null } },
+                        { assignedManager: { $exists: true, $ne: null } },
+                        { onboardedByManagerId: { $exists: true, $ne: null } },
+                        { 'addedBy.role': { $regex: /manager/i } }
+                    ]
+                }).select('-__v').sort({ createdAt: -1 }).lean()
+            ]);
+
+            let rawManager = [...managerVendorsFromUser, ...managerVendorsFromVendor];
+            
+            const vendorMap = new Map();
+            rawManager.forEach(v => {
+                const emailKey = (v.email || '').toLowerCase().trim();
+                const phoneKey = (v.phone || '').replace(/\D/g, '');
+                const regKey = (v.registrationId || '').trim();
+                const bizKey = (v.businessName || v.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+                const pinKey = (v.pincode || v.assignedPincode || '').toString().trim();
+                const idKey = v._id ? String(v._id) : '';
+
+                let key = idKey;
+                if (emailKey && !emailKey.includes('vendor_') && !emailKey.includes('@connect.app')) key = emailKey;
+                else if (phoneKey && phoneKey.length >= 10) key = phoneKey;
+                else if (bizKey && pinKey) key = `${bizKey}_${pinKey}`;
+                else if (bizKey && bizKey.length > 3) key = bizKey;
+                else if (regKey) key = regKey;
+
+                if (!vendorMap.has(key)) {
+                    vendorMap.set(key, v);
+                } else {
+                    const existing = vendorMap.get(key);
+                    const preferActive = ['Active', 'Approved', 'active', 'approved'].includes(v.status) ? v.status : existing.status;
+                    vendorMap.set(key, { ...existing, ...v, status: preferActive });
+                }
+            });
+
+            let enriched = await batchEnrichVendors(Array.from(vendorMap.values()));
+
+            if (search) {
+                const s = search.toLowerCase();
+                enriched = enriched.filter(v =>
+                    (v.businessName || v.name || '').toLowerCase().includes(s) ||
+                    (v.onboardedByManager?.name || v.managerName || '').toLowerCase().includes(s) ||
+                    (v.onboardedByManager?.registrationId || v.managerRegistrationId || v.managerId || '').toLowerCase().includes(s) ||
+                    (v.pincode || '').includes(s) ||
+                    (v.email || '').toLowerCase().includes(s)
+                );
+            }
+
+            const pageNum = Math.max(1, parseInt(page, 10) || 1);
+            const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+            const total = enriched.length;
+            const paginated = (req.query.limit && limitNum < total)
+                ? enriched.slice((pageNum - 1) * limitNum, pageNum * limitNum)
+                : enriched;
+
+            return res.json({
+                vendors: paginated,
+                total,
+                page: pageNum,
+                pages: Math.ceil(total / limitNum) || 1
+            });
+        }
+
         if (isDirectRequest === 'true') {
-            // Aggregated direct vendor registration requests (strictly EXCLUDING agent-onboarded vendors)
+            // Aggregated direct vendor registration requests (strictly EXCLUDING agent-onboarded and manager-onboarded vendors)
             const [directVendors, directVendorDocs] = await Promise.all([
                 User.find({
                     $or: [
@@ -487,13 +627,14 @@ router.get('/vendors', auth, async (req, res) => {
             let rawDirect = [...directVendors, ...directVendorDocs];
             let allDirect = await batchEnrichVendors(rawDirect);
 
-            // Filter out handled statuses AND filter out any agent-onboarded vendors
+            // Filter out handled statuses AND filter out any agent-onboarded / manager-onboarded vendors
             const handledStatuses = new Set(['approved', 'rejected', 'assigned', 'active', 'suspended']);
             let pendingDirect = allDirect.filter(v => {
                 const s = String(v.status || '').toLowerCase().trim();
                 const isHandled = handledStatuses.has(s);
                 const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-                return !isHandled && !isAgentOnboarded;
+                const isManagerOnboarded = v.joiningType === 'manager' || !!v.onboardedByManager || !!v.managerId || (v.createdVia && String(v.createdVia).toLowerCase() === 'manager');
+                return !isHandled && !isAgentOnboarded && !isManagerOnboarded;
             });
 
             if (search) {
