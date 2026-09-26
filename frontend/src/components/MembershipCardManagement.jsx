@@ -297,3 +297,5 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
     </div>
   );
 });
+
+export default MembershipCardManagement;

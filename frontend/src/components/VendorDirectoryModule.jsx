@@ -2763,3 +2763,5 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     </div>
   );
 });
+
+export default VendorDirectoryModule;

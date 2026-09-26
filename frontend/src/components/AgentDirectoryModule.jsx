@@ -963,3 +963,5 @@ function AgentLeafCard({ agent, level, onInspect, onAction, compact = true }) {
     </div>
   );
 }
+
+export { AgentDirectoryModule };

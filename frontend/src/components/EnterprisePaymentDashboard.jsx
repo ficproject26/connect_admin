@@ -2108,3 +2108,5 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     </div>
   );
 });
+
+export default EnterprisePaymentDashboard;

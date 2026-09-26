@@ -428,11 +428,13 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         allVendors.forEach(v => {
             if (v && v._id) {
                 const cat = v.category || v.vendorType || 'Retail & Stores';
+                const bId = v.branchId?._id ? v.branchId._id.toString() : (v.branchId ? v.branchId.toString() : null);
+                const aId = v.agentId?._id ? v.agentId._id.toString() : (v.agentId ? v.agentId.toString() : null);
                 vendorMap[v._id.toString()] = {
                     category: cat,
                     name: v.businessName || v.name,
-                    branchId: v.branchId,
-                    agentId: v.agentId
+                    branchId: bId,
+                    agentId: aId
                 };
                 categoryMap[cat] = (categoryMap[cat] || 0);
             }
@@ -467,11 +469,13 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             }
         });
 
-        completedOrders.forEach(o => {
+        const allTransactions = [...(completedOrders || []), ...(completedBookings || [])];
+
+        allTransactions.forEach(o => {
             const vIdStr = o.vendorId?._id ? o.vendorId._id.toString() : (o.vendorId ? o.vendorId.toString() : null);
             const vInfo = vIdStr ? vendorMap[vIdStr] : null;
-            if (vInfo && vInfo.branchId && branchIdToName[vInfo.branchId.toString()]) {
-                const bName = branchIdToName[vInfo.branchId.toString()];
+            if (vInfo && vInfo.branchId && branchIdToName[vInfo.branchId]) {
+                const bName = branchIdToName[vInfo.branchId];
                 branchMap[bName] = (branchMap[bName] || 0) + getItemAmount(o);
             }
         });
@@ -488,7 +492,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
 
         // Vendor Wise Revenue Performance
         const vendorRevMap = {};
-        completedOrders.forEach(o => {
+        allTransactions.forEach(o => {
             const vIdStr = o.vendorId?._id ? o.vendorId._id.toString() : (o.vendorId ? o.vendorId.toString() : null);
             const vInfo = vIdStr ? vendorMap[vIdStr] : null;
             if (vInfo && vInfo.name) {
@@ -510,11 +514,11 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             }
         });
 
-        completedOrders.forEach(o => {
+        allTransactions.forEach(o => {
             const vIdStr = o.vendorId?._id ? o.vendorId._id.toString() : (o.vendorId ? o.vendorId.toString() : null);
             const vInfo = vIdStr ? vendorMap[vIdStr] : null;
-            if (vInfo && vInfo.agentId && agentIdToName[vInfo.agentId.toString()]) {
-                const aName = agentIdToName[vInfo.agentId.toString()];
+            if (vInfo && vInfo.agentId && agentIdToName[vInfo.agentId]) {
+                const aName = agentIdToName[vInfo.agentId];
                 if (aName) {
                     agentRevMap[aName] = (agentRevMap[aName] || 0) + getItemAmount(o);
                 }

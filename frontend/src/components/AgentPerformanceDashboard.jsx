@@ -1233,3 +1233,5 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
     </div>
   );
 });
+
+export default AgentPerformanceDashboard;

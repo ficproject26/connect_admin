@@ -1265,3 +1265,5 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
     </div>
   );
 });
+
+export default PayrollManagement;

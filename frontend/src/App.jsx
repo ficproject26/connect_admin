@@ -12,19 +12,60 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend, PieChart, Pie, Cell
 } from 'recharts';
-const AgentPerformanceDashboard = React.lazy(() => import('./components/AgentPerformanceDashboard').then(m => ({ default: m.AgentPerformanceDashboard })));
-const SecurityDashboard = React.lazy(() => import('./components/SecurityDashboard').then(m => ({ default: m.SecurityDashboard })));
-const AdminSecurityDashboard = React.lazy(() => import('./components/AdminSecurityDashboard').then(m => ({ default: m.AdminSecurityDashboard })));
-const VendorDirectoryModule = React.lazy(() => import('./components/VendorDirectoryModule').then(m => ({ default: m.VendorDirectoryModule })));
-const MembershipCardManagement = React.lazy(() => import('./components/MembershipCardManagement').then(m => ({ default: m.MembershipCardManagement })));
-const EnterprisePaymentDashboard = React.lazy(() => import('./components/EnterprisePaymentDashboard').then(m => ({ default: m.EnterprisePaymentDashboard })));
-const PayrollManagement = React.lazy(() => import('./components/PayrollManagement').then(m => ({ default: m.PayrollManagement })));
-const CustomerSupportTeamManagement = React.lazy(() => import('./components/CustomerSupportTeamManagement').then(m => ({ default: m.CustomerSupportTeamManagement })));
-const AgentDirectoryModule = React.lazy(() => import('./components/AgentDirectoryModule'));
-const AgentPaymentModule = React.lazy(() => import('./components/AgentPaymentModule'));
-const PincodeTerritoryManagement = React.lazy(() => import('./components/PincodeTerritoryManagement').then(m => ({ default: m.PincodeTerritoryManagement })));
-const AdminManagementModule = React.lazy(() => import('./components/AdminManagementModule'));
-const ManagerDirectoryModule = React.lazy(() => import('./components/ManagerDirectoryModule'));
+// Resilient lazy loader that auto-retries and self-heals after new deployments
+const lazyWithRetry = (componentImport, componentName = '') =>
+  React.lazy(async () => {
+    const retryKey = `retry_lazy_${componentName || 'module'}`;
+    const hasRetried = sessionStorage.getItem(retryKey);
+
+    try {
+      const module = await componentImport();
+      sessionStorage.removeItem(retryKey);
+
+      const Component =
+        module?.default ||
+        (componentName && module?.[componentName]) ||
+        Object.values(module || {})[0];
+
+      if (!Component) {
+        throw new Error(`Component "${componentName}" could not be resolved from module exports.`);
+      }
+
+      return { default: Component };
+    } catch (error) {
+      const errorMsg = error?.message || String(error);
+      const isChunkError =
+        errorMsg.includes('dynamically imported module') ||
+        errorMsg.includes('Failed to fetch') ||
+        errorMsg.includes('ChunkLoadError') ||
+        errorMsg.includes('loading chunk') ||
+        errorMsg.includes('Failed to load module script');
+
+      if (isChunkError && !hasRetried) {
+        console.warn(`[LazyRetry] Dynamic chunk load failed for ${componentName}. Auto-refreshing to load latest deployment...`, error);
+        sessionStorage.setItem(retryKey, 'true');
+        window.location.reload();
+        return new Promise(() => {}); // Halt execution while reloading
+      }
+
+      sessionStorage.removeItem(retryKey);
+      throw error;
+    }
+  });
+
+const AgentPerformanceDashboard = lazyWithRetry(() => import('./components/AgentPerformanceDashboard'), 'AgentPerformanceDashboard');
+const SecurityDashboard = lazyWithRetry(() => import('./components/SecurityDashboard'), 'SecurityDashboard');
+const AdminSecurityDashboard = lazyWithRetry(() => import('./components/AdminSecurityDashboard'), 'AdminSecurityDashboard');
+const VendorDirectoryModule = lazyWithRetry(() => import('./components/VendorDirectoryModule'), 'VendorDirectoryModule');
+const MembershipCardManagement = lazyWithRetry(() => import('./components/MembershipCardManagement'), 'MembershipCardManagement');
+const EnterprisePaymentDashboard = lazyWithRetry(() => import('./components/EnterprisePaymentDashboard'), 'EnterprisePaymentDashboard');
+const PayrollManagement = lazyWithRetry(() => import('./components/PayrollManagement'), 'PayrollManagement');
+const CustomerSupportTeamManagement = lazyWithRetry(() => import('./components/CustomerSupportTeamManagement'), 'CustomerSupportTeamManagement');
+const AgentDirectoryModule = lazyWithRetry(() => import('./components/AgentDirectoryModule'), 'AgentDirectoryModule');
+const AgentPaymentModule = lazyWithRetry(() => import('./components/AgentPaymentModule'), 'AgentPaymentModule');
+const PincodeTerritoryManagement = lazyWithRetry(() => import('./components/PincodeTerritoryManagement'), 'PincodeTerritoryManagement');
+const AdminManagementModule = lazyWithRetry(() => import('./components/AdminManagementModule'), 'AdminManagementModule');
+const ManagerDirectoryModule = lazyWithRetry(() => import('./components/ManagerDirectoryModule'), 'ManagerDirectoryModule');
 import dataSyncManager from './utils/dataSyncManager';
 
 const resolveSanitizedApiBase = () => {
@@ -221,7 +262,7 @@ const getAgentLevel = (raw) => {
   return 'pincode';
 };
 
-// --- Error Boundary to prevent blank screens ---
+// --- Error Boundary to prevent blank screens and self-heal from deployment chunk mismatches ---
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -234,10 +275,73 @@ class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, errorInfo) {
     console.error("ErrorBoundary caught an error", error, errorInfo);
+    const msg = error?.message || String(error || '');
+    const isChunkError =
+      msg.includes('dynamically imported module') ||
+      msg.includes('Failed to fetch') ||
+      msg.includes('ChunkLoadError') ||
+      msg.includes('loading chunk') ||
+      msg.includes('Failed to load module script');
+
+    if (isChunkError) {
+      const lastAutoReload = sessionStorage.getItem('error_boundary_chunk_reload');
+      const now = Date.now();
+      if (!lastAutoReload || now - Number(lastAutoReload) > 10000) {
+        sessionStorage.setItem('error_boundary_chunk_reload', String(now));
+        window.location.reload();
+      }
+    }
   }
 
   render() {
     if (this.state.hasError) {
+      const msg = this.state.error?.message || String(this.state.error || '');
+      const isChunkError =
+        msg.includes('dynamically imported module') ||
+        msg.includes('Failed to fetch') ||
+        msg.includes('ChunkLoadError') ||
+        msg.includes('loading chunk') ||
+        msg.includes('Failed to load module script');
+
+      if (isChunkError) {
+        return (
+          <div className="p-8 max-w-xl mx-auto my-16 bg-blue-50 dark:bg-slate-900 border border-blue-200 dark:border-blue-900/40 text-slate-800 dark:text-slate-100 rounded-3xl shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <RefreshCw className="w-8 h-8 text-primary-600 animate-spin" />
+              <div>
+                <h1 className="text-xl font-extrabold tracking-tight">Portal Update Deployed</h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400">A new build of the Admin Portal is ready</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-300 mb-6 leading-relaxed">
+              The admin portal was recently updated with new features and fixes. Your browser tab needs to refresh once to load the newest application modules.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => {
+                  sessionStorage.clear();
+                  window.location.reload();
+                }}
+                className="bg-primary-600 hover:bg-primary-700 text-white font-bold px-6 py-2.5 rounded-xl transition-all shadow-md text-sm flex items-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Update & Reload Portal
+              </button>
+              <button
+                onClick={() => {
+                  localStorage.clear();
+                  sessionStorage.clear();
+                  window.location.reload();
+                }}
+                className="bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 text-slate-700 dark:text-slate-200 font-semibold px-4 py-2.5 rounded-xl transition-all text-sm cursor-pointer"
+              >
+                Clear Cache & Reload
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="p-8 max-w-2xl mx-auto my-16 bg-rose-50 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/30 text-rose-800 dark:text-rose-200 rounded-3xl shadow-xl">
           <div className="flex items-center gap-3 mb-4">
@@ -254,15 +358,16 @@ class ErrorBoundary extends React.Component {
             <button
               onClick={() => {
                 localStorage.clear();
-                this.setState({ hasError: false, error: null });
+                sessionStorage.clear();
+                window.location.reload();
               }}
-              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md text-sm"
+              className="bg-rose-600 hover:bg-rose-500 text-white font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md text-sm cursor-pointer"
             >
-              Reset Session & Recover
+              Reset Session & Reload
             </button>
             <button
               onClick={() => this.setState({ hasError: false, error: null })}
-              className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold px-5 py-2.5 rounded-xl transition-all text-sm"
+              className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-semibold px-5 py-2.5 rounded-xl transition-all text-sm cursor-pointer"
             >
               Reset UI
             </button>

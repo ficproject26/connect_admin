@@ -479,3 +479,5 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
     </div>
   );
 }
+
+export { AgentPaymentModule };

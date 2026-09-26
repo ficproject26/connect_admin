@@ -292,3 +292,5 @@ export const CustomerSupportTeamManagement = React.memo(({ token, API_BASE }) =>
     </div>
   );
 });
+
+export default CustomerSupportTeamManagement;

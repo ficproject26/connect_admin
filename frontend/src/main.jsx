@@ -13,6 +13,33 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
+// Auto-recover from stale chunks after new deployments on Vercel
+const triggerDeploymentReload = (source, err) => {
+  console.warn(`[Auto-Recovery] Dynamic chunk load failed via ${source}. Reloading to fetch latest deployment...`, err);
+  const lastReload = sessionStorage.getItem('chunk_reload_timestamp');
+  const now = Date.now();
+  if (!lastReload || now - Number(lastReload) > 8000) {
+    sessionStorage.setItem('chunk_reload_timestamp', String(now));
+    window.location.reload();
+  }
+};
+
+window.addEventListener('vite:preloadError', (event) => {
+  triggerDeploymentReload('vite:preloadError', event);
+});
+
+window.addEventListener('error', (event) => {
+  const msg = event?.message || '';
+  if (
+    msg.includes('dynamically imported module') ||
+    msg.includes('Failed to fetch') ||
+    msg.includes('error loading dynamically imported module') ||
+    msg.includes('ChunkLoadError')
+  ) {
+    triggerDeploymentReload('window:error', event);
+  }
+});
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <App />
