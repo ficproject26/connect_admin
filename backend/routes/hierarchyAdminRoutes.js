@@ -13,14 +13,7 @@ const State = require('../models/State');
 const District = require('../models/District');
 const Division = require('../models/Division');
 const Pincode = require('../models/Pincode');
-
-const INDIAN_STATES = [
-    "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-    "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-    "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-    "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
-    "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
-];
+const { validateTerritoryHierarchy } = require('./territory');
 
 // MANAGER LIMITS CONFIGURATION
 const MANAGER_LIMITS = {
@@ -439,6 +432,24 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
             return res.status(400).json({ msg: 'State and Pincode are required for Pincode Admin' });
         }
 
+        // Strict Database Hierarchy Verification
+        const terrValidation = await validateTerritoryHierarchy({
+            state: finalState,
+            district: ['district', 'division', 'pincode'].includes(targetLevel) ? finalDistrict : null,
+            division: ['division', 'pincode'].includes(targetLevel) ? finalDivision : null,
+            pincode: targetLevel === 'pincode' ? finalPincode : null,
+            requireActive: true
+        });
+
+        if (!terrValidation.valid) {
+            return res.status(400).json({ msg: terrValidation.message, error: 'INVALID_TERRITORY' });
+        }
+
+        if (terrValidation.data?.state) finalState = terrValidation.data.state.name;
+        if (terrValidation.data?.district) finalDistrict = terrValidation.data.district.name;
+        if (terrValidation.data?.division) finalDivision = terrValidation.data.division.name;
+        if (terrValidation.data?.pincode) finalPincode = terrValidation.data.pincode.code;
+
         // 4. DUPLICATE CHECK
         const cleanEmail = email.toLowerCase().trim();
         const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
@@ -761,6 +772,24 @@ router.post('/managers/request', [auth, territoryScope], async (req, res) => {
             return res.status(400).json({ msg: 'State and Pincode are required for Pincode Manager' });
         }
 
+        // Strict Database Hierarchy Verification
+        const terrValidation = await validateTerritoryHierarchy({
+            state: finalState,
+            district: ['district', 'division', 'pincode'].includes(targetLevel) ? finalDistrict : null,
+            division: ['division', 'pincode'].includes(targetLevel) ? finalDivision : null,
+            pincode: targetLevel === 'pincode' ? finalPincode : null,
+            requireActive: true
+        });
+
+        if (!terrValidation.valid) {
+            return res.status(400).json({ msg: terrValidation.message, error: 'INVALID_TERRITORY' });
+        }
+
+        if (terrValidation.data?.state) finalState = terrValidation.data.state.name;
+        if (terrValidation.data?.district) finalDistrict = terrValidation.data.district.name;
+        if (terrValidation.data?.division) finalDivision = terrValidation.data.division.name;
+        if (terrValidation.data?.pincode) finalPincode = terrValidation.data.pincode.code;
+
         // CHECK TERRITORY MANAGER LIMITS
         const maxLimit = MANAGER_LIMITS[targetLevel] || 2;
         const countFilter = {
@@ -987,53 +1016,73 @@ router.get('/territory/options', [auth, territoryScope], async (req, res) => {
     try {
         const { state, district, division } = req.query;
 
-        // States
-        let statesList = INDIAN_STATES;
+        // States: Single source of truth from State collection in MongoDB
+        let statesList = [];
         if (!req.adminUser.isMainAdmin && req.adminUser.assignedState) {
             statesList = [req.adminUser.assignedState];
+        } else {
+            const activeStates = await State.find({ status: 'Active' }).sort({ name: 1 }).lean();
+            statesList = activeStates.map(s => s.name);
         }
 
-        // Districts for selected state
+        // Districts for selected state: strictly belonging to stateId
         let districtsList = [];
         const targetState = state || req.adminUser.assignedState;
+        let matchedStateDoc = null;
         if (targetState) {
-            const dbDistricts = await Pincode.distinct('district', { state: new RegExp(`^${targetState}$`, 'i') });
-            const modelDistricts = await District.find({}).populate('stateId', 'name').lean();
-            const filteredModelDistricts = modelDistricts
-                .filter(d => d.stateId?.name && d.stateId.name.toLowerCase() === targetState.toLowerCase())
-                .map(d => d.name);
+            matchedStateDoc = await State.findOne({
+                $and: [
+                    { status: 'Active' },
+                    {
+                        $or: [
+                            { name: new RegExp(`^${targetState.trim()}$`, 'i') },
+                            { code: targetState.trim().toUpperCase() }
+                        ]
+                    }
+                ]
+            });
 
-            districtsList = Array.from(new Set([...dbDistricts, ...filteredModelDistricts])).filter(Boolean).sort();
+            if (matchedStateDoc) {
+                const dbDistricts = await District.find({ stateId: matchedStateDoc._id, status: 'Active' }).sort({ name: 1 }).lean();
+                districtsList = dbDistricts.map(d => d.name);
+            }
         }
 
-        // Divisions for selected district
+        // Divisions for selected district: strictly belonging to districtId
         let divisionsList = [];
         const targetDistrict = district || req.adminUser.assignedDistrict;
-        if (targetDistrict) {
-            const dbDivisions = await Pincode.distinct('division', { district: new RegExp(`^${targetDistrict}$`, 'i') });
-            const modelDivisions = await Division.find({}).populate('districtId', 'name').lean();
-            const filteredModelDivisions = modelDivisions
-                .filter(d => d.districtId?.name && d.districtId.name.toLowerCase() === targetDistrict.toLowerCase())
-                .map(d => d.name);
+        let matchedDistDoc = null;
+        if (targetDistrict && matchedStateDoc) {
+            matchedDistDoc = await District.findOne({
+                stateId: matchedStateDoc._id,
+                name: new RegExp(`^${targetDistrict.trim()}$`, 'i'),
+                status: 'Active'
+            });
 
-            divisionsList = Array.from(new Set([...dbDivisions, ...filteredModelDivisions])).filter(Boolean).sort();
+            if (matchedDistDoc) {
+                const dbDivisions = await Division.find({ districtId: matchedDistDoc._id, status: 'Active' }).sort({ name: 1 }).lean();
+                divisionsList = dbDivisions.map(d => d.name);
+            }
         }
 
-        // Pincodes for selected division or district
+        // Pincodes for selected division: strictly belonging to divisionId
         let pincodesList = [];
         const targetDivision = division || req.adminUser.assignedDivision;
-        if (targetDivision || targetDistrict) {
-            const pinFilter = {};
-            if (targetState) pinFilter.state = new RegExp(`^${targetState}$`, 'i');
-            if (targetDistrict) pinFilter.district = new RegExp(`^${targetDistrict}$`, 'i');
-            if (targetDivision) pinFilter.division = new RegExp(`^${targetDivision}$`, 'i');
+        if (targetDivision && matchedDistDoc) {
+            const matchedDivDoc = await Division.findOne({
+                districtId: matchedDistDoc._id,
+                name: new RegExp(`^${targetDivision.trim()}$`, 'i'),
+                status: 'Active'
+            });
 
-            const pins = await Pincode.find(pinFilter).select('code name postOffice').limit(100).lean();
-            pincodesList = pins.map(p => ({
-                code: p.code,
-                name: p.name || p.postOffice || p.code,
-                postOffice: p.postOffice || ''
-            }));
+            if (matchedDivDoc) {
+                const pins = await Pincode.find({ divisionId: matchedDivDoc._id, status: 'Active' }).select('code name postOffice').sort({ code: 1 }).lean();
+                pincodesList = pins.map(p => ({
+                    code: p.code,
+                    name: p.name || p.postOffice || p.code,
+                    postOffice: p.postOffice || ''
+                }));
+            }
         }
 
         res.json({

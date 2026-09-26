@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
+const { validateTerritoryHierarchy } = require('./territory');
 const Pincode = require('../models/Pincode');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
@@ -108,41 +109,37 @@ router.post('/register', async (req, res) => {
         }
         let territoryStr = territoryParts.length > 0 ? territoryParts.join(' / ') : (req.body.assignedArea || territory.state || '');
 
-        // Resolve Pincode ID
-        let pincodeId = req.body.assignedPincode;
-        const pincodeCode = territory.pincode || req.body.pincode;
-        if (!pincodeId && pincodeCode) {
-            let pinDoc = await Pincode.findOne({ code: pincodeCode });
-            if (!pinDoc) {
-                pinDoc = new Pincode({
-                    code: pincodeCode,
-                    name: req.body.postOffice || req.body.city || 'Default Office',
-                    district: territory.district || req.body.district || 'Default District',
-                    state: territory.state || req.body.state || 'Default State'
-                });
-                await pinDoc.save();
-            }
-            pincodeId = pinDoc._id;
-        }
-
-        const kDocs = req.body.kycDocs || req.body.kyc || {};
-        const kycMapped = {
-            aadhaarNumber: kDocs.aadhaarNumber || req.body.aadhaarNumber || '',
-            aadhaarImage: kDocs.aadhaarCard || kDocs.aadhaarImage || '',
-            panNumber: kDocs.panNumber || req.body.panNumber || '',
-            panImage: kDocs.panCard || kDocs.panImage || '',
-            selfie: kDocs.passportPhoto || kDocs.selfie || '',
-            businessProofImage: kDocs.signature || kDocs.businessProofImage || '',
-            educationalCertificates: kDocs.educationalCertificates || kDocs.educationCert || '',
-            cancelledCheque: kDocs.cancelledCheque || kDocs.bankCheque || ''
-        };
-
+        // Central Database Hierarchy Validation (Mandatory Rule)
         const cleanTerritory = {
             state: territory.state || req.body.state || req.body.assignedState || '',
             district: territory.district || req.body.district || req.body.assignedDistrict || '',
             division: territory.division || req.body.division || req.body.assignedDivision || '',
-            pincode: territory.pincode || req.body.pincode || ''
+            pincode: territory.pincode || req.body.pincode || req.body.assignedPincode || ''
         };
+
+        let pincodeId = null;
+
+        if (cleanTerritory.state || cleanTerritory.district || cleanTerritory.division || cleanTerritory.pincode) {
+            const terrVal = await validateTerritoryHierarchy({
+                state: cleanTerritory.state,
+                district: ['district', 'division', 'pincode'].includes(agentRole) ? cleanTerritory.district : null,
+                division: ['division', 'pincode'].includes(agentRole) ? cleanTerritory.division : null,
+                pincode: agentRole === 'pincode' ? cleanTerritory.pincode : null,
+                requireActive: true
+            });
+
+            if (!terrVal.valid) {
+                return res.status(400).json({ msg: terrVal.message, message: terrVal.message, error: 'INVALID_TERRITORY' });
+            }
+
+            if (terrVal.data?.state) cleanTerritory.state = terrVal.data.state.name;
+            if (terrVal.data?.district) cleanTerritory.district = terrVal.data.district.name;
+            if (terrVal.data?.division) cleanTerritory.division = terrVal.data.division.name;
+            if (terrVal.data?.pincode) {
+                cleanTerritory.pincode = terrVal.data.pincode.code;
+                pincodeId = terrVal.data.pincode._id;
+            }
+        }
 
         user = new User({ 
             name, 

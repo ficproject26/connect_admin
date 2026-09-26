@@ -28,23 +28,9 @@ router.get('/available', async (req, res) => {
     }
 });
 
-// @route    POST api/pincodes/seed
-// @desc     Seed initial pincodes (Admin only in real app)
-// @access   Public (for now)
+// Legacy seed endpoint disabled - territory must only be created via Admin Territory Management
 router.post('/seed', async (req, res) => {
-    const pincodes = [
-        { code: '400001', name: 'Fort', district: 'Mumbai', state: 'Maharashtra' },
-        { code: '110001', name: 'Connaught Place', district: 'New Delhi', state: 'Delhi' },
-        { code: '560001', name: 'Bangalore GPO', district: 'Bangalore', state: 'Karnataka' },
-        { code: '600001', name: 'Chennai GPO', district: 'Chennai', state: 'Tamil Nadu' },
-    ];
-    try {
-        await Pincode.insertMany(pincodes);
-        res.json({ msg: 'Pincodes seeded' });
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server error');
-    }
+    res.status(403).json({ msg: 'Manual seeding disabled. Use Admin Territory Management.' });
 });
 
 module.exports = router;

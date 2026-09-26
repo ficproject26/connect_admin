@@ -8,13 +8,6 @@ import {
 } from 'lucide-react';
 import StateAdminOnboardingWizard from './StateAdminOnboardingWizard';
 
-const INDIAN_STATES = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
-  "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
-];
 
 export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast }) => {
   // Primary Tabs: 'hierarchy' | 'requests' | 'activity'
@@ -1219,29 +1212,11 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
                 {activityLogs.length === 0 ? (
-                  // Clean default audit feed items
-                  [
-                    { when: '23 Sep 2026 10:45 AM', who: 'Tamil Nadu State Admin', what: 'Created District Admin', role: 'District Admin', territory: 'Tamil Nadu → Dharmapuri', status: 'Active' },
-                    { when: '23 Sep 2026 11:15 AM', who: 'Dharmapuri District Admin', what: 'Created Division Admin', role: 'Division Admin', territory: 'Tamil Nadu → Dharmapuri → Harur', status: 'Active' },
-                    { when: '23 Sep 2026 12:10 PM', who: 'Harur Division Admin', what: 'Requested Pincode Admin', role: 'Pincode Admin', territory: 'Tamil Nadu → Dharmapuri → Harur → 635305', status: 'Pending Approval' }
-                  ].map((log, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/50 transition-colors">
-                      <td className="py-3 px-3 text-slate-400 text-[11px] font-mono">{log.when}</td>
-                      <td className="py-3 px-3 font-bold text-slate-800 dark:text-slate-200">{log.who}</td>
-                      <td className="py-3 px-3 font-semibold text-primary-600 dark:text-primary-400">{log.what}</td>
-                      <td className="py-3 px-3">
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${getRoleBadge(log.role)}`}>
-                          {log.role}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-300 font-medium">{log.territory}</td>
-                      <td className="py-3 px-3">
-                        <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${log.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'}`}>
-                          {log.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  <tr>
+                    <td colSpan="6" className="py-8 text-center text-slate-400 text-xs font-medium">
+                      No territory audit activity logs recorded yet.
+                    </td>
+                  </tr>
                 ) : (
                   activityLogs.map((log, idx) => (
                     <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/50 transition-colors">

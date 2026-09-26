@@ -6444,50 +6444,9 @@ function App() {
                         codeVal = val.toUpperCase() + '01';
                       }
 
-                      const districtMap = {
-                        'mumbai': { state: 'Maharashtra', city: 'Mumbai', code: 'MUM01' },
-                        'delhi': { state: 'Delhi', city: 'Delhi', code: 'DEL01' },
-                        'bangalore': { state: 'Karnataka', city: 'Bengaluru', code: 'BLR01' },
-                        'bengaluru': { state: 'Karnataka', city: 'Bengaluru', code: 'BLR01' },
-                        'chennai': { state: 'Tamil Nadu', city: 'Chennai', code: 'CHN01' },
-                        'kolkata': { state: 'West Bengal', city: 'Kolkata', code: 'KOL01' },
-                        'hyderabad': { state: 'Telangana', city: 'Hyderabad', code: 'HYD01' },
-                        'pune': { state: 'Maharashtra', city: 'Pune', code: 'PUN01' },
-                        'ahmedabad': { state: 'Gujarat', city: 'Ahmedabad', code: 'AMD01' },
-                        'jaipur': { state: 'Rajasthan', city: 'Jaipur', code: 'JAI01' },
-                        'lucknow': { state: 'Uttar Pradesh', city: 'Lucknow', code: 'LKO01' },
-                        'patna': { state: 'Bihar', city: 'Patna', code: 'PAT01' },
-                        'coimbatore': { state: 'Tamil Nadu', city: 'Coimbatore', code: 'CBE01' },
-                        'madurai': { state: 'Tamil Nadu', city: 'Madurai', code: 'MDU01' },
-                        'surat': { state: 'Gujarat', city: 'Surat', code: 'SUR01' },
-                        'kanpur': { state: 'Uttar Pradesh', city: 'Kanpur', code: 'KAN01' },
-                        'nagpur': { state: 'Maharashtra', city: 'Nagpur', code: 'NAG01' },
-                        'indore': { state: 'Madhya Pradesh', city: 'Indore', code: 'IND01' },
-                        'bhopal': { state: 'Madhya Pradesh', city: 'Bhopal', code: 'BHO01' },
-                        'visakhapatnam': { state: 'Andhra Pradesh', city: 'Visakhapatnam', code: 'VTZ01' },
-                        'vadodara': { state: 'Gujarat', city: 'Vadodara', code: 'BDQ01' },
-                        'kochi': { state: 'Kerala', city: 'Kochi', code: 'COK01' },
-                        'thiruvananthapuram': { state: 'Kerala', city: 'Thiruvananthapuram', code: 'TRV01' }
-                      };
-
-                      const key = val.trim().toLowerCase();
-                      const matched = districtMap[key];
-
-                      if (matched) {
-                        form.code.value = matched.code;
-                        form.state.value = matched.state;
-                        form.district.value = val;
-                        form.city.value = matched.city;
-                        form.address.value = `${matched.city}, ${matched.state}`;
-                        form.contactNumber.value = '9876543210';
-                      } else {
-                        form.code.value = codeVal;
-                        form.district.value = val;
-                        form.city.value = val;
-                        form.state.value = '';
-                        form.address.value = val ? `${val} Central Office` : '';
-                        form.contactNumber.value = val ? '9876543210' : '';
-                      }
+                      form.code.value = codeVal;
+                      form.district.value = val;
+                      if (!form.city.value) form.city.value = val;
                     }}
                     required
                     type="text"

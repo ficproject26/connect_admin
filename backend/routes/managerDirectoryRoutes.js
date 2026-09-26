@@ -5,7 +5,11 @@ const auth = require('../middleware/auth');
 const Manager = require('../models/Manager');
 const ManagerRequest = require('../models/ManagerRequest');
 const Pincode = require('../models/Pincode');
+const State = require('../models/State');
+const District = require('../models/District');
+const Division = require('../models/Division');
 const User = require('../models/User');
+const { validateTerritoryHierarchy } = require('./territory');
 
 // ============================================================
 // MANAGER DIRECTORY ROUTES
@@ -44,6 +48,9 @@ router.get('/manager-directory/summary', auth, async (req, res) => {
 // ============================================================
 router.get('/manager-directory/states', auth, async (req, res) => {
     try {
+        // Master Database States (Single Source of Truth)
+        const dbStates = await State.find({ status: 'Active' }).sort({ name: 1 }).lean();
+
         // Aggregate managers by state
         const stateCounts = await Manager.aggregate([
             { $group: { _id: '$assignedState', total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ['$status', 'Active'] }, 1, 0] } } } },
@@ -54,8 +61,16 @@ router.get('/manager-directory/states', auth, async (req, res) => {
         const requestStates = await ManagerRequest.distinct('assignedState', { status: 'Pending' });
 
         const stateMap = {};
+        dbStates.forEach(s => {
+            if (s.name) stateMap[s.name] = { state: s.name, code: s.code, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+        });
+
         stateCounts.forEach(s => {
-            if (s._id) stateMap[s._id] = { state: s._id, totalManagers: s.total, activeManagers: s.active, pendingRequests: 0 };
+            if (s._id) {
+                if (!stateMap[s._id]) stateMap[s._id] = { state: s._id, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+                stateMap[s._id].totalManagers = s.total;
+                stateMap[s._id].activeManagers = s.active;
+            }
         });
         requestStates.forEach(s => {
             if (s && !stateMap[s]) stateMap[s] = { state: s, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
@@ -87,6 +102,24 @@ router.get('/manager-directory/states/:state/districts', auth, async (req, res) 
     try {
         const stateName = decodeURIComponent(req.params.state);
 
+        // Find State document in central database
+        const stDoc = await State.findOne({
+            $or: [
+                { name: safeRegex(stateName) },
+                { code: stateName.toUpperCase() }
+            ]
+        });
+
+        const districtMap = {};
+
+        // Populate all Active Districts created in Admin for this State
+        if (stDoc) {
+            const dbDistricts = await District.find({ stateId: stDoc._id, status: 'Active' }).sort({ name: 1 }).lean();
+            dbDistricts.forEach(d => {
+                if (d.name) districtMap[d.name] = { district: d.name, state: stDoc.name, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+            });
+        }
+
         // Get distinct districts from Manager collection + ManagerRequest collection
         const [managerDistricts, requestDistricts] = await Promise.all([
             Manager.aggregate([
@@ -97,10 +130,13 @@ router.get('/manager-directory/states/:state/districts', auth, async (req, res) 
             ManagerRequest.distinct('assignedDistrict', { assignedState: safeRegex(stateName), status: 'Pending' })
         ]);
 
-        const districtMap = {};
         managerDistricts.forEach(d => {
             const key = (d._id || '').trim();
-            if (key) districtMap[key] = { district: key, state: stateName, totalManagers: d.total, activeManagers: d.active, pendingRequests: 0 };
+            if (key) {
+                if (!districtMap[key]) districtMap[key] = { district: key, state: stateName, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+                districtMap[key].totalManagers = d.total;
+                districtMap[key].activeManagers = d.active;
+            }
         });
         requestDistricts.forEach(d => {
             const key = (d || '').trim();
@@ -134,6 +170,20 @@ router.get('/manager-directory/districts/:district/divisions', auth, async (req,
         const districtName = decodeURIComponent(req.params.district);
         const stateName = req.query.state || '';
 
+        const distDoc = await District.findOne({
+            name: safeRegex(districtName)
+        });
+
+        const divisionMap = {};
+
+        // Master DB Active Divisions
+        if (distDoc) {
+            const dbDivisions = await Division.find({ districtId: distDoc._id, status: 'Active' }).sort({ name: 1 }).lean();
+            dbDivisions.forEach(v => {
+                if (v.name) divisionMap[v.name] = { division: v.name, district: distDoc.name, state: stateName || '', totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+            });
+        }
+
         const matchFilter = { assignedDistrict: safeRegex(districtName) };
         if (stateName) matchFilter.assignedState = safeRegex(stateName);
 
@@ -146,10 +196,13 @@ router.get('/manager-directory/districts/:district/divisions', auth, async (req,
             ManagerRequest.distinct('assignedDivision', { ...matchFilter, status: 'Pending' })
         ]);
 
-        const divisionMap = {};
         managerDivisions.forEach(d => {
             const key = (d._id || '').trim();
-            if (key) divisionMap[key] = { division: key, district: districtName, state: stateName, totalManagers: d.total, activeManagers: d.active, pendingRequests: 0 };
+            if (key) {
+                if (!divisionMap[key]) divisionMap[key] = { division: key, district: districtName, state: stateName, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+                divisionMap[key].totalManagers = d.total;
+                divisionMap[key].activeManagers = d.active;
+            }
         });
         requestDivisions.forEach(d => {
             const key = (d || '').trim();
@@ -183,6 +236,20 @@ router.get('/manager-directory/divisions/:division/pincodes', auth, async (req, 
         const divisionName = decodeURIComponent(req.params.division);
         const { state, district } = req.query;
 
+        const divDoc = await Division.findOne({
+            name: safeRegex(divisionName)
+        });
+
+        const pincodeMap = {};
+
+        // Master DB Active Pincodes
+        if (divDoc) {
+            const dbPincodes = await Pincode.find({ divisionId: divDoc._id, status: 'Active' }).sort({ code: 1 }).lean();
+            dbPincodes.forEach(p => {
+                if (p.code) pincodeMap[p.code] = { pincode: p.code, division: divDoc.name, district: district || p.district || '', state: state || p.state || '', totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+            });
+        }
+
         const matchFilter = { assignedDivision: safeRegex(divisionName) };
         if (state) matchFilter.assignedState = safeRegex(state);
         if (district) matchFilter.assignedDistrict = safeRegex(district);
@@ -196,10 +263,13 @@ router.get('/manager-directory/divisions/:division/pincodes', auth, async (req, 
             ManagerRequest.distinct('assignedPincode', { ...matchFilter, status: 'Pending' })
         ]);
 
-        const pincodeMap = {};
         managerPincodes.forEach(p => {
             const key = (p._id || '').trim();
-            if (key) pincodeMap[key] = { pincode: key, division: divisionName, district: district || '', state: state || '', totalManagers: p.total, activeManagers: p.active, pendingRequests: 0 };
+            if (key) {
+                if (!pincodeMap[key]) pincodeMap[key] = { pincode: key, division: divisionName, district: district || '', state: state || '', totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+                pincodeMap[key].totalManagers = p.total;
+                pincodeMap[key].activeManagers = p.active;
+            }
         });
         requestPincodes.forEach(p => {
             const key = (p || '').trim();
@@ -517,31 +587,33 @@ router.get('/manager-directory/territory-options', auth, async (req, res) => {
     try {
         const { state, district, division } = req.query;
 
-        // Get distinct states from Manager collection
-        const states = await Manager.distinct('assignedState');
-        states.sort();
+        // Master DB Active States
+        const states = await State.find({ status: 'Active' }).sort({ name: 1 }).distinct('name');
 
         let districts = [];
         if (state && state !== 'All') {
-            districts = await Manager.distinct('assignedDistrict', { assignedState: safeRegex(state) });
-            districts = districts.filter(Boolean).sort();
+            const stDoc = await State.findOne({
+                $or: [{ name: safeRegex(state) }, { code: state.toUpperCase() }]
+            });
+            if (stDoc) {
+                districts = await District.find({ stateId: stDoc._id, status: 'Active' }).sort({ name: 1 }).distinct('name');
+            }
         }
 
         let divisions = [];
         if (district && district !== 'All') {
-            const filter = { assignedDistrict: safeRegex(district) };
-            if (state && state !== 'All') filter.assignedState = safeRegex(state);
-            divisions = await Manager.distinct('assignedDivision', filter);
-            divisions = divisions.filter(Boolean).sort();
+            const distDoc = await District.findOne({ name: safeRegex(district) });
+            if (distDoc) {
+                divisions = await Division.find({ districtId: distDoc._id, status: 'Active' }).sort({ name: 1 }).distinct('name');
+            }
         }
 
         let pincodes = [];
         if (division && division !== 'All') {
-            const filter = { assignedDivision: safeRegex(division) };
-            if (state && state !== 'All') filter.assignedState = safeRegex(state);
-            if (district && district !== 'All') filter.assignedDistrict = safeRegex(district);
-            pincodes = await Manager.distinct('assignedPincode', filter);
-            pincodes = pincodes.filter(Boolean).sort();
+            const divDoc = await Division.findOne({ name: safeRegex(division) });
+            if (divDoc) {
+                pincodes = await Pincode.find({ divisionId: divDoc._id, status: 'Active' }).sort({ code: 1 }).distinct('code');
+            }
         }
 
         res.json({ success: true, states, districts, divisions, pincodes });
@@ -574,6 +646,19 @@ const handleNominateManager = async (req, res) => {
             return res.status(400).json({
                 msg: `Invalid manager level. Must be one of: ${validLevels.join(', ')}`
             });
+        }
+
+        // Mandatory Central Territory Database Validation
+        const terrValidation = await validateTerritoryHierarchy({
+            state: assignedState,
+            district: level.toLowerCase() !== 'state' ? assignedDistrict : null,
+            division: ['division', 'pincode'].includes(level.toLowerCase()) ? assignedDivision : null,
+            pincode: level.toLowerCase() === 'pincode' ? assignedPincode : null,
+            requireActive: true
+        });
+
+        if (!terrValidation.valid) {
+            return res.status(400).json({ msg: terrValidation.message, error: 'INVALID_TERRITORY' });
         }
 
         // Check manager quota limits (Section 12)

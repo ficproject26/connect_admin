@@ -191,19 +191,6 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
     if ((!city || !state) && addr) {
         const parts = addr.split(',').map(p => p.trim()).filter(p => p && !isInvalidLoc(p));
         for (const part of parts) {
-            const INDIAN_STATES = [
-                "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-                "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-                "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-                "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
-                "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
-            ];
-            const matchedState = INDIAN_STATES.find(s => s.toLowerCase() === part.toLowerCase() || part.toLowerCase().includes(s.toLowerCase()));
-            if (matchedState && !state) {
-                state = matchedState;
-                continue;
-            }
-
             if (part.toUpperCase().includes('DISTRICT') || part.toUpperCase().includes('DIST')) {
                 const cleanDist = part.replace(/DISTRICT|DIST/gi, '').trim();
                 if (!city && cleanDist) city = cleanDist;
@@ -213,18 +200,6 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
             } else if (!city && parts.length > 1 && part !== parts[0] && !part.match(/^\d+$/)) {
                 city = part;
             }
-        }
-    }
-
-    if (pin && pin.length === 6) {
-        const prefix2 = pin.substring(0, 2);
-        if (!state) {
-            if (['60', '61', '62', '63', '64'].includes(prefix2)) state = "Tamil Nadu";
-            else if (['56', '57', '58', '59'].includes(prefix2)) state = "Karnataka";
-            else if (['50', '51', '52', '53'].includes(prefix2)) state = "Andhra Pradesh / Telangana";
-            else if (['67', '68', '69'].includes(prefix2)) state = "Kerala";
-            else if (['40', '41', '42', '43', '44'].includes(prefix2)) state = "Maharashtra";
-            else if (['11'].includes(prefix2)) state = "Delhi";
         }
     }
 

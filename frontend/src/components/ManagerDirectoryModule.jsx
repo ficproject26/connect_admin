@@ -42,14 +42,6 @@ const getStatusBadge = (status) => {
   return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
 };
 
-const INDIAN_STATES = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", 
-  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh", 
-  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab", 
-  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", 
-  "Uttarakhand", "West Bengal", "Delhi", "Puducherry"
-];
-
 // ─────────────────────────────────────────────────────────────
 // SMALL REUSABLE COMPONENTS
 // ─────────────────────────────────────────────────────────────

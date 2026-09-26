@@ -1079,17 +1079,245 @@ router.delete('/pincodes/:id', [auth, superAdminAuth], async (req, res) => {
 // ============================================================
 // 7. AUDIT LOGS
 // ============================================================
-router.get('/audit-logs', [auth], async (req, res) => {
+// ============================================================
+// 8. CENTRALIZED TERRITORY HIERARCHY VALIDATION & LOOKUP
+// ============================================================
+
+/**
+ * Strict Hierarchy Validator
+ * Validates that:
+ * 1. State exists and is Active
+ * 2. District exists, is Active, and belongs to State
+ * 3. Division exists, is Active, and belongs to District
+ * 4. Pincode exists, is Active, and belongs to Division/District/State
+ */
+const validateTerritoryHierarchy = async ({ state, district, division, pincode, requireActive = true }) => {
+    let stateDoc = null;
+    let distDoc = null;
+    let divDoc = null;
+    let pinDoc = null;
+
+    const statusFilter = requireActive ? { status: 'Active' } : {};
+
+    // 1. Validate State (if provided)
+    if (state) {
+        const stStr = String(state).trim();
+        const isOid = mongoose.Types.ObjectId.isValid(stStr);
+        stateDoc = await State.findOne({
+            $and: [
+                statusFilter,
+                {
+                    $or: [
+                        ...(isOid ? [{ _id: new mongoose.Types.ObjectId(stStr) }] : []),
+                        { name: new RegExp(`^${stStr}$`, 'i') },
+                        { code: stStr.toUpperCase() }
+                    ]
+                }
+            ]
+        });
+
+        if (!stateDoc) {
+            return {
+                valid: false,
+                message: `Territory validation failure: State "${stStr}" does not exist in the database or is inactive.`
+            };
+        }
+    }
+
+    // 2. Validate District (if provided)
+    if (district) {
+        const distStr = String(district).trim();
+        const isDistOid = mongoose.Types.ObjectId.isValid(distStr);
+
+        const distQuery = {
+            $and: [
+                statusFilter,
+                {
+                    $or: [
+                        ...(isDistOid ? [{ _id: new mongoose.Types.ObjectId(distStr) }] : []),
+                        { name: new RegExp(`^${distStr}$`, 'i') },
+                        { code: distStr.toUpperCase() }
+                    ]
+                }
+            ]
+        };
+
+        if (stateDoc) {
+            distQuery.stateId = stateDoc._id;
+        }
+
+        distDoc = await District.findOne(distQuery);
+
+        if (!distDoc) {
+            const stateContext = stateDoc ? ` belonging to State "${stateDoc.name}"` : '';
+            return {
+                valid: false,
+                message: `Territory validation failure: District "${distStr}" does not exist${stateContext} or is inactive.`
+            };
+        }
+
+        if (!stateDoc && distDoc.stateId) {
+            stateDoc = await State.findOne({ _id: distDoc.stateId, ...statusFilter });
+        }
+    }
+
+    // 3. Validate Division (if provided)
+    if (division) {
+        const divStr = String(division).trim();
+        const isDivOid = mongoose.Types.ObjectId.isValid(divStr);
+
+        const divQuery = {
+            $and: [
+                statusFilter,
+                {
+                    $or: [
+                        ...(isDivOid ? [{ _id: new mongoose.Types.ObjectId(divStr) }] : []),
+                        { name: new RegExp(`^${divStr}$`, 'i') },
+                        { code: divStr.toUpperCase() }
+                    ]
+                }
+            ]
+        };
+
+        if (distDoc) {
+            divQuery.districtId = distDoc._id;
+        } else if (stateDoc) {
+            divQuery.stateId = stateDoc._id;
+        }
+
+        divDoc = await Division.findOne(divQuery);
+
+        if (!divDoc) {
+            const distContext = distDoc ? ` belonging to District "${distDoc.name}"` : '';
+            return {
+                valid: false,
+                message: `Territory validation failure: Division "${divStr}" does not exist${distContext} or is inactive.`
+            };
+        }
+
+        if (!distDoc && divDoc.districtId) {
+            distDoc = await District.findOne({ _id: divDoc.districtId, ...statusFilter });
+        }
+        if (!stateDoc && divDoc.stateId) {
+            stateDoc = await State.findOne({ _id: divDoc.stateId, ...statusFilter });
+        }
+    }
+
+    // 4. Validate Pincode (if provided)
+    if (pincode) {
+        const pinStr = String(pincode).trim();
+        const pinQuery = {
+            code: pinStr,
+            ...statusFilter
+        };
+
+        pinDoc = await Pincode.findOne(pinQuery);
+
+        if (!pinDoc) {
+            return {
+                valid: false,
+                message: `Territory validation failure: Pincode "${pinStr}" is not registered in the database or is inactive.`
+            };
+        }
+
+        // Verify Pincode belongs to specified Division
+        if (divDoc) {
+            const divMatch = (pinDoc.divisionId && pinDoc.divisionId.equals(divDoc._id)) ||
+                (pinDoc.division && pinDoc.division.toLowerCase() === divDoc.name.toLowerCase());
+            if (!divMatch) {
+                return {
+                    valid: false,
+                    message: `Territory validation failure: Pincode "${pinStr}" does not belong to Division "${divDoc.name}".`
+                };
+            }
+        }
+
+        // Verify Pincode belongs to specified District
+        if (distDoc) {
+            const distMatch = (pinDoc.districtId && pinDoc.districtId.equals(distDoc._id)) ||
+                (pinDoc.district && pinDoc.district.toLowerCase() === distDoc.name.toLowerCase());
+            if (!distMatch) {
+                return {
+                    valid: false,
+                    message: `Territory validation failure: Pincode "${pinStr}" does not belong to District "${distDoc.name}".`
+                };
+            }
+        }
+
+        // Verify Pincode belongs to specified State
+        if (stateDoc) {
+            const stateMatch = (pinDoc.stateId && pinDoc.stateId.equals(stateDoc._id)) ||
+                (pinDoc.state && pinDoc.state.toLowerCase() === stateDoc.name.toLowerCase());
+            if (!stateMatch) {
+                return {
+                    valid: false,
+                    message: `Territory validation failure: Pincode "${pinStr}" does not belong to State "${stateDoc.name}".`
+                };
+            }
+        }
+    }
+
+    return {
+        valid: true,
+        data: {
+            state: stateDoc ? { _id: stateDoc._id, name: stateDoc.name, code: stateDoc.code } : null,
+            district: distDoc ? { _id: distDoc._id, name: distDoc.name, code: distDoc.code } : null,
+            division: divDoc ? { _id: divDoc._id, name: divDoc.name, code: divDoc.code } : null,
+            pincode: pinDoc ? { _id: pinDoc._id, code: pinDoc.code, name: pinDoc.name } : null
+        }
+    };
+};
+
+// Lookup Pincode details from central database
+router.get('/lookup/:code', [optionalAuth], async (req, res) => {
     try {
-        const limit = parseInt(req.query.limit) || 50;
-        const logs = await TerritoryAuditLog.find()
-            .sort({ timestamp: -1 })
-            .limit(limit)
+        const { code } = req.params;
+        const pin = await Pincode.findOne({ code: String(code).trim() })
+            .populate('stateId', 'name code status')
+            .populate('districtId', 'name code status')
+            .populate('divisionId', 'name code status')
             .lean();
-        res.json({ success: true, logs });
+
+        if (!pin) {
+            return res.status(404).json({ success: false, message: `Pincode ${code} not found in database.` });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                pincode: pin.code,
+                name: pin.name,
+                state: pin.stateId?.name || pin.state,
+                stateCode: pin.stateId?.code || '',
+                stateId: pin.stateId?._id || null,
+                district: pin.districtId?.name || pin.district,
+                districtCode: pin.districtId?.code || '',
+                districtId: pin.districtId?._id || null,
+                division: pin.divisionId?.name || pin.division,
+                divisionCode: pin.divisionId?.code || '',
+                divisionId: pin.divisionId?._id || null,
+                status: pin.status
+            }
+        });
     } catch (err) {
-        res.status(500).json({ msg: 'Server error fetching audit logs' });
+        res.status(500).json({ success: false, message: 'Server error looking up pincode' });
     }
 });
+
+// Validate Territory Hierarchy Endpoint
+router.post('/validate', [optionalAuth], async (req, res) => {
+    try {
+        const { state, district, division, pincode } = req.body;
+        const result = await validateTerritoryHierarchy({ state, district, division, pincode });
+        if (!result.valid) {
+            return res.status(400).json({ success: false, message: result.message });
+        }
+        res.json({ success: true, data: result.data });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Server error validating territory' });
+    }
+});
+
+router.validateTerritoryHierarchy = validateTerritoryHierarchy;
 
 module.exports = router;
