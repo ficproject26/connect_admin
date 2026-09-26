@@ -1573,82 +1573,121 @@ router.post('/vendors/delete', auth, async (req, res) => {
 // GET Membership Requests
 router.get('/membership-requests', auth, async (req, res) => {
     try {
-        const { membershipType, paymentMode, paymentStatus, status, search } = req.query;
+        const { membershipType, paymentMode, paymentStatus, status, search, refresh } = req.query;
 
-        // Auto-sync any real payments from membership_payments into MembershipRequest & CardHolder (throttled to at most once per 60s)
-        const shouldSync = !cacheService.get('membership_sync_cooldown');
+        // Auto-sync real payments from membership_payments into MembershipRequest & CardHolder
+        // Throttled to at most once per 5 seconds, or immediately if refresh is requested
+        const cooldownKey = 'membership_sync_cooldown';
+        const shouldSync = Boolean(refresh === 'true' || !cacheService.get(cooldownKey));
         if (shouldSync) {
-            cacheService.set('membership_sync_cooldown', true, 60);
+            cacheService.set(cooldownKey, true, 5);
             try {
                 const paymentsCol = mongoose.connection.collection('membership_payments');
+                const usersCol = mongoose.connection.collection('users');
+                const custCol = mongoose.connection.collection('customers');
+
                 const payments = await paymentsCol.find({ status: 'SUCCESS' }).toArray();
                 if (payments.length > 0) {
-                    const memIds = payments.map(p => p.membershipId || ('FIC-MEM-' + (p._id ? p._id.toString().slice(-6) : ''))).filter(Boolean);
-                    const txIds = payments.map(p => p.paymentId || (p._id ? p._id.toString() : '')).filter(Boolean);
-
-                    const existing = await MembershipRequest.find({
-                        $or: [
-                            { membershipId: { $in: memIds } },
-                            { transactionId: { $in: txIds } }
-                        ]
-                    }).select('membershipId transactionId').lean();
-
-                    const existingSet = new Set();
-                    existing.forEach(e => {
-                        if (e.membershipId) existingSet.add(e.membershipId);
-                        if (e.transactionId) existingSet.add(e.transactionId);
-                    });
-
                     for (const p of payments) {
-                        const memId = p.membershipId || ('FIC-MEM-' + (p._id ? p._id.toString().slice(-6) : Date.now().toString().slice(-6)));
-                        const txId = p.paymentId || (p._id ? p._id.toString() : '');
-                        if (!existingSet.has(memId) && !existingSet.has(txId)) {
-                            existingSet.add(memId);
-                            existingSet.add(txId);
-                            const planStr = (p.plan || p.planName || '').toLowerCase();
-                            const normTier = planStr.includes('diamond') ? 'Diamond'
-                                : planStr.includes('gold') ? 'Gold'
-                                : 'Silver';
-                            const rawMode = (p.paymentMethod || 'UPI').toString().toLowerCase();
-                            const normMode = rawMode.includes('card') ? 'Card'
-                                : rawMode.includes('wallet') ? 'Wallet'
-                                : rawMode.includes('bank') ? 'Net Banking'
-                                : 'UPI';
-                            await MembershipRequest.create({
-                                customerId: p.userId && mongoose.Types.ObjectId.isValid(p.userId) ? new mongoose.Types.ObjectId(p.userId) : null,
-                                customerName: p.customerName || 'Customer Member',
-                                customerEmail: p.customerEmail || '',
-                                customerPhone: p.customerPhone || '',
-                                membershipId: memId,
-                                membershipType: normTier,
-                                paymentMode: normMode,
-                                paymentStatus: 'Paid',
-                                validityStartDate: p.startDate ? new Date(p.startDate) : new Date(p.createdAt || Date.now()),
-                                validityExpiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                                amount: Number(p.amount || 0),
-                                status: 'Approved',
-                                transactionId: txId,
-                                createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
-                            });
+                        const orClauses = [];
+                        if (p.userId) orClauses.push({ _id: p.userId }, { id: p.userId });
+                        if (p.customerId) orClauses.push({ customerId: p.customerId });
+                        if (p.customerEmail) orClauses.push({ email: p.customerEmail });
+                        if (p.customerPhone) orClauses.push({ phone: p.customerPhone });
 
-                            // Ensure cardholders collection also has the card
-                            await CardHolder.findOneAndUpdate(
-                                { cardNumber: memId },
-                                {
-                                    $setOnInsert: {
-                                        name: p.customerName || 'Customer Member',
-                                        email: p.customerEmail || '',
-                                        phone: p.customerPhone || '',
-                                        cardType: normTier === 'Diamond' ? 'Platinum' : normTier,
-                                        cardNumber: memId,
-                                        expiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                                        status: 'active',
-                                        createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
-                                    }
-                                },
-                                { upsert: true }
-                            ).catch(() => {});
+                        let dbUser = null;
+                        if (orClauses.length > 0) {
+                            dbUser = await usersCol.findOne({ $or: orClauses });
+                            if (!dbUser) dbUser = await custCol.findOne({ $or: orClauses });
                         }
+
+                        const realName = dbUser?.name || dbUser?.fullName || p.customerName || 'Customer Member';
+                        const realEmail = dbUser?.email || p.customerEmail || '';
+                        const realPhone = dbUser?.phone || dbUser?.mobile || p.customerPhone || '';
+                        const realCustCode = dbUser?.customerId || p.customerId || '';
+                        const realCustId = p.userId || dbUser?.id || dbUser?._id || null;
+
+                        const planStr = (p.plan || p.planName || '').toLowerCase();
+                        const normTier = planStr.includes('diamond') ? 'Diamond'
+                            : planStr.includes('gold') ? 'Gold'
+                            : 'Silver';
+
+                        const rawMode = (p.paymentMethod || 'UPI').toString().toLowerCase();
+                        const normMode = rawMode.includes('card') ? 'Card'
+                            : rawMode.includes('wallet') ? 'Wallet'
+                            : rawMode.includes('bank') ? 'Net Banking'
+                            : 'UPI';
+
+                        const isUpgrade = Boolean(p.previousPlan && p.previousPlan !== 'None' && p.previousPlan.toLowerCase() !== (p.plan || '').toLowerCase());
+                        const prevPlanStr = (p.previousPlan || '').toLowerCase();
+                        const normPrevTier = prevPlanStr.includes('diamond') ? 'Diamond'
+                            : prevPlanStr.includes('gold') ? 'Gold'
+                            : prevPlanStr.includes('silver') ? 'Silver'
+                            : '';
+
+                        const memId = p.membershipId || ('FIC-' + (normTier.toUpperCase().slice(0, 4)) + '-' + (p._id ? p._id.toString().slice(-6) : Date.now().toString().slice(-6)));
+                        const txId = p.paymentId || (p._id ? p._id.toString() : '');
+                        const historyArray = Array.isArray(dbUser?.membershipHistory) ? dbUser.membershipHistory : [];
+
+                        await MembershipRequest.findOneAndUpdate(
+                            {
+                                $or: [
+                                    { transactionId: txId },
+                                    { membershipId: memId }
+                                ]
+                            },
+                            {
+                                $set: {
+                                    customerId: realCustId,
+                                    customerCode: realCustCode,
+                                    customerName: realName,
+                                    customerEmail: realEmail,
+                                    customerPhone: realPhone,
+                                    customerPhoto: dbUser?.avatar || dbUser?.photo || '',
+                                    membershipType: normTier,
+                                    paymentMode: normMode,
+                                    paymentStatus: 'Paid',
+                                    validityStartDate: p.startDate ? new Date(p.startDate) : new Date(p.createdAt || Date.now()),
+                                    validityExpiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                    amount: Number(p.amount || 0),
+                                    status: isUpgrade ? 'Upgraded' : 'Approved',
+                                    isUpgraded: isUpgrade,
+                                    previousTier: normPrevTier,
+                                    upgradeDate: isUpgrade ? new Date(p.createdAt || Date.now()) : null,
+                                    upgradeAmount: isUpgrade ? Number(p.amount || 0) : 0,
+                                    upgradeTransactionId: isUpgrade ? txId : '',
+                                    history: historyArray,
+                                    orderId: p.orderId || '',
+                                    updatedAt: new Date()
+                                },
+                                $setOnInsert: {
+                                    membershipId: memId,
+                                    transactionId: txId,
+                                    createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+                                }
+                            },
+                            { upsert: true, returnDocument: 'after' }
+                        );
+
+                        // Ensure cardholders collection has matching active card
+                        await CardHolder.findOneAndUpdate(
+                            { cardNumber: memId },
+                            {
+                                $set: {
+                                    name: realName,
+                                    email: realEmail,
+                                    phone: realPhone,
+                                    cardType: normTier === 'Diamond' ? 'Platinum' : normTier,
+                                    cardNumber: memId,
+                                    expiryDate: p.expiryDate ? new Date(p.expiryDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                    status: 'active'
+                                },
+                                $setOnInsert: {
+                                    createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
+                                }
+                            },
+                            { upsert: true }
+                        ).catch(() => {});
                     }
                 }
             } catch (syncErr) {
@@ -1658,18 +1697,42 @@ router.get('/membership-requests', auth, async (req, res) => {
 
         const filter = {};
 
-        if (membershipType && membershipType !== 'all') filter.membershipType = membershipType;
-        if (paymentMode && paymentMode !== 'all') filter.paymentMode = paymentMode;
-        if (paymentStatus && paymentStatus !== 'all') filter.paymentStatus = paymentStatus;
-        if (status && status !== 'all') filter.status = status;
+        if (membershipType && membershipType !== 'all') {
+            filter.membershipType = new RegExp(`^${membershipType.trim()}$`, 'i');
+        }
+        if (paymentMode && paymentMode !== 'all') {
+            filter.paymentMode = new RegExp(`^${paymentMode.trim()}$`, 'i');
+        }
+        if (paymentStatus && paymentStatus !== 'all') {
+            filter.paymentStatus = new RegExp(`^${paymentStatus.trim()}$`, 'i');
+        }
+        if (status && status !== 'all') {
+            const st = status.trim().toLowerCase();
+            if (st === 'approved' || st === 'active') {
+                filter.status = { $in: ['Approved', 'approved', 'Active', 'active'] };
+            } else if (st === 'upgraded') {
+                filter.$or = [{ status: { $in: ['Upgraded', 'upgraded'] } }, { isUpgraded: true }];
+            } else {
+                filter.status = new RegExp(`^${status.trim()}$`, 'i');
+            }
+        }
 
-        if (search) {
-            filter.$or = [
-                { customerName: { $regex: new RegExp(search, 'i') } },
-                { customerEmail: { $regex: new RegExp(search, 'i') } },
-                { customerPhone: { $regex: new RegExp(search, 'i') } },
-                { membershipId: { $regex: new RegExp(search, 'i') } }
+        if (search && search.trim()) {
+            const searchRegex = new RegExp(search.trim(), 'i');
+            const searchConditions = [
+                { customerName: searchRegex },
+                { customerEmail: searchRegex },
+                { customerPhone: searchRegex },
+                { customerCode: searchRegex },
+                { membershipId: searchRegex },
+                { transactionId: searchRegex }
             ];
+            if (filter.$or) {
+                filter.$and = [{ $or: filter.$or }, { $or: searchConditions }];
+                delete filter.$or;
+            } else {
+                filter.$or = searchConditions;
+            }
         }
 
         const requests = await MembershipRequest.find(filter).sort({ createdAt: -1 }).lean();
