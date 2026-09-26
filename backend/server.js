@@ -187,11 +187,14 @@ io.on('connection', (socket) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/auth', require('./routes/auth'));
 app.use('/admin-api/auth', require('./routes/auth'));
+app.use('/admin/auth', require('./routes/auth'));
 
 app.use('/api/security', require('./routes/security'));
 app.use('/api/admin/security', require('./routes/security'));
 app.use('/admin-api/security', require('./routes/security'));
 app.use('/admin-api/admin/security', require('./routes/security'));
+app.use('/admin/security', require('./routes/security'));
+app.use('/security', require('./routes/security'));
 
 // Complete Production Payment Dashboard & Payroll Management Routes (Mount BEFORE general enterprise routes)
 app.use('/api/admin/enterprise/payments', require('./routes/paymentRoutes'));
@@ -203,66 +206,103 @@ app.use('/api/admin/payments', require('./routes/paymentRoutes'));
 app.use('/admin-api/admin/payments', require('./routes/paymentRoutes'));
 app.use('/admin-api/payments', require('./routes/paymentRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/admin/enterprise/payments', require('./routes/paymentRoutes'));
+app.use('/admin/payments', require('./routes/paymentRoutes'));
+app.use('/payments', require('./routes/paymentRoutes'));
 
 app.use('/api/admin/enterprise', require('./routes/enterpriseModules'));
 app.use('/admin-api/enterprise', require('./routes/enterpriseModules'));
 app.use('/admin-api/admin/enterprise', require('./routes/enterpriseModules'));
+app.use('/admin/enterprise', require('./routes/enterpriseModules'));
+app.use('/enterprise', require('./routes/enterpriseModules'));
 
 app.use('/api/admin/territory', require('./routes/territory'));
 app.use('/api/territory', require('./routes/territory'));
 app.use('/admin-api/territory', require('./routes/territory'));
 app.use('/admin-api/admin/territory', require('./routes/territory'));
+app.use('/admin/territory', require('./routes/territory'));
 app.use('/territory', require('./routes/territory'));
 app.use('/territories', require('./routes/territory'));
 app.use('/api/territories', require('./routes/territory'));
 app.use('/admin-api/territories', require('./routes/territory'));
+app.use('/admin/territories', require('./routes/territory'));
 app.use('/api/public/territory', require('./routes/territory'));
 
 app.use('/api/admin', require('./routes/hierarchyAdminRoutes'));
 app.use('/admin-api/admin', require('./routes/hierarchyAdminRoutes'));
 app.use('/admin-api', require('./routes/hierarchyAdminRoutes'));
+app.use('/admin', require('./routes/hierarchyAdminRoutes'));
 
 app.use('/api/admin', require('./routes/managerDirectoryRoutes'));
 app.use('/admin-api/admin', require('./routes/managerDirectoryRoutes'));
 app.use('/admin-api', require('./routes/managerDirectoryRoutes'));
+app.use('/admin', require('./routes/managerDirectoryRoutes'));
 
 app.use('/api/admin', require('./routes/admin'));
 app.use('/admin-api/admin', require('./routes/admin'));
 app.use('/admin-api', require('./routes/admin'));
+app.use('/admin', require('./routes/admin'));
 
 app.use('/api/public', require('./routes/admin'));
 app.use('/admin-api/public', require('./routes/admin'));
+app.use('/public', require('./routes/admin'));
 
 app.use('/api/agent', require('./routes/agent'));
 app.use('/admin-api/agent', require('./routes/agent'));
+app.use('/admin-api/agents', require('./routes/admin'));
+app.use('/admin/agent', require('./routes/agent'));
+app.use('/admin/agents', require('./routes/admin'));
+app.use('/agent', require('./routes/agent'));
+app.use('/agents', require('./routes/admin'));
 
 app.use('/api/pincodes', require('./routes/pincodes'));
 app.use('/admin-api/pincodes', require('./routes/pincodes'));
+app.use('/admin/pincodes', require('./routes/pincodes'));
+app.use('/pincodes', require('./routes/pincodes'));
 
 app.use('/api/payment', require('./routes/payment'));
 app.use('/admin-api/payment', require('./routes/payment'));
+app.use('/admin/payment', require('./routes/payment'));
+app.use('/payment', require('./routes/payment'));
 
 // Top-level Route Aliases for Standard REST Paths
 app.use('/api/orders', require('./routes/admin'));
 app.use('/admin-api/orders', require('./routes/admin'));
+app.use('/admin/orders', require('./routes/admin'));
+app.use('/orders', require('./routes/admin'));
 
 app.use('/api/bookings', require('./routes/admin'));
 app.use('/admin-api/bookings', require('./routes/admin'));
+app.use('/admin/bookings', require('./routes/admin'));
+app.use('/bookings', require('./routes/admin'));
 
 app.use('/api/jobs', require('./routes/admin'));
 app.use('/admin-api/jobs', require('./routes/admin'));
+app.use('/admin/jobs', require('./routes/admin'));
+app.use('/jobs', require('./routes/admin'));
 
 app.use('/api/products', require('./routes/admin'));
 app.use('/admin-api/products', require('./routes/admin'));
+app.use('/admin/products', require('./routes/admin'));
+app.use('/products', require('./routes/admin'));
 
 app.use('/api/vendors', require('./routes/admin'));
 app.use('/admin-api/vendors', require('./routes/admin'));
+app.use('/admin/vendors', require('./routes/admin'));
+app.use('/vendors', require('./routes/admin'));
 
 app.use('/api/users', require('./routes/admin'));
 app.use('/admin-api/users', require('./routes/admin'));
+app.use('/admin/users', require('./routes/admin'));
+app.use('/users', require('./routes/admin'));
+
+app.use('/api/customers', require('./routes/admin'));
+app.use('/admin-api/customers', require('./routes/admin'));
+app.use('/admin/customers', require('./routes/admin'));
+app.use('/customers', require('./routes/admin'));
 
 // 404 Handler for unmapped API routes
-app.use(['/api', '/admin-api'], (req, res) => {
+app.use(['/api', '/admin-api', '/admin'], (req, res) => {
     res.status(404).json({
         success: false,
         message: `API route not found: ${req.method} ${req.originalUrl}`,

@@ -122,6 +122,27 @@ class DataSyncManager {
           this.notifySubscribers(key, data);
           return data;
         }
+
+        if (res.status === 404 && fullUrl.includes('api.ficapp.in/admin-api/') && !fullUrl.includes('api.ficapp.in/admin-api/admin-api/')) {
+          const fallbackUrl = fullUrl.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/');
+          const fbController = new AbortController();
+          const fbTimeoutId = setTimeout(() => fbController.abort(), 15000);
+          try {
+            const fbRes = await fetch(fallbackUrl, {
+              headers: this.getHeaders(),
+              signal: fbController.signal
+            });
+            clearTimeout(fbTimeoutId);
+            if (fbRes.ok) {
+              const fbData = await fbRes.json();
+              this.cache.set(key, { data: fbData, timestamp: Date.now() });
+              this.notifySubscribers(key, fbData);
+              return fbData;
+            }
+          } catch (e) {
+            clearTimeout(fbTimeoutId);
+          }
+        }
       } catch (err) {
         if (err.name !== 'AbortError' && !err.message?.includes('aborted')) {
           console.warn(`[DataSyncManager] Fetch error for key '${key}':`, err.message || err);

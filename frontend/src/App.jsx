@@ -936,6 +936,26 @@ function App() {
               return data;
             }
           }
+
+          if (r.status === 404 && targetUrl.includes('api.ficapp.in/admin-api/') && !targetUrl.includes('api.ficapp.in/admin-api/admin-api/')) {
+            const fallbackUrl = targetUrl.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/');
+            const fbController = new AbortController();
+            const fbTimeoutId = setTimeout(() => fbController.abort(), 15000);
+            try {
+              const fbRes = await fetch(fallbackUrl, { headers, signal: fbController.signal });
+              clearTimeout(fbTimeoutId);
+              if (fbRes.ok) {
+                let fbData = null;
+                try { fbData = await fbRes.json(); } catch (je) { const txt = await fbRes.text().catch(() => ''); try { fbData = JSON.parse(txt); } catch(e){} }
+                if (fbData !== null && fbData !== undefined) {
+                  if (setter) setter(fbData);
+                  return fbData;
+                }
+              }
+            } catch (fbErr) {
+              clearTimeout(fbTimeoutId);
+            }
+          }
         } catch (e) {
           if (e.name === 'AbortError' || e.message?.includes('aborted')) {
             return null;
