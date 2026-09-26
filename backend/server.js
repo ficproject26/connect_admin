@@ -193,17 +193,20 @@ app.use('/api/admin/security', require('./routes/security'));
 app.use('/admin-api/security', require('./routes/security'));
 app.use('/admin-api/admin/security', require('./routes/security'));
 
-app.use('/api/admin/enterprise', require('./routes/enterpriseModules'));
-app.use('/admin-api/enterprise', require('./routes/enterpriseModules'));
-app.use('/admin-api/admin/enterprise', require('./routes/enterpriseModules'));
-
-// Complete Production Payment Dashboard & Payroll Management Routes
+// Complete Production Payment Dashboard & Payroll Management Routes (Mount BEFORE general enterprise routes)
 app.use('/api/admin/enterprise/payments', require('./routes/paymentRoutes'));
 app.use('/admin-api/admin/enterprise/payments', require('./routes/paymentRoutes'));
 app.use('/admin-api/enterprise/payments', require('./routes/paymentRoutes'));
+app.use('/api/enterprise/payments', require('./routes/paymentRoutes'));
+app.use('/enterprise/payments', require('./routes/paymentRoutes'));
 app.use('/api/admin/payments', require('./routes/paymentRoutes'));
 app.use('/admin-api/admin/payments', require('./routes/paymentRoutes'));
 app.use('/admin-api/payments', require('./routes/paymentRoutes'));
+app.use('/api/payments', require('./routes/paymentRoutes'));
+
+app.use('/api/admin/enterprise', require('./routes/enterpriseModules'));
+app.use('/admin-api/enterprise', require('./routes/enterpriseModules'));
+app.use('/admin-api/admin/enterprise', require('./routes/enterpriseModules'));
 
 app.use('/api/admin/territory', require('./routes/territory'));
 app.use('/api/territory', require('./routes/territory'));

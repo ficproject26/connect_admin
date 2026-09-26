@@ -679,9 +679,104 @@ router.get('/admins', [auth, adminAuth], async (req, res) => {
     }
 });
 
-router.get('/admins/:id', auth, async (req, res) => {
+router.get('/admins/requests', auth, async (req, res) => {
+    try {
+        const ManagerRequest = require('../models/ManagerRequest');
+        const managerRequests = await ManagerRequest.find({}).sort({ createdAt: -1 }).lean().catch(() => []);
+        const pendingUsers = await User.find({
+            role: { $in: ['admin', 'super-admin'] },
+            status: { $in: ['pending', 'pending_approval', 'requested', 'in_review', 'under_verification'] }
+        }).select('-password -passwordHash').sort({ createdAt: -1 }).lean().catch(() => []);
+
+        const formatted = [];
+        for (const r of (managerRequests || [])) {
+            formatted.push({
+                _id: String(r._id || r.requestId),
+                requestType: `${(r.level || 'Admin').toUpperCase()} Onboarding`,
+                requestedBy: { name: r.requestedBy?.name || 'Territory Admin', role: r.requestedBy?.role || 'Admin' },
+                name: r.name || 'Candidate',
+                phone: r.phone || '',
+                email: r.email || '',
+                requestedRole: `${r.level ? r.level.charAt(0).toUpperCase() + r.level.slice(1) : 'Territory'} Admin`,
+                role: `${r.level ? r.level.charAt(0).toUpperCase() + r.level.slice(1) : 'Territory'} Admin`,
+                state: r.assignedState || '',
+                district: r.assignedDistrict || '',
+                division: r.assignedDivision || '',
+                pincode: r.assignedPincode || '',
+                status: (r.status || 'Pending').charAt(0).toUpperCase() + (r.status || 'Pending').slice(1).toLowerCase(),
+                createdAt: r.createdAt || new Date()
+            });
+        }
+        for (const u of (pendingUsers || [])) {
+            formatted.push({
+                _id: String(u._id),
+                requestType: `${(u.adminLevel || u.level || 'Admin').toUpperCase()} Onboarding`,
+                requestedBy: { name: u.referredBy?.name || 'Administrator', role: u.referredBy?.role || 'Admin' },
+                name: u.name || 'Candidate',
+                phone: u.phone || '',
+                email: u.email || '',
+                requestedRole: u.adminRole || `${(u.adminLevel || 'territory')} Admin`,
+                role: u.adminRole || 'Admin',
+                state: u.assignedState || u.state || '',
+                district: u.assignedDistrict || u.district || '',
+                division: u.assignedDivision || u.division || '',
+                pincode: u.assignedPincode ? String(u.assignedPincode) : (u.pincode || ''),
+                status: (u.status || 'Pending').charAt(0).toUpperCase() + (u.status || 'Pending').slice(1).toLowerCase(),
+                createdAt: u.createdAt || new Date()
+            });
+        }
+        res.json(formatted);
+    } catch (err) {
+        console.error('Admin requests error:', err);
+        res.status(500).json({ success: false, msg: 'Server error retrieving admin requests', requests: [] });
+    }
+});
+
+router.get('/admins/activity', auth, async (req, res) => {
+    try {
+        const TerritoryAuditLog = require('../models/TerritoryAuditLog');
+        const AuditLog = require('../models/AuditLog');
+        const [tLogs, aLogs] = await Promise.all([
+            TerritoryAuditLog.find({}).sort({ timestamp: -1 }).limit(100).lean().catch(() => []),
+            AuditLog.find({}).sort({ createdAt: -1 }).limit(50).lean().catch(() => [])
+        ]);
+
+        const formatted = [];
+        for (const log of (tLogs || [])) {
+            formatted.push({
+                timestamp: log.timestamp || log.createdAt || new Date(),
+                actorName: log.actorName || 'Admin',
+                action: log.action || 'Territory Configuration',
+                role: log.actorRole || 'Administrator',
+                territory: log.territoryName ? `${log.territoryType || 'Territory'}: ${log.territoryName}` : 'Central',
+                status: 'Success'
+            });
+        }
+        for (const log of (aLogs || [])) {
+            formatted.push({
+                timestamp: log.createdAt || log.timestamp || new Date(),
+                actorName: log.userEmail || 'System Admin',
+                action: log.action ? log.action.replace(/_/g, ' ').toUpperCase() : 'Audit Event',
+                role: log.userRole || 'Admin',
+                territory: log.location?.city ? `${log.location.city}, ${log.location.country || 'India'}` : 'Global',
+                status: log.status === 'success' ? 'Success' : (log.status || 'Info')
+            });
+        }
+        formatted.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        res.json(formatted);
+    } catch (err) {
+        console.error('Admin activity error:', err);
+        res.status(500).json({ success: false, msg: 'Server error retrieving activity logs', logs: [] });
+    }
+});
+
+router.get('/admins/:id', auth, async (req, res, next) => {
     try {
         let adminId = req.params.id;
+        if (['requests', 'activity', 'stats', 'export', 'dashboard', 'pin-status'].includes(adminId)) {
+            return typeof next === 'function' ? next() : res.status(404).json({ success: false, msg: 'Endpoint not found' });
+        }
+
         const query = mongoose.Types.ObjectId.isValid(adminId) 
             ? { _id: new mongoose.Types.ObjectId(adminId) }
             : { _id: adminId };

@@ -13,6 +13,8 @@ const State = require('../models/State');
 const District = require('../models/District');
 const Division = require('../models/Division');
 const Pincode = require('../models/Pincode');
+const TerritoryAuditLog = require('../models/TerritoryAuditLog');
+const AuditLog = require('../models/AuditLog');
 const { validateTerritoryHierarchy } = require('./territory');
 
 // MANAGER LIMITS CONFIGURATION
@@ -239,11 +241,213 @@ router.get('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
 });
 
 // ============================================================
-// 1B. GET SINGLE ADMINISTRATOR DETAILS (ALL NON-SENSITIVE FIELDS)
+// 1B. GET ONBOARDING REQUESTS & ACTIVITY AUDIT TRAIL
 // ============================================================
-const getSingleAdminHandler = async (req, res) => {
+const getAdminRequestsHandler = async (req, res) => {
+    try {
+        const territoryFilter = req.territoryFilter || {};
+        
+        // 1. Fetch ManagerRequests (requests submitted for state, district, division, pincode admins/managers)
+        const managerReqQuery = {};
+        if (territoryFilter.assignedState) {
+            managerReqQuery.assignedState = territoryFilter.assignedState;
+        }
+        if (territoryFilter.assignedDistrict) {
+            managerReqQuery.assignedDistrict = territoryFilter.assignedDistrict;
+        }
+        if (territoryFilter.assignedDivision) {
+            managerReqQuery.assignedDivision = territoryFilter.assignedDivision;
+        }
+
+        const managerRequests = await ManagerRequest.find(managerReqQuery)
+            .sort({ createdAt: -1 })
+            .lean()
+            .catch(() => []);
+
+        // 2. Fetch User collection pending admin onboarding
+        const userAdminQuery = {
+            role: { $in: ['admin', 'super-admin'] },
+            status: { $in: ['pending', 'pending_approval', 'requested', 'in_review', 'under_verification'] }
+        };
+        if (territoryFilter.assignedState) {
+            userAdminQuery.$or = [
+                { assignedState: territoryFilter.assignedState },
+                { state: territoryFilter.assignedState }
+            ];
+        }
+        const pendingUsers = await User.find(userAdminQuery)
+            .select('-password -passwordHash')
+            .sort({ createdAt: -1 })
+            .lean()
+            .catch(() => []);
+
+        // Format unified list of onboarding requests
+        const formatted = [];
+
+        for (const r of (managerRequests || [])) {
+            formatted.push({
+                _id: String(r._id || r.requestId),
+                requestType: `${(r.level || 'Admin').toUpperCase()} Onboarding`,
+                requestedBy: {
+                    name: r.requestedBy?.name || 'Territory Admin',
+                    role: r.requestedBy?.role || 'Admin'
+                },
+                name: r.name || 'Candidate',
+                phone: r.phone || '',
+                email: r.email || '',
+                requestedRole: `${r.level ? r.level.charAt(0).toUpperCase() + r.level.slice(1) : 'Territory'} Admin`,
+                role: `${r.level ? r.level.charAt(0).toUpperCase() + r.level.slice(1) : 'Territory'} Admin`,
+                state: r.assignedState || '',
+                district: r.assignedDistrict || '',
+                division: r.assignedDivision || '',
+                pincode: r.assignedPincode || '',
+                status: (r.status || 'Pending').charAt(0).toUpperCase() + (r.status || 'Pending').slice(1).toLowerCase(),
+                createdAt: r.createdAt || new Date()
+            });
+        }
+
+        for (const u of (pendingUsers || [])) {
+            formatted.push({
+                _id: String(u._id),
+                requestType: `${(u.adminLevel || u.level || 'Admin').toUpperCase()} Onboarding`,
+                requestedBy: {
+                    name: u.referredBy?.name || 'Administrator',
+                    role: u.referredBy?.role || 'Admin'
+                },
+                name: u.name || 'Candidate',
+                phone: u.phone || '',
+                email: u.email || '',
+                requestedRole: u.adminRole || `${(u.adminLevel || 'territory')} Admin`,
+                role: u.adminRole || 'Admin',
+                state: u.assignedState || u.state || '',
+                district: u.assignedDistrict || u.district || '',
+                division: u.assignedDivision || u.division || '',
+                pincode: u.assignedPincode ? String(u.assignedPincode) : (u.pincode || ''),
+                status: (u.status || 'Pending').charAt(0).toUpperCase() + (u.status || 'Pending').slice(1).toLowerCase(),
+                createdAt: u.createdAt || new Date()
+            });
+        }
+
+        res.json(formatted);
+    } catch (err) {
+        console.error('Get admin requests error:', err);
+        res.status(500).json({ success: false, msg: 'Server error retrieving onboarding requests', requests: [], error: err.message });
+    }
+};
+
+const getAdminActivityHandler = async (req, res) => {
+    try {
+        const territoryFilter = req.territoryFilter || {};
+        const query = {};
+        if (territoryFilter.assignedState) {
+            query.$or = [
+                { territoryName: territoryFilter.assignedState },
+                { 'metadata.state': territoryFilter.assignedState }
+            ];
+        }
+
+        const [tLogs, aLogs] = await Promise.all([
+            TerritoryAuditLog.find(query).sort({ timestamp: -1 }).limit(100).lean().catch(() => []),
+            AuditLog.find({}).sort({ createdAt: -1 }).limit(50).lean().catch(() => [])
+        ]);
+
+        const formatted = [];
+
+        for (const log of (tLogs || [])) {
+            formatted.push({
+                timestamp: log.timestamp || log.createdAt || new Date(),
+                actorName: log.actorName || 'Admin',
+                action: log.action || 'Territory Configuration',
+                role: log.actorRole || 'Administrator',
+                territory: log.territoryName ? `${log.territoryType || 'Territory'}: ${log.territoryName}` : 'Central',
+                status: 'Success'
+            });
+        }
+
+        for (const log of (aLogs || [])) {
+            formatted.push({
+                timestamp: log.createdAt || log.timestamp || new Date(),
+                actorName: log.userEmail || 'System Admin',
+                action: log.action ? log.action.replace(/_/g, ' ').toUpperCase() : 'Audit Event',
+                role: log.userRole || 'Admin',
+                territory: log.location?.city ? `${log.location.city}, ${log.location.country || 'India'}` : 'Global',
+                status: log.status === 'success' ? 'Success' : (log.status || 'Info')
+            });
+        }
+
+        formatted.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        res.json(formatted);
+    } catch (err) {
+        console.error('Get admin activity logs error:', err);
+        res.status(500).json({ success: false, msg: 'Server error retrieving activity logs', logs: [], error: err.message });
+    }
+};
+
+const approveAdminRequestHandler = async (req, res) => {
+    try {
+        const reqId = req.params.id;
+        const query = mongoose.Types.ObjectId.isValid(reqId) ? { _id: new mongoose.Types.ObjectId(reqId) } : { _id: reqId };
+
+        let updated = await ManagerRequest.findOneAndUpdate(
+            { $or: [query, { requestId: reqId }] },
+            { $set: { status: 'approved', approvedAt: new Date(), approvedBy: req.adminUser?.email || 'Admin' } },
+            { new: true }
+        );
+
+        if (!updated) {
+            updated = await User.findOneAndUpdate(
+                query,
+                { $set: { status: 'approved', isActive: true, approvedAt: new Date() } },
+                { new: true }
+            );
+        }
+
+        res.json({ success: true, msg: 'Onboarding request approved successfully', data: updated });
+    } catch (err) {
+        console.error('Approve admin request error:', err);
+        res.status(500).json({ success: false, msg: 'Server error approving request', error: err.message });
+    }
+};
+
+const rejectAdminRequestHandler = async (req, res) => {
+    try {
+        const reqId = req.params.id;
+        const { reason } = req.body || {};
+        const query = mongoose.Types.ObjectId.isValid(reqId) ? { _id: new mongoose.Types.ObjectId(reqId) } : { _id: reqId };
+
+        let updated = await ManagerRequest.findOneAndUpdate(
+            { $or: [query, { requestId: reqId }] },
+            { $set: { status: 'rejected', rejectionReason: reason || 'Application rejected by Admin', rejectedAt: new Date() } },
+            { new: true }
+        );
+
+        if (!updated) {
+            updated = await User.findOneAndUpdate(
+                query,
+                { $set: { status: 'rejected', rejectionReason: reason || 'Application rejected by Admin', isActive: false } },
+                { new: true }
+            );
+        }
+
+        res.json({ success: true, msg: 'Onboarding request rejected', data: updated });
+    } catch (err) {
+        console.error('Reject admin request error:', err);
+        res.status(500).json({ success: false, msg: 'Server error rejecting request', error: err.message });
+    }
+};
+
+// ============================================================
+// 1C. GET SINGLE ADMINISTRATOR DETAILS (ALL NON-SENSITIVE FIELDS)
+// ============================================================
+const getSingleAdminHandler = async (req, res, next) => {
     try {
         let adminId = req.params.id;
+        // Never treat sub-path keywords as administrator IDs
+        if (['requests', 'activity', 'stats', 'export', 'dashboard', 'pin-status'].includes(adminId)) {
+            return typeof next === 'function' ? next() : res.status(404).json({ success: false, msg: 'Endpoint not found' });
+        }
+
         const query = mongoose.Types.ObjectId.isValid(adminId) 
             ? { _id: new mongoose.Types.ObjectId(adminId) }
             : { _id: adminId };
@@ -288,6 +492,16 @@ const getSingleAdminHandler = async (req, res) => {
         res.status(500).json({ success: false, msg: 'Server error retrieving administrator details', error: err.message });
     }
 };
+
+// Explicit Routes for Onboarding Requests & Activity Log (MUST BE DECLARED BEFORE /:id ROUTES)
+router.get('/admins/requests', [auth, territoryScope], getAdminRequestsHandler);
+router.get('/hierarchy-admins/requests', [auth, territoryScope], getAdminRequestsHandler);
+router.get('/admins/activity', [auth, territoryScope], getAdminActivityHandler);
+router.get('/hierarchy-admins/activity', [auth, territoryScope], getAdminActivityHandler);
+router.post('/admins/requests/:id/approve', [auth, territoryScope], approveAdminRequestHandler);
+router.put('/admins/requests/:id/approve', [auth, territoryScope], approveAdminRequestHandler);
+router.post('/admins/requests/:id/reject', [auth, territoryScope], rejectAdminRequestHandler);
+router.put('/admins/requests/:id/reject', [auth, territoryScope], rejectAdminRequestHandler);
 
 router.get('/hierarchy-admins/:id', [auth, territoryScope], getSingleAdminHandler);
 router.get('/admins/:id', [auth, territoryScope], getSingleAdminHandler);

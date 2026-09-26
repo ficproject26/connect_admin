@@ -493,6 +493,15 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   // Handle Approve Admin Onboarding Request (Section 7)
   const handleApproveRequest = async (reqItem) => {
     try {
+      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
+      await fetch(`${API_BASE}/admin/admins/requests/${reqItem._id}/approve`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': activeToken || '',
+          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+          'Content-Type': 'application/json'
+        }
+      }).catch(() => null);
       notify(`Onboarding request for ${reqItem.name || 'administrator'} approved.`, 'success');
       setRequests(prev => prev.map(r => r._id === reqItem._id ? { ...r, status: 'Approved' } : r));
     } catch (err) {
@@ -504,6 +513,16 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   const handleRejectRequest = async () => {
     if (!rejectingRequest) return;
     try {
+      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
+      await fetch(`${API_BASE}/admin/admins/requests/${rejectingRequest._id}/reject`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': activeToken || '',
+          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ reason: rejectionReason })
+      }).catch(() => null);
       notify(`Onboarding request for ${rejectingRequest.name || 'administrator'} rejected.`, 'info');
       setRequests(prev => prev.map(r => r._id === rejectingRequest._id ? { ...r, status: 'Rejected', rejectionReason } : r));
       setRejectingRequest(null);

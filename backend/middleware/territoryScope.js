@@ -99,6 +99,10 @@ const territoryScope = async (req, res, next) => {
         // 2. STATE ADMIN RESTRICTIONS
         if (adminTier === 'state') {
             if (!userState) {
+                if (req.method === 'GET' && (req.url.includes('/requests') || req.url.includes('/activity') || req.url.includes('/admins'))) {
+                    req.territoryFilter = { assignedState: '__none__' };
+                    return next();
+                }
                 return res.status(403).json({ msg: 'State Admin has no assigned state configured.', message: 'Territory configuration missing' });
             }
             // Strict state validation: reject cross-state attempts
@@ -116,6 +120,10 @@ const territoryScope = async (req, res, next) => {
         // 3. DISTRICT ADMIN RESTRICTIONS
         if (adminTier === 'district') {
             if (!userState || !userDistrict) {
+                if (req.method === 'GET' && (req.url.includes('/requests') || req.url.includes('/activity') || req.url.includes('/admins'))) {
+                    req.territoryFilter = { assignedState: '__none__', assignedDistrict: '__none__' };
+                    return next();
+                }
                 return res.status(403).json({ msg: 'District Admin has incomplete territory configuration.', message: 'Territory configuration missing' });
             }
             if (reqState && reqState.toLowerCase() !== 'all' && reqState.toLowerCase() !== userState.toLowerCase()) {
@@ -133,6 +141,10 @@ const territoryScope = async (req, res, next) => {
         // 4. DIVISION ADMIN RESTRICTIONS
         if (adminTier === 'division') {
             if (!userState || !userDistrict || !userDivision) {
+                if (req.method === 'GET' && (req.url.includes('/requests') || req.url.includes('/activity') || req.url.includes('/admins'))) {
+                    req.territoryFilter = { assignedState: '__none__', assignedDistrict: '__none__', assignedDivision: '__none__' };
+                    return next();
+                }
                 return res.status(403).json({ msg: 'Division Admin has incomplete territory configuration.', message: 'Territory configuration missing' });
             }
             if (reqState && reqState.toLowerCase() !== 'all' && reqState.toLowerCase() !== userState.toLowerCase()) {
