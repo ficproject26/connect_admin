@@ -762,11 +762,11 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
       </div>
 
       {/* INTERACTIVE BREADCRUMB BAR (Section 8 & 21) */}
-      <div className="bg-slate-50 dark:bg-slate-850/60 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-2xl flex items-center gap-2 text-xs font-semibold overflow-x-auto">
-        <span className="text-slate-400 text-[10px] font-black uppercase tracking-wider shrink-0">Territory Scope:</span>
+      <div className="bg-slate-100/90 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-2xl flex items-center gap-2.5 text-xs font-semibold overflow-x-auto shadow-xs">
+        <span className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-wider shrink-0">Territory Scope:</span>
         <button
           onClick={() => { setBreadcrumbState(''); setBreadcrumbDistrict(''); setBreadcrumbDivision(''); setBreadcrumbPincode(''); }}
-          className={`hover:text-primary-600 transition-colors cursor-pointer shrink-0 ${!breadcrumbState ? 'font-black text-primary-600 dark:text-primary-400' : 'text-slate-600 dark:text-slate-400'}`}
+          className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!breadcrumbState ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
         >
           All States
         </button>
@@ -775,7 +775,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
             <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <button
               onClick={() => { setBreadcrumbDistrict(''); setBreadcrumbDivision(''); setBreadcrumbPincode(''); }}
-              className={`hover:text-primary-600 transition-colors cursor-pointer shrink-0 ${!breadcrumbDistrict ? 'font-black text-primary-600 dark:text-primary-400' : 'text-slate-600 dark:text-slate-400'}`}
+              className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!breadcrumbDistrict ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
             >
               {breadcrumbState}
             </button>
@@ -786,7 +786,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
             <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <button
               onClick={() => { setBreadcrumbDivision(''); setBreadcrumbPincode(''); }}
-              className={`hover:text-primary-600 transition-colors cursor-pointer shrink-0 ${!breadcrumbDivision ? 'font-black text-primary-600 dark:text-primary-400' : 'text-slate-600 dark:text-slate-400'}`}
+              className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!breadcrumbDivision ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
             >
               {breadcrumbDistrict}
             </button>
@@ -795,7 +795,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
         {breadcrumbDivision && (
           <>
             <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span className="font-black text-primary-600 dark:text-primary-400 shrink-0">
+            <span className="font-black text-primary-600 dark:text-primary-400 px-2.5 py-1 rounded-lg bg-primary-500/10 border border-primary-500/30 shrink-0">
               {breadcrumbDivision}
             </span>
           </>
@@ -832,46 +832,46 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                 const totalDistCount = Object.keys(stateNode.districts).length;
 
                 return (
-                  <div key={stateKey} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden transition-all">
+                  <div key={stateKey} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden transition-all">
                     {/* LEVEL 1: STATE HEADER NODE */}
                     <div 
                       onClick={() => toggleNode(stateKey)}
-                      className="p-5 bg-slate-50/80 dark:bg-slate-850/60 hover:bg-slate-100/80 dark:hover:bg-slate-800/60 cursor-pointer transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800"
+                      className="p-4 sm:p-5 bg-slate-50 hover:bg-slate-100/90 dark:bg-slate-850 dark:hover:bg-slate-800 cursor-pointer transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800"
                     >
                       <div className="flex items-center gap-3.5">
-                        <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black text-lg border border-emerald-500/20 shrink-0">
+                        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black text-lg border border-emerald-500/20 shrink-0">
                           🏛️
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                               STATE
                             </span>
-                            <h3 className="text-base font-black text-slate-800 dark:text-slate-100 tracking-tight">
+                            <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
                               {stateNode.name}
                             </h3>
                           </div>
                           <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
                             {stateNode.stateAdmins.length > 0 ? (
-                              <>State Admin: <strong className="text-slate-700 dark:text-slate-200">{stateNode.stateAdmins.map(a => a.name).join(', ')}</strong></>
+                              <>State Admin: <strong className="text-slate-800 dark:text-slate-200 font-bold">{stateNode.stateAdmins.map(a => a.name).join(', ')}</strong></>
                             ) : (
-                              <span className="text-amber-500 font-semibold">No State Admin Assigned</span>
+                              <span className="text-amber-600 dark:text-amber-400 font-semibold">No State Admin Assigned</span>
                             )}
                           </p>
                         </div>
                       </div>
 
                       {/* Right State Node Meta & Actions */}
-                      <div className="flex items-center gap-3 shrink-0" onClick={e => e.stopPropagation()}>
-                        <span className="bg-white dark:bg-slate-800 px-3 py-1 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-500">
-                          Districts: <strong>{totalDistCount}</strong>
+                      <div className="flex items-center gap-2.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        <span className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-600 dark:text-slate-300 shadow-xs">
+                          Districts: <strong className="text-slate-900 dark:text-white">{totalDistCount}</strong>
                         </span>
 
                         {/* State Action: Add District Admin */}
                         {(isMainAdmin || currentUserTier === 'state') && (
                           <button
                             onClick={() => openAddAdminModal('district', { state: stateNode.name })}
-                            className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-[11px] px-3 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1 cursor-pointer"
+                            className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                             title="Add District Admin under this State"
                           >
                             <Plus className="w-3.5 h-3.5" /> District Admin
@@ -882,7 +882,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                         {(isMainAdmin || currentUserTier === 'main') && (
                           <button
                             onClick={() => setDeleteConfirmState(stateNode)}
-                            className="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white dark:bg-rose-950/40 dark:hover:bg-rose-600 dark:text-rose-400 dark:hover:text-white border border-rose-200 dark:border-rose-900/40 font-bold text-[11px] px-3 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                            className="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white dark:bg-rose-950/40 dark:hover:bg-rose-600 dark:text-rose-400 dark:hover:text-white border border-rose-200 dark:border-rose-900/40 font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                             title={`Delete State: ${stateNode.name}`}
                           >
                             <Trash2 className="w-3.5 h-3.5 shrink-0" />
@@ -892,7 +892,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
                         <button 
                           onClick={() => toggleNode(stateKey)}
-                          className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 transition-colors cursor-pointer"
+                          className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
                         >
                           {isStateExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                         </button>
@@ -901,7 +901,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
                     {/* STATE ADMIN CARDS & EXPANDED DISTRICTS */}
                     {isStateExpanded && (
-                      <div className="p-5 space-y-6 bg-slate-50/40 dark:bg-slate-900/40">
+                      <div className="p-4 sm:p-5 space-y-6 bg-slate-50/60 dark:bg-slate-950/60">
                         {/* State Admin Profile Cards */}
                         {stateNode.stateAdmins.length > 0 && (
                           <div className="space-y-2">
@@ -951,7 +951,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                 {/* DISTRICT HEADER */}
                                 <div 
                                   onClick={() => toggleNode(distKey)}
-                                  className="p-4 hover:bg-slate-50 dark:hover:bg-slate-850/50 cursor-pointer flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800"
+                                  className="p-3.5 sm:p-4 bg-slate-50 hover:bg-slate-100/90 dark:bg-slate-850 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 transition-colors"
                                 >
                                   <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs border border-blue-500/20">
@@ -959,10 +959,10 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                     </div>
                                     <div>
                                       <div className="flex items-center gap-2">
-                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-blue-500/10 text-blue-600">
+                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
                                           DISTRICT
                                         </span>
-                                        <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">
+                                        <h4 className="font-extrabold text-slate-900 dark:text-white text-sm">
                                           {distNode.name}
                                         </h4>
                                       </div>
@@ -977,7 +977,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                     {(isMainAdmin || currentUserTier === 'state' || currentUserTier === 'district') && (
                                       <button
                                         onClick={() => openAddAdminModal('division', { state: stateNode.name, district: distNode.name })}
-                                        className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
+                                        className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
                                       >
                                         <Plus className="w-3 h-3" /> Division Admin
                                       </button>
@@ -985,7 +985,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
                                     <button 
                                       onClick={() => toggleNode(distKey)}
-                                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+                                      className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-400 transition-colors cursor-pointer"
                                     >
                                       {isDistExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                     </button>
@@ -994,7 +994,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
                                 {/* DISTRICT CONTENT: ADMINS & DIVISIONS */}
                                 {isDistExpanded && (
-                                  <div className="p-4 bg-slate-50/50 dark:bg-slate-900/60 space-y-4">
+                                  <div className="p-4 bg-slate-50/50 dark:bg-slate-950/60 space-y-4">
                                     {/* District Admins */}
                                     {distNode.districtAdmins.length > 0 && (
                                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1002,11 +1002,11 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                           <div
                                             key={admin._id}
                                             onClick={() => setSelectedAdmin(admin)}
-                                            className="p-3 bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-xl cursor-pointer hover:border-blue-500/50 flex items-center justify-between"
+                                            className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl cursor-pointer hover:border-blue-500/50 flex items-center justify-between shadow-xs transition-all"
                                           >
                                             <div>
-                                              <span className="text-[9px] font-black text-blue-600 uppercase">DISTRICT ADMIN</span>
-                                              <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{admin.name}</p>
+                                              <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">DISTRICT ADMIN</span>
+                                              <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
                                               <p className="text-[10px] text-slate-400">{admin.phone}</p>
                                             </div>
                                             <span className="text-[10px] text-primary-600 font-bold flex items-center gap-0.5">Details <ChevronRight className="w-3 h-3" /></span>
@@ -1023,16 +1023,16 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                         const totalPinCount = Object.keys(divNode.pincodes).length;
 
                                         return (
-                                          <div key={divKey} className="bg-white dark:bg-slate-850 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                                          <div key={divKey} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
                                             <div
                                               onClick={() => toggleNode(divKey)}
-                                              className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between gap-2"
+                                              className="p-3 bg-slate-50/60 hover:bg-slate-100/90 dark:bg-slate-850 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between gap-2 transition-colors"
                                             >
                                               <div className="flex items-center gap-2">
-                                                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600">
+                                                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
                                                   DIVISION
                                                 </span>
-                                                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">{divNode.name}</span>
+                                                <span className="text-xs font-extrabold text-slate-900 dark:text-white">{divNode.name}</span>
                                                 <span className="text-[10px] text-slate-400">({divNode.divisionAdmins.length} Admins)</span>
                                               </div>
 
@@ -1040,12 +1040,12 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                                 {(isMainAdmin || currentUserTier === 'state' || currentUserTier === 'district' || currentUserTier === 'division') && (
                                                   <button
                                                     onClick={() => openAddAdminModal('pincode', { state: stateNode.name, district: distNode.name, division: divNode.name })}
-                                                    className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer"
+                                                    className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer active:scale-95"
                                                   >
                                                     <Plus className="w-2.5 h-2.5" /> Pincode Admin
                                                   </button>
                                                 )}
-                                                <button onClick={() => toggleNode(divKey)} className="text-slate-400">
+                                                <button onClick={() => toggleNode(divKey)} className="text-slate-400 hover:text-slate-200 transition-colors">
                                                   {isDivExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                                                 </button>
                                               </div>
@@ -1053,33 +1053,33 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
                                             {/* LEVEL 4: PINCODES */}
                                             {isDivExpanded && (
-                                              <div className="p-3 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                                              <div className="p-3 bg-slate-50/70 dark:bg-slate-950/70 border-t border-slate-100 dark:border-slate-800 space-y-2">
                                                 {divNode.divisionAdmins.map(admin => (
                                                   <div
                                                     key={admin._id}
                                                     onClick={() => setSelectedAdmin(admin)}
-                                                    className="p-2 bg-white dark:bg-slate-850 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-between cursor-pointer"
+                                                    className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-between cursor-pointer hover:border-purple-500/50 shadow-xs transition-all"
                                                   >
                                                     <div>
-                                                      <span className="text-[8px] font-bold text-purple-500">DIVISION ADMIN</span>
-                                                      <p className="text-xs font-bold">{admin.name}</p>
+                                                      <span className="text-[8px] font-bold text-purple-600 dark:text-purple-400">DIVISION ADMIN</span>
+                                                      <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
                                                     </div>
                                                     <span className="text-[10px] text-primary-500 font-semibold">View</span>
                                                   </div>
                                                 ))}
 
                                                 {Object.values(divNode.pincodes).map(pinNode => (
-                                                  <div key={pinNode.code} className="p-2.5 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                                                  <div key={pinNode.code} className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-xs">
                                                     <div>
-                                                      <span className="text-[8px] font-black uppercase text-amber-600">PINCODE {pinNode.code}</span>
-                                                      <p className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                                                      <span className="text-[8px] font-black uppercase text-amber-600 dark:text-amber-400">PINCODE {pinNode.code}</span>
+                                                      <p className="text-xs font-bold text-slate-900 dark:text-white">
                                                         {pinNode.pincodeAdmins.map(a => a.name).join(', ') || 'No Pincode Admin'}
                                                       </p>
                                                     </div>
                                                     {pinNode.pincodeAdmins[0] && (
                                                       <button
                                                         onClick={() => setSelectedAdmin(pinNode.pincodeAdmins[0])}
-                                                        className="text-[10px] text-primary-600 font-bold hover:underline"
+                                                        className="text-[10px] text-primary-600 dark:text-primary-400 font-bold hover:underline cursor-pointer"
                                                       >
                                                         Details
                                                       </button>

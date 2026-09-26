@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   X, ChevronRight, ChevronLeft, User, Phone, Globe,
   Shield, FileText, Eye, EyeOff, CheckCircle, AlertCircle, Upload,
