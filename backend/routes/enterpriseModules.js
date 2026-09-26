@@ -34,7 +34,7 @@ const sanitizeVendorAddressObj = (vObj) => {
     const isPlaceholder = (val) => {
         if (!val || typeof val !== 'string') return true;
         const clean = val.trim().toLowerCase();
-        return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty'].includes(clean) || /^(.)\1+$/.test(clean);
+        return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty', '—', '-', '--'].includes(clean) || /^(.)\1+$/.test(clean);
     };
 
     let street = (vObj.businessAddress || vObj.street || vObj.address || vObj.streetAddress || '').trim();
@@ -55,12 +55,16 @@ const sanitizeVendorAddressObj = (vObj) => {
     }
 
     const addressParts = [];
-    if (street) addressParts.push(street);
-    if (city && city.toLowerCase() !== street.toLowerCase()) addressParts.push(city);
-    if (state && state.toLowerCase() !== city.toLowerCase()) addressParts.push(state);
+    if (street && !isPlaceholder(street)) addressParts.push(street);
+    const streetLower = street ? street.toLowerCase() : '';
+    if (city && !isPlaceholder(city) && !streetLower.includes(city.toLowerCase())) addressParts.push(city);
+    if (state && !isPlaceholder(state) && !streetLower.includes(state.toLowerCase()) && state.toLowerCase() !== city.toLowerCase()) addressParts.push(state);
 
-    const baseAddr = addressParts.join(', ');
-    vObj.fullAddress = baseAddr ? (pin ? `${baseAddr} (${pin})` : baseAddr) : (pin ? `Pincode: ${pin}` : '—');
+    let baseAddr = addressParts.join(', ');
+    baseAddr = baseAddr.replace(/,\s*[—\-]+(?:\s*\(\d+\))?$/g, '').replace(/,\s*—\s*,/g, ', ').replace(/,\s*$/, '').trim();
+
+    const hasPin = pin && baseAddr.includes(pin);
+    vObj.fullAddress = baseAddr ? (pin && !hasPin ? `${baseAddr} (${pin})` : baseAddr) : (pin ? `Pincode: ${pin}` : '—');
     vObj.assignedArea = (state && city) ? `${state} / ${city}` : (state || city || '—');
     vObj.pincode = pin || '—';
     vObj.city = city || '—';
@@ -415,6 +419,126 @@ function sanitizeVendorPayload(vObj) {
     return vObj;
 }
 
+// CANONICAL DEDUPLICATION & MERGE HELPER FOR VENDORS
+const deduplicateVendorsList = (list = []) => {
+    if (!Array.isArray(list) || list.length === 0) return [];
+
+    const regMap = new Map();
+    const phoneMap = new Map();
+    const emailMap = new Map();
+    const idMap = new Map();
+
+    const canonicalVendors = [];
+
+    const getCleanPhone = (v) => {
+        const p = String(v.mobileNumber || v.mobile || v.phone || v.contactNumber || v.phoneNumber || '').replace(/\D/g, '');
+        return p.length >= 10 ? p.slice(-10) : '';
+    };
+
+    const getCleanEmail = (v) => {
+        const e = String(v.email || '').toLowerCase().trim();
+        return (e && !e.includes('vendor_') && !e.includes('@connect.app') && e.includes('@')) ? e : '';
+    };
+
+    const getCleanRegId = (v) => {
+        const r = String(v.registrationId || v.regId || v.vendorId || '').trim();
+        return (r && r !== 'undefined' && r !== 'null' && r !== '—') ? r.toUpperCase() : '';
+    };
+
+    const isAgentCheck = (v) => {
+        if (!v) return false;
+        const j = String(v.joiningType || '').toLowerCase();
+        const c = String(v.createdVia || '').toLowerCase();
+        const r = String(v.registrationSource || '').toLowerCase();
+        return j === 'agent' || c === 'agent' || r === 'agent' || Boolean(v.onboardedByAgent) || Boolean(v.onboardedBy) || Boolean(v.agentId) || Boolean(v.agentName) || Boolean(v.assignedAgent);
+    };
+
+    const isManagerCheck = (v) => {
+        if (!v) return false;
+        const j = String(v.joiningType || '').toLowerCase();
+        const c = String(v.createdVia || '').toLowerCase();
+        const r = String(v.registrationSource || '').toLowerCase();
+        return j === 'manager' || c === 'manager' || r === 'manager' || Boolean(v.onboardedByManager) || Boolean(v.managerId) || Boolean(v.assignedManager) || Boolean(v.managerName);
+    };
+
+    for (const item of list) {
+        if (!item || typeof item !== 'object') continue;
+        const v = typeof item.toObject === 'function' ? item.toObject() : { ...item };
+
+        const regId = getCleanRegId(v);
+        const phone = getCleanPhone(v);
+        const email = getCleanEmail(v);
+        const idStr = v._id ? String(v._id) : '';
+
+        let existing = null;
+        if (regId && regMap.has(regId)) existing = regMap.get(regId);
+        else if (phone && phoneMap.has(phone)) existing = phoneMap.get(phone);
+        else if (email && emailMap.has(email)) existing = emailMap.get(email);
+        else if (idStr && idMap.has(idStr)) existing = idMap.get(idStr);
+
+        if (existing) {
+            // Merge records: prefer active/approved status
+            const existingStatus = String(existing.status || '').toLowerCase().trim();
+            const currentStatus = String(v.status || '').toLowerCase().trim();
+            if (['active', 'approved'].includes(currentStatus) && !['active', 'approved'].includes(existingStatus)) {
+                existing.status = v.status;
+                existing.isActive = true;
+            }
+
+            // Determine and preserve Joining Type
+            if (isAgentCheck(v) || isAgentCheck(existing)) {
+                existing.joiningType = 'agent';
+                existing.onboardedByAgent = existing.onboardedByAgent || v.onboardedByAgent;
+                existing.assignedAgent = existing.assignedAgent || v.assignedAgent;
+                existing.agentId = existing.agentId || v.agentId;
+                existing.agentName = existing.agentName || v.agentName;
+                existing.agentRegistrationId = existing.agentRegistrationId || v.agentRegistrationId;
+                existing.onboardedBy = existing.onboardedBy || v.onboardedBy;
+            } else if (isManagerCheck(v) || isManagerCheck(existing)) {
+                existing.joiningType = 'manager';
+                existing.onboardedByManager = existing.onboardedByManager || v.onboardedByManager;
+                existing.assignedManager = existing.assignedManager || v.assignedManager;
+                existing.managerId = existing.managerId || v.managerId;
+                existing.managerName = existing.managerName || v.managerName;
+            } else {
+                existing.joiningType = existing.joiningType || v.joiningType || 'direct';
+            }
+
+            // Fill non-empty properties
+            if (!existing.businessName && (v.businessName || v.name)) existing.businessName = v.businessName || v.name;
+            if (!existing.contactPerson && (v.contactPerson || v.ownerName || v.contactName)) existing.contactPerson = v.contactPerson || v.ownerName || v.contactName;
+            if ((!existing.phone || existing.phone === '—') && v.phone && v.phone !== '—') existing.phone = v.phone;
+            if (!existing.email && v.email) existing.email = v.email;
+            if ((!existing.category || existing.category === '—') && v.category && v.category !== '—') existing.category = v.category;
+            if (!existing.fullAddress && (v.fullAddress || v.address)) existing.fullAddress = v.fullAddress || v.address;
+            if (!existing.pincode && v.pincode) existing.pincode = v.pincode;
+            if (!existing.state && v.state) existing.state = v.state;
+            if (!existing.district && v.district) existing.district = v.district;
+
+            // Update cross-reference indexes
+            if (regId && !regMap.has(regId)) regMap.set(regId, existing);
+            if (phone && !phoneMap.has(phone)) phoneMap.set(phone, existing);
+            if (email && !emailMap.has(email)) emailMap.set(email, existing);
+            if (idStr && !idMap.has(idStr)) idMap.set(idStr, existing);
+        } else {
+            const vendorCopy = { ...v };
+            if (regId) vendorCopy.registrationId = regId;
+            if (isAgentCheck(vendorCopy)) vendorCopy.joiningType = 'agent';
+            else if (isManagerCheck(vendorCopy)) vendorCopy.joiningType = 'manager';
+            else vendorCopy.joiningType = vendorCopy.joiningType || 'direct';
+
+            canonicalVendors.push(vendorCopy);
+
+            if (regId) regMap.set(regId, vendorCopy);
+            if (phone) phoneMap.set(phone, vendorCopy);
+            if (email) emailMap.set(email, vendorCopy);
+            if (idStr) idMap.set(idStr, vendorCopy);
+        }
+    }
+
+    return canonicalVendors;
+};
+
 // GET Vendor Directory with filters, pagination, and direct requests / agent-onboarded requests
 router.get('/vendors', auth, async (req, res) => {
     try {
@@ -448,34 +572,9 @@ router.get('/vendors', auth, async (req, res) => {
                 }).select('-__v').sort({ createdAt: -1 }).lean()
             ]);
 
-            let rawAgent = [...agentVendorsFromUser, ...agentVendorsFromVendor];
-            
-            const vendorMap = new Map();
-            rawAgent.forEach(v => {
-                const emailKey = (v.email || '').toLowerCase().trim();
-                const phoneKey = (v.phone || '').replace(/\D/g, '');
-                const regKey = (v.registrationId || '').trim();
-                const bizKey = (v.businessName || v.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-                const pinKey = (v.pincode || v.assignedPincode || '').toString().trim();
-                const idKey = v._id ? String(v._id) : '';
-
-                let key = idKey;
-                if (emailKey && !emailKey.includes('vendor_') && !emailKey.includes('@connect.app')) key = emailKey;
-                else if (phoneKey && phoneKey.length >= 10) key = phoneKey;
-                else if (bizKey && pinKey) key = `${bizKey}_${pinKey}`;
-                else if (bizKey && bizKey.length > 3) key = bizKey;
-                else if (regKey) key = regKey;
-
-                if (!vendorMap.has(key)) {
-                    vendorMap.set(key, v);
-                } else {
-                    const existing = vendorMap.get(key);
-                    const preferActive = ['Active', 'Approved', 'active', 'approved'].includes(v.status) ? v.status : existing.status;
-                    vendorMap.set(key, { ...existing, ...v, status: preferActive });
-                }
-            });
-
-            let enriched = await batchEnrichVendors(Array.from(vendorMap.values()));
+            const rawAgent = [...agentVendorsFromUser, ...agentVendorsFromVendor];
+            const dedupedAgent = deduplicateVendorsList(rawAgent);
+            let enriched = await batchEnrichVendors(dedupedAgent);
 
             if (search) {
                 const s = search.toLowerCase();
@@ -531,34 +630,9 @@ router.get('/vendors', auth, async (req, res) => {
                 }).select('-__v').sort({ createdAt: -1 }).lean()
             ]);
 
-            let rawManager = [...managerVendorsFromUser, ...managerVendorsFromVendor];
-            
-            const vendorMap = new Map();
-            rawManager.forEach(v => {
-                const emailKey = (v.email || '').toLowerCase().trim();
-                const phoneKey = (v.phone || '').replace(/\D/g, '');
-                const regKey = (v.registrationId || '').trim();
-                const bizKey = (v.businessName || v.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
-                const pinKey = (v.pincode || v.assignedPincode || '').toString().trim();
-                const idKey = v._id ? String(v._id) : '';
-
-                let key = idKey;
-                if (emailKey && !emailKey.includes('vendor_') && !emailKey.includes('@connect.app')) key = emailKey;
-                else if (phoneKey && phoneKey.length >= 10) key = phoneKey;
-                else if (bizKey && pinKey) key = `${bizKey}_${pinKey}`;
-                else if (bizKey && bizKey.length > 3) key = bizKey;
-                else if (regKey) key = regKey;
-
-                if (!vendorMap.has(key)) {
-                    vendorMap.set(key, v);
-                } else {
-                    const existing = vendorMap.get(key);
-                    const preferActive = ['Active', 'Approved', 'active', 'approved'].includes(v.status) ? v.status : existing.status;
-                    vendorMap.set(key, { ...existing, ...v, status: preferActive });
-                }
-            });
-
-            let enriched = await batchEnrichVendors(Array.from(vendorMap.values()));
+            const rawManager = [...managerVendorsFromUser, ...managerVendorsFromVendor];
+            const dedupedManager = deduplicateVendorsList(rawManager);
+            let enriched = await batchEnrichVendors(dedupedManager);
 
             if (search) {
                 const s = search.toLowerCase();
@@ -587,7 +661,6 @@ router.get('/vendors', auth, async (req, res) => {
         }
 
         if (isDirectRequest === 'true') {
-            // Aggregated direct vendor registration requests (strictly EXCLUDING agent-onboarded and manager-onboarded vendors)
             const [directVendors, directVendorDocs] = await Promise.all([
                 User.find({
                     $or: [
@@ -602,10 +675,9 @@ router.get('/vendors', auth, async (req, res) => {
                 }).select('-__v').sort({ createdAt: -1 }).lean()
             ]);
 
-            let rawDirect = [...directVendors, ...directVendorDocs];
+            const rawDirect = deduplicateVendorsList([...directVendors, ...directVendorDocs]);
             let allDirect = await batchEnrichVendors(rawDirect);
 
-            // Filter out handled statuses AND filter out any agent-onboarded / manager-onboarded vendors
             const handledStatuses = new Set(['approved', 'rejected', 'assigned', 'active', 'suspended']);
             let pendingDirect = allDirect.filter(v => {
                 const s = String(v.status || '').toLowerCase().trim();
@@ -660,20 +732,24 @@ router.get('/vendors', auth, async (req, res) => {
             User.find(query).select('-password -__v').sort({ createdAt: -1 }).lean(),
             Vendor.find(query).select('-__v').sort({ createdAt: -1 }).lean()
         ]);
-        let rawVendors = [...userVendors, ...docVendors];
+        const rawVendors = [...userVendors, ...docVendors];
 
-        // Deduplicate vendors by _id or email
-        const vendorMap = new Map();
-        rawVendors.forEach(v => {
-            const key = v._id ? String(v._id) : (v.email || Math.random());
-            if (!vendorMap.has(key)) vendorMap.set(key, v);
-        });
-        let vendors = Array.from(vendorMap.values());
-
-        // Return empty array when no vendors are found in DB
+        // Deduplicate vendors canonically by registrationId / phone / email / ID
+        const dedupedVendors = deduplicateVendorsList(rawVendors);
 
         // Attach Pincode Agent information & normalize profile fields
-        const enrichedVendors = await batchEnrichVendors(vendors);
+        let enrichedVendors = await batchEnrichVendors(dedupedVendors);
+
+        // Compute authoritative stats across all unique vendors
+        const stats = {
+            total: enrichedVendors.length,
+            active: enrichedVendors.filter(v => ['active', 'approved'].includes(String(v.status || '').toLowerCase())).length,
+            pending: enrichedVendors.filter(v => ['pending', 'under_verification', 'requested', 'in_review'].includes(String(v.status || '').toLowerCase())).length,
+            suspended: enrichedVendors.filter(v => ['suspended', 'revoked', 'rejected'].includes(String(v.status || '').toLowerCase())).length,
+            agentOnboarded: enrichedVendors.filter(v => v.joiningType === 'agent').length,
+            managerOnboarded: enrichedVendors.filter(v => v.joiningType === 'manager').length,
+            directRequests: enrichedVendors.filter(v => v.joiningType === 'direct' && !['active', 'approved'].includes(String(v.status || '').toLowerCase())).length
+        };
 
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
         const limitNum = Math.max(1, parseInt(limit, 10) || 20);
@@ -685,6 +761,7 @@ router.get('/vendors', auth, async (req, res) => {
         res.json({
             vendors: paginated,
             total,
+            stats,
             page: pageNum,
             pages: Math.ceil(total / limitNum) || 1
         });

@@ -21,14 +21,27 @@ const getVendorCategory = (v) => {
 };
 
 const getVendorAddress = (v) => {
+  if (!v) return '—';
+
   const isPlaceholder = (val) => {
     if (!val || typeof val !== 'string') return true;
     const clean = val.trim().toLowerCase();
-    return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty'].includes(clean) || /^(.)\1+$/.test(clean);
+    return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty', '—', '-', '--'].includes(clean) || /^(.)\1+$/.test(clean);
+  };
+
+  const cleanTrailingArtifacts = (addr) => {
+    if (!addr || typeof addr !== 'string') return '—';
+    return addr
+      .replace(/,\s*[—\-]+(?:\s*\(\d+\))?$/g, '')
+      .replace(/,\s*—\s*,/g, ', ')
+      .replace(/\s*,\s*—\s*$/g, '')
+      .replace(/\s*,\s*,+/g, ', ')
+      .replace(/,\s*$/, '')
+      .trim() || '—';
   };
 
   if (v.fullAddress && !v.fullAddress.toLowerCase().includes('city, state') && !v.fullAddress.includes('111111') && !v.fullAddress.toLowerCase().includes('dfghjkhj')) {
-    return v.fullAddress;
+    return cleanTrailingArtifacts(v.fullAddress);
   }
 
   let street = (v.businessAddress || v.street || v.address || v.streetAddress || '').trim();
@@ -49,13 +62,15 @@ const getVendorAddress = (v) => {
   }
 
   const addressParts = [];
-  if (street) addressParts.push(street);
-  if (city && city.toLowerCase() !== street.toLowerCase()) addressParts.push(city);
-  if (state && state.toLowerCase() !== city.toLowerCase()) addressParts.push(state);
+  if (street && !isPlaceholder(street)) addressParts.push(street);
+  const streetLower = street ? street.toLowerCase() : '';
+  if (city && !isPlaceholder(city) && !streetLower.includes(city.toLowerCase())) addressParts.push(city);
+  if (state && !isPlaceholder(state) && !streetLower.includes(state.toLowerCase()) && state.toLowerCase() !== city.toLowerCase()) addressParts.push(state);
 
   const baseAddress = addressParts.join(', ');
-  if (baseAddress && pin) return `${baseAddress} (${pin})`;
-  if (baseAddress) return baseAddress;
+  const hasPin = pin && baseAddress.includes(pin);
+  if (baseAddress && pin && !hasPin) return cleanTrailingArtifacts(`${baseAddress} (${pin})`);
+  if (baseAddress) return cleanTrailingArtifacts(baseAddress);
   if (pin) return `Pincode: ${pin}`;
   return '—';
 };
@@ -352,6 +367,130 @@ const getManagerInfo = (v) => {
   };
 };
 
+const getVendorJoiningSource = (v) => {
+  if (isVendorAgentOnboarded(v)) {
+    return {
+      type: 'agent',
+      label: 'Agent Onboarded',
+      badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+      icon: '👤'
+    };
+  }
+  if (isVendorManagerOnboarded(v)) {
+    return {
+      type: 'manager',
+      label: 'Manager Onboarded',
+      badgeClass: 'bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20',
+      icon: '👔'
+    };
+  }
+  return {
+    type: 'direct',
+    label: 'Direct Request',
+    badgeClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
+    icon: '🌐'
+  };
+};
+
+export const deduplicateVendorsList = (list = []) => {
+  if (!Array.isArray(list) || list.length === 0) return [];
+
+  const regMap = new Map();
+  const phoneMap = new Map();
+  const emailMap = new Map();
+  const idMap = new Map();
+  const canonicalVendors = [];
+
+  const getCleanPhone = (v) => {
+    const p = String(v.mobileNumber || v.mobileContact || v.mobile || v.phone || v.contactNumber || v.phoneNumber || '').replace(/\D/g, '');
+    return p.length >= 10 ? p.slice(-10) : '';
+  };
+
+  const getCleanEmail = (v) => {
+    const e = String(v.email || '').toLowerCase().trim();
+    return (e && !e.includes('vendor_') && !e.includes('@connect.app') && e.includes('@')) ? e : '';
+  };
+
+  const getCleanRegId = (v) => {
+    const r = String(v.registrationId || v.regId || v.vendorId || '').trim();
+    return (r && r !== 'undefined' && r !== 'null' && r !== '—') ? r.toUpperCase() : '';
+  };
+
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const v = { ...item };
+
+    const regId = getCleanRegId(v);
+    const phone = getCleanPhone(v);
+    const email = getCleanEmail(v);
+    const idStr = v._id ? String(v._id) : '';
+
+    let existing = null;
+    if (regId && regMap.has(regId)) existing = regMap.get(regId);
+    else if (phone && phoneMap.has(phone)) existing = phoneMap.get(phone);
+    else if (email && emailMap.has(email)) existing = emailMap.get(email);
+    else if (idStr && idMap.has(idStr)) existing = idMap.get(idStr);
+
+    if (existing) {
+      // Merge records: prefer active/approved status
+      const existingStatus = String(existing.status || '').toLowerCase().trim();
+      const currentStatus = String(v.status || '').toLowerCase().trim();
+      if (['active', 'approved'].includes(currentStatus) && !['active', 'approved'].includes(existingStatus)) {
+        existing.status = v.status;
+        existing.isActive = true;
+      }
+
+      // Determine and preserve Joining Type
+      if (isVendorAgentOnboarded(v) || isVendorAgentOnboarded(existing)) {
+        existing.joiningType = 'agent';
+        existing.onboardedByAgent = existing.onboardedByAgent || v.onboardedByAgent;
+        existing.assignedAgent = existing.assignedAgent || v.assignedAgent;
+        existing.agentId = existing.agentId || v.agentId;
+        existing.agentName = existing.agentName || v.agentName;
+        existing.agentRegistrationId = existing.agentRegistrationId || v.agentRegistrationId;
+        existing.onboardedBy = existing.onboardedBy || v.onboardedBy;
+      } else if (isVendorManagerOnboarded(v) || isVendorManagerOnboarded(existing)) {
+        existing.joiningType = 'manager';
+        existing.onboardedByManager = existing.onboardedByManager || v.onboardedByManager;
+        existing.assignedManager = existing.assignedManager || v.assignedManager;
+        existing.managerId = existing.managerId || v.managerId;
+        existing.managerName = existing.managerName || v.managerName;
+      } else {
+        existing.joiningType = existing.joiningType || v.joiningType || 'direct';
+      }
+
+      // Fill in any missing properties
+      if (!existing.businessName && (v.businessName || v.name)) existing.businessName = v.businessName || v.name;
+      if (!existing.contactPerson && (v.contactPerson || v.ownerName || v.contactName)) existing.contactPerson = v.contactPerson || v.ownerName || v.contactName;
+      if ((!existing.phone || existing.phone === '—') && v.phone && v.phone !== '—') existing.phone = v.phone;
+      if (!existing.email && v.email) existing.email = v.email;
+      if ((!existing.category || existing.category === '—') && v.category && v.category !== '—') existing.category = v.category;
+      if (!existing.fullAddress && (v.fullAddress || v.address)) existing.fullAddress = v.fullAddress || v.address;
+      if (!existing.pincode && v.pincode) existing.pincode = v.pincode;
+
+      if (regId && !regMap.has(regId)) regMap.set(regId, existing);
+      if (phone && !phoneMap.has(phone)) phoneMap.set(phone, existing);
+      if (email && !emailMap.has(email)) emailMap.set(email, existing);
+      if (idStr && !idMap.has(idStr)) idMap.set(idStr, existing);
+    } else {
+      const vendorCopy = { ...v };
+      if (regId) vendorCopy.registrationId = regId;
+      if (isVendorAgentOnboarded(vendorCopy)) vendorCopy.joiningType = 'agent';
+      else if (isVendorManagerOnboarded(vendorCopy)) vendorCopy.joiningType = 'manager';
+      else vendorCopy.joiningType = vendorCopy.joiningType || 'direct';
+
+      canonicalVendors.push(vendorCopy);
+
+      if (regId) regMap.set(regId, vendorCopy);
+      if (phone) phoneMap.set(phone, vendorCopy);
+      if (email) emailMap.set(email, vendorCopy);
+      if (idStr) idMap.set(idStr, vendorCopy);
+    }
+  }
+
+  return canonicalVendors;
+};
+
 const vendorModuleCacheMap = new Map();
 
 export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSection = null, highlightVendorId = null }) => {
@@ -362,6 +501,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
+  const [serverStats, setServerStats] = useState(null);
 
   // Filters & Search
   const [search, setSearch] = useState('');
@@ -459,6 +599,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
       setVendors(cached.list);
       setTotal(cached.totalCount);
       setPages(cached.totalPages);
+      if (cached.stats) setServerStats(cached.stats);
     } else {
       setLoading(true);
     }
@@ -504,13 +645,16 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
       let totalPages = 1;
       if (res.ok) {
         const data = await res.json();
-        list = data.vendors || [];
-        totalCount = data.total || list.length;
-        totalPages = data.pages || Math.ceil(list.length / 12);
-        vendorModuleCacheMap.set(cacheKey, { list, totalCount, totalPages, timestamp: Date.now() });
+        const rawList = data.vendors || [];
+        const dedupedList = deduplicateVendorsList(rawList);
+        list = dedupedList;
+        totalCount = data.stats?.total ?? (data.total || list.length);
+        totalPages = data.pages || Math.ceil(totalCount / 12) || 1;
+        vendorModuleCacheMap.set(cacheKey, { list, totalCount, totalPages, stats: data.stats, timestamp: Date.now() });
         setVendors(list);
         setTotal(totalCount);
         setPages(totalPages);
+        if (data.stats) setServerStats(data.stats);
         setError(null);
       } else {
         throw new Error(`Server returned HTTP ${res.status}`);
@@ -565,13 +709,14 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
 
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
-          const list = data.vendors || [];
-            const pendingOnly = list.filter(v => {
-              const s = (v.status || '').toLowerCase().trim();
-              const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-              return !isAgentOnboarded && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
-            });
-            setDirectRequests(pendingOnly);
+          const list = deduplicateVendorsList(data.vendors || []);
+          const pendingOnly = list.filter(v => {
+            const s = (v.status || '').toLowerCase().trim();
+            const isAgent = isVendorAgentOnboarded(v);
+            const isManager = isVendorManagerOnboarded(v);
+            return !isAgent && !isManager && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
+          });
+          setDirectRequests(pendingOnly);
         }
       } catch (e) {
         if (e.name !== 'AbortError') console.error('Fetch direct requests warning:', e.message);
@@ -603,7 +748,8 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
 
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
-          const pendingOnly = (data.vendors || []).filter(v => {
+          const list = deduplicateVendorsList(data.vendors || []);
+          const pendingOnly = list.filter(v => {
             const s = (v.status || '').toLowerCase().trim();
             return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
           });
@@ -639,7 +785,8 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
 
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
-          const pendingOnly = (data.vendors || []).filter(v => {
+          const list = deduplicateVendorsList(data.vendors || []);
+          const pendingOnly = list.filter(v => {
             const s = (v.status || '').toLowerCase().trim();
             return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
           });
@@ -1101,16 +1248,16 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     document.body.removeChild(link);
   };
 
-  const totalVendorsCount = total || vendors.length;
-  const activeVendorsCount = vendors.filter(v => {
+  const totalVendorsCount = serverStats?.total ?? (total || vendors.length);
+  const activeVendorsCount = serverStats?.active ?? vendors.filter(v => {
     const s = normalizeStatusValue(v.status);
     return s === 'Active';
   }).length;
-  const pendingRequestsCount = directRequests.length + vendors.filter(v => {
+  const pendingRequestsCount = serverStats?.pending ?? (directRequests.length + vendors.filter(v => {
     const s = normalizeStatusValue(v.status);
     return s === 'Pending';
-  }).length;
-  const suspendedVendorsCount = vendors.filter(v => {
+  }).length);
+  const suspendedVendorsCount = serverStats?.suspended ?? vendors.filter(v => {
     const s = normalizeStatusValue(v.status);
     return s === 'Suspended';
   }).length;
@@ -1377,102 +1524,145 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
         <>
           {/* 3. VENDORS GRID VIEW */}
           {viewMode === 'grid' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {vendors.map((v, idx) => (
-                <div 
-                  key={v._id} 
-                  onClick={() => setSelectedVendorDetails(v)}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs space-y-4 hover:border-primary-500/50 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group"
-                >
-                  <div className="space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-lg sm:text-xl flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-all shrink-0">
-                          {(v.businessName || v.name || 'V')[0].toUpperCase()}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5 sm:gap-5">
+              {vendors.map((v, idx) => {
+                const js = getVendorJoiningSource(v);
+                return (
+                  <div 
+                    key={v.registrationId || v.vendorId || (v._id ? String(v._id) : `vnd-${idx}`)} 
+                    onClick={() => setSelectedVendorDetails(v)}
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs hover:border-primary-500/50 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group h-full"
+                  >
+                    <div className="space-y-3.5 flex-1 flex flex-col">
+                      {/* Top Header */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-lg sm:text-xl flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-all shrink-0">
+                            {(v.businessName || v.name || 'V')[0].toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all truncate" title={v.businessName || v.name}>
+                              {v.businessName || v.name}
+                            </h4>
+                            <p className="text-xs text-slate-400 font-semibold truncate" title={v.contactPerson || v.email}>
+                              {v.contactPerson || v.email}
+                            </p>
+                          </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all truncate">{v.businessName || v.name}</h4>
-                          <p className="text-xs text-slate-400 font-semibold truncate">{v.contactPerson || v.email}</p>
+                        <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                          {renderStatusBadge(v.status)}
+                          {!isPendingVendorReview(v.status) && (
+                            <select
+                              value={normalizeStatusValue(v.status)}
+                              onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
+                              className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
+                            >
+                              <option value="Active">Active</option>
+                              <option value="Suspended">Suspended</option>
+                              <option value="Rejected">Rejected</option>
+                            </select>
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0" onClick={e => e.stopPropagation()}>
-                        {renderStatusBadge(v.status)}
-                        {!isPendingVendorReview(v.status) && (
-                          <select
-                            value={normalizeStatusValue(v.status)}
-                            onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
-                            className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
-                          >
-                            <option value="Active">Active</option>
-                            <option value="Suspended">Suspended</option>
-                            <option value="Rejected">Rejected</option>
-                          </select>
-                        )}
-                      </div>
-                    </div>
 
-                    <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-1.5 text-xs text-slate-600 dark:text-slate-400 font-medium">
-                      <div className="flex justify-between items-center">
-                        <span className="text-slate-400">Joining Type:</span>
+                      {/* Info Block */}
+                      <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl space-y-2 text-xs text-slate-600 dark:text-slate-400 font-medium">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Joining Type:</span>
+                          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg border ${js.badgeClass}`}>
+                            {js.icon} {js.label}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Category:</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[160px] text-right" title={getVendorCategory(v)}>
+                            {getVendorCategory(v)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Phone:</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300 font-mono">
+                            {getVendorPhone(v)}
+                          </span>
+                        </div>
+                        <div className="flex flex-col gap-0.5 pt-1.5 border-t border-slate-100 dark:border-slate-850">
+                          <span className="text-slate-400 text-[11px] font-medium">Address / Territory:</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-200 text-xs break-words line-clamp-2 min-h-[36px] leading-snug" title={getVendorAddress(v)}>
+                            {getVendorAddress(v)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Joining Source Box - Standardized equal height across all cards */}
+                      <div className="mt-auto">
                         {isVendorAgentOnboarded(v) ? (
-                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                            👤 Agent Onboarded
-                          </span>
+                          <div className="p-3 bg-purple-500/5 border border-purple-500/15 rounded-2xl min-h-[58px] flex flex-col justify-center space-y-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-purple-700 dark:text-purple-300 font-extrabold flex items-center gap-1.5 truncate">
+                                <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">Agent: {getAgentInfo(v).name}</span>
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 font-mono shrink-0 ml-1">
+                                Pin: {getAgentInfo(v).pincode}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono font-medium truncate">
+                              Agent ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong>
+                            </div>
+                          </div>
+                        ) : isVendorManagerOnboarded(v) ? (
+                          <div className="p-3 bg-teal-500/5 border border-teal-500/15 rounded-2xl min-h-[58px] flex flex-col justify-center space-y-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-teal-700 dark:text-teal-300 font-extrabold flex items-center gap-1.5 truncate">
+                                <UserCog className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">Manager: {getManagerInfo(v).name}</span>
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 font-mono shrink-0 ml-1">
+                                Pin: {getManagerInfo(v).pincode}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-mono font-medium truncate">
+                              Manager ID: <strong className="text-slate-700 dark:text-slate-300">{getManagerInfo(v).registrationId}</strong>
+                            </div>
+                          </div>
                         ) : (
-                          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                            🌐 Direct Website
-                          </span>
+                          <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-2xl min-h-[58px] flex flex-col justify-center space-y-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-amber-700 dark:text-amber-400 font-extrabold flex items-center gap-1.5 truncate">
+                                <Clock className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">Direct Request</span>
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 font-mono shrink-0 ml-1">
+                                Pin: {v.pincode || '—'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-medium truncate">
+                              {v.assignedPincodeAgent ? (
+                                <span>Pincode Agent: <strong className="text-slate-700 dark:text-slate-300">{v.assignedPincodeAgent.name}</strong></span>
+                              ) : (
+                                <span>Direct Registration • <strong className="text-slate-700 dark:text-slate-300">Self Onboarded</strong></span>
+                              )}
+                            </div>
+                          </div>
                         )}
-                      </div>
-                      <div className="flex justify-between"><span className="text-slate-400">Category:</span><span className="font-bold">{getVendorCategory(v)}</span></div>
-                      <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-bold">{getVendorPhone(v)}</span></div>
-                      <div className="flex flex-col gap-0.5 pt-1 border-t border-slate-100 dark:border-slate-850">
-                        <span className="text-slate-400 text-[11px] font-medium">Address / Territory:</span>
-                        <span className="font-bold text-slate-700 dark:text-slate-200 text-xs break-words line-clamp-3 leading-snug" title={getVendorAddress(v)}>
-                          {getVendorAddress(v)}
-                        </span>
                       </div>
                     </div>
 
-                    {/* Agent Onboarded or Pincode Agent Status */}
-                    {isVendorAgentOnboarded(v) ? (
-                      <div className="p-3 bg-purple-500/5 border border-purple-500/15 rounded-2xl space-y-1 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-purple-700 dark:text-purple-300 font-extrabold flex items-center gap-1">
-                            <UserCheck className="w-3.5 h-3.5" />
-                            Agent: {getAgentInfo(v).name}
-                          </span>
-                          <span className="text-[10px] font-bold text-slate-400 font-mono">
-                            Pin: {getAgentInfo(v).pincode}
-                          </span>
-                        </div>
-                        <div className="text-[11px] text-slate-400 font-mono font-medium">
-                          Agent ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong>
-                        </div>
-                      </div>
-                    ) : v.assignedPincodeAgent ? (
-                      <div className="p-3 bg-blue-500/5 border border-blue-500/15 rounded-2xl flex items-center justify-between text-xs" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold">
-                          <UserCheck className="w-4 h-4" />
-                          <span>Agent: <strong>{v.assignedPincodeAgent.name}</strong></span>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="pt-2 flex items-center justify-between">
-                    <span className="text-[10px] text-slate-400 font-semibold">Reg ID: {formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
-                    <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                    {/* Card Footer: Reg ID and View Details */}
+                    <div className="pt-3 mt-3 flex items-center justify-between border-t border-slate-100 dark:border-slate-850">
+                      <span className="text-[10px] text-slate-400 font-semibold truncate mr-2" title={formatVendorId(v.registrationId || v.vendorId || v._id, idx)}>
+                        Reg ID: {formatVendorId(v.registrationId || v.vendorId || v._id, idx)}
+                      </span>
                       <button
                         onClick={e => { e.stopPropagation(); setSelectedVendorDetails(v); }}
-                        className="text-[10px] font-extrabold text-blue-600 hover:text-white hover:bg-blue-600 dark:text-blue-400 flex items-center gap-1 cursor-pointer bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-500/20 transition-all active:scale-95"
+                        className="text-[10px] font-extrabold text-blue-600 hover:text-white hover:bg-blue-600 dark:text-blue-400 flex items-center gap-1 cursor-pointer bg-blue-500/10 px-2.5 py-1 rounded-xl border border-blue-500/20 transition-all active:scale-95 shrink-0"
                       >
                         <Eye className="w-3 h-3" /> View Details
                       </button>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -1492,88 +1682,95 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-850 text-xs">
-              {vendors.map((v, idx) => (
-                <tr 
-                  key={v._id} 
-                  onClick={() => setSelectedVendorDetails(v)}
-                  className="hover:bg-slate-50/80 dark:hover:bg-slate-850/60 cursor-pointer transition-colors group"
-                >
-                  <td className="py-3 px-4">
-                    <span className="font-extrabold text-slate-800 dark:text-slate-100 block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{v.businessName || v.name}</span>
-                    <span className="text-[11px] text-slate-400">{v.email} • {getVendorPhone(v)}</span>
-                  </td>
-                  <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
-                    {getVendorCategory(v)}
-                  </td>
-                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-medium">
-                    {getVendorAddress(v)}
-                  </td>
-                  <td className="py-3 px-4">
-                    {isVendorAgentOnboarded(v) ? (
-                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 flex items-center gap-1 w-fit">
-                        👤 Agent Onboarded
+              {vendors.map((v, idx) => {
+                const js = getVendorJoiningSource(v);
+                return (
+                  <tr 
+                    key={v.registrationId || v.vendorId || (v._id ? String(v._id) : `vnd-${idx}`)} 
+                    onClick={() => setSelectedVendorDetails(v)}
+                    className="hover:bg-slate-50/80 dark:hover:bg-slate-850/60 cursor-pointer transition-colors group"
+                  >
+                    <td className="py-3 px-4">
+                      <span className="font-extrabold text-slate-800 dark:text-slate-100 block group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{v.businessName || v.name}</span>
+                      <span className="text-[11px] text-slate-400">{v.email} • {getVendorPhone(v)}</span>
+                    </td>
+                    <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
+                      {getVendorCategory(v)}
+                    </td>
+                    <td className="py-3 px-4 text-slate-600 dark:text-slate-400 font-medium max-w-xs truncate" title={getVendorAddress(v)}>
+                      {getVendorAddress(v)}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-xl border flex items-center gap-1 w-fit ${js.badgeClass}`}>
+                        {js.icon} {js.label}
                       </span>
-                    ) : (
-                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center gap-1 w-fit">
-                        🌐 Direct Website
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                    {isVendorAgentOnboarded(v) ? (
-                      <div className="space-y-0.5">
-                        <span className="text-xs font-extrabold text-purple-700 dark:text-purple-300 flex items-center gap-1">
-                          <UserCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                          {getAgentInfo(v).name}
-                        </span>
-                        <div className="text-[11px] text-slate-500 font-mono font-medium">
-                          ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong> • Pin: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).pincode}</strong>
+                    </td>
+                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                      {isVendorAgentOnboarded(v) ? (
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-extrabold text-purple-700 dark:text-purple-300 flex items-center gap-1">
+                            <UserCheck className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                            {getAgentInfo(v).name}
+                          </span>
+                          <div className="text-[11px] text-slate-500 font-mono font-medium">
+                            ID: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).registrationId}</strong> • Pin: <strong className="text-slate-700 dark:text-slate-300">{getAgentInfo(v).pincode}</strong>
+                          </div>
                         </div>
-                      </div>
-                    ) : v.assignedPincodeAgent ? (
-                      <div className="space-y-0.5">
-                        <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                          <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                          {v.assignedPincodeAgent.name}
-                        </span>
-                        <div className="text-[11px] text-slate-500 font-mono">
-                          ID: {v.assignedPincodeAgent.registrationId || '—'} {v.pincode ? `• Pin: ${v.pincode}` : ''}
+                      ) : isVendorManagerOnboarded(v) ? (
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-extrabold text-teal-700 dark:text-teal-300 flex items-center gap-1">
+                            <UserCog className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                            {getManagerInfo(v).name}
+                          </span>
+                          <div className="text-[11px] text-slate-500 font-mono font-medium">
+                            ID: <strong className="text-slate-700 dark:text-slate-300">{getManagerInfo(v).registrationId}</strong> • Pin: <strong className="text-slate-700 dark:text-slate-300">{getManagerInfo(v).pincode}</strong>
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <span className="text-xs font-semibold text-slate-400">Unassigned</span>
-                    )}
-                  </td>
-                  <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-1.5">
-                      {renderStatusBadge(v.status)}
-                      {!isPendingVendorReview(v.status) && (
-                        <select
-                          value={normalizeStatusValue(v.status)}
-                          onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
-                          className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
-                        >
-                          <option value="Active">Active</option>
-                          <option value="Suspended">Suspended</option>
-                          <option value="Rejected">Rejected</option>
-                        </select>
+                      ) : v.assignedPincodeAgent ? (
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                            <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                            {v.assignedPincodeAgent.name}
+                          </span>
+                          <div className="text-[11px] text-slate-500 font-mono">
+                            ID: {v.assignedPincodeAgent.registrationId || '—'} {v.pincode ? `• Pin: ${v.pincode}` : ''}
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-400">Direct Application</span>
                       )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center justify-end gap-1.5">
-                      <span className="text-[11px] text-slate-400 font-mono mr-1">{formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
-                      <button
-                        onClick={e => { e.stopPropagation(); setSelectedVendorDetails(v); }}
-                        title="View Vendor Details"
-                        className="p-1.5 rounded-xl bg-blue-500/10 text-blue-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer border border-blue-500/20 active:scale-95"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="py-3 px-4" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5">
+                        {renderStatusBadge(v.status)}
+                        {!isPendingVendorReview(v.status) && (
+                          <select
+                            value={normalizeStatusValue(v.status)}
+                            onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
+                            className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
+                          >
+                            <option value="Active">Active</option>
+                            <option value="Suspended">Suspended</option>
+                            <option value="Rejected">Rejected</option>
+                          </select>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <span className="text-[11px] text-slate-400 font-mono mr-1">{formatVendorId(v.registrationId || v.vendorId || v._id, idx)}</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); setSelectedVendorDetails(v); }}
+                          title="View Vendor Details"
+                          className="p-1.5 rounded-xl bg-blue-500/10 text-blue-600 hover:bg-blue-600 hover:text-white transition-all cursor-pointer border border-blue-500/20 active:scale-95"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1860,13 +2057,14 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                   <div className="flex justify-between"><span className="text-slate-400">Subcategory:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.subcategory || selectedVendorDetails.subCategory || 'General'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Vendor Type:</span><span className="font-bold">{selectedVendorDetails.baseVendorType || selectedVendorDetails.vendorType || 'Retail Vendor'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Joining Method:</span>
-                    <span className={`font-extrabold uppercase text-[10px] px-2 py-0.5 rounded-md border ${
-                      isVendorAgentOnboarded(selectedVendorDetails)
-                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
-                        : 'bg-blue-500/10 text-blue-600 border border-blue-500/20'
-                    }`}>
-                      {isVendorAgentOnboarded(selectedVendorDetails) ? '👤 Agent Onboarded' : '🌐 Direct Website'}
-                    </span>
+                    {(() => {
+                      const js = getVendorJoiningSource(selectedVendorDetails);
+                      return (
+                        <span className={`font-extrabold uppercase text-[10px] px-2 py-0.5 rounded-md border ${js.badgeClass}`}>
+                          {js.icon} {js.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <div className="flex justify-between"><span className="text-slate-400">Operating Hours:</span><span className="font-bold">{selectedVendorDetails.operatingHours || '9:00 AM - 9:00 PM'}</span></div>
                 </div>
@@ -1909,17 +2107,32 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                 );
               })()}
 
-              {/* 3. Onboarding & Agent Details */}
+              {/* 3. Onboarding & Verification Details */}
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">
                 <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold pb-2 border-b border-slate-200/60 dark:border-slate-850">
                   <UserCheck className="w-4 h-4 text-purple-500" />
-                  <span>Agent & Onboarding</span>
+                  <span>Onboarding & Verification</span>
                 </div>
                 <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
-                  <div className="flex justify-between"><span className="text-slate-400">Assigned Agent:</span><span className="font-bold text-purple-600 dark:text-purple-400">{getAgentInfo(selectedVendorDetails).name}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Agent Reg ID:</span><span className="font-mono font-bold">{getAgentInfo(selectedVendorDetails).registrationId}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Agent Pincode:</span><span className="font-mono font-bold">{getAgentInfo(selectedVendorDetails).pincode}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Assigned Territory:</span><span className="font-bold">{getAgentInfo(selectedVendorDetails).name !== '—' ? (selectedVendorDetails.assignedArea || `${selectedVendorDetails.state || ''} / ${selectedVendorDetails.city || selectedVendorDetails.district || ''}`) : '—'}</span></div>
+                  {isVendorAgentOnboarded(selectedVendorDetails) ? (
+                    <>
+                      <div className="flex justify-between"><span className="text-slate-400">Assigned Agent:</span><span className="font-bold text-purple-600 dark:text-purple-400">{getAgentInfo(selectedVendorDetails).name}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Agent Reg ID:</span><span className="font-mono font-bold">{getAgentInfo(selectedVendorDetails).registrationId}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Agent Pincode:</span><span className="font-mono font-bold">{getAgentInfo(selectedVendorDetails).pincode}</span></div>
+                    </>
+                  ) : isVendorManagerOnboarded(selectedVendorDetails) ? (
+                    <>
+                      <div className="flex justify-between"><span className="text-slate-400">Territory Manager:</span><span className="font-bold text-teal-600 dark:text-teal-400">{getManagerInfo(selectedVendorDetails).name}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Manager ID:</span><span className="font-mono font-bold">{getManagerInfo(selectedVendorDetails).registrationId}</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Manager Pincode:</span><span className="font-mono font-bold">{getManagerInfo(selectedVendorDetails).pincode}</span></div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between"><span className="text-slate-400">Onboarding Type:</span><span className="font-bold text-amber-700 dark:text-amber-400">Direct Merchant Application</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Pincode Agent:</span><span className="font-bold">{selectedVendorDetails.assignedPincodeAgent?.name || 'Automated Territory Resolution'}</span></div>
+                    </>
+                  )}
+                  <div className="flex justify-between"><span className="text-slate-400">Assigned Territory:</span><span className="font-bold">{selectedVendorDetails.assignedArea || `${selectedVendorDetails.state || ''} / ${selectedVendorDetails.city || selectedVendorDetails.district || ''}` || '—'}</span></div>
                 </div>
               </div>
 
