@@ -82,16 +82,32 @@ class CacheService {
   }
 
   initRedis() {
-    const redisUrl = process.env.REDIS_URL || (process.env.REDIS_HOST ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : null);
+    let redisUrl = process.env.REDIS_URL || (process.env.REDIS_HOST ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : null);
     if (!redisUrl) {
       // In-memory cache is active by default
       return;
     }
+    // Clean any prefix like 'redis-cli -u ' if accidentally pasted
+    redisUrl = redisUrl.replace(/^redis-cli\s+-u\s+/i, '').trim();
 
     try {
-      // Lazy load redis if installed
-      const redis = require('redis');
-      this.redisClient = redis.createClient({ url: redisUrl, socket: { connectTimeout: 3000 } });
+      let Redis;
+      try {
+        Redis = require('ioredis');
+        this.redisClient = new Redis(redisUrl, {
+          connectTimeout: 5000,
+          maxRetriesPerRequest: 3,
+          enableReadyCheck: true
+        });
+        this.isIoRedis = true;
+      } catch (err) {
+        const redis = require('redis');
+        this.redisClient = redis.createClient({ url: redisUrl, socket: { connectTimeout: 5000 } });
+        this.redisClient.connect().catch(() => {
+          this.isRedisReady = false;
+        });
+        this.isIoRedis = false;
+      }
       
       this.redisClient.on('error', (err) => {
         // Silent graceful fallback to in-memory cache
@@ -102,8 +118,8 @@ class CacheService {
         this.isRedisReady = true;
       });
 
-      this.redisClient.connect().catch(() => {
-        this.isRedisReady = false;
+      this.redisClient.on('connect', () => {
+        this.isRedisReady = true;
       });
     } catch (e) {
       // Redis package not installed or failed to initialize, memory cache continues seamlessly
@@ -129,7 +145,13 @@ class CacheService {
       try {
         const str = JSON.stringify(value);
         if (ttlSeconds > 0) {
-          await this.redisClient.setEx(key, ttlSeconds, str);
+          if (this.isIoRedis) {
+            await this.redisClient.set(key, str, 'EX', ttlSeconds);
+          } else if (typeof this.redisClient.setEx === 'function') {
+            await this.redisClient.setEx(key, ttlSeconds, str);
+          } else {
+            await this.redisClient.set(key, str, 'EX', ttlSeconds);
+          }
         } else {
           await this.redisClient.set(key, str);
         }
