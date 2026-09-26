@@ -1867,22 +1867,23 @@ function App() {
       <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
 
         {/* HEADER BAR */}
-        <header className="h-16 sm:h-20 glass sticky top-0 z-20 px-3 sm:px-8 flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800/80">
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1 mr-2">
-            <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-slate-500 dark:text-slate-400 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0">
-              <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
-            <div className="min-w-0">
-              <h2 className="text-base sm:text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight truncate">
-                {activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab === 'admin-management' ? 'Admin Management' : activeTab === 'admin-tasks' ? 'Admin Tasks' : activeTab === 'admin-reports' ? 'Admin Reports' : activeTab === 'manager-directory' ? 'Managers' : activeTab === 'manager-reports' ? 'Manager Reports' : activeTab.replace('-', ' ')}
-              </h2>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
-                {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
-              </p>
+        <header className="glass sticky top-0 z-20 border-b border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6">
+          <div className="max-w-7xl w-full mx-auto h-16 sm:h-20 flex items-center justify-between">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1 mr-2">
+              <button onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden text-slate-500 dark:text-slate-400 p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg shrink-0">
+                <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
+              </button>
+              <div className="min-w-0">
+                <h2 className="text-base sm:text-xl font-extrabold capitalize text-slate-900 dark:text-white tracking-tight truncate">
+                  {activeTab === 'vendor-directory-enterprise' ? 'Vendor Directory - Enterprise' : activeTab === 'vendor-directory' ? 'Vendor Directory' : activeTab === 'agents' ? 'Agent Directory' : activeTab === 'agent-performance' ? 'Agent Performance Monitoring' : activeTab === 'agent-payment' ? 'Agent Payment' : (activeTab === 'pincodes' || activeTab === 'pincode-management') ? 'Pincode Management' : activeTab === 'admin-management' ? 'Admin Management' : activeTab === 'admin-tasks' ? 'Admin Tasks' : activeTab === 'admin-reports' ? 'Admin Reports' : activeTab === 'manager-directory' ? 'Managers' : activeTab === 'manager-reports' ? 'Manager Reports' : activeTab.replace(/-/g, ' ')}
+                </h2>
+                <p className="text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">
+                  {new Date().toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}
+                </p>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {/* Dark Mode toggle button */}
             <button
               onClick={() => setDarkMode(!darkMode)}
@@ -1988,7 +1989,8 @@ function App() {
               </button>
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
         <main className="px-3 py-4 sm:p-6 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6 overflow-x-hidden min-w-0">
           <React.Suspense fallback={

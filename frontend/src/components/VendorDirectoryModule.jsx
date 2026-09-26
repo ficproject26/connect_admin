@@ -1160,35 +1160,35 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     const s = String(status || '').toLowerCase().trim();
     if (s === 'approved' || s === 'active') {
       return (
-        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" /> Active
+        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1 shrink-0 whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse shrink-0" /> Active
         </span>
       );
     }
     if (s === 'inactive') {
       return (
-        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-red-500/10 text-red-600 border border-red-500/20 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" /> Inactive
+        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-red-500/10 text-red-600 border border-red-500/20 flex items-center gap-1 shrink-0 whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block shrink-0" /> Inactive
         </span>
       );
     }
     if (s === 'suspended') {
       return (
-        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block" /> Suspended
+        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-slate-800 text-slate-200 border border-slate-700 flex items-center gap-1 shrink-0 whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block shrink-0" /> Suspended
         </span>
       );
     }
     if (s === 'rejected') {
       return (
-        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-rose-500/10 text-rose-600 border border-rose-500/20 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block" /> Rejected
+        <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-rose-500/10 text-rose-600 border border-rose-500/20 flex items-center gap-1 shrink-0 whitespace-nowrap">
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block shrink-0" /> Rejected
         </span>
       );
     }
     return (
-      <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-700 border border-amber-500/20 flex items-center gap-1">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" /> Pending
+      <span className="text-[10px] font-black uppercase px-2.5 py-1 rounded-xl bg-amber-500/10 text-amber-700 border border-amber-500/20 flex items-center gap-1 shrink-0 whitespace-nowrap">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block shrink-0" /> Pending
       </span>
     );
   };
@@ -1266,25 +1266,29 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     <div className="space-y-6 pb-12">
 
       {/* 1. MODULE HEADER & TOOLBAR */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 rounded-3xl shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Vendor Directory</h2>
-            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 sm:p-6 rounded-3xl shadow-sm space-y-5">
+        {/* Top: Title, Enterprise Suite badge & description */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight whitespace-nowrap">
+              Vendor Directory
+            </h2>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
               Enterprise Suite
             </span>
           </div>
-          <p className="text-xs text-slate-400 font-semibold mt-1">
+          <p className="text-xs text-slate-400 font-semibold mt-0.5 max-w-3xl">
             Manage all registered merchants, vendor status lifecycle, and automated pincode agent verification requests.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        {/* Action Buttons Row - Single horizontal row on desktop, cleanly wrapping on smaller screens */}
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 w-full">
           {/* Refresh Button */}
           <button
             onClick={() => { fetchVendors(true); fetchDirectRequests(); fetchAgentOnboardedVendors(); fetchManagerOnboardedVendors(); fetchVendorBusinessRequests(); }}
             disabled={loading}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold text-xs rounded-2xl transition-all flex items-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 whitespace-nowrap border border-slate-200/60 dark:border-slate-700"
+            className="h-10 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-extrabold text-xs rounded-2xl transition-all inline-flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50 whitespace-nowrap border border-slate-200/80 dark:border-slate-700 shadow-xs"
             title="Refresh latest database records"
           >
             <RefreshCw className={`w-4 h-4 shrink-0 ${loading ? 'animate-spin text-primary-500' : ''}`} />
@@ -1294,10 +1298,11 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           {/* Direct Requests Button */}
           <button
             onClick={() => { setShowDirectModal(true); fetchDirectRequests(); }}
-            className="px-4 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
+            className="h-10 px-4 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center justify-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
           >
-            <Clock className="w-4 h-4 shrink-0" /> Direct Requests
-            <span className="bg-white text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-black">
+            <Clock className="w-4 h-4 shrink-0" />
+            <span>Direct Requests</span>
+            <span className="bg-white text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-black shrink-0">
               {directRequests.length || '!'}
             </span>
           </button>
@@ -1305,10 +1310,11 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           {/* Agent Onboarded Vendors Button */}
           <button
             onClick={() => { setShowAgentOnboardedModal(true); fetchAgentOnboardedVendors(); }}
-            className="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
+            className="h-10 px-4 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-extrabold text-xs rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center justify-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
           >
-            <UserCheck className="w-4 h-4 shrink-0" /> Agent Onboarded
-            <span className="bg-white text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-black">
+            <UserCheck className="w-4 h-4 shrink-0" />
+            <span>Agent Onboarded</span>
+            <span className="bg-white text-purple-800 px-2 py-0.5 rounded-full text-[10px] font-black shrink-0">
               {agentOnboardedVendorsList.length}
             </span>
           </button>
@@ -1316,11 +1322,12 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           {/* Manager Onboarded Vendors Button */}
           <button
             onClick={() => { setShowManagerOnboardedModal(true); fetchManagerOnboardedVendors(); }}
-            className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
+            className="h-10 px-4 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white font-extrabold text-xs rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center justify-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
             title="Review vendors onboarded by territory managers"
           >
-            <UserCog className="w-4 h-4 shrink-0" /> Manager Onboarded
-            <span className="bg-white text-teal-800 px-2 py-0.5 rounded-full text-[10px] font-black">
+            <UserCog className="w-4 h-4 shrink-0" />
+            <span>Manager Onboarded</span>
+            <span className="bg-white text-teal-800 px-2 py-0.5 rounded-full text-[10px] font-black shrink-0">
               {managerOnboardedVendorsList.length}
             </span>
           </button>
@@ -1328,85 +1335,65 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           {/* Existing Vendor Business Requests Button */}
           <button
             onClick={() => { setShowBusinessRequestsModal(true); setBusinessRequestsFilter('pending'); fetchVendorBusinessRequests(); }}
-            className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-2xl shadow-md transition-all flex items-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
+            className="h-10 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-2xl shadow-sm hover:shadow transition-all inline-flex items-center justify-center gap-2 cursor-pointer active:scale-95 whitespace-nowrap"
             title="Review secondary business outlet requests registered by existing vendors"
           >
-            <Building2 className="w-4 h-4 shrink-0" /> Business Requests
-            <span className="bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full text-[10px] font-black">
+            <Building2 className="w-4 h-4 shrink-0" />
+            <span>Business Requests</span>
+            <span className="bg-amber-400 text-slate-900 px-2 py-0.5 rounded-full text-[10px] font-black shrink-0">
               {businessRequestsList.filter(b => !['active', 'approved'].includes((b.status||'').toLowerCase())).length}
             </span>
           </button>
 
-          {/* Export CSV */}
+          {/* Export CSV - Aligned to the far right on desktop */}
           <button
             onClick={exportCSV}
-            className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-extrabold text-xs rounded-2xl transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap"
+            className="h-10 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-200 font-extrabold text-xs rounded-2xl transition-all inline-flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap sm:ml-auto border border-slate-200/80 dark:border-slate-700 shadow-xs active:scale-95"
           >
-            <Download className="w-4 h-4 shrink-0" /> Export CSV
+            <Download className="w-4 h-4 shrink-0" />
+            <span>Export CSV</span>
           </button>
-
-          {/* View Mode Toggle */}
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-2xl border border-slate-200/60 dark:border-slate-700 shrink-0">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded-xl text-xs font-bold transition-all ${
-                viewMode === 'grid' ? 'bg-white dark:bg-slate-900 text-primary-600 shadow-xs' : 'text-slate-400'
-              }`}
-              title="Grid View"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded-xl text-xs font-bold transition-all ${
-                viewMode === 'list' ? 'bg-white dark:bg-slate-900 text-primary-600 shadow-xs' : 'text-slate-400'
-              }`}
-              title="List View"
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
 
       {/* KPI STAT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Vendors</p>
-            <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-1">{totalVendorsCount}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between min-h-[96px] h-full">
+          <div className="flex flex-col justify-center min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Total Vendors</p>
+            <h3 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-slate-100 mt-1 leading-none">{totalVendorsCount}</h3>
           </div>
-          <div className="p-3 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-2xl border border-blue-500/20">
+          <div className="w-12 h-12 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 flex items-center justify-center shrink-0">
             <Store className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active Vendors</p>
-            <h3 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{activeVendorsCount}</h3>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between min-h-[96px] h-full">
+          <div className="flex flex-col justify-center min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Active Vendors</p>
+            <h3 className="text-2xl sm:text-3xl font-black text-emerald-600 dark:text-emerald-400 mt-1 leading-none">{activeVendorsCount}</h3>
           </div>
-          <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl border border-emerald-500/20">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
             <CheckCircle className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Requests</p>
-            <h3 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{pendingRequestsCount}</h3>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between min-h-[96px] h-full">
+          <div className="flex flex-col justify-center min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Pending Requests</p>
+            <h3 className="text-2xl sm:text-3xl font-black text-amber-600 dark:text-amber-400 mt-1 leading-none">{pendingRequestsCount}</h3>
           </div>
-          <div className="p-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl border border-amber-500/20">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
             <Clock className="w-6 h-6" />
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between">
-          <div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Suspended Vendors</p>
-            <h3 className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">{suspendedVendorsCount}</h3>
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs flex items-center justify-between min-h-[96px] h-full">
+          <div className="flex flex-col justify-center min-w-0">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider truncate">Suspended Vendors</p>
+            <h3 className="text-2xl sm:text-3xl font-black text-rose-600 dark:text-rose-400 mt-1 leading-none">{suspendedVendorsCount}</h3>
           </div>
-          <div className="p-3 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl border border-rose-500/20">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center shrink-0">
             <ShieldAlert className="w-6 h-6" />
           </div>
         </div>
@@ -1414,16 +1401,16 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
 
       {/* 2. FILTERS & SEARCH TOOLBAR */}
       <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2 flex-1">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
           {/* Search Box */}
-          <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs w-full sm:w-64">
-            <Search className="w-4 h-4 text-slate-400 mr-2" />
+          <div className="h-10 flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 text-xs w-full sm:w-72 shadow-xs transition-all focus-within:border-primary-500">
+            <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
             <input
               type="text"
               placeholder="Search by Vendor Name, Business, Phone..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="bg-transparent focus:outline-none w-full text-slate-800 dark:text-slate-200 font-medium"
+              className="bg-transparent focus:outline-none w-full text-slate-800 dark:text-slate-200 font-medium placeholder-slate-400"
             />
           </div>
 
@@ -1431,7 +1418,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           <select
             value={category}
             onChange={e => setCategory(e.target.value)}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3 py-2 font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+            className="h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3.5 font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-primary-500 shadow-xs cursor-pointer"
           >
             <option value="all">All Categories</option>
             <option value="Service">Service</option>
@@ -1447,7 +1434,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           <select
             value={statusFilter}
             onChange={e => setStatusFilter(e.target.value)}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3 py-2 font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+            className="h-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs px-3.5 font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-primary-500 shadow-xs cursor-pointer"
           >
             <option value="all">All Statuses</option>
             <option value="Active">🟢 Active</option>
@@ -1456,9 +1443,35 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           </select>
         </div>
 
-        <span className="text-xs font-bold text-slate-400">
-          Showing <strong>{vendors.length}</strong> of {total} Vendors
-        </span>
+        <div className="flex items-center gap-3 shrink-0 ml-auto">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-xs h-10">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`h-full px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'grid' ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 font-extrabold shadow-xs' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+              }`}
+              title="Grid View"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Grid</span>
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`h-full px-2.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'list' ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 font-extrabold shadow-xs' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+              }`}
+              title="List View"
+            >
+              <List className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">List</span>
+            </button>
+          </div>
+
+          <span className="text-xs font-bold text-slate-400 dark:text-slate-500 whitespace-nowrap">
+            Showing <strong className="text-slate-700 dark:text-slate-300">{vendors.length}</strong> of {total} Vendors
+          </span>
+        </div>
       </div>
 
       {/* ERROR BADGE NOTIFICATION IF PREVIOUS DATA RETAINED */}
@@ -1524,38 +1537,40 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
         <>
           {/* 3. VENDORS GRID VIEW */}
           {viewMode === 'grid' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5 sm:gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
               {vendors.map((v, idx) => {
                 const js = getVendorJoiningSource(v);
-                return (
-                  <div 
-                    key={v.registrationId || v.vendorId || (v._id ? String(v._id) : `vnd-${idx}`)} 
+                  return (
+                  <div
+                    key={v.registrationId || v.vendorId || (v._id ? String(v._id) : `vnd-${idx}`)}
                     onClick={() => setSelectedVendorDetails(v)}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs hover:border-primary-500/50 hover:shadow-md transition-all flex flex-col justify-between cursor-pointer group h-full"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs hover:border-primary-500/50 hover:shadow-md transition-all flex flex-col cursor-pointer group h-full"
                   >
                     <div className="space-y-3.5 flex-1 flex flex-col">
-                      {/* Top Header */}
-                      <div className="flex items-start justify-between gap-2.5">
+                      {/* Top Header: Avatar + Name + Status */}
+                      <div className="flex items-start justify-between gap-3">
+                        {/* Avatar + Name */}
                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-lg sm:text-xl flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-all shrink-0">
+                          <div className="w-11 h-11 rounded-2xl bg-amber-500/10 text-amber-700 dark:text-amber-400 font-black text-lg flex items-center justify-center border border-amber-500/20 group-hover:scale-105 transition-transform shrink-0">
                             {(v.businessName || v.name || 'V')[0].toUpperCase()}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-all truncate" title={v.businessName || v.name}>
+                            <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors truncate" title={v.businessName || v.name}>
                               {v.businessName || v.name}
                             </h4>
-                            <p className="text-xs text-slate-400 font-semibold truncate" title={v.contactPerson || v.email}>
+                            <p className="text-xs text-slate-400 font-semibold truncate mt-0.5" title={v.contactPerson || v.email}>
                               {v.contactPerson || v.email}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                        {/* Status Badge + Dropdown — stop propagation so card click doesn't fire */}
+                        <div className="flex flex-col items-end gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
                           {renderStatusBadge(v.status)}
                           {!isPendingVendorReview(v.status) && (
                             <select
                               value={normalizeStatusValue(v.status)}
                               onChange={e => { e.stopPropagation(); handleUpdateVendorStatus(v, e.target.value); }}
-                              className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none"
+                              className="text-[10px] font-extrabold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-2 py-1 cursor-pointer focus:outline-none w-full"
                             >
                               <option value="Active">Active</option>
                               <option value="Suspended">Suspended</option>
