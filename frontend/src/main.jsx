@@ -42,7 +42,7 @@ window.addEventListener('error', (event) => {
 
 // Universal API Base URL Auto-Healing Interceptor:
 // If Nginx reverse proxy strips the /admin-api prefix causing a 404 Route Not Found,
-// automatically transparently retry with /admin-api/admin-api/ to guarantee 100% uptime across all modules.
+// preemptively and transparently route through /admin-api/admin-api/ to guarantee 100% uptime without console 404 noise.
 if (typeof window !== 'undefined' && window.fetch) {
   const _origFetch = window.fetch;
   window.fetch = async function (input, init) {
@@ -55,11 +55,33 @@ if (typeof window !== 'undefined' && window.fetch) {
       url = input.url || '';
     }
 
+    let primaryInput = input;
+    let isRewritten = false;
+
+    // Preemptively rewrite api.ficapp.in/admin-api/admin/ to api.ficapp.in/admin-api/admin-api/admin/
+    // because Nginx's proxy_pass strips the first /admin-api/
+    if (typeof url === 'string' && url.includes('api.ficapp.in/admin-api/admin/') && !url.includes('api.ficapp.in/admin-api/admin-api/')) {
+      const rewrittenUrl = url.replace('api.ficapp.in/admin-api/admin/', 'api.ficapp.in/admin-api/admin-api/admin/');
+      isRewritten = true;
+      if (typeof input === 'string') {
+        primaryInput = rewrittenUrl;
+      } else if (input instanceof URL) {
+        primaryInput = new URL(rewrittenUrl);
+      } else if (typeof Request !== 'undefined' && input instanceof Request) {
+        primaryInput = new Request(rewrittenUrl, input);
+      }
+    }
+
     try {
-      const response = await _origFetch.apply(this, arguments);
+      const response = await _origFetch.call(this, primaryInput, init);
       if (response && response.status === 404 && typeof url === 'string') {
-        if (url.includes('api.ficapp.in/admin-api/') && !url.includes('api.ficapp.in/admin-api/admin-api/')) {
-          const fallbackUrl = url.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/');
+        const fallbackUrl = isRewritten
+          ? url
+          : (url.includes('api.ficapp.in/admin-api/') && !url.includes('api.ficapp.in/admin-api/admin-api/'))
+            ? url.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/')
+            : null;
+
+        if (fallbackUrl && fallbackUrl !== url) {
           try {
             let fallbackInput = fallbackUrl;
             if (typeof Request !== 'undefined' && input instanceof Request) {

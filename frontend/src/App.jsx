@@ -910,7 +910,12 @@ function App() {
         targetUrl = `${API_BASE}/${url}`;
       }
       targetUrl = targetUrl.replace('https://api.ficapp.in/api/', 'https://api.ficapp.in/admin-api/');
-      targetUrl = targetUrl.replace(/([^:])\/\//g, '$1/').replace(/\/admin-api\/admin-api\//g, '/admin-api/');
+      targetUrl = targetUrl.replace(/([^:])\/\//g, '$1/');
+      if (targetUrl.includes('api.ficapp.in/admin-api/admin/') && !targetUrl.includes('api.ficapp.in/admin-api/admin-api/')) {
+        targetUrl = targetUrl.replace('api.ficapp.in/admin-api/admin/', 'api.ficapp.in/admin-api/admin-api/admin/');
+      } else if (!targetUrl.includes('api.ficapp.in/')) {
+        targetUrl = targetUrl.replace(/\/admin-api\/admin-api\//g, '/admin-api/');
+      }
 
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
@@ -937,8 +942,10 @@ function App() {
             }
           }
 
-          if (r.status === 404 && targetUrl.includes('api.ficapp.in/admin-api/') && !targetUrl.includes('api.ficapp.in/admin-api/admin-api/')) {
-            const fallbackUrl = targetUrl.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/');
+          if (r.status === 404 && targetUrl.includes('api.ficapp.in/admin-api/')) {
+            const fallbackUrl = targetUrl.includes('api.ficapp.in/admin-api/admin-api/')
+              ? targetUrl.replace('api.ficapp.in/admin-api/admin-api/', 'api.ficapp.in/admin-api/')
+              : targetUrl.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/');
             const fbController = new AbortController();
             const fbTimeoutId = setTimeout(() => fbController.abort(), 15000);
             try {

@@ -5771,6 +5771,23 @@ const clearAgentPerfOverviewCache = () => {
     agentPerfOverviewCache.clear();
 };
 
+const normalizeAgentLevel = (rawLevel, fallback = 'pincode') => {
+    if (!rawLevel) return fallback;
+    if (typeof rawLevel === 'string') {
+        const lower = rawLevel.toLowerCase().trim();
+        if (lower.includes('state')) return 'state';
+        if (lower.includes('district') || lower.includes('dist')) return 'district';
+        if (lower.includes('divis') || lower.includes('division')) return 'division';
+        if (lower.includes('pincode') || lower.includes('pin')) return 'pincode';
+        return lower || fallback;
+    }
+    if (typeof rawLevel === 'object') {
+        const val = rawLevel.value || rawLevel.level || rawLevel.name || rawLevel.label || rawLevel.code || rawLevel.type || '';
+        if (val) return normalizeAgentLevel(String(val), fallback);
+    }
+    return String(rawLevel || fallback).toLowerCase().trim() || fallback;
+};
+
 // GET Performance Overview (Optimized MongoDB Aggregation & Real Database Calculations)
 const handleAgentPerformanceOverview = async (req, res) => {
     try {
@@ -5824,7 +5841,12 @@ const handleAgentPerformanceOverview = async (req, res) => {
 
         // Base user filter for agents
         const agentFilter = { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] } };
-        if (agentType && agentType !== 'all') agentFilter.level = agentType.toLowerCase();
+        if (agentType && agentType !== 'all') {
+            agentFilter.$or = [
+                { level: new RegExp(agentType, 'i') },
+                { role: new RegExp(agentType, 'i') }
+            ];
+        }
         if (status && status !== 'all') agentFilter.status = status.toLowerCase();
 
         const orConditions = [];
@@ -5981,18 +6003,21 @@ const handleAgentPerformanceOverview = async (req, res) => {
             const agentMap = new Map();
             userAgents.forEach(a => {
                 const key = (a.registrationId || a.email || (a._id ? a._id.toString() : '')).toLowerCase().trim();
-                if (key) agentMap.set(key, a);
+                if (key) {
+                    agentMap.set(key, {
+                        ...a,
+                        level: normalizeAgentLevel(a.level || a.agentLevel || a.role || 'pincode')
+                    });
+                }
             });
             rawAgents.forEach(raw => {
                 const key = (raw.registrationId || raw.email || (raw._id ? raw._id.toString() : '')).toLowerCase().trim();
                 if (key && !agentMap.has(key)) {
-                    const levelVal = (raw.level || raw.role || 'pincode').toLowerCase();
-                    const cleanLevel = levelVal.includes('state') ? 'state' : levelVal.includes('district') ? 'district' : (levelVal.includes('divis') || levelVal.includes('division')) ? 'division' : 'pincode';
                     agentMap.set(key, {
                         ...raw,
                         _id: raw._id || new mongoose.Types.ObjectId(),
                         role: 'agent',
-                        level: cleanLevel,
+                        level: normalizeAgentLevel(raw.level || raw.role || 'pincode'),
                         assignedArea: raw.assignedArea || (raw.territory ? Object.values(raw.territory).filter(Boolean).join(' / ') : ''),
                         status: raw.status || raw.kycStatus || 'approved',
                         isActive: raw.isActive !== false
@@ -6005,7 +6030,7 @@ const handleAgentPerformanceOverview = async (req, res) => {
         }
 
         if (agentType && agentType !== 'all') {
-            allAgents = allAgents.filter(a => (a.level || '').toLowerCase() === agentType.toLowerCase());
+            allAgents = allAgents.filter(a => normalizeAgentLevel(a.level) === normalizeAgentLevel(agentType));
         }
         if (status && status !== 'all') {
             allAgents = allAgents.filter(a => (a.status || '').toLowerCase() === status.toLowerCase());
@@ -6142,7 +6167,7 @@ const handleAgentPerformanceOverview = async (req, res) => {
                     email: agent.email,
                     phone: agent.phone,
                     role: agent.role,
-                    level: agent.level || 'pincode',
+                    level: normalizeAgentLevel(agent.level || agent.agentLevel || agent.role || 'pincode'),
                     assignedArea: agent.assignedArea || 'Tamil Nadu',
                     assignedPincode: agent.assignedPincode,
                     status: agent.status || 'approved',
@@ -6177,10 +6202,10 @@ const handleAgentPerformanceOverview = async (req, res) => {
         const sortedByVendor = [...agentMetricsList].sort((a, b) => b.metrics.vendorOnboarding - a.metrics.vendorOnboarding);
 
         const leaderboards = {
-            topStateAgent: agentMetricsList.find(a => a.agent.level === 'state') || null,
-            topDistrictAgent: agentMetricsList.find(a => a.agent.level === 'district') || null,
-            topDivisionalAgent: agentMetricsList.find(a => ['division', 'divisional'].includes(a.agent.level)) || null,
-            topPincodeAgent: agentMetricsList.find(a => a.agent.level === 'pincode') || null,
+            topStateAgent: agentMetricsList.find(a => normalizeAgentLevel(a.agent.level) === 'state') || null,
+            topDistrictAgent: agentMetricsList.find(a => normalizeAgentLevel(a.agent.level) === 'district') || null,
+            topDivisionalAgent: agentMetricsList.find(a => ['division', 'divisional'].includes(normalizeAgentLevel(a.agent.level))) || null,
+            topPincodeAgent: agentMetricsList.find(a => normalizeAgentLevel(a.agent.level) === 'pincode') || null,
             topRevenueGenerator: sortedByRevenue[0] && sortedByRevenue[0].metrics.revenue > 0 ? sortedByRevenue[0] : null,
             topMembershipSeller: sortedByMembership[0] && sortedByMembership[0].metrics.membershipSales > 0 ? sortedByMembership[0] : null,
             topVendorCreator: sortedByVendor[0] && sortedByVendor[0].metrics.vendorOnboarding > 0 ? sortedByVendor[0] : null,
@@ -6239,10 +6264,10 @@ const handleAgentPerformanceOverview = async (req, res) => {
             { period: 'Sun', Performance: baseScore, Targets: totalAgents > 0 ? 80 : 0 }
         ];
 
-        const stateRev = agentMetricsList.filter(a => a.agent.level === 'state').reduce((acc, c) => acc + c.metrics.revenue, 0);
-        const distRev = agentMetricsList.filter(a => a.agent.level === 'district').reduce((acc, c) => acc + c.metrics.revenue, 0);
-        const divRev = agentMetricsList.filter(a => ['division', 'divisional'].includes(a.agent.level)).reduce((acc, c) => acc + c.metrics.revenue, 0);
-        const pinRev = agentMetricsList.filter(a => a.agent.level === 'pincode').reduce((acc, c) => acc + c.metrics.revenue, 0);
+        const stateRev = agentMetricsList.filter(a => normalizeAgentLevel(a.agent.level) === 'state').reduce((acc, c) => acc + c.metrics.revenue, 0);
+        const distRev = agentMetricsList.filter(a => normalizeAgentLevel(a.agent.level) === 'district').reduce((acc, c) => acc + c.metrics.revenue, 0);
+        const divRev = agentMetricsList.filter(a => ['division', 'divisional'].includes(normalizeAgentLevel(a.agent.level))).reduce((acc, c) => acc + c.metrics.revenue, 0);
+        const pinRev = agentMetricsList.filter(a => normalizeAgentLevel(a.agent.level) === 'pincode').reduce((acc, c) => acc + c.metrics.revenue, 0);
 
         const barChartRevenue = [
             { category: 'State', Revenue: stateRev },
@@ -6251,10 +6276,10 @@ const handleAgentPerformanceOverview = async (req, res) => {
             { category: 'Pincode', Revenue: pinRev }
         ];
 
-        const stateCount = allAgents.filter(a => a.level === 'state').length;
-        const distCount = allAgents.filter(a => a.level === 'district').length;
-        const divCount = allAgents.filter(a => ['division', 'divisional'].includes(a.level)).length;
-        const pinCount = allAgents.filter(a => a.level === 'pincode').length;
+        const stateCount = allAgents.filter(a => normalizeAgentLevel(a.level) === 'state').length;
+        const distCount = allAgents.filter(a => normalizeAgentLevel(a.level) === 'district').length;
+        const divCount = allAgents.filter(a => ['division', 'divisional'].includes(normalizeAgentLevel(a.level))).length;
+        const pinCount = allAgents.filter(a => normalizeAgentLevel(a.level) === 'pincode').length;
 
         const pieChartCategory = [
             { name: 'State Agents', value: stateCount },

@@ -13,6 +13,23 @@ import {
 
 const agentPerfCacheMap = new Map();
 
+export const safeAgentLevel = (rawLevel, fallback = 'pincode') => {
+  if (!rawLevel) return fallback;
+  if (typeof rawLevel === 'string') {
+    const l = rawLevel.toLowerCase().trim();
+    if (l.includes('state')) return 'state';
+    if (l.includes('district') || l.includes('dist')) return 'district';
+    if (l.includes('divis') || l.includes('division')) return 'division';
+    if (l.includes('pincode') || l.includes('pin')) return 'pincode';
+    return l || fallback;
+  }
+  if (typeof rawLevel === 'object') {
+    const val = rawLevel.value || rawLevel.level || rawLevel.name || rawLevel.label || rawLevel.code || rawLevel.type || '';
+    if (val) return safeAgentLevel(val, fallback);
+  }
+  return String(rawLevel || fallback).toLowerCase().trim() || fallback;
+};
+
 export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
   // Filters & State
   const [period, setPeriod] = useState('monthly'); // today, weekly, monthly, quarterly, half-yearly, yearly, custom
@@ -106,7 +123,10 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
       const queryString = queryParams.toString();
       const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
-      const targetUrl = `${baseClean}/admin/agent-performance/overview?${queryString}`;
+      let targetUrl = `${baseClean}/admin/agent-performance/overview?${queryString}`;
+      if (targetUrl.includes('api.ficapp.in/admin-api/admin/') && !targetUrl.includes('api.ficapp.in/admin-api/admin-api/')) {
+        targetUrl = targetUrl.replace('api.ficapp.in/admin-api/admin/', 'api.ficapp.in/admin-api/admin-api/admin/');
+      }
       const authToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
 
       let successData = null;
@@ -120,15 +140,33 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
           externalSignal.addEventListener('abort', () => controller.abort());
         }
 
-        const res = await fetch(targetUrl, {
-          headers: {
-            'x-auth-token': authToken,
-            'Authorization': `Bearer ${authToken}`,
-            'Content-Type': 'application/json'
-          },
+        const fetchHeaders = {
+          'x-auth-token': authToken,
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        };
+
+        let res = await fetch(targetUrl, {
+          headers: fetchHeaders,
           signal: controller.signal
         });
         clearTimeout(timeoutId);
+
+        // Fallback retry if 404 returned
+        if (res.status === 404) {
+          const alternateUrl = targetUrl.includes('/admin-api/admin-api/')
+            ? targetUrl.replace('/admin-api/admin-api/', '/admin-api/')
+            : targetUrl.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/');
+          try {
+            const altController = new AbortController();
+            const altTimeout = setTimeout(() => altController.abort(), 15000);
+            const altRes = await fetch(alternateUrl, { headers: fetchHeaders, signal: altController.signal });
+            clearTimeout(altTimeout);
+            if (altRes.ok) {
+              res = altRes;
+            }
+          } catch (altErr) {}
+        }
 
         if (res.ok) {
           successData = await res.json();
@@ -149,8 +187,27 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       if (successData) {
         const actualCards = successData.cards || successData.data?.cards || null;
         const actualLeaderboards = successData.leaderboards || successData.data?.leaderboards || null;
+        if (actualLeaderboards) {
+          ['topStateAgent', 'topDistrictAgent', 'topDivisionalAgent', 'topPincodeAgent', 'topRevenueGenerator', 'topMembershipSeller', 'topVendorCreator', 'topReferralAgent'].forEach(k => {
+            if (actualLeaderboards[k]?.agent) {
+              actualLeaderboards[k].agent.level = safeAgentLevel(actualLeaderboards[k].agent.level || actualLeaderboards[k].agent.role);
+            }
+          });
+        }
         const actualCharts = successData.charts || successData.data?.charts || defaultChartsData;
-        const actualAgents = successData.agents || successData.data?.agents || [];
+        const rawAgents = successData.agents || successData.data?.agents || [];
+        const actualAgents = rawAgents.map(item => {
+          if (!item) return item;
+          const ag = item.agent || item;
+          const cleanLevel = safeAgentLevel(ag.level || ag.agentLevel || ag.role);
+          return {
+            ...item,
+            agent: {
+              ...ag,
+              level: cleanLevel
+            }
+          };
+        });
 
         agentPerfCacheMap.set(cacheKey, {
           cards: actualCards,
@@ -203,15 +260,15 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
     if (!agentsList || agentsList.length === 0) return;
     const headers = ['Agent Name', 'Email', 'Role', 'Territory', 'Status', 'Score', 'Rating', 'Registrations', 'Revenue'];
     const rows = agentsList.map(a => [
-      `"${a.agent.name}"`,
-      `"${a.agent.email}"`,
-      `"${a.agent.level}"`,
-      `"${a.agent.assignedArea || ''}"`,
-      `"${a.agent.status}"`,
-      a.score,
-      `"${a.rating}"`,
-      a.metrics.registrations,
-      a.metrics.revenue
+      `"${a.agent?.name || ''}"`,
+      `"${a.agent?.email || ''}"`,
+      `"${safeAgentLevel(a.agent?.level)}"`,
+      `"${a.agent?.assignedArea || ''}"`,
+      `"${a.agent?.status || ''}"`,
+      a.score || 0,
+      `"${a.rating || ''}"`,
+      a.metrics?.registrations || 0,
+      a.metrics?.revenue || 0
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -855,7 +912,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
                         <td className="py-3.5 px-4 whitespace-nowrap">
                           <span className="capitalize font-extrabold text-xs px-2.5 py-1 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 whitespace-nowrap inline-flex items-center justify-center">
-                            {(ag.level || 'pincode').toLowerCase()} Agent
+                            {safeAgentLevel(ag?.level)} Agent
                           </span>
                         </td>
 
@@ -960,7 +1017,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
                       </div>
                       
                       <span className="capitalize font-extrabold text-[11px] px-2.5 py-1 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 whitespace-nowrap inline-flex items-center justify-center shrink-0">
-                        {(ag.level || 'pincode').toLowerCase()} Agent
+                        {safeAgentLevel(ag?.level)} Agent
                       </span>
                     </div>
 
@@ -1125,7 +1182,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
                   <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{selectedAgentProfile.agent.name}</h3>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="capitalize text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20 whitespace-nowrap">
-                      {selectedAgentProfile.agent.level} Agent
+                      {safeAgentLevel(selectedAgentProfile.agent?.level)} Agent
                     </span>
                     <span className="text-xs text-slate-400">{selectedAgentProfile.agent.email} • {selectedAgentProfile.agent.phone}</span>
                   </div>
