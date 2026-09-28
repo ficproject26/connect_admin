@@ -133,7 +133,14 @@ const getSafeParsedLocalStorageItem = (key, fallbackValue) => {
 
 const getFormattedTerritory = (agent) => {
   if (!agent) return 'Not assigned';
-  const level = (agent.level || agent.role || 'pincode').toLowerCase();
+  const rawLvl = agent.level || agent.role || 'pincode';
+  const level = String(
+    rawLvl === 1 || rawLvl === '1' ? 'state' :
+    rawLvl === 2 || rawLvl === '2' ? 'district' :
+    rawLvl === 3 || rawLvl === '3' ? 'division' :
+    rawLvl === 4 || rawLvl === '4' ? 'pincode' :
+    rawLvl
+  ).toLowerCase();
   let rawArea = agent.assignedArea || (agent.territory ? [agent.territory.state, agent.territory.district, agent.territory.division, agent.territory.pincode].filter(Boolean).join(' / ') : '') || '';
   if (!rawArea) return 'Not assigned';
 
@@ -159,10 +166,17 @@ const getAgentEarnings = (agent) => {
   if (explicit > 0) return explicit;
 
   const vendorsCount = Number(agent.vendorsAdded || agent.vendorCount || 0);
-  const lvl = (agent.level || 'pincode').toLowerCase();
+  const rawLvl = agent.level || 'pincode';
+  const lvl = String(
+    rawLvl === 1 || rawLvl === '1' ? 'state' :
+    rawLvl === 2 || rawLvl === '2' ? 'district' :
+    rawLvl === 3 || rawLvl === '3' ? 'division' :
+    rawLvl === 4 || rawLvl === '4' ? 'pincode' :
+    rawLvl
+  ).toLowerCase();
   const perVendorRate = lvl === 'state' ? 2500 : lvl === 'district' ? 1800 : ['division', 'divisional'].includes(lvl) ? 1200 : 800;
   const baseTierAccrual = lvl === 'state' ? 15000 : lvl === 'district' ? 10000 : ['division', 'divisional'].includes(lvl) ? 6000 : 3500;
-  const status = (agent.status || agent.kycStatus || '').toLowerCase();
+  const status = String(agent.status || agent.kycStatus || '').toLowerCase();
   if (status === 'approved' || status === 'active' || agent.isActive) {
     return (vendorsCount * perVendorRate) + baseTierAccrual;
   } else if (vendorsCount > 0) {
@@ -8478,14 +8492,14 @@ function App() {
                 <div className="bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wider">Division Managers</span>
                   <span className="text-xl font-black text-amber-900 dark:text-amber-200 mt-1 block">
-                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.downstreamDivisions || agents.filter(a => (a.level || '').toLowerCase() === 'division' && a.assignedArea?.includes(modalData.name)).length) : 0} Agents
+                    {(String(modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.downstreamDivisions || agents.filter(a => String(a.level || '').toLowerCase() === 'division' && a.assignedArea?.includes(modalData.name)).length) : 0} Agents
                   </span>
                 </div>
 
                 <div className="bg-blue-500/10 border border-blue-500/20 p-3.5 rounded-2xl text-left">
                   <span className="block text-[10px] font-black text-blue-700 dark:text-blue-300 uppercase tracking-wider">Pincode Agents</span>
                   <span className="text-xl font-black text-blue-900 dark:text-blue-200 mt-1 block">
-                    {((modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.downstreamPincodes || agents.filter(a => (a.level || '').toLowerCase() === 'pincode' && a.assignedArea?.includes(modalData.name)).length) : 0} Agents
+                    {(String(modalData.status || '').toLowerCase() === 'approved' || modalData.isActive) ? (modalData.downstreamPincodes || agents.filter(a => String(a.level || '').toLowerCase() === 'pincode' && a.assignedArea?.includes(modalData.name)).length) : 0} Agents
                   </span>
                 </div>
               </div>
@@ -8528,10 +8542,10 @@ function App() {
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-extrabold text-[10px] uppercase px-3 py-1 rounded-xl bg-[#864f19] text-white shadow-xs tracking-wider">
-                      {['division', 'divisional'].includes((modalData.level || '').toLowerCase()) ? 'DIVISIONAL AGENT' : `${(modalData.level || 'pincode').toUpperCase()} AGENT`}
+                      {['division', 'divisional'].includes(String(modalData.level || '').toLowerCase()) ? 'DIVISIONAL AGENT' : `${String(modalData.level || 'pincode').toUpperCase()} AGENT`}
                     </span>
                     <span className={`text-[10px] font-extrabold px-3 py-1 rounded-xl flex items-center gap-1 border ${
-                      (modalData.status || '').toLowerCase() === 'approved'
+                      String(modalData.status || '').toLowerCase() === 'approved'
                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                         : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                     }`}>
@@ -8557,7 +8571,7 @@ function App() {
                 <User className="w-4 h-4" /> Step 1: Personal & Account Credentials
               </h4>
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                <div><span className="text-slate-400 block font-semibold">Role Applied For:</span><strong className="text-slate-800 dark:text-slate-200 uppercase">{['division', 'divisional'].includes((modalData.level || '').toLowerCase()) ? 'Division Agent' : `${modalData.level || 'Pincode'} Agent`}</strong></div>
+                <div><span className="text-slate-400 block font-semibold">Role Applied For:</span><strong className="text-slate-800 dark:text-slate-200 uppercase">{['division', 'divisional'].includes(String(modalData.level || '').toLowerCase()) ? 'Division Agent' : `${modalData.level || 'Pincode'} Agent`}</strong></div>
                 <div><span className="text-slate-400 block font-semibold">Full Name:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.name}</strong></div>
                 <div><span className="text-slate-400 block font-semibold">Primary Mobile Number:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.phone}</strong></div>
                 <div><span className="text-slate-400 block font-semibold">Email Address:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.email}</strong></div>

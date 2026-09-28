@@ -159,9 +159,9 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
   // Determine Main Admin status
   const isMainAdmin = useMemo(() => {
-    const roleLower = (currentUser?.role || '').toLowerCase().trim();
-    const adminRoleLower = (currentUser?.adminRole || '').toLowerCase().trim();
-    const levelLower = (currentUser?.adminLevel || currentUser?.level || '').toLowerCase().trim();
+    const roleLower = String(currentUser?.role || '').toLowerCase().trim();
+    const adminRoleLower = String(currentUser?.adminRole || '').toLowerCase().trim();
+    const levelLower = String(currentUser?.adminLevel || currentUser?.level || '').toLowerCase().trim();
     return (
       roleLower === 'super-admin' ||
       roleLower === 'superadmin' ||
@@ -330,7 +330,14 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
       const distName = (admin.assignedDistrict || '').trim();
       const divName = (admin.assignedDivision || '').trim();
       const pinCode = (admin.assignedPincode ? String(admin.assignedPincode) : '').trim();
-      const level = (admin.adminLevel || admin.level || '').toLowerCase();
+      const rawLvl = admin.adminLevel || admin.level || '';
+      const level = String(
+        rawLvl === 1 || rawLvl === '1' ? 'state' :
+        rawLvl === 2 || rawLvl === '2' ? 'district' :
+        rawLvl === 3 || rawLvl === '3' ? 'division' :
+        rawLvl === 4 || rawLvl === '4' ? 'pincode' :
+        rawLvl
+      ).toLowerCase();
 
       if (!statesMap[stateName]) {
         statesMap[stateName] = {
@@ -566,7 +573,8 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   };
 
   const getRoleBadge = (level) => {
-    const l = (level || '').toLowerCase();
+    const raw = String(level || '');
+    const l = (raw === '1' ? 'state' : raw === '2' ? 'district' : raw === '3' ? 'division' : raw === '4' ? 'pincode' : raw).toLowerCase();
     if (l === 'state') return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
     if (l === 'district') return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
     if (l.includes('divis')) return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20';

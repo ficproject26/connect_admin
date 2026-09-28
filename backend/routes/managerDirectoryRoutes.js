@@ -19,6 +19,28 @@ const { validateTerritoryHierarchy } = require('./territory');
 // Helper: safe string for regex
 const safeRegex = (val) => new RegExp(`^${val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
+const normalizeManagerLevelStr = (lvl) => {
+    if (lvl === 1 || lvl === '1') return 'state';
+    if (lvl === 2 || lvl === '2') return 'district';
+    if (lvl === 3 || lvl === '3') return 'division';
+    if (lvl === 4 || lvl === '4') return 'pincode';
+    const s = String(lvl || 'state').trim().toLowerCase();
+    if (s === 'state_manager') return 'state';
+    if (s === 'district_manager') return 'district';
+    if (s === 'division_manager') return 'division';
+    if (s === 'pincode_manager') return 'pincode';
+    return s || 'state';
+};
+
+const mapLevelToQuery = (lvl) => {
+    const l = String(lvl || '').toLowerCase().trim();
+    if (l === 'state' || l === '1' || l === 'state_manager') return { $in: ['state', 1, '1', 'state_manager'] };
+    if (l === 'district' || l === '2' || l === 'district_manager') return { $in: ['district', 2, '2', 'district_manager'] };
+    if (l === 'division' || l === '3' || l === 'division_manager') return { $in: ['division', 3, '3', 'division_manager'] };
+    if (l === 'pincode' || l === '4' || l === 'pincode_manager') return { $in: ['pincode', 4, '4', 'pincode_manager'] };
+    return l;
+};
+
 // ============================================================
 // 1. SUMMARY KPI COUNTS
 // GET /manager-directory/summary
@@ -313,7 +335,14 @@ router.get('/manager-directory/pincodes/:pincode/managers', auth, async (req, re
             .sort({ createdAt: -1 })
             .lean();
 
-        res.json({ success: true, pincode, managers, total: managers.length });
+        const formattedManagers = managers.map(m => ({
+            ...m,
+            phone: m.phone || m.mobile || '',
+            status: (m.status === 'approved' || m.status === 'Approved') ? 'Active' : (m.status || 'Active'),
+            level: normalizeManagerLevelStr(m.level)
+        }));
+
+        res.json({ success: true, pincode, managers: formattedManagers, total: formattedManagers.length });
     } catch (err) {
         console.error('Manager directory pincode managers error:', err);
         res.status(500).json({ msg: 'Error fetching managers for pincode', error: err.message });
@@ -334,7 +363,14 @@ router.get('/manager-directory/managers/:id', auth, async (req, res) => {
 
         if (!manager) return res.status(404).json({ msg: 'Manager not found' });
 
-        res.json({ success: true, manager });
+        const formattedManager = {
+            ...manager,
+            phone: manager.phone || manager.mobile || '',
+            status: (manager.status === 'approved' || manager.status === 'Approved') ? 'Active' : (manager.status || 'Active'),
+            level: normalizeManagerLevelStr(manager.level)
+        };
+
+        res.json({ success: true, manager: formattedManager });
     } catch (err) {
         console.error('Manager directory get manager error:', err);
         res.status(500).json({ msg: 'Error fetching manager', error: err.message });
@@ -354,8 +390,14 @@ router.get('/manager-directory/managers', auth, async (req, res) => {
         if (district && district !== 'All') query.assignedDistrict = safeRegex(district);
         if (division && division !== 'All') query.assignedDivision = safeRegex(division);
         if (pincode && pincode !== 'All') query.assignedPincode = pincode;
-        if (level && level !== 'All') query.level = level.toLowerCase();
-        if (status && status !== 'All') query.status = status;
+        if (level && level !== 'All') query.level = mapLevelToQuery(level);
+        if (status && status !== 'All') {
+            if (String(status).toLowerCase() === 'active') {
+                query.status = { $in: ['Active', 'active', 'approved', 'Approved'] };
+            } else {
+                query.status = safeRegex(status);
+            }
+        }
 
         if (search && search.trim()) {
             const q = search.trim();
@@ -363,6 +405,7 @@ router.get('/manager-directory/managers', auth, async (req, res) => {
                 { name: { $regex: q, $options: 'i' } },
                 { email: { $regex: q, $options: 'i' } },
                 { phone: { $regex: q, $options: 'i' } },
+                { mobile: { $regex: q, $options: 'i' } },
                 { managerId: { $regex: q, $options: 'i' } }
             ];
         }
@@ -379,9 +422,16 @@ router.get('/manager-directory/managers', auth, async (req, res) => {
             Manager.countDocuments(query)
         ]);
 
+        const formattedManagers = managers.map(m => ({
+            ...m,
+            phone: m.phone || m.mobile || '',
+            status: (m.status === 'approved' || m.status === 'Approved') ? 'Active' : (m.status || 'Active'),
+            level: normalizeManagerLevelStr(m.level)
+        }));
+
         res.json({
             success: true,
-            managers,
+            managers: formattedManagers,
             total,
             page: parseInt(page),
             pages: Math.ceil(total / parseInt(limit))
@@ -404,7 +454,7 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
         if (status && status !== 'All') query.status = status;
         else if (!status) query.status = 'Pending'; // default to Pending
 
-        if (level && level !== 'All') query.level = level.toLowerCase();
+        if (level && level !== 'All') query.level = mapLevelToQuery(level);
         if (state && state !== 'All') query.assignedState = safeRegex(state);
         if (district && district !== 'All') query.assignedDistrict = safeRegex(district);
 
@@ -431,9 +481,15 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
             ManagerRequest.countDocuments(query)
         ]);
 
+        const formattedRequests = requests.map(r => ({
+            ...r,
+            phone: r.phone || r.mobile || '',
+            level: normalizeManagerLevelStr(r.level)
+        }));
+
         res.json({
             success: true,
-            requests,
+            requests: formattedRequests,
             total,
             page: parseInt(page),
             pages: Math.ceil(total / parseInt(limit))

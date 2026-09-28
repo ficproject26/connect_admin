@@ -13,18 +13,49 @@ const MANAGER_LIMITS = {
   state: 8,
   district: 2,
   division: 2,
-  pincode: 2
+  pincode: 2,
+  1: 8,
+  2: 2,
+  3: 2,
+  4: 2,
+  '1': 8,
+  '2': 2,
+  '3': 2,
+  '4': 2
 };
 
 const LEVEL_LABELS = {
   state: 'State Manager',
   district: 'District Manager',
   division: 'Division Manager',
-  pincode: 'Pincode Manager'
+  pincode: 'Pincode Manager',
+  1: 'State Manager',
+  2: 'District Manager',
+  3: 'Division Manager',
+  4: 'Pincode Manager',
+  '1': 'State Manager',
+  '2': 'District Manager',
+  '3': 'Division Manager',
+  '4': 'Pincode Manager'
+};
+
+export const normalizeManagerLevel = (level, role) => {
+  if (level === 1 || level === '1') return 'state';
+  if (level === 2 || level === '2') return 'district';
+  if (level === 3 || level === '3') return 'division';
+  if (level === 4 || level === '4') return 'pincode';
+
+  const raw = String(level || role || '').trim().toLowerCase();
+  if (!raw) return 'state';
+  if (raw === '1' || raw === 'state' || raw === 'state_manager' || raw.includes('state')) return 'state';
+  if (raw === '2' || raw === 'district' || raw === 'district_manager' || raw.includes('dist')) return 'district';
+  if (raw === '3' || raw === 'division' || raw === 'divisional' || raw === 'division_manager' || raw.includes('div')) return 'division';
+  if (raw === '4' || raw === 'pincode' || raw === 'pincode_manager' || raw.includes('pin')) return 'pincode';
+  return raw;
 };
 
 const getLevelBadge = (level) => {
-  const l = (level || '').toLowerCase();
+  const l = normalizeManagerLevel(level);
   if (l === 'state')    return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
   if (l === 'district') return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20';
   if (l === 'division') return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20';
@@ -33,34 +64,41 @@ const getLevelBadge = (level) => {
 };
 
 const getStatusBadge = (status) => {
-  if (status === 'Active')    return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
-  if (status === 'Inactive')  return 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20';
-  if (status === 'Suspended') return 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
-  if (status === 'Pending')   return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
-  if (status === 'Approved')  return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
-  if (status === 'Rejected')  return 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
+  const s = String(status || '').trim().toLowerCase();
+  if (s === 'active' || s === 'approved') return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
+  if (s === 'inactive')                   return 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20';
+  if (s === 'suspended')                  return 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
+  if (s === 'pending')                    return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+  if (s === 'rejected')                   return 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
   return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
 };
 
 // ─────────────────────────────────────────────────────────────
 // SMALL REUSABLE COMPONENTS
 // ─────────────────────────────────────────────────────────────
-const StatusBadge = ({ status }) => (
-  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getStatusBadge(status)}`}>
-    <span className={`w-1.5 h-1.5 rounded-full ${
-      status === 'Active' || status === 'Approved' ? 'bg-emerald-500' :
-      status === 'Pending' ? 'bg-amber-500' :
-      status === 'Rejected' || status === 'Suspended' ? 'bg-red-500' : 'bg-slate-500'
-    }`} />
-    {status}
-  </span>
-);
+const StatusBadge = ({ status }) => {
+  const s = String(status || '').trim().toLowerCase();
+  const displayStatus = String(status || 'Active');
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getStatusBadge(status)}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${
+        s === 'active' || s === 'approved' ? 'bg-emerald-500' :
+        s === 'pending' ? 'bg-amber-500' :
+        s === 'rejected' || s === 'suspended' ? 'bg-red-500' : 'bg-slate-500'
+      }`} />
+      {displayStatus}
+    </span>
+  );
+};
 
-const LevelBadge = ({ level }) => (
-  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getLevelBadge(level)}`}>
-    {LEVEL_LABELS[level] || level}
-  </span>
-);
+const LevelBadge = ({ level }) => {
+  const norm = normalizeManagerLevel(level);
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getLevelBadge(norm)}`}>
+      {LEVEL_LABELS[norm] || LEVEL_LABELS[level] || String(level || 'Manager')}
+    </span>
+  );
+};
 
 // Quota Badge: displays "Managers: count / limit" and "LIMIT REACHED" badge (Requirement 12 & 14)
 const QuotaBadge = ({ count, limit, onNominate }) => {
@@ -211,7 +249,8 @@ const ManagerDrawer = ({ manager, onClose }) => {
 // REQUEST CARD (Requirement 13)
 // ─────────────────────────────────────────────────────────────
 const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => {
-  const limit = MANAGER_LIMITS[request.level] || 2;
+  const normLevel = normalizeManagerLevel(request.level);
+  const limit = MANAGER_LIMITS[normLevel] || MANAGER_LIMITS[request.level] || 2;
   const current = request.currentTerritoryCount || 1;
 
   return (
@@ -310,7 +349,8 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting }) => {
   });
   const [error, setError] = useState('');
 
-  const limit = MANAGER_LIMITS[territory?.level] || 2;
+  const normLevel = normalizeManagerLevel(territory?.level);
+  const limit = MANAGER_LIMITS[normLevel] || MANAGER_LIMITS[territory?.level] || 2;
   const current = territory?.currentCount || 0;
   const isLimitReached = current >= limit;
 
@@ -326,7 +366,7 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting }) => {
     }
     onSubmit({
       ...form,
-      level: territory.level,
+      level: normLevel || territory.level,
       assignedState: territory.state,
       assignedDistrict: territory.district || '',
       assignedDivision: territory.division || '',
@@ -340,7 +380,7 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting }) => {
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
           <div>
             <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
-              Request {LEVEL_LABELS[territory?.level] || 'Manager'}
+              Request {LEVEL_LABELS[normLevel] || LEVEL_LABELS[territory?.level] || 'Manager'}
             </h3>
             <p className="text-xs text-slate-400 font-medium">
               Submit manager onboarding request for administrative approval
@@ -684,14 +724,24 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       });
       const data = await apiFetch(`/admin/manager-directory/managers?${params.toString()}`);
       const all = data?.managers || (Array.isArray(data) ? data : []);
-      setManagers(all);
+      const normalizedAll = all.map(m => ({
+        ...m,
+        level: normalizeManagerLevel(m.level, m.role),
+        phone: m.phone || m.mobile || ''
+      }));
+      setManagers(normalizedAll);
       setManagersTotal(data?.total || all.length);
       setManagersPage(page);
     } catch {
       try {
         const data = await apiFetch('/admin/admins');
         const all = Array.isArray(data) ? data : (data?.admins || []);
-        setManagers(all);
+        const normalizedAll = all.map(m => ({
+          ...m,
+          level: normalizeManagerLevel(m.level, m.role),
+          phone: m.phone || m.mobile || ''
+        }));
+        setManagers(normalizedAll);
         setManagersTotal(all.length);
         setManagersPage(page);
       } catch {
@@ -1315,7 +1365,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
           ) : requests.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
               <Clock className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-slate-500">No {requestStatusFilter !== 'All' ? requestStatusFilter.toLowerCase() : ''} requests.</p>
+              <p className="text-sm font-semibold text-slate-500">No {requestStatusFilter !== 'All' ? String(requestStatusFilter || '').toLowerCase() : ''} requests.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1406,7 +1456,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                       <span className="text-[10px] text-slate-400 font-mono">{mgr.managerId}</span>
                       <LevelBadge level={mgr.level} />
                     </div>
-                    <p className="text-xs text-slate-500">{mgr.phone} · <span className="truncate">{mgr.email}</span></p>
+                    <p className="text-xs text-slate-500">{mgr.phone || mgr.mobile || '—'} · <span className="truncate">{mgr.email}</span></p>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[11px]">
                       {mgr.assignedState && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mgr.assignedState}</span>}
                       {mgr.assignedDistrict && <><ArrowRight className="w-2.5 h-2.5 text-slate-400" /><span className="text-blue-600 dark:text-blue-400">{mgr.assignedDistrict}</span></>}
@@ -1419,7 +1469,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                     <button onClick={() => setSelectedManager(mgr)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors" title="View Profile">
                       <Eye className="w-4 h-4" />
                     </button>
-                    {mgr.status === 'Active' ? (
+                    {['Active', 'approved', 'Approved'].includes(mgr.status) ? (
                       <button onClick={() => handleStatusUpdate(mgr, 'Inactive')} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors" title="Deactivate">
                         <XCircle className="w-4 h-4" />
                       </button>
