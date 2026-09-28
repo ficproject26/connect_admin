@@ -21,9 +21,23 @@ const territoryScope = async (req, res, next) => {
             userId = new mongoose.Types.ObjectId(userId);
         }
 
-        const user = await User.findById(userId)
+        let user = await User.findById(userId)
             .select('name email role adminRole adminLevel level assignedState assignedDistrict assignedDivision assignedPincode territory status isActive')
             .lean();
+
+        if (!user) {
+            const Manager = require('../models/Manager');
+            const mgr = await Manager.findById(userId).lean();
+            if (mgr) {
+                user = {
+                    ...mgr,
+                    role: `${mgr.level}_manager`,
+                    adminRole: `${mgr.level}-admin`,
+                    adminLevel: mgr.level,
+                    isActive: mgr.status === 'Active'
+                };
+            }
+        }
 
         if (!user) {
             return res.status(401).json({ msg: 'User account not found', message: 'User not found' });
@@ -51,21 +65,22 @@ const territoryScope = async (req, res, next) => {
             return next();
         }
 
-        // Determine Lower Tier Admin
+        // Determine Lower Tier Admin or Manager
         let adminTier = 'unknown';
-        if (adminRoleLower === 'state-admin' || adminLevelLower === 'state') {
+        if (adminRoleLower === 'state-admin' || adminLevelLower === 'state' || roleLower === 'state_manager' || roleLower === 'state-manager') {
             adminTier = 'state';
-        } else if (adminRoleLower === 'district-admin' || adminRoleLower === 'branch-admin' || adminLevelLower === 'district') {
+        } else if (adminRoleLower === 'district-admin' || adminRoleLower === 'branch-admin' || adminLevelLower === 'district' || roleLower === 'district_manager' || roleLower === 'district-manager') {
             adminTier = 'district';
-        } else if (adminRoleLower === 'division-admin' || adminLevelLower === 'division') {
+        } else if (adminRoleLower === 'division-admin' || adminLevelLower === 'division' || roleLower === 'division_manager' || roleLower === 'division-manager') {
             adminTier = 'division';
-        } else if (adminRoleLower === 'pincode-admin' || adminLevelLower === 'pincode') {
+        } else if (adminRoleLower === 'pincode-admin' || adminLevelLower === 'pincode' || roleLower === 'pincode_manager' || roleLower === 'pincode-manager') {
             adminTier = 'pincode';
         }
 
-        // Verify that the user has admin privileges
+        // Verify that the user has admin or manager privileges
         const isAdmin = 
             ['admin', 'super-admin', 'superadmin'].includes(roleLower) || 
+            roleLower.includes('manager') ||
             ['super-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin'].includes(adminRoleLower);
 
         if (!isAdmin && adminTier === 'unknown') {

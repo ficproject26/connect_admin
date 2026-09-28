@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
+const territoryScope = require('../middleware/territoryScope');
 const Manager = require('../models/Manager');
 const ManagerRequest = require('../models/ManagerRequest');
 const Pincode = require('../models/Pincode');
@@ -9,16 +10,21 @@ const State = require('../models/State');
 const District = require('../models/District');
 const Division = require('../models/Division');
 const User = require('../models/User');
+const Vendor = require('../models/Vendor');
+const Order = require('../models/Order');
+const Booking = require('../models/Booking');
+const Customer = require('../models/Customer');
+const TieUp = require('../models/TieUp');
 const { validateTerritoryHierarchy } = require('./territory');
 const TerritoryAssignmentService = require('../utils/territoryAssignmentService');
 
 // ============================================================
 // MANAGER DIRECTORY ROUTES
-// All routes require authentication (Main Admin sees everything)
+// All routes require authentication & strict territory scoping
 // ============================================================
 
 // Helper: safe string for regex
-const safeRegex = (val) => new RegExp(`^${val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+const safeRegex = (val) => new RegExp(`^${String(val || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
 const normalizeManagerLevelStr = (lvl) => {
     if (lvl === 1 || lvl === '1') return 'state';
@@ -43,17 +49,18 @@ const mapLevelToQuery = (lvl) => {
 };
 
 // ============================================================
-// 1. SUMMARY KPI COUNTS
+// 1. SUMMARY KPI COUNTS (Strictly Territory-Scoped)
 // GET /manager-directory/summary
 // ============================================================
-router.get('/manager-directory/summary', auth, async (req, res) => {
+router.get('/manager-directory/summary', [auth, territoryScope], async (req, res) => {
     try {
+        const baseFilter = req.territoryFilter || {};
         const [total, active, inactive] = await Promise.all([
-            Manager.countDocuments({}),
-            Manager.countDocuments({ status: 'Active' }),
-            Manager.countDocuments({ status: { $in: ['Inactive', 'Suspended'] } })
+            Manager.countDocuments(baseFilter),
+            Manager.countDocuments({ ...baseFilter, status: 'Active' }),
+            Manager.countDocuments({ ...baseFilter, status: { $in: ['Inactive', 'Suspended'] } })
         ]);
-        const pending = await ManagerRequest.countDocuments({ status: 'Pending' });
+        const pending = await ManagerRequest.countDocuments({ ...baseFilter, status: 'Pending' });
 
         res.json({
             success: true,
@@ -62,6 +69,181 @@ router.get('/manager-directory/summary', auth, async (req, res) => {
     } catch (err) {
         console.error('Manager directory summary error:', err);
         res.status(500).json({ msg: 'Error fetching summary', error: err.message });
+    }
+});
+
+// ============================================================
+// 1B. HIERARCHICAL MANAGERS TREE (State -> District -> Division -> Pincode)
+// GET /manager-directory/hierarchy
+// ============================================================
+router.get('/manager-directory/hierarchy', [auth, territoryScope], async (req, res) => {
+    try {
+        const query = { ...(req.territoryFilter || {}) };
+        const { search, state, district, division, pincode, level, status } = req.query;
+
+        if (state && state !== 'All') query.assignedState = safeRegex(state);
+        if (district && district !== 'All') query.assignedDistrict = safeRegex(district);
+        if (division && division !== 'All') query.assignedDivision = safeRegex(division);
+        if (pincode && pincode !== 'All') query.assignedPincode = pincode;
+        if (level && level !== 'All') query.level = mapLevelToQuery(level);
+        if (status && status !== 'All') {
+            if (String(status).toLowerCase() === 'active') {
+                query.status = { $in: ['Active', 'active', 'approved', 'Approved'] };
+            } else {
+                query.status = safeRegex(status);
+            }
+        }
+
+        if (search && search.trim()) {
+            const q = search.trim();
+            query.$or = [
+                { name: { $regex: q, $options: 'i' } },
+                { email: { $regex: q, $options: 'i' } },
+                { phone: { $regex: q, $options: 'i' } },
+                { mobile: { $regex: q, $options: 'i' } },
+                { managerId: { $regex: q, $options: 'i' } }
+            ];
+        }
+
+        const rawManagers = await Manager.find(query)
+            .populate('parentAdminId', 'name email adminRole adminLevel')
+            .populate('approvedBy', 'name email')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const formattedManagers = rawManagers.map(m => ({
+            ...m,
+            phone: m.phone || m.mobile || '',
+            status: (m.status === 'approved' || m.status === 'Approved') ? 'Active' : (m.status || 'Active'),
+            level: normalizeManagerLevelStr(m.level)
+        }));
+
+        // Structure hierarchical tree
+        // STATE -> DISTRICT -> DIVISION -> PINCODE
+        const stateMap = {};
+
+        // 1. Collect all distinct states present in the real manager records
+        formattedManagers.forEach(m => {
+            const stName = (m.assignedState || 'Unassigned').trim();
+            if (!stateMap[stName]) {
+                stateMap[stName] = {
+                    state: stName,
+                    stateManagers: [],
+                    districts: {}
+                };
+            }
+            if (m.level === 'state') {
+                stateMap[stName].stateManagers.push(m);
+            }
+        });
+
+        // 2. Attach District Managers
+        formattedManagers.forEach(m => {
+            if (m.level === 'district') {
+                const stName = (m.assignedState || 'Unassigned').trim();
+                const distName = (m.assignedDistrict || 'Unassigned').trim();
+                if (!stateMap[stName]) {
+                    stateMap[stName] = { state: stName, stateManagers: [], districts: {} };
+                }
+                if (!stateMap[stName].districts[distName]) {
+                    stateMap[stName].districts[distName] = {
+                        district: distName,
+                        state: stName,
+                        districtManagers: [],
+                        divisions: {}
+                    };
+                }
+                stateMap[stName].districts[distName].districtManagers.push(m);
+            }
+        });
+
+        // 3. Attach Division Managers
+        formattedManagers.forEach(m => {
+            if (m.level === 'division') {
+                const stName = (m.assignedState || 'Unassigned').trim();
+                const distName = (m.assignedDistrict || 'Unassigned').trim();
+                const divName = (m.assignedDivision || 'Unassigned').trim();
+                if (!stateMap[stName]) {
+                    stateMap[stName] = { state: stName, stateManagers: [], districts: {} };
+                }
+                if (!stateMap[stName].districts[distName]) {
+                    stateMap[stName].districts[distName] = { district: distName, state: stName, districtManagers: [], divisions: {} };
+                }
+                if (!stateMap[stName].districts[distName].divisions[divName]) {
+                    stateMap[stName].districts[distName].divisions[divName] = {
+                        division: divName,
+                        district: distName,
+                        state: stName,
+                        divisionManagers: [],
+                        pincodes: {}
+                    };
+                }
+                stateMap[stName].districts[distName].divisions[divName].divisionManagers.push(m);
+            }
+        });
+
+        // 4. Attach Pincode Managers
+        formattedManagers.forEach(m => {
+            if (m.level === 'pincode') {
+                const stName = (m.assignedState || 'Unassigned').trim();
+                const distName = (m.assignedDistrict || 'Unassigned').trim();
+                const divName = (m.assignedDivision || 'Unassigned').trim();
+                const pinCode = (m.assignedPincode || 'Unassigned').trim();
+                if (!stateMap[stName]) {
+                    stateMap[stName] = { state: stName, stateManagers: [], districts: {} };
+                }
+                if (!stateMap[stName].districts[distName]) {
+                    stateMap[stName].districts[distName] = { district: distName, state: stName, districtManagers: [], divisions: {} };
+                }
+                if (!stateMap[stName].districts[distName].divisions[divName]) {
+                    stateMap[stName].districts[distName].divisions[divName] = { division: divName, district: distName, state: stName, divisionManagers: [], pincodes: {} };
+                }
+                if (!stateMap[stName].districts[distName].divisions[divName].pincodes[pinCode]) {
+                    stateMap[stName].districts[distName].divisions[divName].pincodes[pinCode] = {
+                        pincode: pinCode,
+                        division: divName,
+                        district: distName,
+                        state: stName,
+                        pincodeManagers: []
+                    };
+                }
+                stateMap[stName].districts[distName].divisions[divName].pincodes[pinCode].pincodeManagers.push(m);
+            }
+        });
+
+        // Transform map to array format
+        const statesArray = Object.values(stateMap).map(st => ({
+            state: st.state,
+            stateManagers: st.stateManagers,
+            districts: Object.values(st.districts).map(d => ({
+                district: d.district,
+                state: d.state,
+                districtManagers: d.districtManagers,
+                divisions: Object.values(d.divisions).map(v => ({
+                    division: v.division,
+                    district: d.district,
+                    state: d.state,
+                    divisionManagers: v.divisionManagers,
+                    pincodes: Object.values(v.pincodes).map(p => ({
+                        pincode: p.pincode,
+                        division: v.division,
+                        district: d.district,
+                        state: d.state,
+                        pincodeManagers: p.pincodeManagers
+                    }))
+                }))
+            }))
+        })).sort((a, b) => a.state.localeCompare(b.state));
+
+        res.json({
+            success: true,
+            totalManagers: formattedManagers.length,
+            states: statesArray,
+            managers: formattedManagers
+        });
+    } catch (err) {
+        console.error('Manager hierarchy error:', err);
+        res.status(500).json({ msg: 'Error building manager hierarchy', error: err.message });
     }
 });
 
@@ -376,7 +558,7 @@ router.get('/manager-directory/pincodes/:pincode/managers', auth, async (req, re
 // 7. GET MANAGER DETAILS BY ID
 // GET /manager-directory/managers/:id
 // ============================================================
-router.get('/manager-directory/managers/:id', auth, async (req, res) => {
+router.get('/manager-directory/managers/:id', [auth, territoryScope], async (req, res) => {
     try {
         const manager = await Manager.findById(req.params.id)
             .populate('parentAdminId', 'name email adminRole adminLevel assignedState assignedDistrict')
@@ -401,14 +583,145 @@ router.get('/manager-directory/managers/:id', auth, async (req, res) => {
 });
 
 // ============================================================
-// 8. FLAT SEARCH / FILTER ALL MANAGERS (debounced search)
+// 7B. GET REAL MANAGER PERFORMANCE & ACTIVITY DETAILS
+// GET /manager-directory/managers/:id/performance
+// ============================================================
+router.get('/manager-directory/managers/:id/performance', [auth, territoryScope], async (req, res) => {
+    try {
+        const manager = await Manager.findById(req.params.id)
+            .populate('parentAdminId', 'name email adminRole adminLevel')
+            .populate('approvedBy', 'name email')
+            .populate('requestedBy', 'name email adminRole')
+            .lean();
+
+        if (!manager) return res.status(404).json({ msg: 'Manager not found' });
+
+        const normLevel = normalizeManagerLevelStr(manager.level);
+        const st = (manager.assignedState || '').trim();
+        const dist = (manager.assignedDistrict || '').trim();
+        const div = (manager.assignedDivision || '').trim();
+        const pin = (manager.assignedPincode || '').trim();
+
+        // Territory match filter for shops / vendors in manager's territory
+        const vendorTerritoryFilter = {};
+        if (st) vendorTerritoryFilter.state = safeRegex(st);
+        if (['district', 'division', 'pincode'].includes(normLevel) && dist) {
+            vendorTerritoryFilter.district = safeRegex(dist);
+        }
+        if (['division', 'pincode'].includes(normLevel) && div) {
+            vendorTerritoryFilter.division = safeRegex(div);
+        }
+        if (normLevel === 'pincode' && pin) {
+            vendorTerritoryFilter.pincode = pin;
+        }
+
+        const now = new Date();
+        const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        // Check vendors matching territory or direct attribution
+        const vendorOrConditions = [];
+        if (Object.keys(vendorTerritoryFilter).length > 0) {
+            vendorOrConditions.push(vendorTerritoryFilter);
+        }
+        if (manager.managerId) vendorOrConditions.push({ managerId: manager.managerId });
+        if (manager._id) vendorOrConditions.push({ managerId: manager._id });
+
+        const vendorQuery = vendorOrConditions.length > 0 ? { $or: vendorOrConditions } : {};
+
+        const [
+            totalVendors,
+            todayVendors,
+            thisWeekVendors,
+            thisMonthVendors,
+            matchingVendors
+        ] = await Promise.all([
+            Vendor.countDocuments(vendorQuery),
+            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfDay } }),
+            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfWeek } }),
+            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfMonth } }),
+            Vendor.find(vendorQuery).select('_id id').lean()
+        ]);
+
+        const vendorIds = matchingVendors.map(v => v._id).concat(matchingVendors.map(v => v.id).filter(Boolean));
+
+        // Orders matching vendors in territory
+        let orderQuery = { vendorId: { $in: vendorIds } };
+        if (vendorIds.length === 0) {
+            orderQuery = { _id: null };
+        }
+
+        const [
+            totalOrders,
+            allOrders,
+            todayOrders,
+            monthOrders
+        ] = await Promise.all([
+            Order.countDocuments(orderQuery),
+            Order.find(orderQuery).select('amount totalAmount finalAmount').lean(),
+            Order.find({ ...orderQuery, createdAt: { $gte: startOfDay } }).select('amount totalAmount finalAmount').lean(),
+            Order.find({ ...orderQuery, createdAt: { $gte: startOfMonth } }).select('amount totalAmount finalAmount').lean()
+        ]);
+
+        const sumRev = (list) => list.reduce((sum, o) => sum + (Number(o.amount || o.totalAmount || o.finalAmount || 0) || 0), 0);
+        const totalRevenue = sumRev(allOrders);
+        const todayRevenue = sumRev(todayOrders);
+        const thisMonthRevenue = sumRev(monthOrders);
+
+        // Customers count in territory
+        const customerFilter = {};
+        if (pin) customerFilter.pincode = pin;
+        else if (st) customerFilter.address = safeRegex(st);
+        const totalCustomers = Object.keys(customerFilter).length > 0 ? await Customer.countDocuments(customerFilter) : 0;
+
+        // Bookings in territory
+        let totalBookings = 0;
+        try {
+            if (vendorIds.length > 0) {
+                totalBookings = await Booking.countDocuments({ vendorId: { $in: vendorIds } });
+            }
+        } catch {}
+
+        res.json({
+            success: true,
+            manager: {
+                ...manager,
+                phone: manager.phone || manager.mobile || '',
+                status: (manager.status === 'approved' || manager.status === 'Approved') ? 'Active' : (manager.status || 'Active'),
+                level: normLevel
+            },
+            performance: {
+                totalShopsTiedUp: totalVendors,
+                todayShopsTiedUp: todayVendors,
+                thisWeekShopsTiedUp: thisWeekVendors,
+                thisMonthShopsTiedUp: thisMonthVendors,
+                totalRevenue,
+                todayRevenue,
+                thisMonthRevenue,
+                totalCustomers,
+                totalVendors,
+                totalOrders,
+                totalBookings
+            }
+        });
+    } catch (err) {
+        console.error('Manager performance error:', err);
+        res.status(500).json({ msg: 'Error computing manager performance', error: err.message });
+    }
+});
+
+// ============================================================
+// 8. FLAT SEARCH / FILTER ALL MANAGERS (Strictly Scoped)
 // GET /manager-directory/managers
 // ============================================================
-router.get('/manager-directory/managers', auth, async (req, res) => {
+router.get('/manager-directory/managers', [auth, territoryScope], async (req, res) => {
     try {
         const { search, state, district, division, pincode, level, status, page = 1, limit = 30 } = req.query;
 
-        const query = {};
+        const query = { ...(req.territoryFilter || {}) };
         if (state && state !== 'All') query.assignedState = safeRegex(state);
         if (district && district !== 'All') query.assignedDistrict = safeRegex(district);
         if (division && division !== 'All') query.assignedDivision = safeRegex(division);
@@ -659,40 +972,51 @@ router.put('/manager-directory/managers/:id/status', auth, async (req, res) => {
 });
 
 // ============================================================
-// 13. CASCADING TERRITORY OPTIONS (for filter dropdowns)
+// 13. CASCADING TERRITORY OPTIONS (Strictly from real managers)
 // GET /manager-directory/territory-options
 // ============================================================
-router.get('/manager-directory/territory-options', auth, async (req, res) => {
+router.get('/manager-directory/territory-options', [auth, territoryScope], async (req, res) => {
     try {
         const { state, district, division } = req.query;
+        const baseFilter = { ...(req.territoryFilter || {}), status: { $in: ['Active', 'active', 'approved', 'Approved', 'Inactive', 'Suspended'] } };
 
-        // Master DB Active States
-        const states = await State.find({ status: 'Active' }).sort({ name: 1 }).distinct('name');
+        // Only states that actually have real managers in the database
+        const rawStates = await Manager.distinct('assignedState', baseFilter);
+        const states = rawStates.filter(Boolean).sort((a, b) => a.localeCompare(b));
 
         let districts = [];
         if (state && state !== 'All') {
-            const stDoc = await State.findOne({
-                $or: [{ name: safeRegex(state) }, { code: state.toUpperCase() }]
+            const rawDistricts = await Manager.distinct('assignedDistrict', {
+                ...baseFilter,
+                assignedState: safeRegex(state),
+                assignedDistrict: { $ne: '' }
             });
-            if (stDoc) {
-                districts = await District.find({ stateId: stDoc._id, status: 'Active' }).sort({ name: 1 }).distinct('name');
-            }
+            districts = rawDistricts.filter(Boolean).sort((a, b) => a.localeCompare(b));
         }
 
         let divisions = [];
         if (district && district !== 'All') {
-            const distDoc = await District.findOne({ name: safeRegex(district) });
-            if (distDoc) {
-                divisions = await Division.find({ districtId: distDoc._id, status: 'Active' }).sort({ name: 1 }).distinct('name');
-            }
+            const match = {
+                ...baseFilter,
+                assignedDistrict: safeRegex(district),
+                assignedDivision: { $ne: '' }
+            };
+            if (state && state !== 'All') match.assignedState = safeRegex(state);
+            const rawDivisions = await Manager.distinct('assignedDivision', match);
+            divisions = rawDivisions.filter(Boolean).sort((a, b) => a.localeCompare(b));
         }
 
         let pincodes = [];
         if (division && division !== 'All') {
-            const divDoc = await Division.findOne({ name: safeRegex(division) });
-            if (divDoc) {
-                pincodes = await Pincode.find({ divisionId: divDoc._id, status: 'Active' }).sort({ code: 1 }).distinct('code');
-            }
+            const match = {
+                ...baseFilter,
+                assignedDivision: safeRegex(division),
+                assignedPincode: { $ne: '' }
+            };
+            if (state && state !== 'All') match.assignedState = safeRegex(state);
+            if (district && district !== 'All') match.assignedDistrict = safeRegex(district);
+            const rawPincodes = await Manager.distinct('assignedPincode', match);
+            pincodes = rawPincodes.filter(Boolean).sort((a, b) => a.localeCompare(b));
         }
 
         res.json({ success: true, states, districts, divisions, pincodes });

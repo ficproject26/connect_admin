@@ -1,43 +1,27 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Users, ChevronRight, ChevronDown, Search, RefreshCw, X, User,
   Phone, Mail, CheckCircle, XCircle, Clock, Globe, Map, MapPin,
-  ArrowRight, Eye, Building2, Layers, Navigation, Shield, Building,
-  ChevronLeft, UserCheck, AlertCircle, Plus, List, AlertTriangle,
-  LayoutGrid, ListTree
+  ArrowRight, Eye, Building2, Layers, Award,
+  ChevronLeft, UserCheck, AlertCircle, Plus, List,
+  ShoppingBag, DollarSign, Calendar, TrendingUp
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────
-// CONSTANTS & LIMITS (Requirement 12)
+// CONSTANTS & HELPERS
 // ─────────────────────────────────────────────────────────────
 const MANAGER_LIMITS = {
   state: 8,
   district: 2,
   division: 2,
-  pincode: 2,
-  1: 8,
-  2: 2,
-  3: 2,
-  4: 2,
-  '1': 8,
-  '2': 2,
-  '3': 2,
-  '4': 2
+  pincode: 2
 };
 
 const LEVEL_LABELS = {
   state: 'State Manager',
   district: 'District Manager',
   division: 'Division Manager',
-  pincode: 'Pincode Manager',
-  1: 'State Manager',
-  2: 'District Manager',
-  3: 'Division Manager',
-  4: 'Pincode Manager',
-  '1': 'State Manager',
-  '2': 'District Manager',
-  '3': 'Division Manager',
-  '4': 'Pincode Manager'
+  pincode: 'Pincode Manager'
 };
 
 export const normalizeManagerLevel = (level, role) => {
@@ -55,7 +39,7 @@ export const normalizeManagerLevel = (level, role) => {
   return raw;
 };
 
-const getLevelBadge = (level) => {
+const getLevelBadgeClass = (level) => {
   const l = normalizeManagerLevel(level);
   if (l === 'state')    return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
   if (l === 'district') return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20';
@@ -64,7 +48,7 @@ const getLevelBadge = (level) => {
   return 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20';
 };
 
-const getStatusBadge = (status) => {
+const getStatusBadgeClass = (status) => {
   const s = String(status || '').trim().toLowerCase();
   if (s === 'active' || s === 'approved') return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
   if (s === 'inactive')                   return 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20';
@@ -74,14 +58,22 @@ const getStatusBadge = (status) => {
   return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
 };
 
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0
+  }).format(Number(amount) || 0);
+};
+
 // ─────────────────────────────────────────────────────────────
-// SMALL REUSABLE COMPONENTS
+// BADGE COMPONENTS
 // ─────────────────────────────────────────────────────────────
 const StatusBadge = ({ status }) => {
   const s = String(status || '').trim().toLowerCase();
   const displayStatus = String(status || 'Active');
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getStatusBadge(status)}`}>
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getStatusBadgeClass(status)}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${
         s === 'active' || s === 'approved' ? 'bg-emerald-500' :
         s === 'pending' ? 'bg-amber-500' :
@@ -95,137 +87,250 @@ const StatusBadge = ({ status }) => {
 const LevelBadge = ({ level }) => {
   const norm = normalizeManagerLevel(level);
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getLevelBadge(norm)}`}>
-      {LEVEL_LABELS[norm] || LEVEL_LABELS[level] || String(level || 'Manager')}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getLevelBadgeClass(norm)}`}>
+      {LEVEL_LABELS[norm] || String(level || 'Manager')}
     </span>
   );
 };
 
-// Quota Badge: displays "Managers: count / limit" and "LIMIT REACHED" badge (Requirement 12 & 14)
-const QuotaBadge = ({ count, limit, onNominate }) => {
-  const isReached = (count || 0) >= limit;
-  return (
-    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-mono font-bold border transition-colors ${
-        isReached
-          ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/25'
-          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-      }`}>
-        Managers: {count || 0} / {limit}
-      </span>
-      {isReached ? (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-rose-500 text-white shadow-xs">
-          LIMIT REACHED
-        </span>
-      ) : (
-        onNominate && (
-          <button
-            onClick={onNominate}
-            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold bg-primary-600 hover:bg-primary-500 text-white shadow-xs transition-all cursor-pointer active:scale-95"
-            title="Nominate/Request Manager"
-          >
-            <Plus className="w-3 h-3" /> Nominate
-          </button>
-        )
-      )}
-    </div>
-  );
-};
+// ─────────────────────────────────────────────────────────────
+// MANAGER PERFORMANCE & ACTIVITY DRAWER
+// ─────────────────────────────────────────────────────────────
+const ManagerDrawer = ({ manager, onClose, API_BASE, token }) => {
+  const [perfData, setPerfData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-// ─────────────────────────────────────────────────────────────
-// MANAGER DETAIL DRAWER
-// ─────────────────────────────────────────────────────────────
-const ManagerDrawer = ({ manager, onClose }) => {
+  useEffect(() => {
+    let isMounted = true;
+    if (!manager?._id) return;
+    setLoading(true);
+
+    fetch(`${API_BASE}/admin/manager-directory/managers/${manager._id}/performance`, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-auth-token': token || '',
+        'Authorization': token ? `Bearer ${token}` : ''
+      }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (isMounted) {
+          if (data?.success && data.performance) {
+            setPerfData(data.performance);
+          } else {
+            setPerfData({
+              totalShopsTiedUp: 0,
+              todayShopsTiedUp: 0,
+              thisWeekShopsTiedUp: 0,
+              thisMonthShopsTiedUp: 0,
+              totalRevenue: 0,
+              todayRevenue: 0,
+              thisMonthRevenue: 0,
+              totalCustomers: 0,
+              totalVendors: 0,
+              totalOrders: 0,
+              totalBookings: 0
+            });
+          }
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setPerfData({
+            totalShopsTiedUp: 0,
+            todayShopsTiedUp: 0,
+            thisWeekShopsTiedUp: 0,
+            thisMonthShopsTiedUp: 0,
+            totalRevenue: 0,
+            todayRevenue: 0,
+            thisMonthRevenue: 0,
+            totalCustomers: 0,
+            totalVendors: 0,
+            totalOrders: 0,
+            totalBookings: 0
+          });
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => { isMounted = false; };
+  }, [manager, API_BASE, token]);
+
   if (!manager) return null;
+
   const onboardedBy = manager.parentAdminId?.name || manager.requestingAdminName || '—';
   const approvedBy  = manager.approvedBy?.name || '—';
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
-        className="relative z-10 w-full max-w-sm bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-700 h-full overflow-y-auto flex flex-col shadow-2xl"
+        className="relative z-10 w-full max-w-md bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 h-full overflow-y-auto flex flex-col shadow-2xl"
         onClick={e => e.stopPropagation()}
         style={{ animation: 'slideInRight .22s cubic-bezier(.4,0,.2,1)' }}
       >
         {/* Drawer header */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-start justify-between px-6 py-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-850/50">
           <div>
-            <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mb-0.5">Manager Profile</p>
-            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">{manager.name}</h3>
+            <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mb-0.5">Manager Performance & Profile</p>
+            <h3 className="text-lg font-black text-slate-900 dark:text-white">{manager.name}</h3>
             <p className="text-xs text-slate-500 font-mono mt-0.5">{manager.managerId}</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors mt-0.5">
-            <X className="w-4 h-4" />
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors mt-0.5 cursor-pointer">
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Status + Level */}
-        <div className="flex items-center gap-2 px-6 py-3 border-b border-slate-100 dark:border-slate-800">
+        {/* Status + Level Badge Bar */}
+        <div className="flex items-center gap-2 px-6 py-3 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
           <StatusBadge status={manager.status} />
           <LevelBadge level={manager.level} />
         </div>
 
         <div className="flex-1 px-6 py-5 space-y-6 overflow-y-auto">
-          {/* Contact */}
+          {/* Performance Section */}
           <section>
-            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-3">Contact</p>
-            <div className="space-y-2.5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">Real Performance Metrics</p>
+              {loading && <RefreshCw className="w-3.5 h-3.5 text-primary-500 animate-spin" />}
+            </div>
+
+            {loading ? (
+              <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin text-primary-500" /> Computing territory metrics…
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Shop Tie-Ups Grid */}
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Store className="w-4 h-4 text-emerald-500" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Shop Tie-Ups / Vendors</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-semibold block">Today</span>
+                      <strong className="text-sm font-black text-slate-800 dark:text-slate-100">{perfData?.todayShopsTiedUp ?? 0}</strong>
+                    </div>
+                    <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-semibold block">This Week</span>
+                      <strong className="text-sm font-black text-slate-800 dark:text-slate-100">{perfData?.thisWeekShopsTiedUp ?? 0}</strong>
+                    </div>
+                    <div className="p-2 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-semibold block">This Month</span>
+                      <strong className="text-sm font-black text-slate-800 dark:text-slate-100">{perfData?.thisMonthShopsTiedUp ?? 0}</strong>
+                    </div>
+                    <div className="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                      <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">Total</span>
+                      <strong className="text-sm font-black text-emerald-600 dark:text-emerald-400">{perfData?.totalShopsTiedUp ?? 0}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Revenue Metrics */}
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800">
+                  <div className="flex items-center gap-2 mb-3">
+                    <DollarSign className="w-4 h-4 text-primary-500" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Revenue Generated</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-semibold block">Today</span>
+                      <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{formatCurrency(perfData?.todayRevenue)}</strong>
+                    </div>
+                    <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                      <span className="text-[10px] text-slate-400 font-semibold block">This Month</span>
+                      <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{formatCurrency(perfData?.thisMonthRevenue)}</strong>
+                    </div>
+                    <div className="p-2.5 bg-primary-500/10 rounded-xl border border-primary-500/20">
+                      <span className="text-[10px] text-primary-600 dark:text-primary-400 font-semibold block">Total</span>
+                      <strong className="text-xs font-black text-primary-600 dark:text-primary-400">{formatCurrency(perfData?.totalRevenue)}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Operations Breakdown */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-semibold block">Customers</span>
+                      <strong className="text-sm font-black text-slate-800 dark:text-slate-200">{perfData?.totalCustomers ?? 0}</strong>
+                    </div>
+                    <Users className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-semibold block">Orders</span>
+                      <strong className="text-sm font-black text-slate-800 dark:text-slate-200">{perfData?.totalOrders ?? 0}</strong>
+                    </div>
+                    <ShoppingBag className="w-4 h-4 text-purple-500" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* Contact Details */}
+          <section>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-3">Contact Details</p>
+            <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800"><Phone className="w-3.5 h-3.5 text-slate-500" /></div>
+                <div className="p-2 rounded-xl bg-slate-200 dark:bg-slate-800"><Phone className="w-3.5 h-3.5 text-slate-500" /></div>
                 <div>
                   <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{manager.phone || '—'}</p>
                   {manager.altPhone && <p className="text-[10px] text-slate-400">{manager.altPhone} (Alt)</p>}
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800"><Mail className="w-3.5 h-3.5 text-slate-500" /></div>
+                <div className="p-2 rounded-xl bg-slate-200 dark:bg-slate-800"><Mail className="w-3.5 h-3.5 text-slate-500" /></div>
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 break-all">{manager.email || '—'}</p>
               </div>
             </div>
           </section>
 
-          {/* Territory */}
+          {/* Assigned Territory Scope */}
           <section>
-            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-3">Territory</p>
-            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 space-y-2">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-3">Assigned Geographic Scope</p>
+            <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 space-y-2">
               {manager.assignedState && (
                 <div className="flex items-center gap-2">
-                  <Globe className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+                  <Globe className="w-4 h-4 text-emerald-500 flex-shrink-0" />
                   <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{manager.assignedState}</span>
                 </div>
               )}
               {manager.assignedDistrict && (
                 <div className="flex items-center gap-2 pl-4">
-                  <ArrowRight className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                  <ArrowRight className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
                   <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{manager.assignedDistrict}</span>
                 </div>
               )}
               {manager.assignedDivision && (
                 <div className="flex items-center gap-2 pl-8">
-                  <ArrowRight className="w-3 h-3 text-purple-400 flex-shrink-0" />
+                  <ArrowRight className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
                   <span className="text-xs font-semibold text-purple-600 dark:text-purple-400">{manager.assignedDivision}</span>
                 </div>
               )}
               {manager.assignedPincode && (
                 <div className="flex items-center gap-2 pl-12">
-                  <ArrowRight className="w-3 h-3 text-amber-400 flex-shrink-0" />
+                  <ArrowRight className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                   <span className="text-xs font-bold text-amber-600 dark:text-amber-400 font-mono">{manager.assignedPincode}</span>
                 </div>
               )}
             </div>
           </section>
 
-          {/* Administration */}
+          {/* Administration Onboarding Info */}
           <section>
-            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-3">Administration</p>
-            <div className="space-y-2.5">
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-3">Administration & Timeline</p>
+            <div className="space-y-2 bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800">
               {[
                 { label: 'Nominated By', value: onboardedBy },
                 { label: 'Approved By',  value: approvedBy },
-                { label: 'Onboarded On', value: manager.createdAt ? new Date(manager.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
+                { label: 'Onboarded Date', value: manager.createdAt ? new Date(manager.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—' },
               ].map(r => (
-                <div key={r.label} className="flex items-center justify-between py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                <div key={r.label} className="flex items-center justify-between py-1.5 border-b border-slate-200/60 dark:border-slate-800 last:border-0">
                   <span className="text-xs text-slate-400 font-medium">{r.label}</span>
                   <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{r.value}</span>
                 </div>
@@ -236,7 +341,7 @@ const ManagerDrawer = ({ manager, onClose }) => {
           {manager.notes && (
             <section>
               <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Notes</p>
-              <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 rounded-xl p-3 border border-slate-200 dark:border-slate-700">{manager.notes}</p>
+              <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3 border border-slate-200/80 dark:border-slate-800">{manager.notes}</p>
             </section>
           )}
         </div>
@@ -247,21 +352,18 @@ const ManagerDrawer = ({ manager, onClose }) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// REQUEST CARD (Requirement 13)
+// REQUEST CARD (Admin Onboarding Request Review)
 // ─────────────────────────────────────────────────────────────
 const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => {
   const normLevel = normalizeManagerLevel(request.level);
-  const limit = MANAGER_LIMITS[normLevel] || MANAGER_LIMITS[request.level] || 2;
-  const current = request.currentTerritoryCount || 1;
+  const limit = MANAGER_LIMITS[normLevel] || 2;
 
   return (
-    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs hover:shadow-sm transition-shadow">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 shadow-xs hover:shadow-sm transition-shadow">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-            <p className="text-sm font-black text-slate-800 dark:text-slate-100">{request.name}</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-black text-slate-800 dark:text-slate-100">{request.name}</p>
+          <div className="flex items-center gap-2 flex-wrap mt-0.5">
             <span className="text-[10px] text-slate-400 font-mono">{request.requestId}</span>
             <LevelBadge level={request.level} />
           </div>
@@ -278,11 +380,11 @@ const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => 
         </div>
       </div>
 
-      {/* Territory & Quota */}
-      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 mb-3 border border-slate-100 dark:border-slate-800">
+      {/* Territory Scope */}
+      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-3 mb-3 border border-slate-100 dark:border-slate-800">
         <div className="flex items-center justify-between mb-1.5">
-          <p className="text-[10px] font-extrabold uppercase text-slate-400">Territory</p>
-          <span className="text-[10px] font-mono font-bold text-slate-500">Quota: {limit} Max</span>
+          <p className="text-[10px] font-extrabold uppercase text-slate-400">Assigned Territory</p>
+          <span className="text-[10px] font-mono font-bold text-slate-500">Limit: {limit}</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
           {request.assignedState && (
@@ -303,12 +405,11 @@ const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => 
       {request.requestingAdminName && (
         <p className="text-[11px] text-slate-400 mb-3">
           Requested by <span className="text-slate-600 dark:text-slate-300 font-semibold">{request.requestingAdminName}</span>
-          {request.requestingAdminRole && <span className="text-slate-400"> · {request.requestingAdminRole}</span>}
         </p>
       )}
 
       {request.status === 'Rejected' && request.rejectionReason && (
-        <p className="text-[11px] text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg px-3 py-2 mb-3">
+        <p className="text-[11px] text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2 mb-3">
           Reason: {request.rejectionReason}
         </p>
       )}
@@ -318,17 +419,17 @@ const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => 
           <button
             onClick={() => onApprove(request)}
             disabled={approving}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-extrabold rounded-xl transition-colors cursor-pointer shadow-xs"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs"
           >
-            <CheckCircle className="w-3.5 h-3.5" />
-            {approving ? 'Approving…' : 'Approve'}
+            <CheckCircle className="w-4 h-4" />
+            {approving ? 'Approving…' : 'Direct Approve'}
           </button>
           <button
             onClick={() => onReject(request)}
             disabled={rejecting}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-60 text-slate-600 dark:text-slate-300 text-xs font-extrabold rounded-xl transition-colors border border-slate-200 dark:border-slate-700 cursor-pointer"
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-60 text-slate-600 dark:text-slate-300 text-xs font-black rounded-xl transition-all border border-slate-200 dark:border-slate-700 cursor-pointer"
           >
-            <XCircle className="w-3.5 h-3.5" />
+            <XCircle className="w-4 h-4" />
             {rejecting ? 'Rejecting…' : 'Reject'}
           </button>
         </div>
@@ -338,9 +439,15 @@ const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => 
 };
 
 // ─────────────────────────────────────────────────────────────
-// NOMINATE / REQUEST MANAGER MODAL (Requirement 13)
+// NOMINATE / ONBOARD MANAGER MODAL
 // ─────────────────────────────────────────────────────────────
-const NominateModal = ({ territory, onClose, onSubmit, submitting }) => {
+const NominateModal = ({ territory, onClose, onSubmit, submitting, territoryOptions }) => {
+  const [level, setLevel] = useState(territory?.level || 'state');
+  const [stateName, setStateName] = useState(territory?.state || '');
+  const [districtName, setDistrictName] = useState(territory?.district || '');
+  const [divisionName, setDivisionName] = useState(territory?.division || '');
+  const [pincodeVal, setPincodeVal] = useState(territory?.pincode || '');
+
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -350,101 +457,158 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting }) => {
   });
   const [error, setError] = useState('');
 
-  const normLevel = normalizeManagerLevel(territory?.level);
-  const limit = MANAGER_LIMITS[normLevel] || MANAGER_LIMITS[territory?.level] || 2;
-  const current = territory?.currentCount || 0;
-  const isLimitReached = current >= limit;
-
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
-      setError('Name, email, and phone number are required.');
+      setError('Name, email, and mobile phone number are required.');
       return;
     }
-    if (isLimitReached) {
-      setError(`Manager limit reached (${current}/${limit}). Cannot submit onboarding request.`);
+    if (!stateName.trim()) {
+      setError('Assigned State is required.');
       return;
     }
+    if (['district', 'division', 'pincode'].includes(level) && !districtName.trim()) {
+      setError('Assigned District is required for this manager level.');
+      return;
+    }
+    if (['division', 'pincode'].includes(level) && !divisionName.trim()) {
+      setError('Assigned Division is required for this manager level.');
+      return;
+    }
+    if (level === 'pincode' && !pincodeVal.trim()) {
+      setError('Assigned Pincode is required for Pincode Manager.');
+      return;
+    }
+
     onSubmit({
       ...form,
-      level: normLevel || territory.level,
-      assignedState: territory.state,
-      assignedDistrict: territory.district || '',
-      assignedDivision: territory.division || '',
-      assignedPincode: territory.pincode || ''
+      level,
+      assignedState: stateName.trim(),
+      assignedDistrict: districtName.trim(),
+      assignedDivision: divisionName.trim(),
+      assignedPincode: pincodeVal.trim()
     });
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
       <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl shadow-2xl p-6 my-6" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-4">
           <div>
             <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
-              Request {LEVEL_LABELS[normLevel] || LEVEL_LABELS[territory?.level] || 'Manager'}
+              Request Manager Onboarding
             </h3>
             <p className="text-xs text-slate-400 font-medium">
-              Submit manager onboarding request for administrative approval
+              Submit a new manager nomination for administrative approval
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg">
+          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded-lg cursor-pointer">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Territory & Quota Banner */}
-        <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 space-y-2 mb-4">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Assigned Territory</span>
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold ${
-              isLimitReached ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-            }`}>
-              Managers: {current} / {limit}
-            </span>
-          </div>
-          <div className="text-xs font-bold text-slate-700 dark:text-slate-200 flex flex-wrap items-center gap-1.5">
-            {territory?.state && <span>{territory.state}</span>}
-            {territory?.district && <><ArrowRight className="w-3 h-3 text-slate-400" /><span>{territory.district}</span></>}
-            {territory?.division && <><ArrowRight className="w-3 h-3 text-slate-400" /><span>{territory.division}</span></>}
-            {territory?.pincode && <><ArrowRight className="w-3 h-3 text-slate-400" /><span className="font-mono text-amber-500">{territory.pincode}</span></>}
-          </div>
-          {isLimitReached && (
-            <p className="text-[11px] font-bold text-rose-500 flex items-center gap-1 pt-1">
-              <AlertCircle className="w-3.5 h-3.5" /> Manager limit reached for this territory.
-            </p>
-          )}
-        </div>
-
         {error && (
-          <p className="text-xs text-rose-500 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl px-3 py-2 mb-4 font-medium">
+          <p className="text-xs text-rose-500 bg-rose-50 dark:bg-rose-900/20 border border-rose-200 dark:border-rose-800 rounded-xl px-3.5 py-2.5 mb-4 font-medium">
             {error}
           </p>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          {/* Manager Role Level Selection */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Manager Full Name *</label>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">Manager Role / Level *</label>
+            <select
+              value={level}
+              onChange={e => setLevel(e.target.value)}
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+            >
+              <option value="state">State Manager (Max 8 per State)</option>
+              <option value="district">District Manager (Max 2 per District)</option>
+              <option value="division">Division Manager (Max 2 per Division)</option>
+              <option value="pincode">Pincode Manager (Max 2 per Pincode)</option>
+            </select>
+          </div>
+
+          {/* Territory Geographic Scope */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">Assigned State *</label>
+              <input
+                type="text"
+                required
+                value={stateName}
+                onChange={e => setStateName(e.target.value)}
+                placeholder="e.g. Tamil Nadu"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+            {['district', 'division', 'pincode'].includes(level) && (
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">Assigned District *</label>
+                <input
+                  type="text"
+                  required
+                  value={districtName}
+                  onChange={e => setDistrictName(e.target.value)}
+                  placeholder="e.g. Krishnagiri"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            )}
+          </div>
+
+          {['division', 'pincode'].includes(level) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-500 mb-1">Assigned Division *</label>
+                <input
+                  type="text"
+                  required
+                  value={divisionName}
+                  onChange={e => setDivisionName(e.target.value)}
+                  placeholder="e.g. Central"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+              {level === 'pincode' && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Assigned Pincode *</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={pincodeVal}
+                    onChange={e => setPincodeVal(e.target.value.replace(/\D/g, ''))}
+                    placeholder="e.g. 635109"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">Full Name *</label>
             <input
               type="text"
               required
-              disabled={isLimitReached}
               value={form.name}
               onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-              placeholder="e.g. Ramesh Kumar"
-              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+              placeholder="Candidate Full Name"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-bold text-slate-500 mb-1">Email Address *</label>
               <input
                 type="email"
                 required
-                disabled={isLimitReached}
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                 placeholder="manager@example.com"
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
             <div>
@@ -453,35 +617,34 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting }) => {
                 type="tel"
                 required
                 maxLength={10}
-                disabled={isLimitReached}
                 value={form.phone}
                 onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '') }))}
                 placeholder="10-digit mobile"
-                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
           </div>
+
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Alternate Phone (Optional)</label>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">Alternate Contact (Optional)</label>
             <input
               type="tel"
               maxLength={10}
-              disabled={isLimitReached}
               value={form.altPhone}
               onChange={e => setForm(f => ({ ...f, altPhone: e.target.value.replace(/\D/g, '') }))}
-              placeholder="Alternate contact number"
-              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
+              placeholder="Alternate phone number"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
+
           <div>
-            <label className="block text-[11px] font-bold text-slate-500 mb-1">Notes / Nomination Justification</label>
+            <label className="block text-[11px] font-bold text-slate-500 mb-1">Notes / Onboarding Purpose</label>
             <textarea
               rows={2}
-              disabled={isLimitReached}
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-              placeholder="Why this manager is being requested for this territory…"
-              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 resize-none"
+              placeholder="Administrative notes or onboarding reason…"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
             />
           </div>
 
@@ -495,10 +658,10 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting }) => {
             </button>
             <button
               type="submit"
-              disabled={isLimitReached || submitting}
-              className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white rounded-xl text-xs font-extrabold transition-colors cursor-pointer shadow-sm"
+              disabled={submitting}
+              className="flex-1 py-2.5 bg-primary-600 hover:bg-primary-500 disabled:opacity-40 text-white rounded-xl text-xs font-black transition-all cursor-pointer shadow-sm"
             >
-              {submitting ? 'Submitting…' : isLimitReached ? 'Manager Limit Reached' : 'Submit Manager Request'}
+              {submitting ? 'Submitting…' : 'Submit Request'}
             </button>
           </div>
         </form>
@@ -508,68 +671,7 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting }) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// HIERARCHY MAP BUILDERS
-// ─────────────────────────────────────────────────────────────
-const buildDistrictMap = (districts) => {
-  const m = {};
-  districts.forEach(d => { m[d.district] = { ...d, expanded: false, loading: false, divisions: {} }; });
-  return m;
-};
-const buildDivisionMap = (divisions) => {
-  const m = {};
-  divisions.forEach(d => { m[d.division] = { ...d, expanded: false, loading: false, pincodes: {} }; });
-  return m;
-};
-const buildPincodeMap = (pincodes) => {
-  const m = {};
-  pincodes.forEach(p => { m[p.pincode] = { ...p, expanded: false, loading: false, managers: [] }; });
-  return m;
-};
-
-const updateDivNode = (hierarchy, stateName, districtName, divisionName, patch) => {
-  const stateNode = hierarchy[stateName] || {};
-  const distNode  = stateNode.districts?.[districtName] || {};
-  const divNode   = distNode.divisions?.[divisionName] || {};
-  return {
-    ...hierarchy,
-    [stateName]: {
-      ...stateNode,
-      districts: {
-        ...stateNode.districts,
-        [districtName]: {
-          ...distNode,
-          divisions: { ...distNode.divisions, [divisionName]: { ...divNode, ...patch } }
-        }
-      }
-    }
-  };
-};
-
-const updatePinNode = (hierarchy, stateName, districtName, divisionName, pincode, patch) => {
-  const stateNode = hierarchy[stateName] || {};
-  const distNode  = stateNode.districts?.[districtName] || {};
-  const divNode   = distNode.divisions?.[divisionName] || {};
-  const pinNode   = divNode.pincodes?.[pincode] || {};
-  return {
-    ...hierarchy,
-    [stateName]: {
-      ...stateNode,
-      districts: {
-        ...stateNode.districts,
-        [districtName]: {
-          ...distNode,
-          divisions: {
-            ...distNode.divisions,
-            [divisionName]: { ...divNode, pincodes: { ...divNode.pincodes, [pincode]: { ...pinNode, ...patch } } }
-          }
-        }
-      }
-    }
-  };
-};
-
-// ─────────────────────────────────────────────────────────────
-// MAIN MODULE
+// MAIN MANAGERS COMPONENT
 // ─────────────────────────────────────────────────────────────
 const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
@@ -579,26 +681,30 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
     else console.log(`[Toast ${type}]:`, msg);
   }, [onToast]);
 
-  // ── Tabs: 'hierarchy' | 'list' | 'requests' (Requirement 14)
+  // Tab State: 'hierarchy' (default) | 'list' | 'requests'
   const [activeTab, setActiveTab] = useState('hierarchy');
 
-  // ── Summary
+  // Summary KPIs
   const [summary, setSummary] = useState({ total: 0, active: 0, pending: 0, inactive: 0 });
   const [summaryLoading, setSummaryLoading] = useState(false);
 
-  // ── Hierarchy
-  const [states, setStates] = useState([]);
-  const [statesLoading, setStatesLoading] = useState(false);
-  const [hierarchy, setHierarchy] = useState({});
+  // Hierarchy Data
+  const [hierarchyStates, setHierarchyStates] = useState([]);
+  const [hierarchyLoading, setHierarchyLoading] = useState(false);
+  const [totalManagersCount, setTotalManagersCount] = useState(0);
 
-  // ── Hierarchy View Mode & Breadcrumb Drill-Down
-  const [managerViewMode, setManagerViewMode] = useState('cards'); // 'cards' | 'tree'
-  const [drillState, setDrillState] = useState('');
-  const [drillDistrict, setDrillDistrict] = useState('');
-  const [drillDivision, setDrillDivision] = useState('');
-  const [drillPincode, setDrillPincode] = useState('');
+  // Expand / Collapse State for Tree Nodes
+  // key format: 'state-Tamil Nadu', 'dist-Tamil Nadu-Krishnagiri', 'div-Tamil Nadu-Krishnagiri-Central'
+  const [expandedNodes, setExpandedNodes] = useState({});
 
-  // ── Requests
+  const toggleNode = useCallback((nodeKey) => {
+    setExpandedNodes(prev => ({
+      ...prev,
+      [nodeKey]: !prev[nodeKey]
+    }));
+  }, []);
+
+  // Manager Requests
   const [requests, setRequests] = useState([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
   const [requestStatusFilter, setRequestStatusFilter] = useState('Pending');
@@ -606,17 +712,13 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [actionLoading, setActionLoading] = useState({});
 
-  // ── Managers
-  const [managers, setManagers] = useState([]);
-  const [managersLoading, setManagersLoading] = useState(false);
-  const [managersTotal, setManagersTotal] = useState(0);
-  const [managersPage, setManagersPage] = useState(1);
+  // List View Flat Data & Pagination
+  const [flatManagers, setFlatManagers] = useState([]);
+  const [flatLoading, setFlatLoading] = useState(false);
+  const [flatTotal, setFlatTotal] = useState(0);
+  const [flatPage, setFlatPage] = useState(1);
 
-  // ── Nominate Modal
-  const [nominateTerritory, setNominateTerritory] = useState(null);
-  const [submittingNomination, setSubmittingNomination] = useState(false);
-
-  // ── Filters & Search
+  // Search & Dependent Filters
   const [search, setSearch] = useState('');
   const [filterState, setFilterState] = useState('All');
   const [filterDistrict, setFilterDistrict] = useState('All');
@@ -626,12 +728,16 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   const [filterStatus, setFilterStatus] = useState('All');
   const [territoryOptions, setTerritoryOptions] = useState({ states: [], districts: [], divisions: [], pincodes: [] });
 
-  // ── Drawer
+  // Selected Manager for Performance Drawer
   const [selectedManager, setSelectedManager] = useState(null);
+
+  // Nominate / Request Modal
+  const [nominateTerritory, setNominateTerritory] = useState(null);
+  const [submittingNomination, setSubmittingNomination] = useState(false);
 
   const searchTimerRef = useRef(null);
 
-  // ── API Helper
+  // ── Unified API Fetch Helper
   const apiFetch = useCallback(async (path, options = {}) => {
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
@@ -652,43 +758,107 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true);
     try {
-      try {
-        const data = await apiFetch('/admin/manager-directory/summary');
-        if (data?.summary) {
-          setSummary(data.summary);
-          return;
-        }
-      } catch {}
-      // Fallback
-      let total = 0, active = 0, pending = 0, inactive = 0;
-      try {
-        const data = await apiFetch('/admin/territory/stats');
-        if (data?.stats) {
-          total = data.stats.totalStates || 0;
-          active = data.stats.totalDistricts || 0;
-        }
-      } catch {}
-      setSummary({ total, active, pending, inactive });
-    } catch { /* silent */ } finally { setSummaryLoading(false); }
-  }, [apiFetch]);
-
-  const loadStates = useCallback(async () => {
-    setStatesLoading(true);
-    try {
-      let stateList = [];
-      try {
-        const data = await apiFetch('/admin/manager-directory/states');
-        if (Array.isArray(data?.states)) stateList = data.states;
-      } catch {}
-
-      if (!stateList.length) {
-        stateList = [];
+      const data = await apiFetch('/admin/manager-directory/summary');
+      if (data?.summary) {
+        setSummary(data.summary);
       }
-      setStates(stateList);
     } catch {
-      setStates([]);
-    } finally { setStatesLoading(false); }
+      setSummary({ total: 0, active: 0, pending: 0, inactive: 0 });
+    } finally {
+      setSummaryLoading(false);
+    }
   }, [apiFetch]);
+
+  const loadTerritoryOptions = useCallback(async (state, district, division) => {
+    try {
+      const params = new URLSearchParams();
+      if (state && state !== 'All') params.set('state', state);
+      if (district && district !== 'All') params.set('district', district);
+      if (division && division !== 'All') params.set('division', division);
+
+      const data = await apiFetch(`/admin/manager-directory/territory-options?${params.toString()}`);
+      if (data?.success) {
+        setTerritoryOptions({
+          states: Array.isArray(data.states) ? data.states : [],
+          districts: Array.isArray(data.districts) ? data.districts : [],
+          divisions: Array.isArray(data.divisions) ? data.divisions : [],
+          pincodes: Array.isArray(data.pincodes) ? data.pincodes : []
+        });
+      }
+    } catch {
+      setTerritoryOptions({ states: [], districts: [], divisions: [], pincodes: [] });
+    }
+  }, [apiFetch]);
+
+  const loadHierarchy = useCallback(async () => {
+    setHierarchyLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (search.trim()) params.set('search', search.trim());
+      if (filterState && filterState !== 'All') params.set('state', filterState);
+      if (filterDistrict && filterDistrict !== 'All') params.set('district', filterDistrict);
+      if (filterDivision && filterDivision !== 'All') params.set('division', filterDivision);
+      if (filterPincode && filterPincode !== 'All') params.set('pincode', filterPincode);
+      if (filterLevel && filterLevel !== 'All') params.set('level', filterLevel);
+      if (filterStatus && filterStatus !== 'All') params.set('status', filterStatus);
+
+      const data = await apiFetch(`/admin/manager-directory/hierarchy?${params.toString()}`);
+      if (data?.success && Array.isArray(data.states)) {
+        setHierarchyStates(data.states);
+        setTotalManagersCount(data.totalManagers || 0);
+
+        // If search or filter is active, auto-expand matching nodes for convenience
+        if (search.trim() || filterDistrict !== 'All' || filterDivision !== 'All' || filterPincode !== 'All') {
+          const autoExpand = {};
+          data.states.forEach(st => {
+            autoExpand[`state-${st.state}`] = true;
+            (st.districts || []).forEach(d => {
+              autoExpand[`dist-${st.state}-${d.district}`] = true;
+              (d.divisions || []).forEach(div => {
+                autoExpand[`div-${st.state}-${d.district}-${div.division}`] = true;
+              });
+            });
+          });
+          setExpandedNodes(prev => ({ ...prev, ...autoExpand }));
+        }
+      } else {
+        setHierarchyStates([]);
+        setTotalManagersCount(0);
+      }
+    } catch {
+      setHierarchyStates([]);
+      setTotalManagersCount(0);
+    } finally {
+      setHierarchyLoading(false);
+    }
+  }, [apiFetch, search, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus]);
+
+  const loadFlatManagers = useCallback(async (page = 1) => {
+    setFlatLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: '30',
+        search: search.trim(),
+        state: filterState,
+        district: filterDistrict,
+        division: filterDivision,
+        pincode: filterPincode,
+        level: filterLevel,
+        status: filterStatus
+      });
+      const data = await apiFetch(`/admin/manager-directory/managers?${params.toString()}`);
+      const list = data?.managers || (Array.isArray(data) ? data : []);
+      setFlatManagers(list);
+      setFlatTotal(data?.total || list.length);
+      setFlatPage(page);
+    } catch {
+      setFlatManagers([]);
+      setFlatTotal(0);
+    } finally {
+      setFlatLoading(false);
+    }
+  }, [apiFetch, search, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus]);
 
   const loadRequests = useCallback(async () => {
     setRequestsLoading(true);
@@ -703,109 +873,43 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
     }
   }, [apiFetch, requestStatusFilter]);
 
-  const loadManagers = useCallback(async (page = 1) => {
-    setManagersLoading(true);
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: '30',
-        search: search.trim(),
-        state: filterState,
-        district: filterDistrict,
-        division: filterDivision,
-        pincode: filterPincode,
-        level: filterLevel,
-        status: filterStatus
-      });
-      const data = await apiFetch(`/admin/manager-directory/managers?${params.toString()}`);
-      const all = data?.managers || (Array.isArray(data) ? data : []);
-      const normalizedAll = all.map(m => ({
-        ...m,
-        level: normalizeManagerLevel(m.level, m.role),
-        phone: m.phone || m.mobile || ''
-      }));
-      setManagers(normalizedAll);
-      setManagersTotal(data?.total || all.length);
-      setManagersPage(page);
-    } catch {
-      try {
-        const data = await apiFetch('/admin/admins');
-        const all = Array.isArray(data) ? data : (data?.admins || []);
-        const normalizedAll = all.map(m => ({
-          ...m,
-          level: normalizeManagerLevel(m.level, m.role),
-          phone: m.phone || m.mobile || ''
-        }));
-        setManagers(normalizedAll);
-        setManagersTotal(all.length);
-        setManagersPage(page);
-      } catch {
-        setManagers([]);
-        setManagersTotal(0);
-      }
-    } finally {
-      setManagersLoading(false);
-    }
-  }, [apiFetch, search, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus]);
-
-  const loadTerritoryOptions = useCallback(async (state, district, division) => {
-    try {
-      let stList = [];
-      let dtList = [];
-      let dvList = [];
-      let pcList = [];
-      try {
-        const stRes = await apiFetch('/admin/territory/states');
-        const raw = Array.isArray(stRes) ? stRes : (stRes?.states || []);
-        stList = raw.map(s => s.name || s.state || s).filter(Boolean);
-      } catch {}
-      if (!stList.length) stList = [];
-
-      if (state && state !== 'All') {
-        try {
-          const dtRes = await apiFetch(`/admin/territory/districts?state=${encodeURIComponent(state)}`);
-          const rawD = Array.isArray(dtRes) ? dtRes : (dtRes?.districts || []);
-          dtList = rawD.map(d => d.name || d.district || d).filter(Boolean);
-        } catch {}
-      }
-      if (district && district !== 'All') {
-        try {
-          const dvRes = await apiFetch(`/admin/territory/divisions?district=${encodeURIComponent(district)}`);
-          const rawV = Array.isArray(dvRes) ? dvRes : (dvRes?.divisions || []);
-          dvList = rawV.map(v => v.name || v.division || v).filter(Boolean);
-        } catch {}
-      }
-      if (division && division !== 'All') {
-        try {
-          const pcRes = await apiFetch(`/admin/territory/pincodes?division=${encodeURIComponent(division)}`);
-          const rawP = Array.isArray(pcRes) ? pcRes : (pcRes?.pincodes || []);
-          pcList = rawP.map(p => p.pincode || p.code || p).filter(Boolean);
-        } catch {}
-      }
-      setTerritoryOptions({
-        states: stList,
-        districts: dtList,
-        divisions: dvList,
-        pincodes: pcList
-      });
-    } catch { /* silent */ }
-  }, [apiFetch]);
-
-  // Initial load
-  useEffect(() => { loadSummary(); loadStates(); loadTerritoryOptions(); }, []);
-
-  useEffect(() => { if (activeTab === 'requests') loadRequests(); }, [activeTab, requestStatusFilter]);
-  useEffect(() => { if (activeTab === 'list') loadManagers(1); }, [activeTab, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus]);
-
-  // Debounced search
+  // Initial Load
   useEffect(() => {
-    if (activeTab !== 'list') return;
-    clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = setTimeout(() => loadManagers(1), 400);
-    return () => clearTimeout(searchTimerRef.current);
-  }, [search]);
+    loadSummary();
+    loadHierarchy();
+    loadTerritoryOptions();
+  }, []);
 
-  // Cascading territory dropdowns
+  // Hierarchy Reload when filters/search change
+  useEffect(() => {
+    if (activeTab === 'hierarchy') {
+      clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = setTimeout(() => {
+        loadHierarchy();
+      }, 350);
+      return () => clearTimeout(searchTimerRef.current);
+    }
+  }, [activeTab, search, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus, loadHierarchy]);
+
+  // List Reload
+  useEffect(() => {
+    if (activeTab === 'list') {
+      clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = setTimeout(() => {
+        loadFlatManagers(1);
+      }, 350);
+      return () => clearTimeout(searchTimerRef.current);
+    }
+  }, [activeTab, search, filterState, filterDistrict, filterDivision, filterPincode, filterLevel, filterStatus, loadFlatManagers]);
+
+  // Requests Reload
+  useEffect(() => {
+    if (activeTab === 'requests') {
+      loadRequests();
+    }
+  }, [activeTab, requestStatusFilter, loadRequests]);
+
+  // Cascading territory filter triggers
   useEffect(() => {
     loadTerritoryOptions(filterState, 'All', 'All');
     setFilterDistrict('All'); setFilterDivision('All'); setFilterPincode('All');
@@ -821,89 +925,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
     setFilterPincode('All');
   }, [filterDivision]);
 
-  // ── Hierarchy Expansion ───────────────────────────────────
-  const expandState = useCallback(async (stateName) => {
-    const existing = hierarchy[stateName];
-    if (existing?.expanded && Object.keys(existing.districts || {}).length > 0) {
-      setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], expanded: false } }));
-      return;
-    }
-    setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], expanded: true, loading: true, districts: {} } }));
-    try {
-      let rawD = [];
-      try {
-        const data = await apiFetch(`/admin/manager-directory/states/${encodeURIComponent(stateName)}/districts`);
-        if (Array.isArray(data?.districts)) rawD = data.districts;
-      } catch {}
-
-      setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, districts: buildDistrictMap(rawD) } }));
-    } catch {
-      setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, error: true } }));
-    }
-  }, [apiFetch, hierarchy]);
-
-  const expandDistrict = useCallback(async (stateName, districtName) => {
-    const distNode = hierarchy[stateName]?.districts?.[districtName] || {};
-    if (distNode.expanded && Object.keys(distNode.divisions || {}).length > 0) {
-      setHierarchy(prev => ({
-        ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...distNode, expanded: false } } }
-      }));
-      return;
-    }
-    setHierarchy(prev => ({
-      ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...distNode, expanded: true, loading: true, divisions: {} } } }
-    }));
-    try {
-      let rawV = [];
-      try {
-        const data = await apiFetch(`/admin/manager-directory/districts/${encodeURIComponent(districtName)}/divisions?state=${encodeURIComponent(stateName)}`);
-        if (Array.isArray(data?.divisions)) rawV = data.divisions;
-      } catch {}
-
-      setHierarchy(prev => ({
-        ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...prev[stateName].districts[districtName], loading: false, divisions: buildDivisionMap(rawV) } } }
-      }));
-    } catch { /* silent */ }
-  }, [apiFetch, hierarchy]);
-
-  const expandDivision = useCallback(async (stateName, districtName, divisionName) => {
-    const divNode = hierarchy[stateName]?.districts?.[districtName]?.divisions?.[divisionName] || {};
-    if (divNode.expanded && Object.keys(divNode.pincodes || {}).length > 0) {
-      setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { expanded: false }));
-      return;
-    }
-    setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { expanded: true, loading: true, pincodes: {} }));
-    try {
-      let rawP = [];
-      try {
-        const data = await apiFetch(`/admin/manager-directory/divisions/${encodeURIComponent(divisionName)}/pincodes?state=${encodeURIComponent(stateName)}&district=${encodeURIComponent(districtName)}`);
-        if (Array.isArray(data?.pincodes)) rawP = data.pincodes;
-      } catch {}
-
-      setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { loading: false, pincodes: buildPincodeMap(rawP) }));
-    } catch { /* silent */ }
-  }, [apiFetch, hierarchy]);
-
-  const expandPincode = useCallback(async (stateName, districtName, divisionName, pincode) => {
-    const pinNode = hierarchy[stateName]?.districts?.[districtName]?.divisions?.[divisionName]?.pincodes?.[pincode] || {};
-    if (pinNode.expanded && pinNode.managers?.length) {
-      setHierarchy(prev => updatePinNode(prev, stateName, districtName, divisionName, pincode, { expanded: false }));
-      return;
-    }
-    setHierarchy(prev => updatePinNode(prev, stateName, districtName, divisionName, pincode, { expanded: true, loading: true, managers: [] }));
-    try {
-      let mgrList = [];
-      try {
-        const data = await apiFetch(`/admin/manager-directory/pincodes/${encodeURIComponent(pincode)}/managers?state=${encodeURIComponent(stateName)}&district=${encodeURIComponent(districtName)}&division=${encodeURIComponent(divisionName)}`);
-        if (Array.isArray(data?.managers)) mgrList = data.managers;
-      } catch {}
-      setHierarchy(prev => updatePinNode(prev, stateName, districtName, divisionName, pincode, { loading: false, managers: mgrList }));
-    } catch {
-      setHierarchy(prev => updatePinNode(prev, stateName, districtName, divisionName, pincode, { loading: false, managers: [] }));
-    }
-  }, [apiFetch, hierarchy]);
-
-  // ── Nominate / Request Manager Submit
+  // ── Nominate / Onboard Handler
   const handleNominateSubmit = async (formData) => {
     setSubmittingNomination(true);
     try {
@@ -915,7 +937,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       setNominateTerritory(null);
       loadRequests();
       loadSummary();
-      loadStates();
+      loadHierarchy();
     } catch (err) {
       notify(err.message || 'Error submitting manager request.', 'error');
     } finally {
@@ -923,829 +945,731 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
     }
   };
 
-  // ── Approve / Reject Handlers
+  // ── Approval / Rejection Handlers
   const handleApprove = useCallback(async (request) => {
     setActionLoading(prev => ({ ...prev, [request._id]: 'approve' }));
     try {
-      try {
-        await apiFetch(`/admin/manager-directory/requests/${request._id}/approve`, { method: 'PUT' });
-      } catch (e) {
-        console.warn('Backend approval delegate:', e.message);
-      }
+      await apiFetch(`/admin/manager-directory/requests/${request._id}/approve`, { method: 'PUT' });
       notify(`Manager onboarding for ${request.name} approved!`, 'success');
-      loadRequests(); loadSummary(); loadStates(); setHierarchy({});
-    } catch (err) { notify(err.message || 'Approval failed', 'error'); }
-    finally { setActionLoading(prev => { const n = { ...prev }; delete n[request._id]; return n; }); }
-  }, [apiFetch, notify, loadRequests, loadSummary, loadStates]);
+      loadRequests();
+      loadSummary();
+      loadHierarchy();
+      if (activeTab === 'list') loadFlatManagers(flatPage);
+    } catch (err) {
+      notify(err.message || 'Approval failed', 'error');
+    } finally {
+      setActionLoading(prev => { const n = { ...prev }; delete n[request._id]; return n; });
+    }
+  }, [apiFetch, notify, loadRequests, loadSummary, loadHierarchy, activeTab, loadFlatManagers, flatPage]);
 
   const handleReject = useCallback(async () => {
     if (!rejectingRequest) return;
     setActionLoading(prev => ({ ...prev, [rejectingRequest._id]: 'reject' }));
     try {
-      try {
-        await apiFetch(`/admin/manager-directory/requests/${rejectingRequest._id}/reject`, {
-          method: 'PUT',
-          body: JSON.stringify({ reason: rejectionReason })
-        });
-      } catch (e) {
-        console.warn('Backend rejection delegate:', e.message);
-      }
+      await apiFetch(`/admin/manager-directory/requests/${rejectingRequest._id}/reject`, {
+        method: 'PUT',
+        body: JSON.stringify({ reason: rejectionReason })
+      });
       notify(`Request for ${rejectingRequest.name} rejected.`, 'info');
-      setRejectingRequest(null); setRejectionReason('');
-      loadRequests(); loadSummary();
-    } catch (err) { notify(err.message || 'Rejection failed', 'error'); }
-    finally { setActionLoading(prev => { const n = { ...prev }; delete n[rejectingRequest._id]; return n; }); }
+      setRejectingRequest(null);
+      setRejectionReason('');
+      loadRequests();
+      loadSummary();
+    } catch (err) {
+      notify(err.message || 'Rejection failed', 'error');
+    } finally {
+      setActionLoading(prev => { const n = { ...prev }; delete n[rejectingRequest._id]; return n; });
+    }
   }, [apiFetch, notify, loadRequests, loadSummary, rejectingRequest, rejectionReason]);
 
   const handleStatusUpdate = useCallback(async (mgr, status) => {
     try {
-      try {
-        await apiFetch(`/admin/manager-directory/managers/${mgr._id}/status`, {
-          method: 'PUT',
-          body: JSON.stringify({ status })
-        });
-      } catch {}
+      await apiFetch(`/admin/manager-directory/managers/${mgr._id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status })
+      });
       notify(`Status updated to ${status}`, 'success');
-      if (activeTab === 'list') loadManagers(managersPage);
+      loadHierarchy();
       loadSummary();
-    } catch (err) { notify(err.message || 'Status update failed', 'error'); }
-  }, [apiFetch, notify, activeTab, loadManagers, managersPage, loadSummary]);
+      if (activeTab === 'list') loadFlatManagers(flatPage);
+    } catch (err) {
+      notify(err.message || 'Status update failed', 'error');
+    }
+  }, [apiFetch, notify, loadHierarchy, loadSummary, activeTab, loadFlatManagers, flatPage]);
 
-  // ── Hierarchy Tree Renderer (Requirement 11, 12, 14)
-  const renderTree = () => {
-    if (statesLoading) return (
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 flex items-center justify-center gap-3 text-slate-400">
-        <RefreshCw className="w-5 h-5 animate-spin" /> Loading territory data…
-      </div>
-    );
-
-    if (!states.length) return (
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
-        <Globe className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-        <p className="text-sm font-semibold text-slate-500">No manager territories found.</p>
-        <p className="text-xs text-slate-400 mt-1">Managers will appear here once they are approved and assigned territories.</p>
-      </div>
-    );
-
-    return (
-      <div className="space-y-2">
-        {states.map(stateObj => {
-          const stateNode = hierarchy[stateObj.state] || {};
-          const isExpanded = stateNode.expanded;
-          const stateCount = stateObj.totalManagers || 0;
-          const stateLimit = MANAGER_LIMITS.state; // 8
-
-          return (
-            <div key={stateObj.state} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
-              {/* ── STATE ROW (Limit: Max 8) ── */}
-              <button
-                onClick={() => expandState(stateObj.state)}
-                className="w-full flex items-center gap-3 px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors text-left cursor-pointer"
-              >
-                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
-                  <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-black text-slate-800 dark:text-slate-100">{stateObj.state}</p>
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                      STATE LEVEL
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                    {stateObj.activeManagers || 0} active · {stateObj.pendingRequests > 0 ? <span className="text-amber-500 font-bold">{stateObj.pendingRequests} pending</span> : '0 pending'}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  {/* Quota Badge (Requirement 12: STATE -> Max 8) */}
-                  <QuotaBadge
-                    count={stateCount}
-                    limit={stateLimit}
-                    onNominate={() => setNominateTerritory({ level: 'state', state: stateObj.state, currentCount: stateCount })}
-                  />
-                  {stateNode.loading
-                    ? <RefreshCw className="w-4 h-4 text-slate-400 animate-spin" />
-                    : (isExpanded ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />)
-                  }
-                </div>
-              </button>
-
-              {/* ── DISTRICTS (Limit: Max 2) ── */}
-              {isExpanded && (
-                <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20">
-                  {Object.values(stateNode.districts || {}).length === 0 && !stateNode.loading && (
-                    <p className="text-[11px] text-slate-400 text-center py-4">No district records loaded</p>
-                  )}
-                  {Object.values(stateNode.districts || {}).map(distObj => {
-                    const distExpanded = distObj.expanded;
-                    const distCount = distObj.totalManagers || 0;
-                    const distLimit = MANAGER_LIMITS.district; // 2
-
-                    return (
-                      <div key={distObj.district}>
-                        <button
-                          onClick={() => expandDistrict(stateObj.state, distObj.district)}
-                          className="w-full flex items-center gap-3 pl-10 pr-5 py-3.5 hover:bg-slate-100/70 dark:hover:bg-slate-800/40 transition-colors text-left border-t border-slate-100 dark:border-slate-800 first:border-t-0 cursor-pointer"
-                        >
-                          <div className="p-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 flex-shrink-0">
-                            <Building2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{distObj.district}</p>
-                              <span className="text-[9px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded-full">
-                                DISTRICT
-                              </span>
-                            </div>
-                            <p className="text-[10px] text-slate-400">{distObj.activeManagers || 0} active</p>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            {/* Quota Badge (Requirement 12: DISTRICT -> Max 2) */}
-                            <QuotaBadge
-                              count={distCount}
-                              limit={distLimit}
-                              onNominate={() => setNominateTerritory({ level: 'district', state: stateObj.state, district: distObj.district, currentCount: distCount })}
-                            />
-                            {distObj.loading
-                              ? <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin" />
-                              : (distExpanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />)
-                            }
-                          </div>
-                        </button>
-
-                        {/* ── DIVISIONS (Limit: Max 2) ── */}
-                        {distExpanded && (
-                          <div className="bg-slate-50 dark:bg-slate-800/30">
-                            {Object.values(distObj.divisions || {}).map(divObj => {
-                              const divExpanded = divObj.expanded;
-                              const divCount = divObj.totalManagers || 0;
-                              const divLimit = MANAGER_LIMITS.division; // 2
-
-                              return (
-                                <div key={divObj.division}>
-                                  <button
-                                    onClick={() => expandDivision(stateObj.state, distObj.district, divObj.division)}
-                                    className="w-full flex items-center gap-3 pl-16 pr-5 py-3 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-colors text-left border-t border-slate-100 dark:border-slate-800 first:border-t-0 cursor-pointer"
-                                  >
-                                    <div className="p-1.5 rounded-md bg-purple-500/10 border border-purple-500/20 flex-shrink-0">
-                                      <Map className="w-3 h-3 text-purple-600 dark:text-purple-400" />
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">{divObj.division}</p>
-                                        <span className="text-[9px] font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.2 rounded-full">
-                                          DIVISION
-                                        </span>
-                                      </div>
-                                      <p className="text-[10px] text-slate-400">{divObj.activeManagers || 0} active</p>
-                                    </div>
-
-                                    <div className="flex items-center gap-3">
-                                      {/* Quota Badge (Requirement 12: DIVISION -> Max 2) */}
-                                      <QuotaBadge
-                                        count={divCount}
-                                        limit={divLimit}
-                                        onNominate={() => setNominateTerritory({ level: 'division', state: stateObj.state, district: distObj.district, division: divObj.division, currentCount: divCount })}
-                                      />
-                                      {divObj.loading
-                                        ? <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin" />
-                                        : (divExpanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />)
-                                      }
-                                    </div>
-                                  </button>
-
-                                  {/* ── PINCODES (Limit: Max 2) ── */}
-                                  {divExpanded && (
-                                    <div className="bg-white dark:bg-slate-900/40">
-                                      {Object.values(divObj.pincodes || {}).map(pinObj => {
-                                        const pinExpanded = pinObj.expanded;
-                                        const pinCount = pinObj.totalManagers || (pinObj.managers?.length || 0);
-                                        const pinLimit = MANAGER_LIMITS.pincode; // 2
-
-                                        return (
-                                          <div key={pinObj.pincode}>
-                                            <button
-                                              onClick={() => expandPincode(stateObj.state, distObj.district, divObj.division, pinObj.pincode)}
-                                              className="w-full flex items-center gap-3 pl-20 pr-5 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors text-left border-t border-slate-100 dark:border-slate-800 first:border-t-0 cursor-pointer"
-                                            >
-                                              <div className="p-1 rounded bg-amber-500/10 border border-amber-500/20 flex-shrink-0">
-                                                <MapPin className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                                              </div>
-                                              <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                  <p className="text-xs font-bold text-slate-600 dark:text-slate-300 font-mono">{pinObj.pincode}</p>
-                                                  <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded-full">
-                                                    PINCODE
-                                                  </span>
-                                                </div>
-                                                <p className="text-[10px] text-slate-400">{pinObj.activeManagers || 0} active</p>
-                                              </div>
-
-                                              <div className="flex items-center gap-3">
-                                                {/* Quota Badge (Requirement 12: PINCODE -> Max 2) */}
-                                                <QuotaBadge
-                                                  count={pinCount}
-                                                  limit={pinLimit}
-                                                  onNominate={() => setNominateTerritory({ level: 'pincode', state: stateObj.state, district: distObj.district, division: divObj.division, pincode: pinObj.pincode, currentCount: pinCount })}
-                                                />
-                                                {pinObj.loading
-                                                  ? <RefreshCw className="w-3.5 h-3.5 text-slate-400 animate-spin" />
-                                                  : (pinExpanded ? <ChevronDown className="w-3.5 h-3.5 text-slate-400" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-400" />)
-                                                }
-                                              </div>
-                                            </button>
-
-                                            {/* ── PINCODE MANAGERS LIST ── */}
-                                            {pinExpanded && (
-                                              <div className="pl-24 pr-5 pb-3 pt-1 space-y-1.5 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
-                                                {pinObj.loading && (
-                                                  <div className="flex items-center gap-2 py-2 text-[11px] text-slate-400">
-                                                    <RefreshCw className="w-3 h-3 animate-spin" /> Loading managers…
-                                                  </div>
-                                                )}
-                                                {!pinObj.loading && !pinObj.managers?.length && (
-                                                  <p className="text-[11px] text-slate-400 py-2">No managers assigned to this pincode.</p>
-                                                )}
-                                                {(pinObj.managers || []).map(mgr => (
-                                                  <div key={mgr._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 flex items-center gap-3 hover:border-slate-300 dark:hover:border-slate-600 transition-colors shadow-xs">
-                                                    <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 flex-shrink-0">
-                                                      <User className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                                                    </div>
-                                                    <div className="flex-1 min-w-0">
-                                                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{mgr.name}</p>
-                                                      <p className="text-[10px] text-slate-400">{mgr.phone} · {mgr.managerId || mgr.email}</p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                      <StatusBadge status={mgr.status} />
-                                                      <button onClick={() => setSelectedManager(mgr)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors" title="View Details">
-                                                        <Eye className="w-3.5 h-3.5" />
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  // ─────────────────────────────────────────────────────────
-  // MAIN RENDER
-  // ─────────────────────────────────────────────────────────
   const pendingCount = summary.pending || 0;
 
   return (
     <div className="space-y-6 pb-12">
-
       {/* ── HEADER ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-sm flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-3xl shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Managers</h2>
-            <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-sm">
-              Territory Management
+            <span className="text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs">
+              Live Database Verified
             </span>
             {pendingCount > 0 && (
               <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
-                ⚠ {pendingCount} Pending
+                ⚠ {pendingCount} Pending Requests
               </span>
             )}
           </div>
           <p className="text-xs text-slate-400 font-semibold mt-1">
-            State Manager (Max 8) → District Manager (Max 2) → Division Manager (Max 2) → Pincode Manager (Max 2)
+            Hierarchical Geographic Flow: State Manager → District Manager → Division Manager → Pincode Manager
           </p>
         </div>
-        <button
-          onClick={() => { loadSummary(); loadStates(); setHierarchy({}); if (activeTab === 'requests') loadRequests(); if (activeTab === 'list') loadManagers(1); }}
-          className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => {
+              loadSummary();
+              loadHierarchy();
+              loadTerritoryOptions();
+              if (activeTab === 'requests') loadRequests();
+              if (activeTab === 'list') loadFlatManagers(1);
+            }}
+            className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 transition-all cursor-pointer shrink-0"
+            title="Refresh Manager Directory"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+          <button
+            onClick={() => setNominateTerritory({ level: 'state', state: '', currentCount: 0 })}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-primary-600 hover:bg-primary-500 text-white font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4" /> Request Manager
+          </button>
+        </div>
       </div>
 
-      {/* ── KPI CARDS ── */}
+      {/* ── KPI METRICS CARDS ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {[
-          { label: 'Total Managers', value: summary.total,    icon: Users,        color: 'indigo',  sub: 'All territory levels' },
-          { label: 'Active Managers',value: summary.active,   icon: UserCheck,    color: 'emerald', sub: 'Currently operational' },
-          { label: 'Pending Requests',value: summary.pending, icon: Clock,        color: 'amber',   sub: 'Awaiting approval' },
-          { label: 'Inactive/Suspended',value: summary.inactive, icon: AlertCircle, color: 'red',  sub: 'Disabled accounts' },
+          { label: 'Total Managers', value: summary.total,    icon: Users,        color: 'emerald', sub: 'Active & inactive' },
+          { label: 'Active Managers',value: summary.active,   icon: UserCheck,    color: 'teal',    sub: 'Currently operational' },
+          { label: 'Pending Requests',value: summary.pending, icon: Clock,        color: 'amber',   sub: 'Awaiting Admin review' },
+          { label: 'Inactive / Suspended',value: summary.inactive, icon: AlertCircle, color: 'red', sub: 'Disabled records' },
         ].map(card => (
           <div key={card.label} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">{card.label}</span>
               <div className={`p-1.5 rounded-lg ${
-                card.color === 'emerald' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' :
+                card.color === 'teal'    ? 'bg-teal-500/10 text-teal-600 dark:text-teal-400' :
                 card.color === 'amber'   ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' :
                 card.color === 'red'     ? 'bg-red-500/10 text-red-600 dark:text-red-400' :
-                                           'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400'
+                                           'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
               }`}>
                 <card.icon className="w-4 h-4" />
               </div>
             </div>
             <h3 className="text-2xl font-black text-slate-800 dark:text-slate-100">{summaryLoading ? '…' : (card.value ?? 0)}</h3>
             <p className={`text-[10px] font-bold mt-0.5 ${
-              card.color === 'emerald' ? 'text-emerald-500' :
+              card.color === 'teal'    ? 'text-teal-500' :
               card.color === 'amber'   ? 'text-amber-500' :
-              card.color === 'red'     ? 'text-red-500' : 'text-indigo-500'
+              card.color === 'red'     ? 'text-red-500' : 'text-emerald-500'
             }`}>{card.sub}</p>
           </div>
         ))}
       </div>
 
-      {/* ── TOP CONTROLS: HIERARCHY / LIST / REQUESTS (Requirement 14) ── */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/60 overflow-x-auto">
-          {[
-            { id: 'hierarchy', label: 'Hierarchy', icon: Layers },
-            { id: 'list',      label: 'List', icon: List },
-            { id: 'requests',  label: `Requests${pendingCount > 0 ? ` (${pendingCount})` : ''}`, icon: Clock },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-extrabold transition-all cursor-pointer shrink-0 ${
-                activeTab === tab.id
-                  ? 'bg-primary-600 text-white shadow-sm'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              {tab.label}
-              {tab.id === 'requests' && pendingCount > 0 && (
-                <span className="w-4 h-4 flex items-center justify-center text-[9px] rounded-full bg-rose-500 text-white font-black animate-pulse">{pendingCount}</span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Global Nominate Action */}
-        <button
-          onClick={() => setNominateTerritory({ level: 'state', state: states[0]?.state || '', currentCount: 0 })}
-          className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> Request Manager
-        </button>
+      {/* ── TOP CONTROLS & TABS ── */}
+      <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-850 p-1.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 w-fit">
+        {[
+          { id: 'hierarchy', label: 'Hierarchy View', icon: Layers },
+          { id: 'list',      label: 'All Managers List', icon: List },
+          { id: 'requests',  label: `Onboarding Requests${pendingCount > 0 ? ` (${pendingCount})` : ''}`, icon: Clock },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              activeTab === tab.id
+                ? 'bg-white dark:bg-slate-900 text-primary-600 dark:text-primary-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <tab.icon className="w-3.5 h-3.5" />
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* ── HIERARCHICAL VIEW TAB (Requirement 14 & Drill-down Cards) ── */}
+      {/* ── SEARCH & DEPENDENT REAL FILTERS (Active on both Hierarchy and List) ── */}
+      {activeTab !== 'requests' && (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-3xl shadow-xs space-y-3">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name, mobile, email or Manager ID…"
+              className="w-full pl-9 pr-9 py-2.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-slate-800 dark:text-slate-200 font-medium"
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+            {/* State Filter */}
+            <select
+              value={filterState}
+              onChange={e => setFilterState(e.target.value)}
+              className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="All">All States</option>
+              {territoryOptions.states.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+
+            {/* District Filter (Cascaded strictly from real records) */}
+            <select
+              value={filterDistrict}
+              onChange={e => setFilterDistrict(e.target.value)}
+              disabled={filterState === 'All'}
+              className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer disabled:opacity-40"
+            >
+              <option value="All">All Districts</option>
+              {territoryOptions.districts.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+
+            {/* Division Filter */}
+            <select
+              value={filterDivision}
+              onChange={e => setFilterDivision(e.target.value)}
+              disabled={filterDistrict === 'All'}
+              className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer disabled:opacity-40"
+            >
+              <option value="All">All Divisions</option>
+              {territoryOptions.divisions.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+
+            {/* Pincode Filter */}
+            <select
+              value={filterPincode}
+              onChange={e => setFilterPincode(e.target.value)}
+              disabled={filterDivision === 'All'}
+              className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer disabled:opacity-40"
+            >
+              <option value="All">All Pincodes</option>
+              {territoryOptions.pincodes.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+
+            {/* Role Filter */}
+            <select
+              value={filterLevel}
+              onChange={e => setFilterLevel(e.target.value)}
+              className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="All">All Types</option>
+              <option value="state">State Manager</option>
+              <option value="district">District Manager</option>
+              <option value="division">Division Manager</option>
+              <option value="pincode">Pincode Manager</option>
+            </select>
+
+            {/* Status Filter */}
+            <select
+              value={filterStatus}
+              onChange={e => setFilterStatus(e.target.value)}
+              className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer"
+            >
+              <option value="All">All Status</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+              <option value="Suspended">Suspended</option>
+            </select>
+          </div>
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* 1. HIERARCHICAL EXPANDABLE DISPLAY (DEFAULT VIEW) */}
+      {/* State Manager [ > ] -> District Manager [ > ] -> Division Manager [ > ] -> Pincode Manager */}
+      {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === 'hierarchy' && (
         <div className="space-y-4">
-          {/* VIEW SWITCHER & BREADCRUMB */}
-          <div className="flex items-center justify-between gap-3 flex-wrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-xs">
-            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
-              <button
-                onClick={() => setManagerViewMode('cards')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${managerViewMode === 'cards' ? 'bg-white dark:bg-slate-900 text-primary-600 dark:text-primary-400 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" /> Drill-Down Cards
-              </button>
-              <button
-                onClick={() => setManagerViewMode('tree')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${managerViewMode === 'tree' ? 'bg-white dark:bg-slate-900 text-primary-600 dark:text-primary-400 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
-              >
-                <ListTree className="w-3.5 h-3.5" /> Tree View
-              </button>
+          {hierarchyLoading ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 flex items-center justify-center gap-3 text-slate-400">
+              <RefreshCw className="w-5 h-5 animate-spin text-primary-500" /> Loading manager hierarchy…
             </div>
-
-            <div className="text-xs text-slate-400 font-medium">
-              Strict Assignment Mode: Only territories with assigned managers are displayed.
-            </div>
-          </div>
-
-          {/* INTERACTIVE BREADCRUMB BAR */}
-          <div className="bg-slate-100/90 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-2xl flex items-center gap-2.5 text-xs font-semibold overflow-x-auto shadow-xs">
-            <span className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-wider shrink-0">Territory Scope:</span>
-            <button
-              onClick={() => { setDrillState(''); setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
-              className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillState ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
-            >
-              All States
-            </button>
-            {drillState && (
-              <>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <button
-                  onClick={() => { setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
-                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillDistrict ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
-                >
-                  {drillState}
-                </button>
-              </>
-            )}
-            {drillDistrict && (
-              <>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <button
-                  onClick={() => { setDrillDivision(''); setDrillPincode(''); }}
-                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillDivision ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
-                >
-                  {drillDistrict}
-                </button>
-              </>
-            )}
-            {drillDivision && (
-              <>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <button
-                  onClick={() => { setDrillPincode(''); }}
-                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillPincode ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
-                >
-                  {drillDivision}
-                </button>
-              </>
-            )}
-            {drillPincode && (
-              <>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="font-black text-primary-600 dark:text-primary-400 px-2.5 py-1 rounded-lg bg-primary-500/10 border border-primary-500/30 shrink-0">
-                  {drillPincode}
-                </span>
-              </>
-            )}
-          </div>
-
-          {managerViewMode === 'cards' ? (
-            /* ── DRILL DOWN CARDS VIEW ── */
-            <div className="space-y-5">
-              {/* SCREEN 1: STATES */}
-              {!drillState && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">States with Assigned Managers</h3>
-                      <p className="text-xs text-slate-400">Click any state card to drill down into assigned districts.</p>
-                    </div>
-                    <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
-                      {states.length} Active {states.length === 1 ? 'State' : 'States'}
-                    </span>
-                  </div>
-
-                  {statesLoading ? (
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 flex items-center justify-center gap-3 text-slate-400">
-                      <RefreshCw className="w-5 h-5 animate-spin" /> Loading manager territories…
-                    </div>
-                  ) : states.length === 0 ? (
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
-                      <Globe className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-                      <p className="text-sm font-semibold text-slate-500">No manager territories found.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {states.map(s => (
-                        <div
-                          key={s.state}
-                          onClick={() => {
-                            setDrillState(s.state);
-                            setDrillDistrict('');
-                            setDrillDivision('');
-                            setDrillPincode('');
-                            expandState(s.state);
-                          }}
-                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
-                        >
-                          <div>
-                            <div className="flex items-center justify-between mb-3">
-                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                                STATE
-                              </span>
-                              <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-emerald-600 transition-colors">
-                                View Districts <ArrowRight className="w-3.5 h-3.5" />
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
-                                <Globe className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                              </div>
-                              <div>
-                                <h4 className="text-base font-black text-slate-900 dark:text-white">{s.state}</h4>
-                                <p className="text-xs text-slate-400 mt-0.5">
-                                  {s.activeManagers || 0} active · {s.pendingRequests || 0} pending
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
-                            <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                              <span className="text-[10px] text-slate-400 block font-semibold">Active</span>
-                              <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{s.activeManagers || 0}</strong>
-                            </div>
-                            <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                              <span className="text-[10px] text-slate-400 block font-semibold">Pending</span>
-                              <strong className="text-xs font-black text-amber-500">{s.pendingRequests || 0}</strong>
-                            </div>
-                            <div className="p-2 bg-emerald-500/10 rounded-xl">
-                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">Quota</span>
-                              <strong className="text-xs font-black text-emerald-600 dark:text-emerald-400">{s.totalManagers || 0} / 8</strong>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* SCREEN 2: DISTRICTS */}
-              {drillState && !drillDistrict && (() => {
-                const stateNode = hierarchy[drillState] || {};
-                const districtList = Object.values(stateNode.districts || {});
-
-                return (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => { setDrillState(''); setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
-                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
-                        >
-                          ← All States
-                        </button>
-                        <h3 className="text-base font-black text-slate-900 dark:text-white">Districts in {drillState}</h3>
-                      </div>
-                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
-                        {districtList.length} Assigned {districtList.length === 1 ? 'District' : 'Districts'}
-                      </span>
-                    </div>
-
-                    {stateNode.loading ? (
-                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex items-center justify-center gap-3 text-slate-400">
-                        <RefreshCw className="w-5 h-5 animate-spin" /> Loading districts…
-                      </div>
-                    ) : districtList.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center">
-                        <Building2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned districts found in {drillState}.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {districtList.map(d => (
-                          <div
-                            key={d.district}
-                            onClick={() => {
-                              setDrillDistrict(d.district);
-                              setDrillDivision('');
-                              setDrillPincode('');
-                              expandDistrict(drillState, d.district);
-                            }}
-                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-500/20">
-                                  DISTRICT
-                                </span>
-                                <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-blue-600 transition-colors">
-                                  View Divisions <ArrowRight className="w-3.5 h-3.5" />
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex-shrink-0">
-                                  <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div>
-                                  <h4 className="text-base font-black text-slate-900 dark:text-white">{d.district}</h4>
-                                  <p className="text-xs text-slate-400 mt-0.5">{d.activeManagers || 0} active managers</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
-                              <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                                <span className="text-[10px] text-slate-400 block font-semibold">Active</span>
-                                <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{d.activeManagers || 0}</strong>
-                              </div>
-                              <div className="p-2 bg-blue-500/10 rounded-xl">
-                                <span className="text-[10px] text-blue-600 dark:text-blue-400 block font-semibold">Quota</span>
-                                <strong className="text-xs font-black text-blue-600 dark:text-blue-400">{d.totalManagers || 0} / 2</strong>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* SCREEN 3: DIVISIONS */}
-              {drillState && drillDistrict && !drillDivision && (() => {
-                const distNode = hierarchy[drillState]?.districts?.[drillDistrict] || {};
-                const divisionList = Object.values(distNode.divisions || {});
-
-                return (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => { setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
-                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
-                        >
-                          ← {drillState} Districts
-                        </button>
-                        <h3 className="text-base font-black text-slate-900 dark:text-white">Divisions in {drillDistrict}</h3>
-                      </div>
-                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
-                        {divisionList.length} Assigned {divisionList.length === 1 ? 'Division' : 'Divisions'}
-                      </span>
-                    </div>
-
-                    {distNode.loading ? (
-                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex items-center justify-center gap-3 text-slate-400">
-                        <RefreshCw className="w-5 h-5 animate-spin" /> Loading divisions…
-                      </div>
-                    ) : divisionList.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center">
-                        <Map className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned divisions found in {drillDistrict}.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {divisionList.map(v => (
-                          <div
-                            key={v.division}
-                            onClick={() => {
-                              setDrillDivision(v.division);
-                              setDrillPincode('');
-                              expandDivision(drillState, drillDistrict, v.division);
-                            }}
-                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
-                          >
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 border border-purple-500/20">
-                                  DIVISION
-                                </span>
-                                <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-purple-600 transition-colors">
-                                  View Pincodes <ArrowRight className="w-3.5 h-3.5" />
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex-shrink-0">
-                                  <Map className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                                </div>
-                                <div>
-                                  <h4 className="text-base font-black text-slate-900 dark:text-white">{v.division}</h4>
-                                  <p className="text-xs text-slate-400 mt-0.5">{v.activeManagers || 0} active managers</p>
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
-                              <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                                <span className="text-[10px] text-slate-400 block font-semibold">Active</span>
-                                <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{v.activeManagers || 0}</strong>
-                              </div>
-                              <div className="p-2 bg-purple-500/10 rounded-xl">
-                                <span className="text-[10px] text-purple-600 dark:text-purple-400 block font-semibold">Quota</span>
-                                <strong className="text-xs font-black text-purple-600 dark:text-purple-400">{v.totalManagers || 0} / 2</strong>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              {/* SCREEN 4: PINCODES */}
-              {drillState && drillDistrict && drillDivision && (() => {
-                const divNode = hierarchy[drillState]?.districts?.[drillDistrict]?.divisions?.[drillDivision] || {};
-                const pincodeList = Object.values(divNode.pincodes || {});
-
-                return (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => { setDrillDivision(''); setDrillPincode(''); }}
-                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
-                        >
-                          ← {drillDistrict} Divisions
-                        </button>
-                        <h3 className="text-base font-black text-slate-900 dark:text-white">Pincodes in {drillDivision}</h3>
-                      </div>
-                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
-                        {pincodeList.length} Assigned {pincodeList.length === 1 ? 'Pincode' : 'Pincodes'}
-                      </span>
-                    </div>
-
-                    {divNode.loading ? (
-                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex items-center justify-center gap-3 text-slate-400">
-                        <RefreshCw className="w-5 h-5 animate-spin" /> Loading pincodes…
-                      </div>
-                    ) : pincodeList.length === 0 ? (
-                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center">
-                        <MapPin className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned pincodes found in {drillDivision}.</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {pincodeList.map(p => {
-                          const isPinExpanded = p.expanded;
-                          const mgrList = p.managers || [];
-
-                          return (
-                            <div
-                              key={p.pincode}
-                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs space-y-4"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 flex-shrink-0">
-                                    <MapPin className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                                  </div>
-                                  <div>
-                                    <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400">PINCODE</span>
-                                    <h4 className="text-base font-black text-slate-900 dark:text-white">{p.pincode}</h4>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    onClick={() => expandPincode(drillState, drillDistrict, drillDivision, p.pincode)}
-                                    className="text-xs font-bold text-primary-600 hover:text-primary-500 px-3 py-1 rounded-lg bg-primary-500/10 cursor-pointer"
-                                  >
-                                    {isPinExpanded ? 'Hide Managers' : 'View Managers'}
-                                  </button>
-                                </div>
-                              </div>
-
-                              {isPinExpanded && (
-                                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">List of Managers:</span>
-                                  {p.loading ? (
-                                    <div className="p-3 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading managers…
-                                    </div>
-                                  ) : mgrList.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic">No managers currently loaded for pincode {p.pincode}.</p>
-                                  ) : (
-                                    <div className="space-y-2">
-                                      {mgrList.map(mgr => (
-                                        <div
-                                          key={mgr._id}
-                                          className="p-3 bg-slate-50 dark:bg-slate-850/60 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl flex items-center justify-between gap-3"
-                                        >
-                                          <div>
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-xs font-extrabold text-slate-900 dark:text-white">{mgr.name}</span>
-                                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600">
-                                                Pincode Manager
-                                              </span>
-                                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${mgr.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-500/10 text-slate-500'}`}>
-                                                {mgr.status}
-                                              </span>
-                                            </div>
-                                            <div className="text-[11px] text-slate-400 flex items-center gap-3 mt-1">
-                                              <span>Phone: <strong className="text-slate-700 dark:text-slate-300">{mgr.phone || '—'}</strong></span>
-                                              <span>Email: <strong className="text-slate-700 dark:text-slate-300">{mgr.email}</strong></span>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
+          ) : hierarchyStates.length === 0 ? (
+            /* Requirement 9: Empty Database Behavior -> "No managers found" */
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 text-center shadow-xs">
+              <Users className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+              <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">No managers found</h3>
+              <p className="text-xs text-slate-400 max-w-md mx-auto mb-6">
+                No manager records currently exist in the database. When new managers are onboarded and approved, they will appear here in their assigned geographic hierarchy.
+              </p>
+              <button
+                onClick={() => setNominateTerritory({ level: 'state', state: '', currentCount: 0 })}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Request Manager
+              </button>
             </div>
           ) : (
-            /* ── TREE VIEW ── */
-            renderTree()
+            <div className="space-y-3">
+              {hierarchyStates.map(stateGroup => {
+                const stateNodeKey = `state-${stateGroup.state}`;
+                const isStateExpanded = !!expandedNodes[stateNodeKey];
+                const stateManagers = stateGroup.stateManagers || [];
+                const districtList = stateGroup.districts || [];
+
+                return (
+                  <div
+                    key={stateGroup.state}
+                    className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden transition-all"
+                  >
+                    {/* ── STATE MANAGERS LEVEL ── */}
+                    {stateManagers.length > 0 ? (
+                      stateManagers.map(stateMgr => {
+                        return (
+                          <div
+                            key={stateMgr._id}
+                            onClick={() => setSelectedManager(stateMgr)}
+                            className="flex items-center justify-between p-5 hover:bg-slate-50/80 dark:hover:bg-slate-850/50 transition-colors cursor-pointer border-b border-slate-100 dark:border-slate-800/80 last:border-b-0 group"
+                          >
+                            <div className="flex items-center gap-4 min-w-0">
+                              <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex-shrink-0 group-hover:scale-105 transition-transform">
+                                <Globe className="w-5 h-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2.5 flex-wrap">
+                                  <h4 className="text-sm font-black text-slate-900 dark:text-white tracking-tight">{stateMgr.name}</h4>
+                                  <LevelBadge level="state" />
+                                  <span className="text-[11px] font-mono text-slate-400 font-semibold">{stateMgr.managerId}</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
+                                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{stateGroup.state}</span>
+                                  <span>·</span>
+                                  <span>{stateMgr.phone}</span>
+                                  <span>·</span>
+                                  <span className="truncate">{stateMgr.email}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 flex-shrink-0">
+                              <StatusBadge status={stateMgr.status} />
+
+                              {/* Separate Arrow Button for Expansion (Requirement 5) */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleNode(stateNodeKey);
+                                }}
+                                className={`p-2 rounded-xl transition-all cursor-pointer border ${
+                                  isStateExpanded
+                                    ? 'bg-emerald-600 text-white border-emerald-500 shadow-xs'
+                                    : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                                }`}
+                                title={isStateExpanded ? 'Collapse District Managers' : 'Expand District Managers'}
+                              >
+                                {isStateExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      /* Virtual State Group Card if no State Manager appointed yet */
+                      <div
+                        onClick={() => toggleNode(stateNodeKey)}
+                        className="flex items-center justify-between p-5 hover:bg-slate-50/80 dark:hover:bg-slate-850/50 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className="p-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex-shrink-0">
+                            <Globe className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h4 className="text-sm font-black text-slate-900 dark:text-white">{stateGroup.state}</h4>
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">STATE</span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5 italic">No State Manager appointed yet</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleNode(stateNodeKey);
+                            }}
+                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                          >
+                            {isStateExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── DISTRICT MANAGERS EXPANSION (Requirement 2 & 3) ── */}
+                    {isStateExpanded && (
+                      <div className="bg-slate-50/70 dark:bg-slate-850/40 border-t border-slate-100 dark:border-slate-800/80 p-4 sm:p-5 space-y-3">
+                        {districtList.length === 0 ? (
+                          /* Requirement 2: "No district managers assigned" */
+                          <div className="py-4 px-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-400 italic font-semibold text-center">
+                            No district managers assigned
+                          </div>
+                        ) : (
+                          districtList.map(distGroup => {
+                            const distNodeKey = `dist-${stateGroup.state}-${distGroup.district}`;
+                            const isDistExpanded = !!expandedNodes[distNodeKey];
+                            const districtManagers = distGroup.districtManagers || [];
+                            const divisionList = distGroup.divisions || [];
+
+                            return (
+                              <div
+                                key={distGroup.district}
+                                className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden ml-2 sm:ml-6"
+                              >
+                                {districtManagers.length > 0 ? (
+                                  districtManagers.map(distMgr => (
+                                    <div
+                                      key={distMgr._id}
+                                      onClick={() => setSelectedManager(distMgr)}
+                                      className="flex items-center justify-between p-4 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 transition-colors cursor-pointer border-b border-slate-100 dark:border-slate-800/80 last:border-b-0 group"
+                                    >
+                                      <div className="flex items-center gap-3.5 min-w-0">
+                                        <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-600 dark:text-blue-400 flex-shrink-0 group-hover:scale-105 transition-transform">
+                                          <Building2 className="w-4 h-4" />
+                                        </div>
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <h5 className="text-xs font-black text-slate-900 dark:text-white">{distMgr.name}</h5>
+                                            <LevelBadge level="district" />
+                                            <span className="text-[10px] font-mono text-slate-400">{distMgr.managerId}</span>
+                                          </div>
+                                          <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 flex-wrap">
+                                            <span className="font-bold text-blue-600 dark:text-blue-400">{distGroup.district}</span>
+                                            <span>·</span>
+                                            <span>{distMgr.phone}</span>
+                                            <span>·</span>
+                                            <span className="truncate">{distMgr.email}</span>
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-2.5 flex-shrink-0">
+                                        <StatusBadge status={distMgr.status} />
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleNode(distNodeKey);
+                                          }}
+                                          className={`p-1.5 rounded-lg transition-all cursor-pointer border ${
+                                            isDistExpanded
+                                              ? 'bg-blue-600 text-white border-blue-500 shadow-xs'
+                                              : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                                          }`}
+                                          title={isDistExpanded ? 'Collapse Division Managers' : 'Expand Division Managers'}
+                                        >
+                                          {isDistExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <div
+                                    onClick={() => toggleNode(distNodeKey)}
+                                    className="flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500">
+                                        <Building2 className="w-4 h-4" />
+                                      </div>
+                                      <div>
+                                        <p className="text-xs font-black text-slate-800 dark:text-slate-200">{distGroup.district}</p>
+                                        <p className="text-[10px] text-slate-400 italic">No District Manager assigned</p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleNode(distNodeKey);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                                    >
+                                      {isDistExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                    </button>
+                                  </div>
+                                )}
+
+                                {/* ── DIVISION MANAGERS EXPANSION (Requirement 3 & 4) ── */}
+                                {isDistExpanded && (
+                                  <div className="bg-slate-50/50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800 p-3 sm:p-4 space-y-2.5">
+                                    {divisionList.length === 0 ? (
+                                      /* Requirement 3: "No division managers assigned" */
+                                      <div className="py-3 px-4 rounded-xl bg-white/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-400 italic font-semibold text-center">
+                                        No division managers assigned
+                                      </div>
+                                    ) : (
+                                      divisionList.map(divGroup => {
+                                        const divNodeKey = `div-${stateGroup.state}-${distGroup.district}-${divGroup.division}`;
+                                        const isDivExpanded = !!expandedNodes[divNodeKey];
+                                        const divisionManagers = divGroup.divisionManagers || [];
+                                        const pincodeList = divGroup.pincodes || [];
+
+                                        return (
+                                          <div
+                                            key={divGroup.division}
+                                            className="bg-white dark:bg-slate-850 border border-slate-200/70 dark:border-slate-750 rounded-xl shadow-xs overflow-hidden ml-2 sm:ml-6"
+                                          >
+                                            {divisionManagers.length > 0 ? (
+                                              divisionManagers.map(divMgr => (
+                                                <div
+                                                  key={divMgr._id}
+                                                  onClick={() => setSelectedManager(divMgr)}
+                                                  className="flex items-center justify-between p-3.5 hover:bg-purple-50/40 dark:hover:bg-purple-950/20 transition-colors cursor-pointer border-b border-slate-100 dark:border-slate-800 last:border-b-0 group"
+                                                >
+                                                  <div className="flex items-center gap-3 min-w-0">
+                                                    <div className="p-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-600 dark:text-purple-400 flex-shrink-0 group-hover:scale-105 transition-transform">
+                                                      <Map className="w-3.5 h-3.5" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                      <div className="flex items-center gap-2 flex-wrap">
+                                                        <h6 className="text-xs font-black text-slate-900 dark:text-white">{divMgr.name}</h6>
+                                                        <LevelBadge level="division" />
+                                                        <span className="text-[10px] font-mono text-slate-400">{divMgr.managerId}</span>
+                                                      </div>
+                                                      <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5 flex-wrap">
+                                                        <span className="font-bold text-purple-600 dark:text-purple-400">{divGroup.division}</span>
+                                                        <span>·</span>
+                                                        <span>{divMgr.phone}</span>
+                                                        <span>·</span>
+                                                        <span className="truncate">{divMgr.email}</span>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+
+                                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                                    <StatusBadge status={divMgr.status} />
+                                                    <button
+                                                      type="button"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        toggleNode(divNodeKey);
+                                                      }}
+                                                      className={`p-1 rounded-md transition-all cursor-pointer border ${
+                                                        isDivExpanded
+                                                          ? 'bg-purple-600 text-white border-purple-500 shadow-xs'
+                                                          : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                                                      }`}
+                                                      title={isDivExpanded ? 'Collapse Pincode Managers' : 'Expand Pincode Managers'}
+                                                    >
+                                                      {isDivExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ))
+                                            ) : (
+                                              <div
+                                                onClick={() => toggleNode(divNodeKey)}
+                                                className="flex items-center justify-between p-3 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer"
+                                              >
+                                                <div className="flex items-center gap-2.5">
+                                                  <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">
+                                                    <Map className="w-3.5 h-3.5" />
+                                                  </div>
+                                                  <div>
+                                                    <p className="text-xs font-black text-slate-800 dark:text-slate-200">{divGroup.division}</p>
+                                                    <p className="text-[10px] text-slate-400 italic">No Division Manager assigned</p>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleNode(divNodeKey);
+                                                  }}
+                                                  className="p-1 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
+                                                >
+                                                  {isDivExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                                </button>
+                                              </div>
+                                            )}
+
+                                            {/* ── PINCODE MANAGERS EXPANSION (Requirement 4) ── */}
+                                            {isDivExpanded && (
+                                              <div className="bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800 p-2.5 sm:p-3 space-y-2">
+                                                {pincodeList.length === 0 ? (
+                                                  /* Requirement 4: "No pincode managers assigned" */
+                                                  <div className="py-2.5 px-3 rounded-lg bg-white/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-[10px] text-slate-400 italic font-semibold text-center">
+                                                    No pincode managers assigned
+                                                  </div>
+                                                ) : (
+                                                  pincodeList.map(pinGroup => {
+                                                    const pincodeManagers = pinGroup.pincodeManagers || [];
+
+                                                    return (
+                                                      <div key={pinGroup.pincode} className="space-y-1.5 ml-2 sm:ml-4">
+                                                        {pincodeManagers.map(pinMgr => (
+                                                          <div
+                                                            key={pinMgr._id}
+                                                            onClick={() => setSelectedManager(pinMgr)}
+                                                            className="flex items-center justify-between p-2.5 bg-white dark:bg-slate-900 border border-slate-200/70 dark:border-slate-700 rounded-xl hover:bg-amber-50/30 dark:hover:bg-amber-950/20 transition-colors cursor-pointer group shadow-2xs"
+                                                          >
+                                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                              <div className="p-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 flex-shrink-0 group-hover:scale-105 transition-transform">
+                                                                <MapPin className="w-3 h-3" />
+                                                              </div>
+                                                              <div className="min-w-0">
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                  <span className="text-xs font-black text-slate-900 dark:text-white">{pinMgr.name}</span>
+                                                                  <LevelBadge level="pincode" />
+                                                                  <span className="text-[10px] font-mono text-slate-400">{pinMgr.managerId}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5 flex-wrap">
+                                                                  <span className="font-bold text-amber-600 dark:text-amber-400 font-mono">{pinGroup.pincode}</span>
+                                                                  <span>·</span>
+                                                                  <span>{pinMgr.phone}</span>
+                                                                  <span>·</span>
+                                                                  <span className="truncate">{pinMgr.email}</span>
+                                                                </div>
+                                                              </div>
+                                                            </div>
+                                                            <StatusBadge status={pinMgr.status} />
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    );
+                                                  })
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
 
-      {/* ── REQUESTS TAB (Requirement 13) ── */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* 2. FLAT LIST VIEW TAB (Alternative View) */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'list' && (
+        <div className="space-y-4">
+          <div className="text-[11px] text-slate-400 font-medium px-1">
+            {flatLoading ? 'Loading…' : `${flatTotal} manager${flatTotal !== 1 ? 's' : ''} found`}
+          </div>
+
+          {flatLoading ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 flex items-center justify-center gap-3 text-slate-400">
+              <RefreshCw className="w-5 h-5 animate-spin text-primary-500" /> Loading managers…
+            </div>
+          ) : flatManagers.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 text-center">
+              <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200">No managers found</p>
+              <p className="text-xs text-slate-400 mt-1">No database records matched your criteria.</p>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden">
+              {flatManagers.map((mgr, idx) => (
+                <div
+                  key={mgr._id}
+                  onClick={() => setSelectedManager(mgr)}
+                  className={`flex items-center gap-4 px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors cursor-pointer ${
+                    idx !== 0 ? 'border-t border-slate-100 dark:border-slate-800' : ''
+                  }`}
+                >
+                  <div className={`p-2 rounded-xl flex-shrink-0 ${getLevelBadgeClass(mgr.level).split(' ').slice(0, 2).join(' ')}`}>
+                    <User className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <p className="text-sm font-black text-slate-800 dark:text-slate-100">{mgr.name}</p>
+                      <span className="text-[10px] text-slate-400 font-mono">{mgr.managerId}</span>
+                      <LevelBadge level={mgr.level} />
+                    </div>
+                    <p className="text-xs text-slate-500">{mgr.phone || '—'} · <span className="truncate">{mgr.email}</span></p>
+                    <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[11px]">
+                      {mgr.assignedState && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mgr.assignedState}</span>}
+                      {mgr.assignedDistrict && <><ArrowRight className="w-2.5 h-2.5 text-slate-400" /><span className="text-blue-600 dark:text-blue-400">{mgr.assignedDistrict}</span></>}
+                      {mgr.assignedDivision && <><ArrowRight className="w-2.5 h-2.5 text-slate-400" /><span className="text-purple-600 dark:text-purple-400">{mgr.assignedDivision}</span></>}
+                      {mgr.assignedPincode && <><ArrowRight className="w-2.5 h-2.5 text-slate-400" /><span className="text-amber-600 dark:text-amber-400 font-mono">{mgr.assignedPincode}</span></>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                    <StatusBadge status={mgr.status} />
+                    <button
+                      onClick={() => setSelectedManager(mgr)}
+                      className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
+                      title="View Profile & Performance"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    {['Active', 'approved', 'Approved'].includes(mgr.status) ? (
+                      <button
+                        onClick={() => handleStatusUpdate(mgr, 'Inactive')}
+                        className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+                        title="Deactivate"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => handleStatusUpdate(mgr, 'Active')}
+                        className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-400 hover:text-emerald-500 transition-colors cursor-pointer"
+                        title="Activate"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {flatTotal > 30 && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => loadFlatManagers(flatPage - 1)}
+                disabled={flatPage <= 1}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" /> Prev
+              </button>
+              <span className="text-xs text-slate-400 font-semibold">
+                Page {flatPage} of {Math.ceil(flatTotal / 30)}
+              </span>
+              <button
+                onClick={() => loadFlatManagers(flatPage + 1)}
+                disabled={flatPage >= Math.ceil(flatTotal / 30)}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
+              >
+                Next <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* 3. REQUESTS TAB (Administrative Onboarding Approvals) */}
+      {/* ───────────────────────────────────────────────────────────── */}
       {activeTab === 'requests' && (
         <div className="space-y-4">
           <div className="flex gap-2 flex-wrap">
@@ -1753,9 +1677,9 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
               <button
                 key={s}
                 onClick={() => setRequestStatusFilter(s)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
                   requestStatusFilter === s
-                    ? 'bg-primary-600 text-white border-primary-500 shadow-sm'
+                    ? 'bg-primary-600 text-white border-primary-500 shadow-xs'
                     : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 hover:text-slate-700 dark:hover:text-slate-200'
                 }`}
               >
@@ -1765,13 +1689,13 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
           </div>
 
           {requestsLoading ? (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 flex items-center justify-center gap-3 text-slate-400">
-              <RefreshCw className="w-5 h-5 animate-spin" /> Loading requests…
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 flex items-center justify-center gap-3 text-slate-400">
+              <RefreshCw className="w-5 h-5 animate-spin text-primary-500" /> Loading requests…
             </div>
           ) : requests.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 text-center">
               <Clock className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-slate-500">No {requestStatusFilter !== 'All' ? String(requestStatusFilter || '').toLowerCase() : ''} requests.</p>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-300">No {requestStatusFilter !== 'All' ? requestStatusFilter.toLowerCase() : ''} requests found.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1790,151 +1714,33 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         </div>
       )}
 
-      {/* ── LIST VIEW TAB (Requirement 14) ── */}
-      {activeTab === 'list' && (
-        <div className="space-y-4">
-          {/* Search + Filters */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs space-y-3">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search by name, mobile, email or Manager ID…"
-                className="w-full pl-9 pr-9 py-2.5 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500 text-slate-800 dark:text-slate-200 font-medium"
-              />
-              {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white"><X className="w-3.5 h-3.5" /></button>}
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-              {[
-                { label: 'State', val: filterState, set: setFilterState, opts: territoryOptions.states, allLabel: 'All States' },
-                { label: 'District', val: filterDistrict, set: setFilterDistrict, opts: territoryOptions.districts, allLabel: 'All Districts', disabled: filterState === 'All' },
-                { label: 'Division', val: filterDivision, set: setFilterDivision, opts: territoryOptions.divisions, allLabel: 'All Divisions', disabled: filterDistrict === 'All' },
-                { label: 'Pincode', val: filterPincode, set: setFilterPincode, opts: territoryOptions.pincodes, allLabel: 'All Pincodes', disabled: filterDivision === 'All' },
-              ].map(f => (
-                <select key={f.label} value={f.val} onChange={e => f.set(e.target.value)} disabled={f.disabled}
-                  className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer disabled:opacity-40"
-                >
-                  <option value="All">{f.allLabel}</option>
-                  {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-              ))}
-              <select value={filterLevel} onChange={e => setFilterLevel(e.target.value)} className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer">
-                <option value="All">All Types</option>
-                <option value="state">State Manager</option>
-                <option value="district">District Manager</option>
-                <option value="division">Division Manager</option>
-                <option value="pincode">Pincode Manager</option>
-              </select>
-              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 font-semibold focus:outline-none cursor-pointer">
-                <option value="All">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Suspended">Suspended</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="text-[11px] text-slate-400 font-medium px-1">
-            {managersLoading ? 'Loading…' : `${managersTotal} manager${managersTotal !== 1 ? 's' : ''} found`}
-          </div>
-
-          {managersLoading ? (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 flex items-center justify-center gap-3 text-slate-400">
-              <RefreshCw className="w-5 h-5 animate-spin" /> Loading managers…
-            </div>
-          ) : managers.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
-              <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-slate-500">No managers match your filters.</p>
-            </div>
-          ) : (
-            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-              {managers.map((mgr, idx) => (
-                <div key={mgr._id} className={`flex items-center gap-4 px-5 py-4 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${idx !== 0 ? 'border-t border-slate-100 dark:border-slate-800' : ''}`}>
-                  <div className={`p-2 rounded-xl flex-shrink-0 ${getLevelBadge(mgr.level).split(' ').slice(0, 2).join(' ')}`}>
-                    <User className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{mgr.name}</p>
-                      <span className="text-[10px] text-slate-400 font-mono">{mgr.managerId}</span>
-                      <LevelBadge level={mgr.level} />
-                    </div>
-                    <p className="text-xs text-slate-500">{mgr.phone || mgr.mobile || '—'} · <span className="truncate">{mgr.email}</span></p>
-                    <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[11px]">
-                      {mgr.assignedState && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mgr.assignedState}</span>}
-                      {mgr.assignedDistrict && <><ArrowRight className="w-2.5 h-2.5 text-slate-400" /><span className="text-blue-600 dark:text-blue-400">{mgr.assignedDistrict}</span></>}
-                      {mgr.assignedDivision && <><ArrowRight className="w-2.5 h-2.5 text-slate-400" /><span className="text-purple-600 dark:text-purple-400">{mgr.assignedDivision}</span></>}
-                      {mgr.assignedPincode && <><ArrowRight className="w-2.5 h-2.5 text-slate-400" /><span className="text-amber-600 dark:text-amber-400 font-mono">{mgr.assignedPincode}</span></>}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <StatusBadge status={mgr.status} />
-                    <button onClick={() => setSelectedManager(mgr)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors" title="View Profile">
-                      <Eye className="w-4 h-4" />
-                    </button>
-                    {['Active', 'approved', 'Approved'].includes(mgr.status) ? (
-                      <button onClick={() => handleStatusUpdate(mgr, 'Inactive')} className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-colors" title="Deactivate">
-                        <XCircle className="w-4 h-4" />
-                      </button>
-                    ) : (
-                      <button onClick={() => handleStatusUpdate(mgr, 'Active')} className="p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 text-slate-400 hover:text-emerald-500 transition-colors" title="Activate">
-                        <CheckCircle className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Pagination */}
-          {managersTotal > 30 && (
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <button
-                onClick={() => loadManagers(managersPage - 1)}
-                disabled={managersPage <= 1}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" /> Prev
-              </button>
-              <span className="text-xs text-slate-400 font-semibold">
-                Page {managersPage} of {Math.ceil(managersTotal / 30)}
-              </span>
-              <button
-                onClick={() => loadManagers(managersPage + 1)}
-                disabled={managersPage >= Math.ceil(managersTotal / 30)}
-                className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 cursor-pointer"
-              >
-                Next <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-        </div>
+      {/* ── MANAGER PERFORMANCE & DETAILS DRAWER ── */}
+      {selectedManager && (
+        <ManagerDrawer
+          manager={selectedManager}
+          onClose={() => setSelectedManager(null)}
+          API_BASE={API_BASE}
+          token={activeToken}
+        />
       )}
 
-      {/* ── MANAGER DRAWER ── */}
-      {selectedManager && <ManagerDrawer manager={selectedManager} onClose={() => setSelectedManager(null)} />}
-
-      {/* ── NOMINATE / REQUEST MANAGER MODAL (Requirement 12 & 13) ── */}
+      {/* ── NOMINATE / ONBOARD MANAGER MODAL ── */}
       {nominateTerritory && (
         <NominateModal
           territory={nominateTerritory}
           onClose={() => setNominateTerritory(null)}
           onSubmit={handleNominateSubmit}
           submitting={submittingNomination}
+          territoryOptions={territoryOptions}
         />
       )}
 
-      {/* ── REJECT REASON MODAL ── */}
+      {/* ── REJECTION REASON MODAL ── */}
       {rejectingRequest && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setRejectingRequest(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div className="relative z-10 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 w-full max-w-md mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={() => setRejectingRequest(null)}>
+          <div className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">Reject Manager Request</h3>
-            <p className="text-xs text-slate-400 mb-4">Rejecting request for <span className="text-slate-700 dark:text-slate-200 font-bold">{rejectingRequest.name}</span></p>
+            <p className="text-xs text-slate-400 mb-4">Rejecting onboarding for <span className="text-slate-700 dark:text-slate-200 font-bold">{rejectingRequest.name}</span></p>
             <textarea
               value={rejectionReason}
               onChange={e => setRejectionReason(e.target.value)}
@@ -1943,13 +1749,16 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500 resize-none mb-4"
             />
             <div className="flex gap-3">
-              <button onClick={() => setRejectingRequest(null)} className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-extrabold transition-colors cursor-pointer border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setRejectingRequest(null)}
+                className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-black transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+              >
                 Cancel
               </button>
               <button
                 onClick={handleReject}
                 disabled={!!actionLoading[rejectingRequest._id]}
-                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-xl text-xs font-extrabold transition-colors cursor-pointer"
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 disabled:opacity-60 text-white rounded-xl text-xs font-black transition-colors cursor-pointer"
               >
                 {actionLoading[rejectingRequest._id] ? 'Rejecting…' : 'Confirm Reject'}
               </button>
