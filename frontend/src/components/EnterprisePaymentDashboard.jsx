@@ -1,115 +1,102 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  DollarSign, TrendingUp, TrendingDown, CreditCard, Shield, Download,
-  Filter, Calendar, RefreshCw, BarChart2, PieChart as PieIcon, Layers, FileText,
-  Plus, Minus, CheckCircle, Clock, AlertTriangle, XCircle, Search, ChevronRight,
-  Eye, Lock, Key, ArrowRight, Check, X, Printer, MapPin, Building, User, Users,
-  Send, AlertCircle, FileCheck, ArrowUpRight, ArrowDownRight, Share2, HelpCircle
+  DollarSign, Shield, RefreshCw, Layers, FileText, CheckCircle, Clock,
+  AlertTriangle, XCircle, Search, ChevronRight, Eye, Lock, Key, ArrowRight,
+  Check, X, Printer, MapPin, Building, User, Users, Send, AlertCircle,
+  FileCheck, ArrowUpRight, ArrowDownRight, Share2, HelpCircle, Briefcase,
+  Truck, Wrench, Store, PauseCircle, Ban, PlayCircle, Hash, ExternalLink
 } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, currentUser, onToast }) => {
   // Main Data States
   const [loading, setLoading] = useState(false);
-  const [kpi, setKpi] = useState({
-    totalReceived: 0,
-    totalPaid: 0,
-    pendingPayments: 0,
-    pendingAmount: 0,
-    failedPayments: 0,
-    failedAmount: 0,
-    cancelledPayments: 0,
-    cancelledAmount: 0,
-    netCashFlow: 0
+  const [activeTab, setActiveTab] = useState('agents'); // 'agents' | 'vendors' | 'delivery' | 'technicians'
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
+
+  // Executive KPI summary
+  const [kpis, setKpis] = useState({
+    totalPayableAmount: 0,
+    totalPayableCount: 0,
+    agentPayableAmount: 0,
+    agentPayableCount: 0,
+    vendorPayableAmount: 0,
+    vendorPayableCount: 0,
+    deliveryPayableAmount: 0,
+    deliveryPayableCount: 0,
+    technicianPayableAmount: 0,
+    technicianPayableCount: 0,
+    totalPaidOut: 0,
+    onHoldCount: 0,
+    cancelledCount: 0
   });
 
-  const [receivedCategories, setReceivedCategories] = useState([]);
-  const [paidCategories, setPaidCategories] = useState([]);
+  // Four recipient categories
+  const [recipients, setRecipients] = useState({
+    agents: [],
+    vendors: [],
+    deliveryPartners: [],
+    technicians: []
+  });
 
-  // Territory hierarchy data
-  const [territoryStates, setTerritoryStates] = useState([]);
-  const [territoryDistricts, setTerritoryDistricts] = useState([]);
-  const [territoryDivisions, setTerritoryDivisions] = useState([]);
-  const [territoryPincodes, setTerritoryPincodes] = useState([]);
+  // Filters & Search
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'PENDING' | 'HOLD' | 'PAID' | 'CANCELLED'
 
-  // Active Category & Transaction List Modal
-  const [activeCategoryModal, setActiveCategoryModal] = useState(null); // null or category object
-  const [transactions, setTransactions] = useState([]);
-  const [txnLoading, setTxnLoading] = useState(false);
-  const [txnTotalCount, setTxnTotalCount] = useState(0);
-  const [txnPage, setTxnPage] = useState(1);
-  const [txnLimit] = useState(15);
-  const [txnTotalPages, setTxnTotalPages] = useState(1);
-
-  // Filters for Transactions
-  const [filterSearch, setFilterSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL');
-  const [filterState, setFilterState] = useState('all');
-  const [filterDistrict, setFilterDistrict] = useState('all');
-  const [filterDivision, setFilterDivision] = useState('all');
-  const [filterPincode, setFilterPincode] = useState('all');
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
-  const [filterSort, setFilterSort] = useState('date_desc');
-
-  // Single Payment Detail View Modal
-  const [selectedPaymentDetail, setSelectedPaymentDetail] = useState(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-
-  // Pay All Preview Modal
-  const [payAllPreviewData, setPayAllPreviewData] = useState(null);
-  const [payAllLoading, setPayAllLoading] = useState(false);
-
-  // Payment Verification Flow States (Single & Bulk)
-  // Step 1: Email OTP -> Step 2: 6-Digit PIN -> Step 3: Final Confirmation
-  const [securityModalOpen, setSecurityModalOpen] = useState(false);
-  const [securityStep, setSecurityStep] = useState(1); // 1: Email OTP, 2: 6-Digit PIN, 3: Confirmation
-  const [activePaymentAction, setActivePaymentAction] = useState(null); // { type: 'single' | 'bulk', paymentId?, category?, recipientName?, amount? }
-  const [adminEmail, setAdminEmail] = useState(currentUser?.email || '');
-  const [otpInput, setOtpInput] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpExpirySeconds, setOtpExpirySeconds] = useState(300);
+  // Pay Action Modal Flow States (10 Steps)
+  // Step 1: Confirmation & Breakdown
+  // Step 2: Email OTP Entry
+  // Step 3: Security PIN Entry
+  // Step 4: Success & Receipt
+  const [payModalOpen, setPayModalOpen] = useState(false);
+  const [payStep, setPayStep] = useState(1); // 1: details, 2: otp, 3: pin, 4: success
+  const [selectedPayable, setSelectedPayable] = useState(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpTimer, setOtpTimer] = useState(300);
   const [verificationToken, setVerificationToken] = useState('');
-  const [pinDigits, setPinDigits] = useState(['', '', '', '', '', '']);
-  const [pinConfigured, setPinConfigured] = useState(true);
-  const [showPinSetup, setShowPinSetup] = useState(false);
-  const [newPin, setNewPin] = useState('');
-  const [confirmNewPin, setConfirmNewPin] = useState('');
-  const [securityLoading, setSecurityLoading] = useState(false);
-  const [securityError, setSecurityError] = useState('');
-  const [processingSuccess, setProcessingSuccess] = useState(null);
+  const [securityPin, setSecurityPin] = useState(['', '', '', '', '', '']);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [payError, setPayError] = useState('');
+  const [processedResult, setProcessedResult] = useState(null);
 
-  // Cancel Payment Modal
-  const [cancelModalPayment, setCancelModalPayment] = useState(null);
+  // Hold Action Modal
+  const [holdModalOpen, setHoldModalOpen] = useState(false);
+  const [holdTarget, setHoldTarget] = useState(null);
+  const [holdReason, setHoldReason] = useState('');
+  const [holdLoading, setHoldLoading] = useState(false);
+
+  // Cancel Action Modal
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
 
-  // Delegation Modal
-  const [showDelegationModal, setShowDelegationModal] = useState(false);
-  const [delegationState, setDelegationState] = useState('');
-  const [delegationCategory, setDelegationCategory] = useState('agent_payment');
-  const [stateAdminsList, setStateAdminsList] = useState([]);
-  const [selectedStateAdminId, setSelectedStateAdminId] = useState('');
-  const [delegationNotes, setDelegationNotes] = useState('');
-  const [delegationLoading, setDelegationLoading] = useState(false);
+  // Security PIN Configuration Modal
+  const [pinConfigModalOpen, setPinConfigModalOpen] = useState(false);
+  const [newPin, setNewPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [pinSetupLoading, setPinSetupLoading] = useState(false);
+  const [pinSetupError, setPinSetupError] = useState('');
+  const [pinStatus, setPinStatus] = useState({ configured: false, isLocked: false });
 
-  // Receipt Modal
-  const [receiptData, setReceiptData] = useState(null);
-  const [receiptLoading, setReceiptLoading] = useState(false);
-
-  // Audit Log Modal
-  const [showAuditModal, setShowAuditModal] = useState(false);
+  // Payout Audit Log Modal
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditLoading, setAuditLoading] = useState(false);
-  const [auditSearch, setAuditSearch] = useState('');
+
+  // Receipt Modal
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [receiptData, setReceiptData] = useState(null);
 
   const toast = useCallback((msg, type = 'info') => {
     if (onToast) onToast(msg, type);
     else console.log(`[${type.toUpperCase()}] ${msg}`);
   }, [onToast]);
 
-  // Fetch Dashboard Summary & Categories
-  const fetchDashboardData = useCallback(async () => {
-    setLoading(true);
+  // Fetch Payout Dashboard Data
+  const fetchDashboardData = useCallback(async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/admin/enterprise/payments/dashboard`, {
         headers: {
@@ -119,412 +106,359 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.kpis) setKpi(data.kpis);
-        if (data.receivedCategories) setReceivedCategories(data.receivedCategories);
-        if (data.paidCategories) setPaidCategories(data.paidCategories);
+        if (data.kpis) setKpis(data.kpis);
+        if (data.recipients) {
+          setRecipients({
+            agents: Array.isArray(data.recipients.agents) ? data.recipients.agents : [],
+            vendors: Array.isArray(data.recipients.vendors) ? data.recipients.vendors : [],
+            deliveryPartners: Array.isArray(data.recipients.deliveryPartners) ? data.recipients.deliveryPartners : [],
+            technicians: Array.isArray(data.recipients.technicians) ? data.recipients.technicians : []
+          });
+        }
       }
     } catch (err) {
-      console.error('Fetch dashboard data error:', err);
+      console.error('Fetch payout dashboard error:', err);
+      if (!isSilent) toast('Failed to load payout dashboard data', 'error');
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
-  }, [API_BASE, token]);
+  }, [API_BASE, token, toast]);
 
-  // Fetch Active Territories from Database (Section 14)
-  const fetchTerritories = useCallback(async () => {
-    try {
-      const [resStates, resDistricts, resDivisions, resPincodes] = await Promise.all([
-        fetch(`${API_BASE}/admin/territory/states?status=Active`, { headers: { 'x-auth-token': token } }),
-        fetch(`${API_BASE}/admin/territory/districts?status=Active`, { headers: { 'x-auth-token': token } }),
-        fetch(`${API_BASE}/admin/territory/divisions?status=Active`, { headers: { 'x-auth-token': token } }),
-        fetch(`${API_BASE}/admin/territory/pincodes?status=Active`, { headers: { 'x-auth-token': token } })
-      ]);
-
-      if (resStates.ok) {
-        const data = await resStates.json();
-        setTerritoryStates(Array.isArray(data) ? data : (data.states || []));
-      }
-      if (resDistricts.ok) {
-        const data = await resDistricts.json();
-        setTerritoryDistricts(Array.isArray(data) ? data : (data.districts || []));
-      }
-      if (resDivisions.ok) {
-        const data = await resDivisions.json();
-        setTerritoryDivisions(Array.isArray(data) ? data : (data.divisions || []));
-      }
-      if (resPincodes.ok) {
-        const data = await resPincodes.json();
-        setTerritoryPincodes(Array.isArray(data) ? data : (data.pincodes || []));
-      }
-    } catch (err) {
-      console.error('Territory load error:', err);
-    }
-  }, [API_BASE, token]);
-
-  // Check PIN Status
+  // Check Security PIN Status
   const checkPinStatus = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/admin/enterprise/payments/pin-status`, {
-        headers: { 'x-auth-token': token, 'Authorization': `Bearer ${token}` }
+        headers: { 'x-auth-token': token }
       });
       if (res.ok) {
         const data = await res.json();
-        setPinConfigured(Boolean(data.configured));
+        setPinStatus({
+          configured: Boolean(data.configured),
+          isLocked: Boolean(data.isLocked),
+          lockedUntil: data.lockedUntil
+        });
       }
-    } catch (e) {
-      console.error('Check PIN status error:', e);
-    }
+    } catch (e) {}
   }, [API_BASE, token]);
 
   // Initial Load
   useEffect(() => {
     fetchDashboardData();
-    fetchTerritories();
     checkPinStatus();
+  }, [fetchDashboardData, checkPinStatus]);
 
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible' && !activeCategoryModal && !securityModalOpen) {
-        fetchDashboardData();
-      }
-    }, 12000);
-
-    return () => clearInterval(interval);
-  }, [fetchDashboardData, fetchTerritories, checkPinStatus, activeCategoryModal, securityModalOpen]);
-
-  // Dynamic Territory Cascade Filtering
-  const availableDistricts = useMemo(() => {
-    if (!filterState || filterState === 'all') return territoryDistricts;
-    return territoryDistricts.filter(d => (d.stateName || d.state || '').toLowerCase() === filterState.toLowerCase());
-  }, [filterState, territoryDistricts]);
-
-  const availableDivisions = useMemo(() => {
-    if (!filterDistrict || filterDistrict === 'all') return territoryDivisions;
-    return territoryDivisions.filter(div => (div.districtName || div.district || '').toLowerCase() === filterDistrict.toLowerCase());
-  }, [filterDistrict, territoryDivisions]);
-
-  const availablePincodes = useMemo(() => {
-    if (!filterDivision || filterDivision === 'all') return territoryPincodes;
-    return territoryPincodes.filter(p => (p.divisionName || p.division || '').toLowerCase() === filterDivision.toLowerCase());
-  }, [filterDivision, territoryPincodes]);
-
-  // Fetch Transactions List for Modal
-  const fetchTransactions = useCallback(async () => {
-    if (!activeCategoryModal) return;
-    setTxnLoading(true);
-    try {
-      const params = new URLSearchParams({
-        category: activeCategoryModal.key,
-        type: activeCategoryModal.type,
-        page: txnPage,
-        limit: txnLimit,
-        sort: filterSort
-      });
-
-      if (filterSearch) params.append('search', filterSearch);
-      if (filterStatus && filterStatus !== 'ALL') params.append('status', filterStatus);
-      if (filterState && filterState !== 'all') params.append('state', filterState);
-      if (filterDistrict && filterDistrict !== 'all') params.append('district', filterDistrict);
-      if (filterDivision && filterDivision !== 'all') params.append('division', filterDivision);
-      if (filterPincode && filterPincode !== 'all') params.append('pincode', filterPincode);
-      if (filterStartDate) params.append('startDate', filterStartDate);
-      if (filterEndDate) params.append('endDate', filterEndDate);
-
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/transactions?${params.toString()}`, {
-        headers: { 'x-auth-token': token, 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setTransactions(data.transactions || []);
-        setTxnTotalCount(data.totalCount || 0);
-        setTxnTotalPages(data.totalPages || 1);
-      }
-    } catch (err) {
-      console.error('Fetch transactions error:', err);
-    } finally {
-      setTxnLoading(false);
-    }
-  }, [activeCategoryModal, txnPage, txnLimit, filterSort, filterSearch, filterStatus, filterState, filterDistrict, filterDivision, filterPincode, filterStartDate, filterEndDate, API_BASE, token]);
-
+  // Socket.IO Real-Time Synchronization Listener
   useEffect(() => {
-    if (activeCategoryModal) {
-      fetchTransactions();
-    }
-  }, [activeCategoryModal, fetchTransactions]);
-
-  // Open Detailed Transaction List Modal
-  const handleOpenCategory = (cat) => {
-    setActiveCategoryModal(cat);
-    setTxnPage(1);
-    setFilterSearch('');
-    setFilterStatus('ALL');
-    setFilterState('all');
-    setFilterDistrict('all');
-    setFilterDivision('all');
-    setFilterPincode('all');
-  };
-
-  // Open Single Payment Detail View
-  const handleViewPaymentDetail = async (paymentId) => {
-    setDetailLoading(true);
+    let socket = null;
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/detail/${paymentId}`, {
-        headers: { 'x-auth-token': token, 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSelectedPaymentDetail(data.payment);
+      let serverUrl = API_BASE ? API_BASE.replace(/\/api.*$/, '') : '';
+      if (!serverUrl && typeof window !== 'undefined') {
+        serverUrl = window.location.origin;
       }
-    } catch (err) {
-      console.error('Fetch payment detail error:', err);
-    } finally {
-      setDetailLoading(false);
+      socket = io(serverUrl || 'http://localhost:8004', {
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1500
+      });
+
+      socket.on('connect', () => {
+        setIsLiveConnected(true);
+        socket.emit('register', { role: 'admin' });
+      });
+
+      socket.on('disconnect', () => {
+        setIsLiveConnected(false);
+      });
+
+      const onRealtimeUpdate = () => {
+        fetchDashboardData(true);
+      };
+
+      socket.on('payment_updated', onRealtimeUpdate);
+      socket.on('payment:updated', onRealtimeUpdate);
+      socket.on('pincode_updated', onRealtimeUpdate);
+      socket.on('territory_updated', onRealtimeUpdate);
+    } catch (e) {
+      console.warn('Real-time connection notice:', e.message);
     }
+
+    return () => {
+      if (socket) socket.disconnect();
+    };
+  }, [API_BASE, fetchDashboardData]);
+
+  // OTP Countdown Timer
+  useEffect(() => {
+    let interval = null;
+    if (payModalOpen && payStep === 2 && otpTimer > 0) {
+      interval = setInterval(() => {
+        setOtpTimer(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [payModalOpen, payStep, otpTimer]);
+
+  // Format currency
+  const fmtCurrency = (val) => {
+    return '₹' + Number(val || 0).toLocaleString('en-IN');
   };
 
-  // Open Pay All Preview Screen
-  const handleOpenPayAll = async (cat) => {
-    setPayAllLoading(true);
+  // Format Date
+  const fmtDate = (d) => {
+    if (!d) return '—';
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/pay-all-preview?category=${cat.key}`, {
-        headers: { 'x-auth-token': token, 'Authorization': `Bearer ${token}` }
+      return new Date(d).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
       });
-      if (res.ok) {
-        const data = await res.json();
-        setPayAllPreviewData(data);
-      }
-    } catch (err) {
-      console.error('Fetch pay all preview error:', err);
-    } finally {
-      setPayAllLoading(false);
+    } catch (e) {
+      return String(d);
     }
   };
 
-  // Proceed to Verification from Pay All or Single Pay
-  const startSecurityVerification = (actionPayload) => {
-    setActivePaymentAction(actionPayload);
-    setSecurityStep(1);
-    setOtpSent(false);
-    setOtpInput('');
+  // Filter current active recipient list
+  const currentList = useMemo(() => {
+    const raw = recipients[activeTab] || [];
+    return raw.filter(item => {
+      // Status filter
+      if (statusFilter !== 'ALL') {
+        const itemStatus = (item.status || 'PENDING').toUpperCase();
+        if (statusFilter === 'PENDING' && itemStatus !== 'PENDING' && itemStatus !== 'ELIGIBLE') return false;
+        if (statusFilter !== 'PENDING' && itemStatus !== statusFilter) return false;
+      }
+      // Search filter
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase();
+        const name = (item.recipientName || '').toLowerCase();
+        const id = (item.recipientId || item.paymentId || '').toLowerCase();
+        const ref = (item.sourceReference || item.orderReference || item.deliveryReference || item.workReference || '').toLowerCase();
+        const purp = (item.paymentPurpose || '').toLowerCase();
+        const phone = (item.recipientPhone || '').toLowerCase();
+        const email = (item.recipientEmail || '').toLowerCase();
+        const bName = (item.businessName || '').toLowerCase();
+        return name.includes(q) || id.includes(q) || ref.includes(q) || purp.includes(q) || phone.includes(q) || email.includes(q) || bName.includes(q);
+      }
+      return true;
+    });
+  }, [recipients, activeTab, statusFilter, searchTerm]);
+
+  // -------------------------------------------------------------
+  // ACTION: INITIATE PAY FLOW (Step 1)
+  // -------------------------------------------------------------
+  const handleOpenPayModal = (item) => {
+    setSelectedPayable(item);
+    setPayStep(1);
+    setPayError('');
+    setOtpCode('');
     setVerificationToken('');
-    setPinDigits(['', '', '', '', '', '']);
-    setSecurityError('');
-    setProcessingSuccess(null);
-    setAdminEmail(currentUser?.email || '');
-    setSecurityModalOpen(true);
+    setSecurityPin(['', '', '', '', '', '']);
+    setProcessedResult(null);
+    setPayModalOpen(true);
   };
 
-  // Send Email OTP
-  const handleSendOtp = async () => {
-    if (!adminEmail || !adminEmail.trim()) {
-      setSecurityError('Please enter your authorized email address.');
-      return;
-    }
-    setSecurityLoading(true);
-    setSecurityError('');
+  // ACTION: CONFIRM DETAILS & REQUEST EMAIL OTP (Step 2)
+  const handleRequestOtp = async () => {
+    setOtpLoading(true);
+    setPayError('');
     try {
       const res = await fetch(`${API_BASE}/admin/enterprise/payments/send-otp`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-auth-token': token,
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ email: adminEmail.trim() })
+          'Content-Type': 'application/json'
+        }
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setOtpSent(true);
-        setOtpExpirySeconds(data.expiresInSeconds || 300);
-        toast('Verification code sent to registered administrator email.', 'success');
+        toast(`Verification OTP dispatched to ${currentUser?.email || 'Super Admin email'}`);
+        setOtpTimer(300);
+        setPayStep(2);
       } else {
-        setSecurityError(data.msg || 'Failed to send OTP.');
+        setPayError(data.msg || 'Failed to dispatch email verification code');
       }
     } catch (err) {
-      setSecurityError('Connection failure sending verification code.');
+      setPayError('Network error while requesting OTP code');
     } finally {
-      setSecurityLoading(false);
+      setOtpLoading(false);
     }
   };
 
-  // Verify Email OTP
-  const handleVerifyOtp = async () => {
-    if (!otpInput || otpInput.trim().length !== 6) {
-      setSecurityError('Enter the complete 6-digit verification code.');
+  // ACTION: VERIFY EMAIL OTP (Step 2 -> Step 3)
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!otpCode || otpCode.trim().length !== 6) {
+      setPayError('Please enter a complete 6-digit OTP code');
       return;
     }
-    setSecurityLoading(true);
-    setSecurityError('');
+    setOtpLoading(true);
+    setPayError('');
     try {
       const res = await fetch(`${API_BASE}/admin/enterprise/payments/verify-otp`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-auth-token': token,
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email: adminEmail.trim(), otp: otpInput.trim() })
+        body: JSON.stringify({ otp: otpCode.trim() })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setVerificationToken(data.verificationToken);
-        setSecurityStep(2); // Proceed to PIN verification
-        toast('Email verification successful. Enter your 6-digit Payment PIN.', 'success');
+        setPayStep(3);
+        toast('Email OTP verified. Please enter your 6-digit Security PIN.');
       } else {
-        setSecurityError(data.msg || 'Invalid verification code.');
+        setPayError(data.msg || 'Invalid or expired OTP code');
       }
     } catch (err) {
-      setSecurityError('Error verifying OTP.');
+      setPayError('Network error verifying OTP code');
     } finally {
-      setSecurityLoading(false);
+      setOtpLoading(false);
     }
   };
 
-  // Handle PIN Digit Change
-  const handlePinDigitChange = (index, value) => {
-    if (!/^\d*$/.test(value)) return;
-    const newDigits = [...pinDigits];
-    newDigits[index] = value.slice(-1);
-    setPinDigits(newDigits);
-
-    // Auto advance focus
-    if (value && index < 5) {
-      const nextInput = document.getElementById(`payment-pin-digit-${index + 1}`);
-      if (nextInput) nextInput.focus();
-    }
-  };
-
-  const handlePinKeyDown = (index, e) => {
-    if (e.key === 'Backspace' && !pinDigits[index] && index > 0) {
-      const prevInput = document.getElementById(`payment-pin-digit-${index - 1}`);
-      if (prevInput) prevInput.focus();
-    }
-  };
-
-  // Setup New Payment PIN
-  const handleSetupPin = async (e) => {
+  // ACTION: VERIFY PIN & DISBURSE PAYMENT (Step 3 -> Step 4)
+  const handleAuthorizeDisbursement = async (e) => {
     e.preventDefault();
-    if (!newPin || newPin.length !== 6 || !/^\d{6}$/.test(newPin)) {
-      setSecurityError('PIN must be exactly 6 digits.');
+    const pinStr = securityPin.join('');
+    if (pinStr.length !== 6) {
+      setPayError('Please enter your full 6-digit Security PIN');
       return;
     }
-    if (newPin !== confirmNewPin) {
-      setSecurityError('PIN and confirmation PIN do not match.');
-      return;
-    }
-    setSecurityLoading(true);
-    setSecurityError('');
+
+    setPinLoading(true);
+    setPayError('');
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/setup-pin`, {
+      // 1. Verify PIN with server
+      const pinRes = await fetch(`${API_BASE}/admin/enterprise/payments/verify-pin`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-auth-token': token,
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ pin: newPin, confirmPin: confirmNewPin })
+        body: JSON.stringify({ pin: pinStr, verificationToken })
       });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setPinConfigured(true);
-        setShowPinSetup(false);
-        toast('6-digit Payment PIN configured successfully!', 'success');
+      const pinData = await pinRes.json();
+      if (!pinRes.ok || !pinData.success) {
+        setPayError(pinData.msg || 'Incorrect Security PIN');
+        setPinLoading(false);
+        return;
+      }
+
+      // 2. Process Disbursement Atomically
+      const processRes = await fetch(`${API_BASE}/admin/enterprise/payments/process`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          paymentId: selectedPayable.paymentId,
+          verificationToken,
+          notes: selectedPayable.paymentPurpose
+        })
+      });
+      const processData = await processRes.json();
+      if (processRes.ok && processData.success) {
+        setProcessedResult(processData.payment);
+        setPayStep(4);
+        toast(processData.msg || 'Payment disbursed successfully');
+        fetchDashboardData(true);
       } else {
-        setSecurityError(data.msg || 'Failed to configure PIN.');
+        setPayError(processData.msg || 'Payment processing failed');
       }
     } catch (err) {
-      setSecurityError('Error configuring PIN.');
+      setPayError('Disbursement transaction failed due to network error');
     } finally {
-      setSecurityLoading(false);
+      setPinLoading(false);
     }
   };
 
-  // Verify Payment PIN
-  const handleVerifyPin = async () => {
-    const fullPin = pinDigits.join('');
-    if (fullPin.length !== 6) {
-      setSecurityError('Please enter all 6 digits of your Payment PIN.');
+  // -------------------------------------------------------------
+  // ACTION: HOLD PAYMENT
+  // -------------------------------------------------------------
+  const handleOpenHoldModal = (item) => {
+    setHoldTarget(item);
+    setHoldReason('');
+    setHoldModalOpen(true);
+  };
+
+  const handleConfirmHold = async (e) => {
+    e.preventDefault();
+    if (!holdReason.trim()) {
+      toast('Please specify a mandatory reason for placing this payment on hold', 'error');
       return;
     }
-    setSecurityLoading(true);
-    setSecurityError('');
+    setHoldLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/verify-pin`, {
+      const res = await fetch(`${API_BASE}/admin/enterprise/payments/hold`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-auth-token': token,
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ pin: fullPin, verificationToken })
+        body: JSON.stringify({
+          paymentId: holdTarget.paymentId,
+          reason: holdReason.trim(),
+          recipientId: holdTarget.recipientId,
+          recipientType: holdTarget.recipientType,
+          recipientName: holdTarget.recipientName,
+          payableAmount: holdTarget.payableAmount,
+          paymentPurpose: holdTarget.paymentPurpose,
+          sourceReference: holdTarget.sourceReference
+        })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setSecurityStep(3); // Proceed to Final Confirmation
-        toast('Payment PIN verified. Please review and confirm payment execution.', 'success');
+        toast(`Payment ${holdTarget.paymentId} placed on hold`);
+        setHoldModalOpen(false);
+        fetchDashboardData(true);
       } else {
-        setSecurityError(data.msg || 'Incorrect Payment PIN.');
+        toast(data.msg || 'Failed to place payment on hold', 'error');
       }
     } catch (err) {
-      setSecurityError('Server error verifying PIN.');
+      toast('Network error holding payment', 'error');
     } finally {
-      setSecurityLoading(false);
+      setHoldLoading(false);
     }
   };
 
-  // Final Payment Processing Execution (Section 7 & 8)
-  const handleExecutePayment = async () => {
-    setSecurityLoading(true);
-    setSecurityError('');
+  const handleReleaseHold = async (item) => {
+    if (!window.confirm(`Release payment ${item.paymentId} from HOLD back to PENDING?`)) return;
     try {
-      let endpoint = `${API_BASE}/admin/enterprise/payments/process`;
-      let payload = {
-        verificationToken,
-        idempotencyKey: `FIC-IDEM-${Date.now()}`
-      };
-
-      if (activePaymentAction.type === 'bulk') {
-        endpoint = `${API_BASE}/admin/enterprise/payments/process-bulk`;
-        payload.category = activePaymentAction.category;
-      } else {
-        payload.paymentId = activePaymentAction.paymentId;
-      }
-
-      const res = await fetch(endpoint, {
+      const res = await fetch(`${API_BASE}/admin/enterprise/payments/release-hold`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-auth-token': token,
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ paymentId: item.paymentId })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setProcessingSuccess(data);
-        toast(data.msg || 'Payment processed successfully!', 'success');
-        fetchDashboardData();
-        if (activeCategoryModal) fetchTransactions();
-        if (payAllPreviewData) setPayAllPreviewData(null);
+        toast(`Payment ${item.paymentId} released back to PENDING`);
+        fetchDashboardData(true);
       } else {
-        setSecurityError(data.msg || 'Payment processing failed.');
+        toast(data.msg || 'Failed to release hold', 'error');
       }
     } catch (err) {
-      setSecurityError('Critical error during payment processing execution.');
-    } finally {
-      setSecurityLoading(false);
+      toast('Network error releasing hold', 'error');
     }
   };
 
-  // Open Cancel Payment Modal (Section 9)
-  const handleOpenCancel = (payment) => {
-    setCancelModalPayment(payment);
+  // -------------------------------------------------------------
+  // ACTION: CANCEL PAYMENT
+  // -------------------------------------------------------------
+  const handleOpenCancelModal = (item) => {
+    setCancelTarget(item);
     setCancelReason('');
+    setCancelModalOpen(true);
   };
 
-  // Execute Payment Cancellation
-  const handleExecuteCancel = async () => {
-    if (!cancelReason || !cancelReason.trim()) {
-      toast('Cancellation reason is required.', 'error');
+  const handleConfirmCancel = async (e) => {
+    e.preventDefault();
+    if (!cancelReason.trim()) {
+      toast('A cancellation reason is required for immutable audit logging', 'error');
       return;
     }
     setCancelLoading(true);
@@ -532,1304 +466,1089 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
       const res = await fetch(`${API_BASE}/admin/enterprise/payments/cancel`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-auth-token': token,
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          paymentId: cancelModalPayment.paymentId,
-          cancellationReason: cancelReason.trim()
+          paymentId: cancelTarget.paymentId,
+          cancellationReason: cancelReason.trim(),
+          reason: cancelReason.trim(),
+          recipientId: cancelTarget.recipientId,
+          recipientType: cancelTarget.recipientType,
+          recipientName: cancelTarget.recipientName,
+          payableAmount: cancelTarget.payableAmount,
+          paymentPurpose: cancelTarget.paymentPurpose,
+          sourceReference: cancelTarget.sourceReference
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        toast(`Payment ${cancelModalPayment.paymentId} cancelled successfully.`, 'success');
-        setCancelModalPayment(null);
-        fetchDashboardData();
-        if (activeCategoryModal) fetchTransactions();
+        toast(`Payment ${cancelTarget.paymentId} cancelled successfully`);
+        setCancelModalOpen(false);
+        fetchDashboardData(true);
       } else {
-        toast(data.msg || 'Failed to cancel payment.', 'error');
+        toast(data.msg || 'Failed to cancel payment', 'error');
       }
     } catch (err) {
-      toast('Error executing payment cancellation.', 'error');
+      toast('Network error cancelling payment', 'error');
     } finally {
       setCancelLoading(false);
     }
   };
 
-  // View Receipt (Section 16)
-  const handleOpenReceipt = async (paymentId) => {
-    setReceiptLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/receipt/${paymentId}`, {
-        headers: { 'x-auth-token': token, 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setReceiptData(data.receipt);
-      }
-    } catch (err) {
-      toast('Error fetching payment receipt.', 'error');
-    } finally {
-      setReceiptLoading(false);
-    }
-  };
-
-  // Open Delegation Modal (Section 15)
-  const handleOpenDelegation = async () => {
-    setShowDelegationModal(true);
-    setDelegationLoading(true);
-    try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/state-admins`, {
-        headers: { 'x-auth-token': token, 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStateAdminsList(data.admins || []);
-        if (data.admins && data.admins.length > 0) {
-          setSelectedStateAdminId(data.admins[0]._id);
-        }
-      }
-    } catch (err) {
-      console.error('Fetch state admins error:', err);
-    } finally {
-      setDelegationLoading(false);
-    }
-  };
-
-  const handleExecuteDelegation = async () => {
-    if (!delegationState) {
-      toast('Please choose a state territory.', 'error');
+  // -------------------------------------------------------------
+  // ACTION: CONFIGURE / SETUP SECURITY PIN
+  // -------------------------------------------------------------
+  const handleSetupPin = async (e) => {
+    e.preventDefault();
+    if (!newPin || newPin.length !== 6 || !/^\d{6}$/.test(newPin)) {
+      setPinSetupError('Security PIN must be exactly 6 numeric digits');
       return;
     }
-    if (!selectedStateAdminId) {
-      toast('Please choose a State Administrator.', 'error');
+    if (newPin !== confirmPin) {
+      setPinSetupError('PIN and Confirmation PIN do not match');
       return;
     }
-    setDelegationLoading(true);
+    setPinSetupLoading(true);
+    setPinSetupError('');
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/delegate`, {
+      const res = await fetch(`${API_BASE}/admin/enterprise/payments/setup-pin`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'x-auth-token': token,
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          state: delegationState,
-          category: delegationCategory,
-          stateAdminId: selectedStateAdminId,
-          notes: delegationNotes
-        })
+        body: JSON.stringify({ pin: newPin, confirmPin })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        toast(data.msg || 'Payments delegated successfully!', 'success');
-        setShowDelegationModal(false);
-        fetchDashboardData();
+        toast('6-digit Payment Security PIN configured successfully');
+        setPinConfigModalOpen(false);
+        checkPinStatus();
       } else {
-        toast(data.msg || 'Delegation failed.', 'error');
+        setPinSetupError(data.msg || 'Failed to configure PIN');
       }
     } catch (err) {
-      toast('Error during delegation processing.', 'error');
+      setPinSetupError('Network error configuring PIN');
     } finally {
-      setDelegationLoading(false);
+      setPinSetupLoading(false);
     }
   };
 
-  // Open Audit Log Modal (Section 17)
-  const handleOpenAuditModal = async () => {
-    setShowAuditModal(true);
+  // -------------------------------------------------------------
+  // ACTION: VIEW AUDIT LOGS
+  // -------------------------------------------------------------
+  const handleOpenAuditLogs = async () => {
+    setAuditModalOpen(true);
     setAuditLoading(true);
     try {
       const res = await fetch(`${API_BASE}/admin/enterprise/payments/audit-log?limit=50`, {
-        headers: { 'x-auth-token': token, 'Authorization': `Bearer ${token}` }
+        headers: { 'x-auth-token': token }
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (res.ok && data.success) {
         setAuditLogs(data.logs || []);
       }
     } catch (err) {
-      console.error('Fetch audit log error:', err);
+      toast('Failed to load audit logs', 'error');
     } finally {
       setAuditLoading(false);
     }
   };
 
-  // Printable Receipt Function
-  const handlePrintReceipt = () => {
-    window.print();
+  // -------------------------------------------------------------
+  // ACTION: VIEW RECEIPT
+  // -------------------------------------------------------------
+  const handleViewReceipt = async (item) => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/payments/receipt/${item.paymentId}`, {
+        headers: { 'x-auth-token': token }
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.receipt) {
+        setReceiptData(data.receipt);
+        setReceiptModalOpen(true);
+      } else {
+        toast('Receipt details not found', 'error');
+      }
+    } catch (err) {
+      toast('Failed to retrieve receipt', 'error');
+    }
+  };
+
+  // Render Status Badge
+  const renderStatusBadge = (status, holdReason, cancelReason) => {
+    const s = (status || 'PENDING').toUpperCase();
+    if (s === 'PAID') {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+          <CheckCircle className="w-3.5 h-3.5" />
+          PAID
+        </span>
+      );
+    }
+    if (s === 'HOLD') {
+      return (
+        <span
+          title={holdReason ? `Hold Reason: ${holdReason}` : 'On Hold for Review'}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-800 cursor-help"
+        >
+          <PauseCircle className="w-3.5 h-3.5" />
+          ON HOLD
+        </span>
+      );
+    }
+    if (s === 'CANCELLED') {
+      return (
+        <span
+          title={cancelReason ? `Cancellation: ${cancelReason}` : 'Payment Cancelled'}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400 border border-rose-200 dark:border-rose-800 cursor-help"
+        >
+          <Ban className="w-3.5 h-3.5" />
+          CANCELLED
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+        <Clock className="w-3.5 h-3.5" />
+        PENDING
+      </span>
+    );
   };
 
   return (
-    <div className="space-y-6 pb-20 font-sans">
-
-      {/* 1. HEADER & CONTROL TOOLBAR */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 p-6 rounded-3xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-6 animate-fadeIn pb-12">
+      {/* ── 1. HEADER & EXECUTIVE ACTIONS ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-6 shadow-sm">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 flex items-center justify-center font-black">
-              <CreditCard className="w-5 h-5" />
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">
+              Payment Dashboard
+            </h1>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+              PAYOUT & COMMISSION MANAGEMENT
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-3xl">
+            Review verified completed work, inspect calculation basis, and securely disburse payouts to Agents, Vendors, Delivery Partners, and Technicians via bank-grade dual verification.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Live Sync Status */}
+          <div
+            title={isLiveConnected ? 'Connected to live event broker' : 'Connecting to real-time events...'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+          >
+            <span className={`w-2 h-2 rounded-full ${isLiveConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+            <span>{isLiveConnected ? 'Live Sync Active' : 'Connecting...'}</span>
+          </div>
+
+          {/* Security PIN Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setPinSetupError('');
+              setNewPin('');
+              setConfirmPin('');
+              setPinConfigModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-bold bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs cursor-pointer"
+          >
+            <Key className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+            <span>{pinStatus.configured ? 'Security PIN' : 'Configure PIN'}</span>
+          </button>
+
+          {/* Audit Log Button */}
+          <button
+            type="button"
+            onClick={handleOpenAuditLogs}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-bold bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs cursor-pointer"
+          >
+            <FileText className="w-3.5 h-3.5 text-slate-500" />
+            <span>Audit Log</span>
+          </button>
+
+          {/* Refresh Button */}
+          <button
+            type="button"
+            onClick={() => fetchDashboardData(false)}
+            disabled={loading}
+            className="inline-flex items-center justify-center p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs cursor-pointer disabled:opacity-50"
+            title="Refresh dashboard records"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── 2. PAYOUT EXECUTIVE KPI METRICS ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+        {/* Total Pending Payables */}
+        <div className="p-4 rounded-2xl border bg-white dark:bg-slate-900 border-indigo-200/80 dark:border-indigo-900/60 shadow-xs relative overflow-hidden">
+          <div className="flex items-center justify-between text-indigo-600 dark:text-indigo-400 text-xs font-bold">
+            <span>TOTAL PAYABLE</span>
+            <DollarSign className="w-4 h-4" />
+          </div>
+          <div className="text-xl font-black text-slate-900 dark:text-white mt-1.5 tracking-tight">
+            {fmtCurrency(kpis.totalPayableAmount)}
+          </div>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5 font-medium">
+            {kpis.totalPayableCount} Pending Approvals
+          </span>
+        </div>
+
+        {/* Agent Commissions */}
+        <div className="p-4 rounded-2xl border bg-white dark:bg-slate-900 border-blue-200/80 dark:border-blue-900/60 shadow-xs">
+          <div className="flex items-center justify-between text-blue-600 dark:text-blue-400 text-xs font-bold">
+            <span>AGENTS</span>
+            <Briefcase className="w-4 h-4" />
+          </div>
+          <div className="text-xl font-black text-slate-900 dark:text-white mt-1.5 tracking-tight">
+            {fmtCurrency(kpis.agentPayableAmount)}
+          </div>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5 font-medium">
+            {kpis.agentPayableCount} Eligible Agents
+          </span>
+        </div>
+
+        {/* Vendor Settlements */}
+        <div className="p-4 rounded-2xl border bg-white dark:bg-slate-900 border-purple-200/80 dark:border-purple-900/60 shadow-xs">
+          <div className="flex items-center justify-between text-purple-600 dark:text-purple-400 text-xs font-bold">
+            <span>VENDORS</span>
+            <Store className="w-4 h-4" />
+          </div>
+          <div className="text-xl font-black text-slate-900 dark:text-white mt-1.5 tracking-tight">
+            {fmtCurrency(kpis.vendorPayableAmount)}
+          </div>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5 font-medium">
+            {kpis.vendorPayableCount} Orders / Settlements
+          </span>
+        </div>
+
+        {/* Delivery & Tech */}
+        <div className="p-4 rounded-2xl border bg-white dark:bg-slate-900 border-amber-200/80 dark:border-amber-900/60 shadow-xs">
+          <div className="flex items-center justify-between text-amber-600 dark:text-amber-400 text-xs font-bold">
+            <span>LOGISTICS & TECH</span>
+            <Truck className="w-4 h-4" />
+          </div>
+          <div className="text-xl font-black text-slate-900 dark:text-white mt-1.5 tracking-tight">
+            {fmtCurrency(kpis.deliveryPayableAmount + kpis.technicianPayableAmount)}
+          </div>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5 font-medium">
+            {kpis.deliveryPayableCount + kpis.technicianPayableCount} Field Tasks
+          </span>
+        </div>
+
+        {/* Total Paid Out */}
+        <div className="p-4 rounded-2xl border bg-white dark:bg-slate-900 border-emerald-200/80 dark:border-emerald-900/60 shadow-xs">
+          <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+            <span>TOTAL PAID</span>
+            <CheckCircle className="w-4 h-4" />
+          </div>
+          <div className="text-xl font-black text-slate-900 dark:text-white mt-1.5 tracking-tight">
+            {fmtCurrency(kpis.totalPaidOut)}
+          </div>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5 font-medium">
+            Disbursed Outflows
+          </span>
+        </div>
+
+        {/* On Hold & Reviews */}
+        <div className="p-4 rounded-2xl border bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 shadow-xs">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-bold">
+            <span>ON HOLD</span>
+            <PauseCircle className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="text-xl font-black text-slate-900 dark:text-white mt-1.5 tracking-tight">
+            {kpis.onHoldCount}
+          </div>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500 block mt-0.5 font-medium">
+            {kpis.cancelledCount} Cancelled
+          </span>
+        </div>
+      </div>
+
+      {/* ── 3. RECIPIENT TABS & FILTERS BAR ── */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+          {/* Recipient Tabs */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab('agents')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                activeTab === 'agents'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              <Briefcase className="w-3.5 h-3.5" />
+              <span>Agents</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === 'agents' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}>
+                {recipients.agents.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('vendors')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                activeTab === 'vendors'
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              <Store className="w-3.5 h-3.5" />
+              <span>Vendors</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === 'vendors' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}>
+                {recipients.vendors.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('delivery')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                activeTab === 'delivery'
+                  ? 'bg-amber-600 text-white shadow-md shadow-amber-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              <Truck className="w-3.5 h-3.5" />
+              <span>Delivery Partners</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === 'delivery' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}>
+                {recipients.deliveryPartners.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('technicians')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                activeTab === 'technicians'
+                  ? 'bg-cyan-600 text-white shadow-md shadow-cyan-500/20'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700/60'
+              }`}
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              <span>Technicians</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                activeTab === 'technicians' ? 'bg-white/20 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+              }`}>
+                {recipients.technicians.length}
+              </span>
+            </button>
+          </div>
+
+          {/* Search & Status Filters */}
+          <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap">
+            <div className="relative min-w-[200px] w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search recipient, ID, reference..."
+                className="w-full pl-8 pr-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Payment Dashboard</h2>
-                <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                  Enterprise Financial Suite
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                Strict separation of Money Received (+) and Money Paid (-), bank-grade OTP/PIN verification, and immutable audit trails.
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            >
+              <option value="ALL">All Statuses</option>
+              <option value="PENDING">Pending / Eligible</option>
+              <option value="HOLD">On Hold</option>
+              <option value="PAID">Paid</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
+        </div>
+
+        {/* ── 4. RECIPIENT TABLES ── */}
+        {loading ? (
+          <div className="py-20 text-center space-y-3">
+            <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
+            <p className="text-xs text-slate-500 font-medium">Fetching real database payout records...</p>
+          </div>
+        ) : currentList.length === 0 ? (
+          <div className="py-16 text-center space-y-3 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl">
+            <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto text-slate-400">
+              <Layers className="w-6 h-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                No payable records available
+              </h3>
+              <p className="text-xs text-slate-400 max-w-sm mx-auto">
+                {activeTab === 'delivery'
+                  ? 'There are currently no active delivery partner accounts or completed deliveries pending payout.'
+                  : activeTab === 'technicians'
+                  ? 'There are currently no active technician accounts or completed service tasks pending payout.'
+                  : `No ${activeTab} matching the selected status or search filter were found in the database.`}
               </p>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-black tracking-wider text-slate-400">
+                  <th className="py-3 px-3">Recipient / ID</th>
+                  {activeTab === 'agents' && <th className="py-3 px-3">Role & Territory</th>}
+                  {activeTab === 'vendors' && <th className="py-3 px-3">Business & Outlets</th>}
+                  <th className="py-3 px-3">
+                    {activeTab === 'agents' ? 'Completed Work' : activeTab === 'vendors' ? 'Order / Reference' : 'Completed Task'}
+                  </th>
+                  <th className="py-3 px-3">Commission / Basis</th>
+                  <th className="py-3 px-3">Payable Amount</th>
+                  <th className="py-3 px-3">Payment Purpose</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+                {currentList.map((item) => {
+                  const isPending = item.status === 'PENDING' || item.status === 'ELIGIBLE';
+                  const isHold = item.status === 'HOLD';
+                  const isPaid = item.status === 'PAID';
+                  const isCancelled = item.status === 'CANCELLED';
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={handleOpenDelegation}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-2xl flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Share2 className="w-4 h-4 text-blue-500" /> Delegate to State Admin
-          </button>
+                  return (
+                    <tr
+                      key={item._id || item.paymentId}
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
+                    >
+                      {/* Recipient / ID */}
+                      <td className="py-3.5 px-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
+                            {item.recipientName?.charAt(0) || 'R'}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900 dark:text-white">
+                              {item.recipientName}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              {item.recipientId || item.paymentId}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
 
-          <button
-            onClick={handleOpenAuditModal}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-2xl flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Shield className="w-4 h-4 text-purple-500" /> Audit Log
-          </button>
+                      {/* Tab Specific Context (Agent Territory / Vendor Business) */}
+                      {activeTab === 'agents' && (
+                        <td className="py-3.5 px-3">
+                          <span className="inline-block px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400 border border-blue-200 dark:border-blue-800 mb-0.5">
+                            {item.role || 'Agent'}
+                          </span>
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {item.assignedTerritory || 'Tamil Nadu'}
+                          </div>
+                        </td>
+                      )}
 
-          <button
-            onClick={() => {
-              setShowPinSetup(true);
-              setSecurityModalOpen(true);
-              setSecurityStep(2);
-            }}
-            className="px-3.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-2xl flex items-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Key className="w-4 h-4 text-amber-500" /> {pinConfigured ? 'Security PIN' : 'Configure PIN'}
-          </button>
+                      {activeTab === 'vendors' && (
+                        <td className="py-3.5 px-3">
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">
+                            {item.businessName || 'Merchant Outlet'}
+                          </div>
+                          <div className="text-[10px] text-slate-400">
+                            {item.businessType || 'Retail'}
+                          </div>
+                        </td>
+                      )}
 
-          <button
-            onClick={fetchDashboardData}
-            title="Refresh Financial Data"
-            className="p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-2xl transition-all cursor-pointer"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-emerald-500' : ''}`} />
-          </button>
-        </div>
+                      {/* Completed Work / Order Ref */}
+                      <td className="py-3.5 px-3">
+                        <div className="text-slate-800 dark:text-slate-200 font-semibold">
+                          {activeTab === 'agents' ? item.eligibleWork : activeTab === 'vendors' ? item.eligibleOrder : item.completedWork || item.completedDeliveries || item.sourceReference}
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">
+                          Ref: {item.sourceReference || item.orderReference || '—'}
+                        </div>
+                      </td>
+
+                      {/* Commission Basis & Rate */}
+                      <td className="py-3.5 px-3">
+                        <div className="text-slate-700 dark:text-slate-300">
+                          {item.commissionBasis}
+                        </div>
+                        <div className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">
+                          Rate: {item.commissionRate || 'Standard'}
+                        </div>
+                      </td>
+
+                      {/* Payable Amount */}
+                      <td className="py-3.5 px-3">
+                        <div className="text-sm font-black text-slate-900 dark:text-white">
+                          {fmtCurrency(item.payableAmount)}
+                        </div>
+                        {item.grossAmount && item.grossAmount !== item.payableAmount && (
+                          <div className="text-[10px] text-slate-400">
+                            Gross: {fmtCurrency(item.grossAmount)}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Payment Purpose */}
+                      <td className="py-3.5 px-3 max-w-xs">
+                        <span className="text-slate-600 dark:text-slate-400 line-clamp-2 text-[11px]" title={item.paymentPurpose}>
+                          {item.paymentPurpose || 'Verified service compensation'}
+                        </span>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3.5 px-3">
+                        {renderStatusBadge(item.status, item.holdReason, item.cancellationReason)}
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-3 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Pay Action Button */}
+                          {(isPending || isHold) && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenPayModal(item)}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-xs cursor-pointer"
+                              title="Process dual-verified payout"
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                              <span>Pay</span>
+                            </button>
+                          )}
+
+                          {/* Hold Action Button */}
+                          {isPending && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenHoldModal(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 hover:bg-amber-100 transition shadow-xs cursor-pointer"
+                              title="Freeze payout for review"
+                            >
+                              <PauseCircle className="w-3.5 h-3.5" />
+                              <span>Hold</span>
+                            </button>
+                          )}
+
+                          {/* Release Hold Button */}
+                          {isHold && (
+                            <button
+                              type="button"
+                              onClick={() => handleReleaseHold(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-blue-300 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 hover:bg-blue-100 transition shadow-xs cursor-pointer"
+                              title="Release back to pending"
+                            >
+                              <PlayCircle className="w-3.5 h-3.5" />
+                              <span>Release</span>
+                            </button>
+                          )}
+
+                          {/* Cancel Action Button */}
+                          {!isPaid && !isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCancelModal(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 hover:bg-rose-100 transition shadow-xs cursor-pointer"
+                              title="Cancel disbursement"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Cancel</span>
+                            </button>
+                          )}
+
+                          {/* Paid Receipt View Button */}
+                          {isPaid && (
+                            <button
+                              type="button"
+                              onClick={() => handleViewReceipt(item)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 transition shadow-xs cursor-pointer"
+                              title="View and print disbursement receipt"
+                            >
+                              <Printer className="w-3.5 h-3.5 text-slate-500" />
+                              <span>Receipt</span>
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* 2. TOP DASHBOARD KPI CARDS (SECTION 24) */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
-        
-        {/* TOTAL RECEIVED (+) */}
-        <div className="bg-white dark:bg-slate-900 border border-emerald-500/20 dark:border-emerald-500/30 rounded-3xl p-4.5 shadow-xs relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Total Received</span>
-            <div className="w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-black text-sm">
-              +
-            </div>
-          </div>
-          <span className="text-xl font-black text-emerald-600 dark:text-emerald-400 block tracking-tight mt-1.5">
-            +₹{(kpi.totalReceived || 0).toLocaleString()}
-          </span>
-          <span className="text-[10px] font-bold text-slate-400 block mt-0.5">Verified Inflows</span>
-        </div>
-
-        {/* TOTAL PAID (-) */}
-        <div className="bg-white dark:bg-slate-900 border border-rose-500/20 dark:border-rose-500/30 rounded-3xl p-4.5 shadow-xs relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-rose-600 dark:text-rose-400">Total Paid</span>
-            <div className="w-6 h-6 rounded-full bg-rose-500/10 text-rose-600 flex items-center justify-center font-black text-sm">
-              -
-            </div>
-          </div>
-          <span className="text-xl font-black text-rose-600 dark:text-rose-400 block tracking-tight mt-1.5">
-            -₹{(kpi.totalPaid || 0).toLocaleString()}
-          </span>
-          <span className="text-[10px] font-bold text-slate-400 block mt-0.5">Processed Outflows</span>
-        </div>
-
-        {/* PENDING PAYMENTS */}
-        <div className="bg-white dark:bg-slate-900 border border-amber-500/20 dark:border-amber-500/30 rounded-3xl p-4.5 shadow-xs relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-400">Pending</span>
-            <Clock className="w-4 h-4 text-amber-500" />
-          </div>
-          <span className="text-xl font-black text-amber-600 dark:text-amber-400 block tracking-tight mt-1.5">
-            ₹{(kpi.pendingAmount || 0).toLocaleString()}
-          </span>
-          <span className="text-[10px] font-bold text-slate-400 block mt-0.5">{kpi.pendingPayments || 0} Pending Approvals</span>
-        </div>
-
-        {/* FAILED PAYMENTS */}
-        <div className="bg-white dark:bg-slate-900 border border-red-500/20 dark:border-red-500/30 rounded-3xl p-4.5 shadow-xs relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-red-600 dark:text-red-400">Failed</span>
-            <AlertTriangle className="w-4 h-4 text-red-500" />
-          </div>
-          <span className="text-xl font-black text-red-600 dark:text-red-400 block tracking-tight mt-1.5">
-            ₹{(kpi.failedAmount || 0).toLocaleString()}
-          </span>
-          <span className="text-[10px] font-bold text-slate-400 block mt-0.5">{kpi.failedPayments || 0} Needs Review</span>
-        </div>
-
-        {/* CANCELLED PAYMENTS */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-3xl p-4.5 shadow-xs relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Cancelled</span>
-            <XCircle className="w-4 h-4 text-slate-400" />
-          </div>
-          <span className="text-xl font-black text-slate-600 dark:text-slate-300 block tracking-tight mt-1.5">
-            ₹{(kpi.cancelledAmount || 0).toLocaleString()}
-          </span>
-          <span className="text-[10px] font-bold text-slate-400 block mt-0.5">{kpi.cancelledPayments || 0} Revoked</span>
-        </div>
-
-        {/* NET CASH FLOW */}
-        <div className={`bg-white dark:bg-slate-900 border rounded-3xl p-4.5 shadow-xs relative overflow-hidden ${
-          (kpi.netCashFlow || 0) >= 0 ? 'border-emerald-500/30' : 'border-rose-500/30'
-        }`}>
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Net Cash Flow</span>
-            {(kpi.netCashFlow || 0) >= 0 ? (
-              <ArrowUpRight className="w-4 h-4 text-emerald-500" />
-            ) : (
-              <ArrowDownRight className="w-4 h-4 text-rose-500" />
-            )}
-          </div>
-          <span className={`text-xl font-black block tracking-tight mt-1.5 ${
-            (kpi.netCashFlow || 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-          }`}>
-            ₹{(kpi.netCashFlow || 0).toLocaleString()}
-          </span>
-          <span className="text-[10px] font-bold text-slate-400 block mt-0.5">Received - Paid</span>
-        </div>
-
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 3. SECTION A: MONEY RECEIVED (GREEN THEME, + ICON, POSITIVE AMOUNTS)      */}
-      {/* ========================================================================= */}
-      <div className="space-y-3.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center font-black text-xs shadow-xs">
-              +
-            </div>
-            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight uppercase">
-              A. Money Received
-            </h3>
-            <span className="text-[11px] font-bold text-emerald-600 bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-              Incoming Revenue
-            </span>
-          </div>
-          <span className="text-xs font-bold text-slate-400">Strict Positive Accounting</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {receivedCategories.map((cat) => (
-            <div
-              key={cat.key}
-              className="bg-white dark:bg-slate-900 border border-emerald-500/20 dark:border-emerald-500/30 hover:border-emerald-500/40 rounded-3xl p-5 shadow-xs transition-all hover:shadow-md flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-black uppercase text-emerald-700 dark:text-emerald-300">
-                    {cat.title}
-                  </span>
-                  <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-black text-xs">
-                    +
-                  </div>
-                </div>
-
-                <div className="mt-1">
-                  <span className="text-2xl font-black text-slate-900 dark:text-slate-50 tracking-tight block">
-                    +₹{(cat.totalAmount || 0).toLocaleString()}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-400 mt-1 block">
-                    {cat.transactionCount || 0} Transactions
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80">
-                <button
-                  onClick={() => handleOpenCategory(cat)}
-                  className="w-full py-2.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-extrabold rounded-2xl flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-98"
-                >
-                  <Eye className="w-3.5 h-3.5" /> View
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 4. SECTION B: MONEY PAID (RED THEME, - ICON, OUTGOING TERMINOLOGY)        */}
-      {/* ========================================================================= */}
-      <div className="space-y-3.5 pt-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center font-black text-xs shadow-xs">
-              -
-            </div>
-            <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight uppercase">
-              B. Money Paid
-            </h3>
-            <span className="text-[11px] font-bold text-rose-600 bg-rose-500/10 px-2.5 py-0.5 rounded-full border border-rose-500/20">
-              Disbursements & Payouts
-            </span>
-          </div>
-          <span className="text-xs font-bold text-slate-400">Database Payout Scheduling</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {paidCategories.map((cat) => (
-            <div
-              key={cat.key}
-              className="bg-white dark:bg-slate-900 border border-rose-500/20 dark:border-rose-500/30 hover:border-rose-500/40 rounded-3xl p-5 shadow-xs transition-all hover:shadow-md flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs font-black uppercase text-rose-700 dark:text-rose-300">
-                    {cat.title}
-                  </span>
-                  <div className="w-5 h-5 rounded-full bg-rose-500/10 text-rose-600 flex items-center justify-center font-black text-xs">
-                    -
-                  </div>
-                </div>
-
-                <div className="mt-1">
-                  <span className="text-2xl font-black text-rose-600 dark:text-rose-400 tracking-tight block">
-                    -₹{(cat.totalAmount || 0).toLocaleString()}
-                  </span>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md">
-                      {cat.pendingCount || 0} Pending
-                    </span>
-                    <span className="text-xs text-slate-400 font-medium">
-                      ({cat.totalCount || 0} Total)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80 grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => handleOpenCategory(cat)}
-                  className="py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-extrabold rounded-2xl flex items-center justify-center gap-1 transition-all cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" /> View
-                </button>
-                <button
-                  disabled={!cat.pendingCount || cat.pendingCount === 0}
-                  onClick={() => handleOpenPayAll(cat)}
-                  className={`py-2.5 text-xs font-extrabold rounded-2xl flex items-center justify-center gap-1 transition-all cursor-pointer shadow-xs active:scale-98 ${
-                    cat.pendingCount > 0
-                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  <Send className="w-3 h-3" /> Pay All
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 5. DETAILED PAYMENT TRANSACTION MANAGEMENT MODAL (SECTION 2 & 14)         */}
-      {/* ========================================================================= */}
-      {activeCategoryModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-6xl rounded-3xl p-6 space-y-5 shadow-2xl my-6 max-h-[92vh] flex flex-col">
-            
+      {/* ── 5. PAY ACTION FLOW MODAL (10 STEPS: DETAILS → OTP → PIN → SUCCESS) ── */}
+      {payModalOpen && selectedPayable && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-lg ${
-                  activeCategoryModal.type === 'received' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-600'
-                }`}>
-                  {activeCategoryModal.type === 'received' ? '+' : '-'}
+            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Shield className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
-                    {activeCategoryModal.title} Management
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    {payStep === 1 && 'Confirm Payout Disbursement'}
+                    {payStep === 2 && 'Step 1: Email OTP Verification'}
+                    {payStep === 3 && 'Step 2: Security PIN Verification'}
+                    {payStep === 4 && 'Disbursement Successful'}
                   </h3>
-                  <p className="text-xs text-slate-400 font-semibold">
-                    Detailed ledger with territory filtering, masked accounts, and backend-enforced payout actions.
+                  <p className="text-[11px] text-slate-400">
+                    Dual-factor server-side payment security protocol
                   </p>
                 </div>
               </div>
-
-              <div className="flex items-center gap-2">
-                {activeCategoryModal.type === 'paid' && (
-                  <button
-                    onClick={() => handleOpenPayAll(activeCategoryModal)}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
-                  >
-                    <Send className="w-3.5 h-3.5" /> {activeCategoryModal.payAllAction || 'Pay All'}
-                  </button>
-                )}
-                <button
-                  onClick={() => setActiveCategoryModal(null)}
-                  className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer rounded-xl bg-slate-100 dark:bg-slate-800"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            {/* Filter Bar (Search, Status, Dynamic Territory Hierarchy, Date Range, Sort) */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-850 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
-                
-                {/* Search */}
-                <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs">
-                  <Search className="w-3.5 h-3.5 text-slate-400 mr-2 shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="Search name, ID, phone..."
-                    value={filterSearch}
-                    onChange={(e) => setFilterSearch(e.target.value)}
-                    className="bg-transparent focus:outline-none w-full text-slate-800 dark:text-slate-200 font-semibold"
-                  />
-                </div>
-
-                {/* Status Filter */}
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                >
-                  <option value="ALL">All Statuses</option>
-                  <option value="PENDING">Pending</option>
-                  <option value="PAID">Paid</option>
-                  <option value="FAILED">Failed</option>
-                  <option value="CANCELLED">Cancelled</option>
-                </select>
-
-                {/* Dynamic State Filter (Database Sourced) */}
-                <select
-                  value={filterState}
-                  onChange={(e) => {
-                    setFilterState(e.target.value);
-                    setFilterDistrict('all');
-                    setFilterDivision('all');
-                    setFilterPincode('all');
-                  }}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                >
-                  <option value="all">All States</option>
-                  {territoryStates.map((st) => (
-                    <option key={st._id} value={st.name}>{st.name}</option>
-                  ))}
-                </select>
-
-                {/* Dynamic District Filter */}
-                <select
-                  value={filterDistrict}
-                  onChange={(e) => {
-                    setFilterDistrict(e.target.value);
-                    setFilterDivision('all');
-                    setFilterPincode('all');
-                  }}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                >
-                  <option value="all">All Districts</option>
-                  {availableDistricts.map((d) => (
-                    <option key={d._id} value={d.name}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2.5">
-                
-                {/* Dynamic Division Filter */}
-                <select
-                  value={filterDivision}
-                  onChange={(e) => {
-                    setFilterDivision(e.target.value);
-                    setFilterPincode('all');
-                  }}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                >
-                  <option value="all">All Divisions</option>
-                  {availableDivisions.map((div) => (
-                    <option key={div._id} value={div.name}>{div.name}</option>
-                  ))}
-                </select>
-
-                {/* Dynamic Pincode Filter */}
-                <select
-                  value={filterPincode}
-                  onChange={(e) => setFilterPincode(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                >
-                  <option value="all">All Pincodes</option>
-                  {availablePincodes.map((pin) => (
-                    <option key={pin._id} value={pin.code}>{pin.code}</option>
-                  ))}
-                </select>
-
-                {/* Date Filters */}
-                <input
-                  type="date"
-                  value={filterStartDate}
-                  onChange={(e) => setFilterStartDate(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                  title="Start Date"
-                />
-
-                <input
-                  type="date"
-                  value={filterEndDate}
-                  onChange={(e) => setFilterEndDate(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                  title="End Date"
-                />
-
-                {/* Sort Option */}
-                <select
-                  value={filterSort}
-                  onChange={(e) => setFilterSort(e.target.value)}
-                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none"
-                >
-                  <option value="date_desc">Newest First</option>
-                  <option value="date_asc">Oldest First</option>
-                  <option value="amount_desc">Highest Amount</option>
-                  <option value="amount_asc">Lowest Amount</option>
-                  <option value="status">Sort by Status</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Transactions Table */}
-            <div className="flex-1 overflow-x-auto min-h-[300px]">
-              {txnLoading ? (
-                <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-                  <RefreshCw className="w-8 h-8 animate-spin text-emerald-500 mb-2" />
-                  <span className="text-xs font-bold">Querying verified payment database records...</span>
-                </div>
-              ) : transactions.length === 0 ? (
-                <div className="text-center py-16 text-slate-400 space-y-2">
-                  <CreditCard className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
-                  <p className="text-xs font-bold">No transactions found matching your criteria.</p>
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                      <th className="py-3 px-3">Payment ID</th>
-                      <th className="py-3 px-3">Recipient</th>
-                      <th className="py-3 px-3">Territory</th>
-                      <th className="py-3 px-3">Bank Details</th>
-                      <th className="py-3 px-3">Amount</th>
-                      <th className="py-3 px-3">Period</th>
-                      <th className="py-3 px-3">Status</th>
-                      <th className="py-3 px-3 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
-                    {transactions.map((t) => (
-                      <tr key={t._id} className="hover:bg-slate-50/70 dark:hover:bg-slate-850/50 transition-colors">
-                        
-                        {/* Payment ID */}
-                        <td className="py-3 px-3">
-                          <span className="font-mono font-black text-slate-800 dark:text-slate-200 block">
-                            {t.paymentId}
-                          </span>
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            {new Date(t.createdAt).toLocaleDateString()}
-                          </span>
-                        </td>
-
-                        {/* Recipient */}
-                        <td className="py-3 px-3">
-                          <span className="font-black text-slate-800 dark:text-slate-100 block">
-                            {t.recipientName}
-                          </span>
-                          <span className="text-[10px] font-semibold text-slate-400 block">
-                            {t.recipientType} {t.recipientPhone ? `• ${t.recipientPhone}` : ''}
-                          </span>
-                        </td>
-
-                        {/* Territory */}
-                        <td className="py-3 px-3 text-[11px]">
-                          <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                            {t.territory?.state || '—'}
-                          </span>
-                          <span className="text-slate-400 block">
-                            {t.territory?.district || '—'} / {t.territory?.pincode || '—'}
-                          </span>
-                        </td>
-
-                        {/* Masked Bank Details */}
-                        <td className="py-3 px-3 font-mono text-[11px]">
-                          <span className="font-bold text-slate-700 dark:text-slate-300 block">
-                            {t.maskedAccountNumber || '••••••••0000'}
-                          </span>
-                          <span className="text-slate-400 text-[10px] block">
-                            {t.bankIfsc || '—'} ({t.bankName || 'Bank'})
-                          </span>
-                        </td>
-
-                        {/* Amount */}
-                        <td className="py-3 px-3">
-                          <span className={`font-black text-sm block ${
-                            t.paymentType === 'received' ? 'text-emerald-600' : 'text-rose-600 dark:text-rose-400'
-                          }`}>
-                            {t.paymentType === 'received' ? '+' : '-'}₹{(t.amount || 0).toLocaleString()}
-                          </span>
-                        </td>
-
-                        {/* Period */}
-                        <td className="py-3 px-3 font-semibold text-slate-600 dark:text-slate-400">
-                          {t.paymentPeriod || '—'}
-                        </td>
-
-                        {/* Status */}
-                        <td className="py-3 px-3">
-                          <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full inline-block ${
-                            t.status === 'PAID' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
-                            t.status === 'PENDING' ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20' :
-                            t.status === 'FAILED' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' :
-                            'bg-slate-200 dark:bg-slate-800 text-slate-500 border border-slate-300 dark:border-slate-700'
-                          }`}>
-                            {t.status}
-                          </span>
-                        </td>
-
-                        {/* Actions (Section 2: [View], [Pay], [Cancel]) */}
-                        <td className="py-3 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => handleViewPaymentDetail(t.paymentId)}
-                              className="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold rounded-xl text-[11px] cursor-pointer"
-                              title="View Complete Details"
-                            >
-                              View
-                            </button>
-
-                            {t.status === 'PENDING' && t.paymentType === 'paid' && (
-                              <>
-                                <button
-                                  onClick={() => startSecurityVerification({
-                                    type: 'single',
-                                    paymentId: t.paymentId,
-                                    recipientName: t.recipientName,
-                                    amount: t.amount,
-                                    category: t.paymentCategory
-                                  })}
-                                  className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-[11px] cursor-pointer shadow-xs active:scale-95"
-                                  title="Pay Recipient"
-                                >
-                                  Pay
-                                </button>
-                                <button
-                                  onClick={() => handleOpenCancel(t)}
-                                  className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-rose-600 font-bold rounded-xl text-[11px] cursor-pointer"
-                                  title="Cancel Payment"
-                                >
-                                  Cancel
-                                </button>
-                              </>
-                            )}
-
-                            {t.status === 'PAID' && (
-                              <button
-                                onClick={() => handleOpenReceipt(t.paymentId)}
-                                className="px-2 py-1.5 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 hover:bg-emerald-100 font-bold rounded-xl text-[11px] cursor-pointer"
-                                title="View Receipt"
-                              >
-                                Receipt
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            {/* Pagination */}
-            <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-3 text-xs">
-              <span className="font-semibold text-slate-400">
-                Showing {transactions.length} of {txnTotalCount} records
-              </span>
-
-              <div className="flex items-center gap-2">
-                <button
-                  disabled={txnPage <= 1}
-                  onClick={() => setTxnPage(p => Math.max(1, p - 1))}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold disabled:opacity-40 cursor-pointer"
-                >
-                  Previous
-                </button>
-                <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
-                  Page {txnPage} of {txnTotalPages}
-                </span>
-                <button
-                  disabled={txnPage >= txnTotalPages}
-                  onClick={() => setTxnPage(p => Math.min(txnTotalPages, p + 1))}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-bold disabled:opacity-40 cursor-pointer"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 6. PAYMENT DETAIL – VIEW MODAL (SECTION 3)                                */}
-      {/* ========================================================================= */}
-      {selectedPaymentDetail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 space-y-6 shadow-2xl my-6">
-            
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="flex items-center gap-2.5">
-                <FileText className="w-5 h-5 text-emerald-500" />
-                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 tracking-tight">
-                  Payment Record Detail ({selectedPaymentDetail.paymentId})
-                </h3>
-              </div>
               <button
-                onClick={() => setSelectedPaymentDetail(null)}
-                className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
+                type="button"
+                onClick={() => setPayModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
                 <X className="w-5 h-5" />
               </button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
-              <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850">
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Recipient Name</span>
-                <span className="font-extrabold text-slate-800 dark:text-slate-100 text-sm block mt-0.5">
-                  {selectedPaymentDetail.recipientName}
-                </span>
-                <span className="text-[10px] font-bold text-slate-400">{selectedPaymentDetail.recipientType}</span>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850">
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Amount</span>
-                <span className={`font-black text-sm block mt-0.5 ${
-                  selectedPaymentDetail.paymentType === 'received' ? 'text-emerald-600' : 'text-rose-600'
-                }`}>
-                  {selectedPaymentDetail.paymentType === 'received' ? '+' : '-'}₹{(selectedPaymentDetail.amount || 0).toLocaleString()}
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">{selectedPaymentDetail.status}</span>
-              </div>
-
-              <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850">
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Payment Period</span>
-                <span className="font-extrabold text-slate-800 dark:text-slate-100 block mt-0.5">
-                  {selectedPaymentDetail.paymentPeriod || 'September 2026'}
-                </span>
-                <span className="text-[10px] font-bold text-slate-400">Due: {new Date(selectedPaymentDetail.dueDate).toLocaleDateString()}</span>
-              </div>
-            </div>
-
-            {/* Territory Breakdown */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 space-y-1.5 text-xs">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Territory Location</span>
-              <div className="grid grid-cols-4 gap-2 font-bold text-slate-700 dark:text-slate-300">
-                <div>State: <span className="text-slate-900 dark:text-slate-100">{selectedPaymentDetail.territory?.state || '—'}</span></div>
-                <div>District: <span className="text-slate-900 dark:text-slate-100">{selectedPaymentDetail.territory?.district || '—'}</span></div>
-                <div>Division: <span className="text-slate-900 dark:text-slate-100">{selectedPaymentDetail.territory?.division || '—'}</span></div>
-                <div>Pincode: <span className="text-slate-900 dark:text-slate-100">{selectedPaymentDetail.territory?.pincode || '—'}</span></div>
-              </div>
-            </div>
-
-            {/* Bank Details */}
-            <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 space-y-2 text-xs">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">Bank Destination</span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-mono text-slate-700 dark:text-slate-300 font-semibold">
-                <div>Holder: <span className="font-sans font-bold text-slate-900 dark:text-slate-100">{selectedPaymentDetail.bankAccountHolder || '—'}</span></div>
-                <div>Account: <span className="font-bold text-slate-900 dark:text-slate-100">{selectedPaymentDetail.maskedAccountNumber || '••••••••0000'}</span></div>
-                <div>IFSC: <span className="font-bold text-slate-900 dark:text-slate-100">{selectedPaymentDetail.bankIfsc || '—'}</span></div>
-                <div>Bank: <span className="font-sans text-slate-900 dark:text-slate-100">{selectedPaymentDetail.bankName || 'Bank'}</span></div>
-              </div>
-            </div>
-
-            {/* Payroll Compensation Details if Payroll */}
-            {selectedPaymentDetail.department && (
-              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 space-y-2 text-xs">
-                <span className="text-[10px] font-black uppercase text-cyan-600 dark:text-cyan-400 tracking-wider block">Payroll Compensation Breakdown</span>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Department</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">{selectedPaymentDetail.department}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Designation</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">{selectedPaymentDetail.designation || 'Staff'}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Basic Salary</span>
-                    <span className="font-bold text-slate-800 dark:text-slate-200">₹{(selectedPaymentDetail.basicSalary || 0).toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 block">Net Payable</span>
-                    <span className="font-black text-emerald-600">₹{(selectedPaymentDetail.netSalary || selectedPaymentDetail.amount || 0).toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Previous History */}
-            {selectedPaymentDetail.previousPaymentHistory && selectedPaymentDetail.previousPaymentHistory.length > 0 && (
-              <div className="space-y-1.5 text-xs">
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Previous Payment History</span>
-                <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-100 dark:border-slate-850 rounded-2xl overflow-hidden">
-                  {selectedPaymentDetail.previousPaymentHistory.map((h, idx) => (
-                    <div key={idx} className="flex justify-between p-2.5 bg-slate-50 dark:bg-slate-950 text-[11px]">
-                      <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{h.paymentId}</span>
-                      <span className="text-slate-400">{h.paymentPeriod}</span>
-                      <span className="font-bold text-slate-800 dark:text-slate-200">₹{(h.amount || 0).toLocaleString()}</span>
-                      <span className="font-bold text-emerald-600 uppercase text-[10px]">{h.status}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setSelectedPaymentDetail(null)}
-                className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-extrabold rounded-2xl cursor-pointer text-xs"
-              >
-                Close
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 7. PAY ALL CONFIRMATION / PREVIEW SCREEN (SECTION 4, 10, 11, 12, 13)       */}
-      {/* ========================================================================= */}
-      {payAllPreviewData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-3xl rounded-3xl p-6 space-y-5 shadow-2xl my-6">
-            
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div>
-                <h3 className="text-xl font-black text-rose-600 tracking-tight uppercase flex items-center gap-2">
-                  <Send className="w-5 h-5" /> Pay All Recipients Confirmation
-                </h3>
-                <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                  Review all eligible pending disbursements before proceeding to Email OTP & 6-digit PIN verification.
-                </p>
-              </div>
-              <button onClick={() => setPayAllPreviewData(null)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-500/20 p-4 rounded-2xl">
-                <span className="text-[10px] font-black uppercase text-rose-700 dark:text-rose-300 block">Total Payable Amount</span>
-                <span className="text-2xl font-black text-rose-600 dark:text-rose-400 block tracking-tight mt-0.5">
-                  ₹{(payAllPreviewData.totalAmount || 0).toLocaleString()}
-                </span>
-              </div>
-              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/70 dark:border-slate-850 p-4 rounded-2xl">
-                <span className="text-[10px] font-black uppercase text-slate-400 block">Pending Recipients</span>
-                <span className="text-2xl font-black text-slate-800 dark:text-slate-100 block tracking-tight mt-0.5">
-                  {payAllPreviewData.pendingCount || 0}
-                </span>
-              </div>
-            </div>
-
-            {/* Recipients List with Masked Bank Details */}
-            <div className="max-h-64 overflow-y-auto border border-slate-100 dark:border-slate-800 rounded-2xl divide-y divide-slate-100 dark:divide-slate-850 text-xs">
-              {payAllPreviewData.recipients.map((r, i) => (
-                <div key={i} className="p-3 flex items-center justify-between hover:bg-slate-50/60 dark:hover:bg-slate-850/40">
-                  <div>
-                    <span className="font-extrabold text-slate-800 dark:text-slate-100 block">{r.recipientName}</span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {r.maskedAccountNumber} • {r.bankIfsc} • {r.territory?.state || 'TN'}
-                    </span>
-                  </div>
-                  <span className="font-black text-rose-600 dark:text-rose-400 text-sm">
-                    ₹{(r.amount || 0).toLocaleString()}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setPayAllPreviewData(null)}
-                className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold rounded-2xl text-xs cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  setPayAllPreviewData(null);
-                  startSecurityVerification({
-                    type: 'bulk',
-                    category: payAllPreviewData.category,
-                    amount: payAllPreviewData.totalAmount,
-                    recipientName: `${payAllPreviewData.pendingCount} Recipients in Bulk Batch`
-                  });
-                }}
-                className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-2xl text-xs shadow-md cursor-pointer flex items-center gap-1.5 active:scale-95"
-              >
-                Proceed to Verification <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 8. 3-STEP PAYMENT SECURITY VERIFICATION MODAL (SECTIONS 5, 6, 7, 8)       */}
-      {/* ========================================================================= */}
-      {securityModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-6 shadow-2xl my-6">
-            
-            {/* Header & Step Indicator */}
-            <div className="border-b border-slate-100 dark:border-slate-800 pb-4">
-              <div className="flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-primary-500/10 text-primary-600 flex items-center justify-center font-black">
-                    <Shield className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
-                      Payment Authorization Gateway
-                    </h3>
-                    <span className="text-[10px] font-bold text-slate-400">Step {securityStep} of 3</span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSecurityModalOpen(false)}
-                  className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Progress Steps */}
-              <div className="grid grid-cols-3 gap-2 mt-4">
-                <div className={`h-1.5 rounded-full ${securityStep >= 1 ? 'bg-primary-600' : 'bg-slate-200 dark:bg-slate-800'}`} />
-                <div className={`h-1.5 rounded-full ${securityStep >= 2 ? 'bg-primary-600' : 'bg-slate-200 dark:bg-slate-800'}`} />
-                <div className={`h-1.5 rounded-full ${securityStep >= 3 ? 'bg-primary-600' : 'bg-slate-200 dark:bg-slate-800'}`} />
-              </div>
             </div>
 
             {/* Error Message Alert */}
-            {securityError && (
-              <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-500/30 text-rose-600 dark:text-rose-400 p-3 rounded-2xl text-xs font-semibold flex items-center gap-2">
+            {payError && (
+              <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 flex items-center gap-2 text-xs font-semibold text-rose-700 dark:text-rose-400">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{securityError}</span>
+                <span>{payError}</span>
               </div>
             )}
 
-            {/* SUCCESS VIEW */}
-            {processingSuccess ? (
-              <div className="text-center py-6 space-y-4">
-                <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-600 mx-auto flex items-center justify-center">
-                  <CheckCircle className="w-10 h-10" />
+            {/* Step 1: Confirmation & Details Breakdown */}
+            {payStep === 1 && (
+              <div className="p-6 space-y-4 overflow-y-auto">
+                {/* Recipient Details Card */}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Recipient</span>
+                      <div className="font-bold text-sm text-slate-900 dark:text-white">
+                        {selectedPayable.recipientName}
+                      </div>
+                      <span className="text-xs text-slate-500 font-mono">
+                        ID: {selectedPayable.recipientId}
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                      {selectedPayable.recipientType}
+                    </span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Bank Account</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
+                        {selectedPayable.bankDetails?.accountNumber || 'Pending Submission'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">IFSC Code</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
+                        {selectedPayable.bankDetails?.ifsc || '—'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-lg font-black text-slate-800 dark:text-slate-100">Payment Processed Successfully!</h4>
-                  <p className="text-xs text-slate-400 font-medium mt-1">
-                    The ledger has been synchronized and the transaction is marked as PAID.
+
+                {/* Calculation Breakdown */}
+                <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60 space-y-2.5">
+                  <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider block">
+                    Calculation & Traceability
+                  </span>
+
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Source Reference</span>
+                    <span className="font-semibold font-mono text-slate-800 dark:text-slate-200">
+                      {selectedPayable.sourceReference}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Commission Basis</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {selectedPayable.commissionBasis}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Applicable Rate</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {selectedPayable.commissionRate}
+                    </span>
+                  </div>
+
+                  <div className="pt-2 border-t border-indigo-200/60 dark:border-indigo-800/60 flex items-baseline justify-between">
+                    <span className="font-bold text-xs text-slate-800 dark:text-slate-200">Final Payable Amount</span>
+                    <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">
+                      {fmtCurrency(selectedPayable.payableAmount)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Payment Purpose Callout */}
+                <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
+                    Payment Purpose (Reason)
+                  </span>
+                  <p className="text-slate-700 dark:text-slate-300 font-medium">
+                    {selectedPayable.paymentPurpose}
                   </p>
                 </div>
 
-                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 text-xs text-left font-mono space-y-1">
-                  <div>Reference: <span className="font-bold text-slate-800 dark:text-slate-200">{processingSuccess.payment?.transactionReference || processingSuccess.summary?.batchReference || 'TXN-SUCCESS'}</span></div>
-                  <div>Status: <span className="font-bold text-emerald-600">PAID</span></div>
-                </div>
-
-                <div className="flex justify-center gap-2.5 pt-2">
+                <div className="pt-2 flex items-center justify-end gap-2.5">
                   <button
-                    onClick={() => {
-                      setSecurityModalOpen(false);
-                      if (processingSuccess.payment?.paymentId) {
-                        handleOpenReceipt(processingSuccess.payment.paymentId);
-                      }
-                    }}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-xs cursor-pointer shadow-md"
+                    type="button"
+                    onClick={() => setPayModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
                   >
-                    View Receipt
+                    Cancel
                   </button>
                   <button
-                    onClick={() => setSecurityModalOpen(false)}
-                    className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-extrabold rounded-2xl text-xs cursor-pointer"
+                    type="button"
+                    onClick={handleRequestOtp}
+                    disabled={otpLoading}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-md shadow-indigo-500/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {otpLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    <span>Confirm & Send Email OTP</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Email OTP Entry */}
+            {payStep === 2 && (
+              <form onSubmit={handleVerifyOtp} className="p-6 space-y-4">
+                <div className="text-center space-y-1">
+                  <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+                    <Send className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Enter Verification Code
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    A secure 6-digit OTP code has been dispatched to authorized Super Admin email:{' '}
+                    <strong className="text-slate-800 dark:text-slate-200">{currentUser?.email || 'admin@connect.in'}</strong>
+                  </p>
+                </div>
+
+                <div>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    autoFocus
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Enter 6-digit OTP"
+                    className="w-full text-center text-2xl tracking-[0.5em] font-mono font-bold py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
+                    <span>Expires in: {Math.floor(otpTimer / 60)}:{(otpTimer % 60).toString().padStart(2, '0')}</span>
+                    {otpTimer === 0 ? (
+                      <button
+                        type="button"
+                        onClick={handleRequestOtp}
+                        className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                      >
+                        Resend Code
+                      </button>
+                    ) : (
+                      <span>Single-use code</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setPayStep(1)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={otpLoading || otpCode.length !== 6}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {otpLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    <span>Verify Email OTP</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Step 3: Security PIN Entry */}
+            {payStep === 3 && (
+              <form onSubmit={handleAuthorizeDisbursement} className="p-6 space-y-4">
+                <div className="text-center space-y-1">
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                    <Lock className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Enter Security PIN
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Email OTP verified. Please enter your 6-digit Security PIN to finalize and disburse {fmtCurrency(selectedPayable.payableAmount)}.
+                  </p>
+                </div>
+
+                {/* 6 Digit Input Boxes */}
+                <div className="flex justify-center gap-2.5 my-3">
+                  {[0, 1, 2, 3, 4, 5].map((idx) => (
+                    <input
+                      key={idx}
+                      id={`pin-box-${idx}`}
+                      type="password"
+                      maxLength={1}
+                      autoFocus={idx === 0}
+                      value={securityPin[idx] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        const copy = [...securityPin];
+                        copy[idx] = val;
+                        setSecurityPin(copy);
+                        if (val && idx < 5) {
+                          const next = document.getElementById(`pin-box-${idx + 1}`);
+                          if (next) next.focus();
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && !securityPin[idx] && idx > 0) {
+                          const prev = document.getElementById(`pin-box-${idx - 1}`);
+                          if (prev) prev.focus();
+                        }
+                      }}
+                      className="w-11 h-12 text-center text-xl font-bold bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    />
+                  ))}
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-center text-xs text-slate-500">
+                  <span>Server-side verified disbursement amount: </span>
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                    {fmtCurrency(selectedPayable.payableAmount)}
+                  </strong>
+                </div>
+
+                <div className="pt-3 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setPayStep(2)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={pinLoading || securityPin.join('').length !== 6}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {pinLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    <span>Authorize & Disburse</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Step 4: Success & Receipt */}
+            {payStep === 4 && (
+              <div className="p-6 text-center space-y-4">
+                <div className="w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+                  <CheckCircle className="w-10 h-10" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-black text-slate-900 dark:text-white">
+                    Disbursement Completed
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Payout of {fmtCurrency(processedResult?.amount || selectedPayable.payableAmount)} has been authorized and disbursed to {selectedPayable.recipientName}.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Payment ID</span>
+                    <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                      {processedResult?.paymentId || selectedPayable.paymentId}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Transaction Reference</span>
+                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {processedResult?.transactionReference || 'TXN-FIC-PROCESSED'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Processed By</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {processedResult?.processedBy || currentUser?.name || 'Super Admin'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Disbursement Time</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      {new Date().toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPayModalOpen(false);
+                      handleViewReceipt({ paymentId: processedResult?.paymentId || selectedPayable.paymentId });
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 transition cursor-pointer"
+                  >
+                    <Printer className="w-4 h-4 text-slate-500" />
+                    <span>View Receipt</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPayModalOpen(false)}
+                    className="px-6 py-2.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 transition cursor-pointer"
                   >
                     Done
                   </button>
                 </div>
               </div>
-            ) : (
-              <>
-                {/* STEP 1: EMAIL OTP VERIFICATION (SECTION 5) */}
-                {securityStep === 1 && (
-                  <div className="space-y-4 text-xs">
-                    <div>
-                      <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        Administrator Email Address
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="email"
-                          value={adminEmail}
-                          onChange={(e) => setAdminEmail(e.target.value)}
-                          placeholder="e.g. admin@example.com"
-                          className="flex-1 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 font-semibold text-slate-800 dark:text-slate-200 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          disabled={securityLoading}
-                          onClick={handleSendOtp}
-                          className="px-4 py-3 bg-primary-600 hover:bg-primary-700 text-white font-extrabold rounded-2xl text-xs cursor-pointer shadow-xs disabled:opacity-50"
-                        >
-                          {otpSent ? 'Resend Code' : 'Send Code'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {otpSent && (
-                      <div className="space-y-2 pt-2 animate-fadeIn">
-                        <label className="block font-bold text-slate-500 uppercase tracking-wider">
-                          Enter 6-Digit Verification Code
-                        </label>
-                        <input
-                          type="text"
-                          maxLength={6}
-                          value={otpInput}
-                          onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
-                          placeholder="••••••"
-                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 font-mono text-center text-xl tracking-[0.5em] font-black text-slate-800 dark:text-slate-100 focus:outline-none"
-                        />
-                        <span className="text-[10px] text-slate-400 block font-medium">
-                          Single-use code expires in 5 minutes. Never share this code.
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="pt-3 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => setSecurityModalOpen(false)}
-                        className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold rounded-2xl cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        disabled={!otpSent || otpInput.length !== 6 || securityLoading}
-                        onClick={handleVerifyOtp}
-                        className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-extrabold rounded-2xl cursor-pointer shadow-md disabled:opacity-50 flex items-center gap-1.5"
-                      >
-                        {securityLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
-                        Verify & Continue <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* STEP 2: 6-DIGIT PAYMENT PIN (SECTION 6) */}
-                {securityStep === 2 && (
-                  <div className="space-y-4 text-xs">
-                    {!pinConfigured || showPinSetup ? (
-                      <form onSubmit={handleSetupPin} className="space-y-3">
-                        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-500/20 p-3 rounded-2xl text-amber-700 dark:text-amber-400 font-semibold text-xs">
-                          Payment PIN has not been configured. Set up your confidential 6-digit PIN below.
-                        </div>
-
-                        <div>
-                          <label className="block font-bold text-slate-500 uppercase mb-1">New 6-Digit PIN</label>
-                          <input
-                            type="password"
-                            maxLength={6}
-                            value={newPin}
-                            onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
-                            placeholder="Enter 6 digits"
-                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 text-center font-mono text-base font-black"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block font-bold text-slate-500 uppercase mb-1">Confirm 6-Digit PIN</label>
-                          <input
-                            type="password"
-                            maxLength={6}
-                            value={confirmNewPin}
-                            onChange={(e) => setConfirmNewPin(e.target.value.replace(/\D/g, ''))}
-                            placeholder="Re-enter 6 digits"
-                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 text-center font-mono text-base font-black"
-                          />
-                        </div>
-
-                        <div className="pt-2 flex justify-end gap-2">
-                          <button
-                            type="submit"
-                            disabled={securityLoading || newPin.length !== 6 || confirmNewPin.length !== 6}
-                            className="w-full py-3 bg-primary-600 text-white font-extrabold rounded-2xl shadow-md cursor-pointer disabled:opacity-50"
-                          >
-                            Save Payment PIN & Continue
-                          </button>
-                        </div>
-                      </form>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="text-center space-y-1">
-                          <label className="block font-black text-slate-800 dark:text-slate-100 text-sm">
-                            Enter 6-Digit Payment PIN
-                          </label>
-                          <span className="text-[11px] text-slate-400 font-medium">
-                            Authorized Super Administrator security verification
-                          </span>
-                        </div>
-
-                        {/* 6 Digit Input Boxes */}
-                        <div className="flex justify-center gap-2.5 py-2">
-                          {[0, 1, 2, 3, 4, 5].map((idx) => (
-                            <input
-                              key={idx}
-                              id={`payment-pin-digit-${idx}`}
-                              type="password"
-                              inputMode="numeric"
-                              maxLength={1}
-                              value={pinDigits[idx]}
-                              onChange={(e) => handlePinDigitChange(idx, e.target.value)}
-                              onKeyDown={(e) => handlePinKeyDown(idx, e)}
-                              className="w-11 h-13 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl text-center text-xl font-mono font-black focus:border-primary-500 focus:outline-none"
-                            />
-                          ))}
-                        </div>
-
-                        <div className="pt-3 flex justify-between items-center border-t border-slate-100 dark:border-slate-800">
-                          <button
-                            type="button"
-                            onClick={() => setShowPinSetup(true)}
-                            className="text-primary-600 font-bold hover:underline"
-                          >
-                            Forgot PIN / Reset
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={pinDigits.join('').length !== 6 || securityLoading}
-                            onClick={handleVerifyPin}
-                            className="px-6 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-extrabold rounded-2xl cursor-pointer shadow-md disabled:opacity-50 flex items-center gap-1.5"
-                          >
-                            {securityLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
-                            Authorize PIN <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* STEP 3: FINAL PAYMENT CONFIRMATION (SECTION 7 & 8) */}
-                {securityStep === 3 && (
-                  <div className="space-y-4 text-xs">
-                    <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-500/20 p-4 rounded-2xl space-y-2">
-                      <div className="flex items-center gap-2 text-rose-600 font-black text-sm">
-                        <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span>Are you sure you want to process this payment?</span>
-                      </div>
-                      <p className="text-slate-500 dark:text-slate-400 font-medium">
-                        This action will disburse funds, update the backend database to PAID, and generate an irrevocable audit reference.
-                      </p>
-                    </div>
-
-                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-100 dark:border-slate-850 space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 font-semibold">Recipient / Run:</span>
-                        <span className="font-extrabold text-slate-800 dark:text-slate-100">
-                          {activePaymentAction?.recipientName || 'Pending Payee'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 font-semibold">Total Amount:</span>
-                        <span className="font-black text-rose-600 text-sm">
-                          ₹{(activePaymentAction?.amount || 0).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 font-semibold">Period:</span>
-                        <span className="font-bold text-slate-700 dark:text-slate-300">September 2026</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-400 font-semibold">Security Clearance:</span>
-                        <span className="font-bold text-emerald-600 flex items-center gap-1">
-                          <Check className="w-3 h-3" /> OTP & PIN Verified
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 flex justify-end gap-2.5 border-t border-slate-100 dark:border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => setSecurityModalOpen(false)}
-                        className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold rounded-2xl cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        disabled={securityLoading}
-                        onClick={handleExecutePayment}
-                        className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-2xl shadow-md cursor-pointer flex items-center gap-1.5 active:scale-95"
-                      >
-                        {securityLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
-                        Yes, Process Payment
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
             )}
-
           </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 9. CANCEL PAYMENT MODAL (SECTION 9)                                       */}
-      {/* ========================================================================= */}
-      {cancelModalPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl my-6">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
-                Cancel Payment ({cancelModalPayment.paymentId})
-              </h3>
-              <button onClick={() => setCancelModalPayment(null)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
+      {/* ── 6. HOLD PAYMENT MODAL ── */}
+      {holdModalOpen && holdTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-amber-950/80 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                  <PauseCircle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Place Payment on Hold
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    ID: {holdTarget.paymentId}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHoldModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-500/20 p-3 rounded-2xl text-amber-700 dark:text-amber-400 font-medium">
-                Cancelling this payment of <strong>₹{(cancelModalPayment.amount || 0).toLocaleString()}</strong> to <strong>{cancelModalPayment.recipientName}</strong>. A mandatory reason is required for compliance.
+            <form onSubmit={handleConfirmHold} className="p-6 space-y-4">
+              <div className="p-3.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/60 text-xs space-y-1">
+                <div className="flex justify-between font-bold">
+                  <span className="text-slate-700 dark:text-slate-300">{holdTarget.recipientName}</span>
+                  <span className="text-amber-700 dark:text-amber-400">{fmtCurrency(holdTarget.payableAmount)}</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  This payout will be frozen. It will not be eligible for disbursement until explicitly released.
+                </p>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                  Hold Reason <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={holdReason}
+                  onChange={(e) => setHoldReason(e.target.value)}
+                  placeholder="e.g. Bank details verification pending, performance inquiry, territory audit flag..."
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setHoldModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={holdLoading || !holdReason.trim()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white transition shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {holdLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PauseCircle className="w-3.5 h-3.5" />}
+                  <span>Confirm Hold</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── 7. CANCEL PAYMENT MODAL ── */}
+      {cancelModalOpen && cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-rose-50 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                  <Ban className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Cancel Disbursement
+                  </h3>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    ID: {cancelTarget.paymentId}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleConfirmCancel} className="p-6 space-y-4">
+              <div className="p-3.5 rounded-xl bg-rose-50/50 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-900/60 text-xs space-y-1">
+                <div className="flex justify-between font-bold">
+                  <span className="text-slate-700 dark:text-slate-300">{cancelTarget.recipientName}</span>
+                  <span className="text-rose-600 dark:text-rose-400">{fmtCurrency(cancelTarget.payableAmount)}</span>
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Cancelled disbursements cannot be paid or reversed. The reason and timestamp are saved in the immutable audit trail.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
                   Cancellation Reason <span className="text-rose-500">*</span>
                 </label>
                 <textarea
@@ -1837,274 +1556,259 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
                   required
                   value={cancelReason}
                   onChange={(e) => setCancelReason(e.target.value)}
-                  placeholder="Enter reason for cancelling this payment..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 text-xs font-semibold focus:outline-none"
+                  placeholder="e.g. Order returned/refunded by customer, duplicate claim, fraudulent activity..."
+                  className="w-full p-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500"
                 />
               </div>
-            </div>
 
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => setCancelModalPayment(null)}
-                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-2xl cursor-pointer"
-              >
-                Keep Payment
-              </button>
-              <button
-                type="button"
-                disabled={!cancelReason.trim() || cancelLoading}
-                onClick={handleExecuteCancel}
-                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-2xl cursor-pointer shadow-md disabled:opacity-50"
-              >
-                {cancelLoading ? 'Cancelling...' : 'Cancel Payment'}
-              </button>
-            </div>
-
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setCancelModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Keep Active
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancelLoading || !cancelReason.trim()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white transition shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {cancelLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
+                  <span>Confirm Cancellation</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 10. PAYMENT DELEGATION TO STATE ADMIN MODAL (SECTION 15)                  */}
-      {/* ========================================================================= */}
-      {showDelegationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-4 shadow-2xl my-6">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Share2 className="w-5 h-5 text-blue-500" />
-                <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
-                  Delegate Payment to State Admin
+      {/* ── 8. CONFIGURE SECURITY PIN MODAL ── */}
+      {pinConfigModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-sm overflow-hidden">
+            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Key className="w-4 h-4" />
+                </div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  {pinStatus.configured ? 'Update Security PIN' : 'Configure Security PIN'}
                 </h3>
               </div>
-              <button onClick={() => setShowDelegationModal(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setPinConfigModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <p className="text-slate-400 font-medium">
-                Delegate state territory disbursement responsibilities to an authorized State Administrator.
-              </p>
+            <form onSubmit={handleSetupPin} className="p-6 space-y-4">
+              {pinSetupError && (
+                <div className="p-2.5 rounded-xl bg-rose-50 text-rose-700 text-xs font-semibold">
+                  {pinSetupError}
+                </div>
+              )}
 
               <div>
-                <label className="block font-bold text-slate-500 uppercase mb-1">State Territory</label>
-                <select
-                  value={delegationState}
-                  onChange={(e) => setDelegationState(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 text-xs font-semibold focus:outline-none"
-                >
-                  <option value="">Select State Territory...</option>
-                  {territoryStates.map((st) => (
-                    <option key={st._id} value={st.name}>{st.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-500 uppercase mb-1">Payment Category</label>
-                <select
-                  value={delegationCategory}
-                  onChange={(e) => setDelegationCategory(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 text-xs font-semibold focus:outline-none"
-                >
-                  <option value="all">All Outgoing Categories</option>
-                  <option value="agent_payment">Agent Payments</option>
-                  <option value="vendor_payment">Vendor Payments</option>
-                  <option value="technician_payment">Technician Payments</option>
-                  <option value="delivery_partner_payment">Delivery Partner Payments</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-500 uppercase mb-1">Authorized State Admin</label>
-                <select
-                  value={selectedStateAdminId}
-                  onChange={(e) => setSelectedStateAdminId(e.target.value)}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 text-xs font-semibold focus:outline-none"
-                >
-                  {stateAdminsList.map((adm) => (
-                    <option key={adm._id} value={adm._id}>
-                      {adm.name} ({adm.email}) {adm.assignedState ? `— ${adm.assignedState}` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block font-bold text-slate-500 uppercase mb-1">Delegation Notes</label>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  New 6-Digit PIN
+                </label>
                 <input
-                  type="text"
-                  value={delegationNotes}
-                  onChange={(e) => setDelegationNotes(e.target.value)}
-                  placeholder="e.g. Authorized September commission disbursement run"
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-2.5 text-xs font-semibold focus:outline-none"
+                  type="password"
+                  maxLength={6}
+                  required
+                  value={newPin}
+                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full text-center text-xl tracking-[0.4em] font-mono py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-            </div>
 
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 text-xs">
-              <button
-                type="button"
-                onClick={() => setShowDelegationModal(false)}
-                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 font-bold rounded-2xl cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={!delegationState || !selectedStateAdminId || delegationLoading}
-                onClick={handleExecuteDelegation}
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-2xl cursor-pointer shadow-md disabled:opacity-50"
-              >
-                {delegationLoading ? 'Delegating...' : 'Delegate Payouts'}
-              </button>
-            </div>
+              <div>
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Confirm 6-Digit PIN
+                </label>
+                <input
+                  type="password"
+                  maxLength={6}
+                  required
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                  placeholder="••••••"
+                  className="w-full text-center text-xl tracking-[0.4em] font-mono py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
 
+              <div className="pt-2 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setPinConfigModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={pinSetupLoading || newPin.length !== 6 || confirmPin.length !== 6}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition disabled:opacity-50"
+                >
+                  {pinSetupLoading ? 'Saving...' : 'Save PIN'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* 11. PAYMENT RECEIPT MODAL (SECTION 16)                                     */}
-      {/* ========================================================================= */}
-      {receiptData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl my-6 print:shadow-none print:border-none">
-            
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <FileCheck className="w-5 h-5 text-emerald-500" />
-                <h3 className="text-base font-black text-slate-800 dark:text-slate-100">Official Payment Receipt</h3>
+      {/* ── 9. AUDIT LOG MODAL ── */}
+      {auditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                  <FileText className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Payout Security Audit Trail
+                  </h3>
+                  <span className="text-[11px] text-slate-400">
+                    Immutable event records for authorization and disbursements
+                  </span>
+                </div>
               </div>
-              <button onClick={() => setReceiptData(null)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer print:hidden">
+              <button
+                type="button"
+                onClick={() => setAuditModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-100 dark:border-slate-850 space-y-3 text-xs">
-              <div className="flex justify-between items-center border-b border-slate-200/60 dark:border-slate-800 pb-2">
-                <span className="font-mono text-[10px] text-slate-400">{receiptData.receiptNumber}</span>
-                <span className="font-bold text-emerald-600 uppercase text-[10px] bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                  Status: {receiptData.status}
-                </span>
-              </div>
-
-              <div className="space-y-1.5 font-mono">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Payment ID:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{receiptData.paymentId}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Transaction Ref:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{receiptData.transactionReference}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Recipient:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{receiptData.recipientName} ({receiptData.recipientType})</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Destination Account:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{receiptData.bankDestination?.maskedAccount} ({receiptData.bankDestination?.ifsc})</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Payment Date:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{new Date(receiptData.paymentDate).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Authorized By:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{receiptData.processedBy}</span>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800 flex justify-between items-center">
-                <span className="font-black text-slate-600 dark:text-slate-400 uppercase">Total Disbursed:</span>
-                <span className="text-xl font-black text-emerald-600">
-                  ₹{(receiptData.amount || 0).toLocaleString()}
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 text-xs print:hidden">
-              <button
-                onClick={handlePrintReceipt}
-                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold rounded-2xl flex items-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" /> Print / Save PDF
-              </button>
-              <button
-                onClick={() => setReceiptData(null)}
-                className="px-5 py-2.5 bg-primary-600 hover:bg-primary-700 text-white font-extrabold rounded-2xl cursor-pointer shadow-md"
-              >
-                Done
-              </button>
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 12. IMMUTABLE AUDIT LOG MODAL (SECTION 17)                                */}
-      {/* ========================================================================= */}
-      {showAuditModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 space-y-4 shadow-2xl my-6 max-h-[88vh] flex flex-col">
-            
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-purple-500" />
-                <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">
-                  Immutable Payment Security Audit Trail
-                </h3>
-              </div>
-              <button onClick={() => setShowAuditModal(false)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+            <div className="p-6 overflow-y-auto space-y-3">
               {auditLoading ? (
-                <div className="py-12 text-center text-slate-400">Loading audit trail...</div>
+                <div className="py-12 text-center">
+                  <RefreshCw className="w-6 h-6 animate-spin text-slate-400 mx-auto" />
+                </div>
               ) : auditLogs.length === 0 ? (
-                <div className="py-12 text-center text-slate-400">No payment audit logs recorded yet.</div>
+                <div className="py-12 text-center text-xs text-slate-400">
+                  No audit logs recorded yet.
+                </div>
               ) : (
                 auditLogs.map((log) => (
-                  <div key={log._id} className="py-3 flex items-start justify-between gap-3">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600">
-                          {log.action}
-                        </span>
-                        <span className="font-bold text-slate-800 dark:text-slate-100">{log.user} ({log.role})</span>
-                      </div>
-                      <p className="text-slate-600 dark:text-slate-400 font-medium text-[11px]">{log.details}</p>
-                      {log.paymentId && (
-                        <span className="font-mono text-[10px] text-slate-400 block">Payment ID: {log.paymentId}</span>
-                      )}
+                  <div
+                    key={log._id}
+                    className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 text-xs space-y-1"
+                  >
+                    <div className="flex items-center justify-between font-bold">
+                      <span className="text-indigo-600 dark:text-indigo-400 uppercase text-[10px]">
+                        {log.action}
+                      </span>
+                      <span className="text-slate-400 text-[10px]">
+                        {new Date(log.timestamp || log.createdAt).toLocaleString('en-IN')}
+                      </span>
                     </div>
-                    <span className="text-[10px] text-slate-400 font-mono shrink-0">
-                      {new Date(log.timestamp).toLocaleString()}
-                    </span>
+                    <p className="text-slate-800 dark:text-slate-200 font-medium">
+                      {log.details}
+                    </p>
+                    <div className="text-[10px] text-slate-400 font-mono">
+                      By: {log.user || 'Administrator'} • IP: {log.ipAddress || '127.0.0.1'}
+                    </div>
                   </div>
                 ))
               )}
             </div>
-
-            <div className="pt-2 flex justify-end border-t border-slate-100 dark:border-slate-800">
-              <button
-                onClick={() => setShowAuditModal(false)}
-                className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-extrabold rounded-2xl text-xs cursor-pointer"
-              >
-                Close Audit Log
-              </button>
-            </div>
-
           </div>
         </div>
       )}
 
+      {/* ── 10. RECEIPT MODAL ── */}
+      {receiptModalOpen && receiptData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Disbursement Receipt
+              </h3>
+              <button
+                type="button"
+                onClick={() => setReceiptModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div className="text-center pb-3 border-b border-slate-100 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] uppercase font-black tracking-widest text-slate-400">
+                  FORGE INDIA CONNECT ENTERPRISE
+                </span>
+                <div className="text-2xl font-black text-slate-900 dark:text-white">
+                  {fmtCurrency(receiptData.amount)}
+                </div>
+                <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  PAID & VERIFIED
+                </span>
+              </div>
+
+              <div className="space-y-2 font-medium text-slate-600 dark:text-slate-300">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Receipt No</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-white">{receiptData.receiptNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Transaction Ref</span>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{receiptData.transactionReference}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Recipient Name</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{receiptData.recipientName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Recipient Category</span>
+                  <span>{receiptData.recipientType}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Purpose</span>
+                  <span className="max-w-[200px] text-right line-clamp-2">{receiptData.paymentPurpose}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Disbursed Date</span>
+                  <span>{new Date(receiptData.paymentDate).toLocaleString('en-IN')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Authorized By</span>
+                  <span>{receiptData.processedBy}</span>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Print</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setReceiptModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 });

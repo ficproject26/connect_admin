@@ -328,15 +328,20 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
                       {txn.recipientName || 'Member / Customer'}
                     </span>
                     <span className="text-[11px] text-slate-400 block mt-0.5">
-                      {txn.recipientType || 'Party'} {txn.recipientPhone ? `• ${txn.recipientPhone}` : ''}
+                      {txn.recipientType || 'Party'} {txn.recipientId ? `• ID: ${txn.recipientId}` : ''} {txn.recipientPhone ? `• ${txn.recipientPhone}` : ''}
                     </span>
                   </td>
 
-                  {/* Category */}
+                  {/* Payment Purpose / Category */}
                   <td className="py-3 px-4">
                     <span className="font-bold text-slate-700 dark:text-slate-300 block text-xs">
-                      {getCategoryLabel(txn.paymentCategory)}
+                      {txn.paymentPurpose || getCategoryLabel(txn.paymentCategory)}
                     </span>
+                    {txn.sourceReference && txn.sourceReference !== '—' && (
+                      <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                        Ref: {txn.sourceReference}
+                      </span>
+                    )}
                   </td>
 
                   {/* Direction Badge */}
@@ -361,12 +366,18 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
 
                   {/* Payment Mode */}
                   <td className="py-3 px-4 font-semibold text-slate-600 dark:text-slate-400">
-                    {txn.paymentMethod || txn.paymentMode || 'Bank Transfer'}
+                    <span className="block">{txn.paymentMethod || txn.paymentMode || 'Bank Transfer'}</span>
+                    <span className="text-[10px] text-slate-400 block mt-0.5">By: {txn.processedBy || 'System'}</span>
                   </td>
 
                   {/* Status */}
                   <td className="py-3 px-4">
                     {getStatusBadge(txn.status)}
+                    {(txn.reason || txn.holdReason || txn.cancellationReason) && (
+                      <span className="text-[10px] text-rose-500 dark:text-rose-400 block mt-1 font-semibold max-w-[140px] truncate" title={txn.reason || txn.holdReason || txn.cancellationReason}>
+                        {txn.reason || txn.holdReason || txn.cancellationReason}
+                      </span>
+                    )}
                   </td>
 
                   {/* Actions */}
@@ -428,7 +439,7 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-indigo-600" />
                 <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
-                  Transaction Audit Record
+                  Payment Audit Record
                 </h3>
               </div>
               <button onClick={() => setSelectedTxn(null)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
@@ -456,15 +467,15 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850">
-                  <span className="text-[10px] text-slate-400 font-black uppercase block">Transaction Ref</span>
+                  <span className="text-[10px] text-slate-400 font-black uppercase block">Payment ID</span>
                   <span className="font-mono font-bold text-slate-800 dark:text-slate-200 block text-xs mt-0.5">
-                    {selectedTxn.transactionReference || selectedTxn.paymentId}
+                    {selectedTxn.paymentId || 'N/A'}
                   </span>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850">
-                  <span className="text-[10px] text-slate-400 font-black uppercase block">Flow Type</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 block text-xs mt-0.5">
-                    {selectedTxn.direction === 'CREDIT' || selectedTxn.paymentType === 'received' ? 'INFLOW (CREDIT)' : 'OUTFLOW (DEBIT)'}
+                  <span className="text-[10px] text-slate-400 font-black uppercase block">Transaction Ref</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200 block text-xs mt-0.5">
+                    {selectedTxn.transactionReference || selectedTxn.paymentId}
                   </span>
                 </div>
               </div>
@@ -473,14 +484,42 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850">
                   <span className="text-[10px] text-slate-400 font-black uppercase block">Party / Recipient</span>
                   <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">{selectedTxn.recipientName}</span>
-                  <span className="text-[11px] text-slate-400">{selectedTxn.recipientPhone || selectedTxn.recipientEmail || 'N/A'}</span>
+                  <span className="text-[11px] text-slate-400 block">{selectedTxn.recipientType} {selectedTxn.recipientId ? `• ID: ${selectedTxn.recipientId}` : ''}</span>
+                  <span className="text-[11px] text-slate-400 block">{selectedTxn.recipientPhone || selectedTxn.recipientEmail || ''}</span>
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850">
-                  <span className="text-[10px] text-slate-400 font-black uppercase block">Category & Method</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">{getCategoryLabel(selectedTxn.paymentCategory)}</span>
-                  <span className="text-[11px] text-slate-400">{selectedTxn.paymentMethod || 'Bank Transfer'}</span>
+                  <span className="text-[10px] text-slate-400 font-black uppercase block">Payment Method & Flow</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 block mt-0.5">{selectedTxn.paymentMethod || 'Bank Transfer'}</span>
+                  <span className="text-[11px] text-slate-400 block">
+                    {selectedTxn.direction === 'CREDIT' || selectedTxn.paymentType === 'received' ? 'Inflow (Credit +)' : 'Outflow (Debit -)'}
+                  </span>
+                  <span className="text-[11px] text-slate-400 block">Processed By: {selectedTxn.processedBy || 'System'}</span>
                 </div>
               </div>
+
+              <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850 space-y-1">
+                <span className="text-[10px] text-slate-400 font-black uppercase block">Payment Purpose & Source</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-200 block">
+                  {selectedTxn.paymentPurpose || getCategoryLabel(selectedTxn.paymentCategory)}
+                </span>
+                {selectedTxn.sourceReference && (
+                  <span className="text-[11px] text-slate-400 font-mono block">
+                    Source Reference: {selectedTxn.sourceReference}
+                  </span>
+                )}
+                {selectedTxn.paidDate && (
+                  <span className="text-[10px] text-slate-400 block">
+                    Date & Time: {new Date(selectedTxn.paidDate).toLocaleString()}
+                  </span>
+                )}
+              </div>
+
+              {(selectedTxn.reason || selectedTxn.holdReason || selectedTxn.cancellationReason) && (
+                <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-2xl text-rose-600 dark:text-rose-400 space-y-1">
+                  <span className="text-[10px] font-black uppercase block">Audit Note / Reason</span>
+                  <p className="text-xs font-medium">{selectedTxn.reason || selectedTxn.holdReason || selectedTxn.cancellationReason}</p>
+                </div>
+              )}
 
               {selectedTxn.bankAccountNumber && (
                 <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-2xl border border-slate-100 dark:border-slate-850 font-mono">

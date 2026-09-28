@@ -14,6 +14,7 @@ const PaymentAuditLogSchema = new mongoose.Schema({
             'payment_viewed',
             'payment_assigned',
             'otp_requested',
+            'otp_sent',
             'otp_verified',
             'otp_failed',
             'pin_setup',
@@ -21,6 +22,8 @@ const PaymentAuditLogSchema = new mongoose.Schema({
             'pin_failed',
             'payment_confirmed',
             'payment_processed',
+            'payment_held',
+            'payment_released_hold',
             'payment_failed',
             'payment_cancelled',
             'payment_delegated',
@@ -33,8 +36,7 @@ const PaymentAuditLogSchema = new mongoose.Schema({
         required: true
     },
     userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
+        type: mongoose.Schema.Types.Mixed,
         default: null
     },
     role: {

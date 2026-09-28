@@ -150,16 +150,31 @@ const logAudit = async (req, action, territoryType, territoryId, territoryName, 
 // Helper: Auto-sync existing Pincodes in database to State/District/Division models
 const autoSyncExistingPincodes = async () => {
     try {
-        const unlinkedPins = await Pincode.find({ stateId: null }).limit(100);
-        for (const pin of unlinkedPins) {
-            if (!pin.state || !pin.district) continue;
+        const unlinkedPins = await Pincode.find({
+            $or: [
+                { stateId: null },
+                { districtId: null },
+                { divisionId: null },
+                { division: 'General' },
+                { division: 'Central' }
+            ]
+        }).limit(200);
 
-            const stName = pin.state.trim();
-            const distName = pin.district.trim();
-            const divName = (pin.division || 'Central').trim();
+        for (const pin of unlinkedPins) {
+            const stName = (pin.state || 'Tamil Nadu').trim();
+            const distName = (pin.district || '').trim();
+            const divName = (pin.division || '').trim();
 
             // 1. Ensure State
-            let st = await State.findOne({ name: new RegExp(`^${stName}$`, 'i') });
+            let st = pin.stateId ? await State.findById(pin.stateId) : null;
+            if (!st) {
+                st = await State.findOne({
+                    $or: [
+                        { name: new RegExp(`^${stName}$`, 'i') },
+                        { code: stName.substring(0, 3).toUpperCase() }
+                    ]
+                });
+            }
             if (!st) {
                 const cleanCode = stName.substring(0, 3).toUpperCase();
                 st = await State.create({
@@ -171,8 +186,17 @@ const autoSyncExistingPincodes = async () => {
             }
 
             // 2. Ensure District
-            let dist = await District.findOne({ stateId: st._id, name: new RegExp(`^${distName}$`, 'i') });
-            if (!dist) {
+            let dist = pin.districtId ? await District.findById(pin.districtId) : null;
+            if (!dist && distName) {
+                dist = await District.findOne({
+                    stateId: st._id,
+                    $or: [
+                        { name: new RegExp(`^${distName}$`, 'i') },
+                        { code: distName.substring(0, 4).toUpperCase() }
+                    ]
+                });
+            }
+            if (!dist && distName) {
                 const distCode = distName.substring(0, 4).toUpperCase();
                 dist = await District.create({
                     districtId: `DIST-${distCode}-${Date.now().toString().slice(-4)}`,
@@ -184,24 +208,58 @@ const autoSyncExistingPincodes = async () => {
             }
 
             // 3. Ensure Division
-            let div = await Division.findOne({ districtId: dist._id, name: new RegExp(`^${divName}$`, 'i') });
-            if (!div) {
-                const divCode = divName.substring(0, 3).toUpperCase();
-                div = await Division.create({
-                    divisionId: `DIV-${divCode}-${Date.now().toString().slice(-4)}`,
-                    stateId: st._id,
-                    districtId: dist._id,
-                    name: divName,
-                    code: divCode,
-                    divisionType: 'Administrative',
-                    status: 'Active'
-                });
+            let div = pin.divisionId ? await Division.findById(pin.divisionId) : null;
+            if (!div && dist) {
+                // Try finding division matching pin's division name if not generic
+                if (divName && divName !== 'General' && divName !== 'Central') {
+                    div = await Division.findOne({ districtId: dist._id, name: new RegExp(`^${divName}$`, 'i') });
+                }
+
+                // If not found, check if pin name / postOffice / taluk / area matches an existing division under this district
+                if (!div) {
+                    const existingDivs = await Division.find({ districtId: dist._id }).lean();
+                    const pinSearchText = `${pin.name || ''} ${pin.postOffice || ''} ${pin.taluk || ''} ${pin.area || ''}`.toLowerCase();
+                    for (const ed of existingDivs) {
+                        if (ed.name && pinSearchText.includes(ed.name.toLowerCase())) {
+                            div = ed;
+                            break;
+                        }
+                    }
+                    // If still not found and district has only 1 division (e.g. Hosur in Krishnagiri), link to that division
+                    if (!div && existingDivs.length === 1) {
+                        div = existingDivs[0];
+                    }
+                }
+
+                // If still not found, create a specific division from taluk or pin.name
+                if (!div) {
+                    const fallbackDivName = (pin.taluk || pin.area || pin.name || 'Administrative Zone').trim();
+                    const divCode = fallbackDivName.substring(0, 4).toUpperCase();
+                    div = await Division.create({
+                        divisionId: `DIV-${dist.code || 'DST'}-${divCode}`,
+                        stateId: st._id,
+                        districtId: dist._id,
+                        name: fallbackDivName,
+                        code: divCode,
+                        divisionType: 'Administrative',
+                        status: 'Active'
+                    });
+                }
             }
 
-            // 4. Link Pincode
-            pin.stateId = st._id;
-            pin.districtId = dist._id;
-            pin.divisionId = div._id;
+            // 4. Link and Repair Pincode
+            if (st) {
+                pin.stateId = st._id;
+                pin.state = st.name;
+            }
+            if (dist) {
+                pin.districtId = dist._id;
+                pin.district = dist.name;
+            }
+            if (div) {
+                pin.divisionId = div._id;
+                pin.division = div.name;
+            }
             if (!pin.pincodeId) {
                 pin.pincodeId = `PIN-${pin.code}`;
             }
@@ -575,8 +633,35 @@ router.get('/districts', [optionalAuth], async (req, res) => {
             filter.stateId = targetStateId;
         }
 
-        const districts = await District.find(filter).populate('stateId', 'name code').sort({ name: 1 });
-        res.json(districts);
+        const districts = await District.find(filter).populate('stateId', 'name code').sort({ name: 1 }).lean();
+        
+        // Compute real division & pincode counts for each district
+        const [allDivisions, allPincodes] = await Promise.all([
+            Division.find({ status: 'Active' }).select('_id districtId name').lean(),
+            Pincode.find({ status: 'Active' }).select('_id districtId divisionId code').lean()
+        ]);
+
+        const enrichedDistricts = districts.map(dst => {
+            const dstIdStr = dst._id.toString();
+            const dstDivs = allDivisions.filter(d => d.districtId && d.districtId.toString() === dstIdStr);
+            const divIds = new Set(dstDivs.map(d => d._id.toString()));
+            const dstPins = allPincodes.filter(p => 
+                (p.districtId && p.districtId.toString() === dstIdStr) || 
+                (p.divisionId && divIds.has(p.divisionId.toString()))
+            );
+            return {
+                ...dst,
+                divisionsCount: dstDivs.length,
+                pincodesCount: dstPins.length,
+                totalDivisions: dstDivs.length,
+                totalPincodes: dstPins.length
+            };
+        });
+
+        if (req.query.format === 'object') {
+            return res.json({ success: true, districts: enrichedDistricts, count: enrichedDistricts.length });
+        }
+        res.json(enrichedDistricts);
     } catch (err) {
         res.status(500).json({ msg: 'Server error retrieving districts' });
     }
@@ -806,8 +891,24 @@ router.get('/divisions', [optionalAuth], async (req, res) => {
         const divisions = await Division.find(filter)
             .populate('stateId', 'name code')
             .populate('districtId', 'name code')
-            .sort({ name: 1 });
-        res.json(divisions);
+            .sort({ name: 1 })
+            .lean();
+
+        const allPincodes = await Pincode.find({ status: 'Active' }).select('_id districtId divisionId code').lean();
+        const enrichedDivisions = divisions.map(div => {
+            const divIdStr = div._id.toString();
+            const divPins = allPincodes.filter(p => p.divisionId && p.divisionId.toString() === divIdStr);
+            return {
+                ...div,
+                pincodesCount: divPins.length,
+                totalPincodes: divPins.length
+            };
+        });
+
+        if (req.query.format === 'object') {
+            return res.json({ success: true, divisions: enrichedDivisions, count: enrichedDivisions.length });
+        }
+        res.json(enrichedDivisions);
     } catch (err) {
         res.status(500).json({ msg: 'Server error retrieving divisions' });
     }
@@ -1096,12 +1197,6 @@ router.post('/pincodes', [auth, superAdminAuth], async (req, res) => {
 
         const trimmedCode = code.trim();
 
-        // Check if code already exists
-        const existingPin = await Pincode.findOne({ code: trimmedCode });
-        if (existingPin) {
-            return res.status(400).json({ msg: `Pincode ${trimmedCode} is already registered in the system` });
-        }
-
         let stateObj = null;
         let distObj = null;
         let divObj = null;
@@ -1119,6 +1214,42 @@ router.post('/pincodes', [auth, superAdminAuth], async (req, res) => {
         }
         if (!stateObj && stateId) {
             stateObj = await State.findById(stateId);
+        }
+
+        // Check if code already exists
+        const existingPin = await Pincode.findOne({ code: trimmedCode });
+        if (existingPin) {
+            // If existing record was orphaned or missing divisionId/districtId, repair and link to target division
+            if (!existingPin.divisionId || !existingPin.districtId || !existingPin.stateId || (divObj && existingPin.divisionId.toString() !== divObj._id.toString() && (!existingPin.division || existingPin.division === 'General' || existingPin.division === 'Central'))) {
+                if (divObj) {
+                    existingPin.divisionId = divObj._id;
+                    existingPin.division = divObj.name;
+                    existingPin.districtId = distObj ? distObj._id : divObj.districtId;
+                    existingPin.district = distObj ? distObj.name : (divObj.districtId?.name || existingPin.district);
+                    existingPin.stateId = stateObj ? stateObj._id : divObj.stateId;
+                    existingPin.state = stateObj ? stateObj.name : (divObj.stateId?.name || existingPin.state);
+                    if (area) existingPin.area = area.trim();
+                    if (postOffice) existingPin.postOffice = postOffice.trim();
+                    if (taluk) existingPin.taluk = taluk.trim();
+                    existingPin.status = status || existingPin.status || 'Active';
+                    await existingPin.save();
+
+                    const io = req.app.get('io');
+                    if (io) {
+                        io.emit('pincode_updated', existingPin);
+                        io.emit('territory_updated', { type: 'pincode', data: existingPin });
+                    }
+
+                    return res.status(200).json({
+                        success: true,
+                        data: existingPin,
+                        msg: `Pincode ${trimmedCode} linked successfully under ${existingPin.state} -> ${existingPin.district} -> ${existingPin.division}`
+                    });
+                }
+            }
+            return res.status(400).json({
+                msg: `Pincode ${trimmedCode} is already registered under ${existingPin.state || 'General'} -> ${existingPin.district || 'General'} -> ${existingPin.division || 'General'}`
+            });
         }
 
         const newPincode = new Pincode({

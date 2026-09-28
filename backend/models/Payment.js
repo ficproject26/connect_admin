@@ -10,6 +10,7 @@ const PaymentSchema = new mongoose.Schema({
     paymentType: {
         type: String,
         enum: ['received', 'paid'],
+        default: 'paid',
         required: true,
         index: true
     },
@@ -29,6 +30,7 @@ const PaymentSchema = new mongoose.Schema({
             'delivery_partner_payment',
             'payroll_payment'
         ],
+        default: 'vendor_payment',
         required: true,
         index: true
     },
@@ -124,9 +126,50 @@ const PaymentSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['PENDING', 'PAID', 'FAILED', 'CANCELLED'],
+        enum: ['ELIGIBLE', 'PENDING', 'HOLD', 'PROCESSING', 'PAID', 'FAILED', 'CANCELLED'],
         default: 'PENDING',
         index: true
+    },
+    holdReason: {
+        type: String,
+        default: ''
+    },
+    heldBy: {
+        type: String,
+        default: ''
+    },
+    heldById: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    heldAt: {
+        type: Date,
+        default: null
+    },
+    paymentPurpose: {
+        type: String,
+        default: ''
+    },
+    eligibleWork: {
+        type: String,
+        default: ''
+    },
+    commissionBasis: {
+        type: String,
+        default: ''
+    },
+    commissionRate: {
+        type: Number,
+        default: 0
+    },
+    grossAmount: {
+        type: Number,
+        default: 0
+    },
+    sourceReference: {
+        type: String,
+        default: ''
     },
     paymentPeriod: {
         type: String,

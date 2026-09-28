@@ -284,6 +284,17 @@ app.use('/admin-api/admin/enterprise', require('./routes/enterpriseModules'));
 app.use('/admin/enterprise', require('./routes/enterpriseModules'));
 app.use('/enterprise', require('./routes/enterpriseModules'));
 
+// Direct Territory Entity Aliases (Districts, Divisions, States, Pincodes)
+['/api/admin/districts', '/admin-api/admin/districts', '/admin-api/districts', '/admin/districts', '/districts', '/api/districts'].forEach(p => {
+    app.use(p, (req, res, next) => { req.url = '/districts' + (req.url === '/' ? '' : req.url); require('./routes/territory')(req, res, next); });
+});
+['/api/admin/divisions', '/admin-api/admin/divisions', '/admin-api/divisions', '/admin/divisions', '/divisions', '/api/divisions'].forEach(p => {
+    app.use(p, (req, res, next) => { req.url = '/divisions' + (req.url === '/' ? '' : req.url); require('./routes/territory')(req, res, next); });
+});
+['/api/admin/states', '/admin-api/admin/states', '/admin-api/states', '/admin/states', '/states', '/api/states'].forEach(p => {
+    app.use(p, (req, res, next) => { req.url = '/states' + (req.url === '/' ? '' : req.url); require('./routes/territory')(req, res, next); });
+});
+
 app.use('/api/admin/territory', require('./routes/territory'));
 app.use('/api/territory', require('./routes/territory'));
 app.use('/admin-api/territory', require('./routes/territory'));
