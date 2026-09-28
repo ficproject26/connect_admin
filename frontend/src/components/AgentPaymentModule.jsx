@@ -118,9 +118,9 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
       else if (rawLvlStr.includes('divis') || rawLvlStr.includes('division')) resolvedLvl = 'division';
       else if (rawLvlStr.includes('pincode') || rawLvlStr.includes('pin')) resolvedLvl = 'pincode';
 
-      const totalEarnings = ag.commissionEarned || ag.totalEarnings || metrics.commission || ag.balance || 0;
-      const paidAmount = ag.paidAmount || ag.wallet || (totalEarnings > 0 ? totalEarnings * 0.8 : 0);
-      const pendingAmount = ag.pendingPayout !== undefined ? ag.pendingPayout : Math.max(0, totalEarnings - paidAmount);
+      const totalEarnings = Number(ag.commissionEarned || ag.totalEarnings || metrics.commission || ag.balance || 0);
+      const paidAmount = ag.paidAmount !== undefined ? Number(ag.paidAmount) : (ag.wallet !== undefined ? Number(ag.wallet) : 0);
+      const pendingAmount = ag.pendingPayout !== undefined ? Number(ag.pendingPayout) : Math.max(0, totalEarnings - paidAmount);
 
       let pStatus = 'paid';
       if (pendingAmount > 0) pStatus = 'pending';

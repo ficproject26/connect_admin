@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CreditCard, Search, CheckCircle, XCircle, Printer,
   Eye, RefreshCw, Sparkles, Award, Shield, User, ArrowUpRight,
-  Calendar, AlertCircle
+  Calendar, AlertCircle, Radio
 } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState([]);
   const [selectedCard, setSelectedCard] = useState(null);
   const [fetchError, setFetchError] = useState(null);
+  const [isLiveConnected, setIsLiveConnected] = useState(false);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -27,12 +29,12 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
         membershipType,
         paymentMode,
         paymentStatus,
-        status
+        status,
+        _t: Date.now().toString()
       });
 
-      if (isManualRefresh) {
-        query.set('refresh', 'true');
-      }
+      // Always send refresh=true on load or refresh to ensure instant DB sync
+      query.set('refresh', 'true');
 
       const res = await fetch(`${API_BASE}/admin/enterprise/membership-requests?${query.toString()}`, {
         headers: {
@@ -57,6 +59,54 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
   useEffect(() => {
     fetchMembershipRequests();
   }, [fetchMembershipRequests]);
+
+  // Real-Time Socket.IO Listener for instant membership updates/upgrades
+  useEffect(() => {
+    let socket = null;
+    try {
+      let serverUrl = '';
+      if (API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
+        try {
+          const parsed = new URL(API_BASE);
+          serverUrl = parsed.origin;
+        } catch {
+          serverUrl = API_BASE.replace(/\/admin-api\/?$/, '').replace(/\/api\/?$/, '');
+        }
+      } else if (typeof window !== 'undefined') {
+        serverUrl = window.location.origin;
+      }
+
+      socket = io(serverUrl || 'http://localhost:8004', {
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1500
+      });
+
+      socket.on('connect', () => {
+        setIsLiveConnected(true);
+        socket.emit('register', { role: 'admin' });
+      });
+
+      socket.on('disconnect', () => {
+        setIsLiveConnected(false);
+      });
+
+      const onMembershipUpdate = () => {
+        fetchMembershipRequests(true);
+      };
+
+      socket.on('membership_updated', onMembershipUpdate);
+      socket.on('membership:updated', onMembershipUpdate);
+    } catch (socketErr) {
+      console.warn('Real-time socket initialization skipped:', socketErr);
+    }
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [API_BASE, fetchMembershipRequests]);
 
   // Periodic background refresh when page is visible
   useEffect(() => {
@@ -163,6 +213,11 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
             <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 border border-purple-500/20">
               Customer Loyalty
             </span>
+            {isLiveConnected && (
+              <span className="text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Sync
+              </span>
+            )}
           </div>
           <p className="text-xs text-slate-400 font-semibold mt-1">
             Review customer card applications, verify payment modes, issue validities, and track membership upgrades.

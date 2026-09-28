@@ -31,7 +31,20 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
   const [districtFilter, setDistrictFilter] = useState('all');
   const [divisionFilter, setDivisionFilter] = useState('all');
   const [pincodeFilter, setPincodeFilter] = useState('all');
-  const [salaryMonth, setSalaryMonth] = useState('September');
+  const [salaryMonth, setSalaryMonth] = useState('all');
+
+  // Dynamic Months List (last 12 months)
+  const monthOptions = useMemo(() => {
+    const list = [{ value: 'all', label: 'All Months' }];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mName = d.toLocaleString('default', { month: 'long' });
+      const yr = d.getFullYear();
+      list.push({ value: mName, label: `${mName} ${yr}` });
+    }
+    return list;
+  }, []);
 
   // Modals
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -41,6 +54,11 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
   const [cancelModalItem, setCancelModalItem] = useState(null);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelLoading, setCancelLoading] = useState(false);
+
+  // Hold Modal
+  const [holdModalItem, setHoldModalItem] = useState(null);
+  const [holdReason, setHoldReason] = useState('');
+  const [holdLoading, setHoldLoading] = useState(false);
 
   // Security Verification Workflow States (Email OTP -> PIN -> Final Confirmation) (Sections 21 & 23)
   const [securityModalOpen, setSecurityModalOpen] = useState(false);
@@ -389,6 +407,46 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
     }
   };
 
+  // Hold Payroll Handlers
+  const handleOpenHold = (item) => {
+    setHoldModalItem(item);
+    setHoldReason('');
+  };
+
+  const handleExecuteHold = async () => {
+    if (!holdReason || !holdReason.trim()) {
+      toast('Hold reason is required.', 'error');
+      return;
+    }
+    setHoldLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/payroll/hold`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': token,
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          payrollId: holdModalItem._id,
+          holdReason: holdReason.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast('Payroll record placed on hold successfully.', 'success');
+        setHoldModalItem(null);
+        fetchPayrollData();
+      } else {
+        toast(data.msg || 'Failed to hold payroll.', 'error');
+      }
+    } catch (err) {
+      toast('Error executing payroll hold.', 'error');
+    } finally {
+      setHoldLoading(false);
+    }
+  };
+
   // Helper for Bulk Pay per department
   const triggerBulkPay = (deptName) => {
     const eligible = payrolls.filter(p => {
@@ -568,6 +626,7 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
           >
             <option value="all">All Payment Statuses</option>
             <option value="Pending">Pending</option>
+            <option value="Held">Held</option>
             <option value="Paid">Paid</option>
             <option value="Cancelled">Cancelled</option>
           </select>
@@ -578,10 +637,9 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
             onChange={e => setSalaryMonth(e.target.value)}
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs px-3 py-2 font-semibold focus:outline-none"
           >
-            <option value="September">September 2026</option>
-            <option value="August">August 2026</option>
-            <option value="July">July 2026</option>
-            <option value="June">June 2026</option>
+            {monthOptions.map((m, idx) => (
+              <option key={idx} value={m.value}>{m.label}</option>
+            ))}
           </select>
         </div>
 
@@ -741,14 +799,20 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
                 <td className="py-3.5 px-3">
                   <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full inline-block ${
                     p.paymentStatus === 'Paid' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
+                    p.paymentStatus === 'Held' ? 'bg-purple-500/10 text-purple-600 border border-purple-500/20' :
                     p.paymentStatus === 'Cancelled' ? 'bg-slate-200 dark:bg-slate-800 text-slate-500 border border-slate-300 dark:border-slate-700' :
                     'bg-amber-500/10 text-amber-600 border border-amber-500/20'
                   }`}>
                     {p.paymentStatus || 'Pending'}
                   </span>
+                  {p.holdReason && p.paymentStatus === 'Held' && (
+                    <span className="text-[10px] text-purple-500 block truncate max-w-[120px]" title={p.holdReason}>
+                      {p.holdReason}
+                    </span>
+                  )}
                 </td>
 
-                {/* Actions: [View], [Pay], [Cancel] (Section 19) */}
+                {/* Actions: [View], [Pay], [Hold], [Cancel] (Section 19) */}
                 <td className="py-3.5 px-3 text-right">
                   <div className="flex items-center justify-end gap-1.5">
                     <button
@@ -759,29 +823,40 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
                       View
                     </button>
 
+                    {((p.paymentStatus || '').toLowerCase() === 'pending' || (p.paymentStatus || '').toLowerCase() === 'held') && (
+                      <button
+                        onClick={() => startSecurityVerification({
+                          type: 'single',
+                          payrollId: p._id,
+                          name: p.employeeName,
+                          amount: p.netSalary || p.salary,
+                          department: p.department
+                        })}
+                        className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-[11px] cursor-pointer shadow-xs active:scale-95"
+                        title="Pay Salary"
+                      >
+                        Pay
+                      </button>
+                    )}
+
                     {(p.paymentStatus || '').toLowerCase() === 'pending' && (
-                      <>
-                        <button
-                          onClick={() => startSecurityVerification({
-                            type: 'single',
-                            payrollId: p._id,
-                            name: p.employeeName,
-                            amount: p.netSalary || p.salary,
-                            department: p.department
-                          })}
-                          className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-[11px] cursor-pointer shadow-xs active:scale-95"
-                          title="Pay Salary"
-                        >
-                          Pay
-                        </button>
-                        <button
-                          onClick={() => handleOpenCancel(p)}
-                          className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-rose-600 font-bold rounded-xl text-[11px] cursor-pointer"
-                          title="Cancel Payroll Entry"
-                        >
-                          Cancel
-                        </button>
-                      </>
+                      <button
+                        onClick={() => handleOpenHold(p)}
+                        className="px-2.5 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 font-bold rounded-xl text-[11px] cursor-pointer border border-purple-200 dark:border-purple-800"
+                        title="Hold Payroll Entry"
+                      >
+                        Hold
+                      </button>
+                    )}
+
+                    {((p.paymentStatus || '').toLowerCase() === 'pending' || (p.paymentStatus || '').toLowerCase() === 'held') && (
+                      <button
+                        onClick={() => handleOpenCancel(p)}
+                        className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-rose-600 font-bold rounded-xl text-[11px] cursor-pointer"
+                        title="Cancel Payroll Entry"
+                      >
+                        Cancel
+                      </button>
                     )}
                   </div>
                 </td>
@@ -934,6 +1009,61 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
                 className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-2xl cursor-pointer shadow-md disabled:opacity-50"
               >
                 {cancelLoading ? 'Cancelling...' : 'Cancel Payroll'}
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* HOLD PAYROLL MODAL */}
+      {holdModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-md rounded-3xl p-6 space-y-4 shadow-2xl my-6">
+            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-black text-slate-800 dark:text-slate-100">
+                Place Payroll on Hold ({holdModalItem.employeeName})
+              </h3>
+              <button onClick={() => setHoldModalItem(null)} className="p-1 text-slate-400 hover:text-slate-600 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="bg-purple-50 dark:bg-purple-950/30 border border-purple-500/20 p-3 rounded-2xl text-purple-700 dark:text-purple-400 font-medium">
+                Placing this payroll record on hold suspends salary disbursement until compliance or verification is resolved.
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Hold Reason <span className="text-purple-500">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={holdReason}
+                  onChange={(e) => setHoldReason(e.target.value)}
+                  placeholder="Enter reason for placing payroll on hold (e.g. bank verification, audit check)..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 text-xs font-semibold focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setHoldModalItem(null)}
+                className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold rounded-2xl cursor-pointer"
+              >
+                Dismiss
+              </button>
+              <button
+                type="button"
+                disabled={!holdReason.trim() || holdLoading}
+                onClick={handleExecuteHold}
+                className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-extrabold rounded-2xl cursor-pointer shadow-md disabled:opacity-50"
+              >
+                {holdLoading ? 'Holding...' : 'Confirm Hold'}
               </button>
             </div>
 

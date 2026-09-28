@@ -1578,15 +1578,16 @@ router.get('/membership-requests', auth, async (req, res) => {
         // Auto-sync real payments from membership_payments into MembershipRequest & CardHolder
         // Throttled to at most once per 5 seconds, or immediately if refresh is requested
         const cooldownKey = 'membership_sync_cooldown';
-        const shouldSync = Boolean(refresh === 'true' || !cacheService.get(cooldownKey));
+        const isCooldown = await cacheService.get(cooldownKey);
+        const shouldSync = Boolean(refresh === 'true' || !isCooldown);
         if (shouldSync) {
-            cacheService.set(cooldownKey, true, 5);
+            await cacheService.set(cooldownKey, true, 5);
             try {
                 const paymentsCol = mongoose.connection.collection('membership_payments');
                 const usersCol = mongoose.connection.collection('users');
                 const custCol = mongoose.connection.collection('customers');
 
-                const payments = await paymentsCol.find({ status: 'SUCCESS' }).toArray();
+                const payments = await paymentsCol.find({ status: 'SUCCESS' }).sort({ createdAt: 1 }).toArray();
                 if (payments.length > 0) {
                     for (const p of payments) {
                         const orClauses = [];
@@ -1629,13 +1630,15 @@ router.get('/membership-requests', auth, async (req, res) => {
                         const txId = p.paymentId || (p._id ? p._id.toString() : '');
                         const historyArray = Array.isArray(dbUser?.membershipHistory) ? dbUser.membershipHistory : [];
 
+                        // Match existing request by customer identity first (customerCode or customerId) to update in-place on upgrade
+                        const customerFilterClauses = [];
+                        if (realCustCode) customerFilterClauses.push({ customerCode: realCustCode });
+                        if (realCustId) customerFilterClauses.push({ customerId: realCustId });
+                        customerFilterClauses.push({ transactionId: txId });
+                        customerFilterClauses.push({ membershipId: memId });
+
                         await MembershipRequest.findOneAndUpdate(
-                            {
-                                $or: [
-                                    { transactionId: txId },
-                                    { membershipId: memId }
-                                ]
-                            },
+                            { $or: customerFilterClauses },
                             {
                                 $set: {
                                     customerId: realCustId,
@@ -1644,6 +1647,7 @@ router.get('/membership-requests', auth, async (req, res) => {
                                     customerEmail: realEmail,
                                     customerPhone: realPhone,
                                     customerPhoto: dbUser?.avatar || dbUser?.photo || '',
+                                    membershipId: memId,
                                     membershipType: normTier,
                                     paymentMode: normMode,
                                     paymentStatus: 'Paid',
@@ -1661,7 +1665,6 @@ router.get('/membership-requests', auth, async (req, res) => {
                                     updatedAt: new Date()
                                 },
                                 $setOnInsert: {
-                                    membershipId: memId,
                                     transactionId: txId,
                                     createdAt: p.createdAt ? new Date(p.createdAt) : new Date()
                                 }
@@ -1670,8 +1673,12 @@ router.get('/membership-requests', auth, async (req, res) => {
                         );
 
                         // Ensure cardholders collection has matching active card
+                        const cardFilters = [{ cardNumber: memId }];
+                        if (realEmail) cardFilters.push({ email: realEmail });
+                        if (realPhone) cardFilters.push({ phone: realPhone });
+
                         await CardHolder.findOneAndUpdate(
-                            { cardNumber: memId },
+                            { $or: cardFilters },
                             {
                                 $set: {
                                     name: realName,
@@ -1688,6 +1695,24 @@ router.get('/membership-requests', auth, async (req, res) => {
                             },
                             { upsert: true }
                         ).catch(() => {});
+                    }
+
+                    // Consolidate any duplicate records per customerCode so customer has strictly one active card
+                    const allReqs = await MembershipRequest.find({}).sort({ updatedAt: -1, createdAt: -1 }).lean();
+                    const seenCodes = new Set();
+                    const duplicateIdsToDelete = [];
+                    for (const reqItem of allReqs) {
+                        const key = reqItem.customerCode || (reqItem.customerId ? reqItem.customerId.toString() : null);
+                        if (key) {
+                            if (seenCodes.has(key)) {
+                                duplicateIdsToDelete.push(reqItem._id);
+                            } else {
+                                seenCodes.add(key);
+                            }
+                        }
+                    }
+                    if (duplicateIdsToDelete.length > 0) {
+                        await MembershipRequest.deleteMany({ _id: { $in: duplicateIdsToDelete } });
                     }
                 }
             } catch (syncErr) {
@@ -1736,6 +1761,9 @@ router.get('/membership-requests', auth, async (req, res) => {
         }
 
         const requests = await MembershipRequest.find(filter).sort({ createdAt: -1 }).lean();
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
         res.json(requests);
     } catch (err) {
         console.error('Fetch membership requests error:', err);
@@ -1892,261 +1920,59 @@ router.get('/payroll', auth, async (req, res) => {
     try {
         const { department, role, employeeType, status, search, state, district, division, pincode, month } = req.query;
 
-        // Fetch explicitly generated PayrollRecords and all related roles concurrently with lean projections
-        const [payrollsRaw, agents, vendors, supportEmps, delPartners, technicians, managers, adminStaffUsers] = await Promise.all([
-            PayrollRecord.find({}).sort({ createdAt: -1 }).lean(),
-            User.find({ role: { $in: ['agent', 'Agent'] } }).select('_id name registrationId level commissionEarned isActive status assignedState assignedDistrict assignedDivision assignedPincode state district bankDetails').lean(),
-            User.find({ role: { $in: ['vendor', 'Vendor'] } }).select('_id name registrationId businessName state district pincode bankDetails').lean(),
-            SupportTeam.find({}).select('_id name employeeId designation department salary joiningDate').lean(),
-            DeliveryPartner.find({}).select('_id name phone city').lean(),
-            CardHolder.find({}).select('_id name cardNumber status').lean(),
-            Manager.find({}).select('_id name managerId level assignedState assignedDistrict assignedDivision assignedPincode status phone').lean(),
-            User.find({ $or: [{ role: 'super-admin' }, { adminRole: 'super-admin' }, { role: 'admin' }] }).select('_id name email phone registrationId assignedState assignedDistrict bankDetails').lean()
-        ]);
+        // Build MongoDB filter query for PayrollRecord
+        const filter = {};
+        if (month && month !== 'all') {
+            filter.month = new RegExp(`^${month.trim()}$`, 'i');
+        }
 
-        let payrolls = [...payrollsRaw];
+        // Fetch explicitly saved PayrollRecords from database
+        let payrolls = await PayrollRecord.find(filter).sort({ createdAt: -1 }).lean();
 
-        // Map existing payroll codes for quick lookup
-        const existingCodes = new Set(payrolls.map(p => p.employeeCode || p.employeeName));
+        // Also incorporate real SupportTeam employees if they have salary configured
+        const supportEmps = await SupportTeam.find({ status: 'active', salary: { $gt: 0 } }).lean();
+        const existingEmployeeIds = new Set(payrolls.map(p => (p.employeeId ? p.employeeId.toString() : p.employeeCode)));
 
-        // 1. Map Admin Staff
-        adminStaffUsers.forEach((adm, idx) => {
-            const code = adm.registrationId || `ADM-${1000 + idx}`;
-            if (!existingCodes.has(code) && !existingCodes.has(adm.name)) {
-                payrolls.push({
-                    _id: `adm-${adm._id}`,
-                    employeeId: adm._id,
-                    employeeName: adm.name || 'System Administrator',
-                    employeeCode: code,
-                    role: 'Executive Administrator',
-                    department: 'Admin Staff',
-                    employeeType: 'Employee',
-                    salary: 65000,
-                    bonus: 10000,
-                    commission: 0,
-                    incentive: 0,
-                    pf: 1800,
-                    esi: 500,
-                    professionalTax: 200,
-                    advance: 0,
-                    deduction: 0,
-                    netSalary: 72500,
-                    paymentStatus: 'Pending',
-                    month: month || 'September',
-                    year: 2026,
-                    joiningDate: new Date('2024-01-15'),
-                    dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-                    bankAccountHolder: adm.name,
-                    bankAccountNumber: '••••••••8819',
-                    bankIfsc: 'HDFC0001001',
-                    bankName: 'HDFC Bank Ltd',
-                    territory: {
-                        state: adm.assignedState || 'Tamil Nadu',
-                        district: adm.assignedDistrict || 'Krishnagiri',
-                        division: 'Central',
-                        pincode: '635109'
-                    }
-                });
-            }
-        });
-
-        // 2. Map Managers
-        managers.forEach((m, idx) => {
-            const code = m.managerId || `MGR-${2000 + idx}`;
-            if (!existingCodes.has(code) && !existingCodes.has(m.name)) {
-                payrolls.push({
-                    _id: `mgr-${m._id}`,
-                    employeeId: m._id,
-                    employeeName: m.name,
-                    employeeCode: code,
-                    role: `${(m.level || 'Branch').toUpperCase()} Manager`,
-                    department: 'Managers',
-                    employeeType: 'Employee',
-                    salary: 48000,
-                    bonus: 6000,
-                    commission: 4000,
-                    incentive: 0,
-                    pf: 1800,
-                    esi: 500,
-                    professionalTax: 200,
-                    advance: 0,
-                    deduction: 0,
-                    netSalary: 55500,
-                    paymentStatus: 'Pending',
-                    month: month || 'September',
-                    year: 2026,
-                    joiningDate: new Date('2024-06-01'),
-                    dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-                    bankAccountHolder: m.name,
-                    bankAccountNumber: '••••••••4432',
-                    bankIfsc: 'ICIC0003002',
-                    bankName: 'ICICI Bank',
-                    territory: {
-                        state: m.assignedState || 'Tamil Nadu',
-                        district: m.assignedDistrict || 'Namakkal',
-                        division: m.assignedDivision || 'Tiruchengode',
-                        pincode: m.assignedPincode || '637205'
-                    }
-                });
-            }
-        });
-
-        // 3. Map Support Team (Customer Support, KYC Team, Payment Team)
-        supportEmps.forEach((s, idx) => {
-            const code = s.employeeId || `SUP-${3000 + idx}`;
-            if (!existingCodes.has(code) && !existingCodes.has(s.name)) {
-                const dept = s.department || 'Customer Support';
+        supportEmps.forEach((s) => {
+            const empKey = s.employeeId || s._id.toString();
+            if (!existingEmployeeIds.has(empKey) && !existingEmployeeIds.has(s._id.toString())) {
+                const baseSal = Number(s.salary || 0);
+                const pf = Math.round(baseSal * 0.05);
+                const esi = Math.round(baseSal * 0.015);
+                const pt = 200;
+                const net = Math.max(0, baseSal - pf - esi - pt);
                 payrolls.push({
                     _id: `sup-${s._id}`,
                     employeeId: s._id,
                     employeeName: s.name,
-                    employeeCode: code,
+                    employeeCode: s.employeeId || `SUP-${s._id.toString().slice(-4)}`,
                     role: s.designation || 'Specialist',
-                    department: dept,
+                    department: s.department || 'Customer Support',
                     employeeType: 'Employee',
-                    salary: s.salary || 34000,
-                    bonus: 3000,
-                    commission: 0,
-                    incentive: 0,
-                    pf: 1800,
-                    esi: 500,
-                    professionalTax: 200,
-                    advance: 0,
-                    deduction: 0,
-                    netSalary: (s.salary || 34000) + 3000 - 2500,
-                    paymentStatus: 'Pending',
-                    month: month || 'September',
-                    year: 2026,
-                    joiningDate: s.joiningDate || new Date('2024-03-10'),
-                    dueDate: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000),
-                    bankAccountHolder: s.name,
-                    bankAccountNumber: '••••••••7765',
-                    bankIfsc: 'SBIN0005544',
-                    bankName: 'State Bank of India',
-                    territory: {
-                        state: 'Tamil Nadu',
-                        district: 'Dharmapuri',
-                        division: 'Central',
-                        pincode: '636701'
-                    }
-                });
-            }
-        });
-
-        // 4. Map KYC Team & Payment Team defaults if support team had no records
-        const hasKyc = payrolls.some(p => p.department === 'KYC Team' || p.department === 'KYC');
-        if (!hasKyc) {
-            payrolls.push({
-                _id: 'kyc-seed-01',
-                employeeName: 'Karthik Raja',
-                employeeCode: 'KYC-101',
-                role: 'KYC Verification Lead',
-                department: 'KYC Team',
-                employeeType: 'Employee',
-                salary: 38000,
-                bonus: 4000,
-                commission: 0,
-                incentive: 0,
-                pf: 1800,
-                esi: 500,
-                professionalTax: 200,
-                advance: 0,
-                deduction: 0,
-                netSalary: 39500,
-                paymentStatus: 'Pending',
-                month: month || 'September',
-                year: 2026,
-                joiningDate: new Date('2024-02-01'),
-                dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-                bankAccountHolder: 'Karthik Raja',
-                bankAccountNumber: '••••••••9081',
-                bankIfsc: 'AXIS0001290',
-                bankName: 'Axis Bank',
-                territory: {
-                    state: 'Tamil Nadu',
-                    district: 'Krishnagiri',
-                    division: 'Central',
-                    pincode: '635109'
-                }
-            });
-        }
-
-        const hasPaymentTeam = payrolls.some(p => p.department === 'Payment Team' || p.department === 'Payment');
-        if (!hasPaymentTeam) {
-            payrolls.push({
-                _id: 'pay-seed-01',
-                employeeName: 'Priya Sundaram',
-                employeeCode: 'PAY-201',
-                role: 'Disbursement Specialist',
-                department: 'Payment Team',
-                employeeType: 'Employee',
-                salary: 40000,
-                bonus: 5000,
-                commission: 0,
-                incentive: 0,
-                pf: 1800,
-                esi: 500,
-                professionalTax: 200,
-                advance: 0,
-                deduction: 0,
-                netSalary: 42500,
-                paymentStatus: 'Pending',
-                month: month || 'September',
-                year: 2026,
-                joiningDate: new Date('2024-04-12'),
-                dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
-                bankAccountHolder: 'Priya Sundaram',
-                bankAccountNumber: '••••••••6654',
-                bankIfsc: 'KKBK0001122',
-                bankName: 'Kotak Mahindra Bank',
-                territory: {
-                    state: 'Tamil Nadu',
-                    district: 'Dharmapuri',
-                    division: 'Harur',
-                    pincode: '636903'
-                }
-            });
-        }
-
-        // 5. Map Agents
-        agents.forEach((a, idx) => {
-            const code = a.registrationId || `AGT-${1000 + idx}`;
-            if (!existingCodes.has(code) && !existingCodes.has(a.name)) {
-                const comm = a.commissionEarned || 0;
-                const baseSal = 28000;
-                const net = baseSal + comm - 2500;
-                payrolls.push({
-                    _id: `agt-${a._id}`,
-                    employeeId: a._id,
-                    employeeName: a.name || 'Agent',
-                    employeeCode: code,
-                    role: `${(a.level || 'Pincode').toUpperCase()} Agent`,
-                    department: 'Agent Operations',
-                    employeeType: 'Agent',
                     salary: baseSal,
                     bonus: 0,
-                    commission: comm,
+                    commission: 0,
                     incentive: 0,
-                    pf: 1800,
-                    esi: 500,
-                    professionalTax: 200,
+                    pf,
+                    esi,
+                    professionalTax: pt,
                     advance: 0,
                     deduction: 0,
                     netSalary: net,
                     paymentStatus: 'Pending',
-                    month: month || 'September',
-                    year: 2026,
-                    joiningDate: new Date('2024-05-15'),
+                    month: month || new Date().toLocaleString('default', { month: 'long' }),
+                    year: new Date().getFullYear(),
+                    joiningDate: s.joiningDate || new Date(),
                     dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
-                    bankAccountHolder: a.bankDetails?.accountHolder || a.name,
-                    bankAccountNumber: '••••••••3321',
-                    bankIfsc: a.bankDetails?.ifscCode || 'SBIN0004567',
-                    bankName: 'State Bank of India',
+                    bankAccountHolder: s.name,
+                    bankAccountNumber: s.bankAccountNumber || '',
+                    bankIfsc: s.bankIfsc || '',
+                    bankName: s.bankName || '',
                     territory: {
-                        state: a.assignedState || a.state || 'Tamil Nadu',
-                        district: a.assignedDistrict || a.district || 'Dharmapuri',
-                        division: a.assignedDivision || 'Central',
-                        pincode: a.pincode || '636701'
+                        state: s.state || '',
+                        district: s.district || '',
+                        division: s.division || '',
+                        pincode: s.pincode || ''
                     }
                 });
             }
@@ -2369,6 +2195,57 @@ router.post('/payroll/cancel', auth, async (req, res) => {
     } catch (err) {
         console.error('Error cancelling payroll record:', err);
         res.status(500).json({ success: false, msg: 'Server error cancelling payroll record.' });
+    }
+});
+
+// POST Hold Payroll Record
+router.post('/payroll/hold', auth, async (req, res) => {
+    try {
+        const { payrollId, holdReason } = req.body;
+        if (!payrollId) {
+            return res.status(400).json({ success: false, msg: 'Payroll record ID is required.' });
+        }
+        if (!holdReason || !holdReason.trim()) {
+            return res.status(400).json({ success: false, msg: 'Hold reason is mandatory.' });
+        }
+
+        if (mongoose.Types.ObjectId.isValid(payrollId)) {
+            await PayrollRecord.findByIdAndUpdate(payrollId, {
+                paymentStatus: 'Held',
+                holdReason: holdReason.trim(),
+                heldBy: req.user.name || 'Administrator',
+                heldAt: new Date()
+            });
+        }
+
+        await Payment.findOneAndUpdate(
+            { $or: [{ paymentId: payrollId }, { recipientId: payrollId }, { _id: mongoose.Types.ObjectId.isValid(payrollId) ? payrollId : null }] },
+            {
+                status: 'HELD',
+                holdReason: holdReason.trim(),
+                heldBy: req.user.name || 'Administrator',
+                heldAt: new Date()
+            }
+        );
+
+        await PaymentAuditLog.create({
+            paymentId: payrollId,
+            action: 'payment_held',
+            user: req.user.name || 'Administrator',
+            userId: req.user.id || req.user._id,
+            role: req.user.role || 'super-admin',
+            details: `Payroll placed on hold: ${holdReason.trim()}`,
+            metadata: { holdReason: holdReason.trim() }
+        });
+
+        res.json({
+            success: true,
+            msg: 'Payroll record has been placed on hold successfully.'
+        });
+
+    } catch (err) {
+        console.error('Error holding payroll record:', err);
+        res.status(500).json({ success: false, msg: 'Server error placing payroll record on hold.' });
     }
 });
 

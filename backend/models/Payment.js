@@ -112,6 +112,16 @@ const PaymentSchema = new mongoose.Schema({
         type: String,
         default: 'INR'
     },
+    direction: {
+        type: String,
+        enum: ['CREDIT', 'DEBIT'],
+        default: 'DEBIT',
+        index: true
+    },
+    paymentMethod: {
+        type: String,
+        default: 'Bank Transfer'
+    },
     status: {
         type: String,
         enum: ['PENDING', 'PAID', 'FAILED', 'CANCELLED'],
@@ -120,7 +130,7 @@ const PaymentSchema = new mongoose.Schema({
     },
     paymentPeriod: {
         type: String,
-        default: 'September 2026'
+        default: () => new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
     },
     dueDate: {
         type: Date,

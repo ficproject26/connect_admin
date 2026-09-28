@@ -716,6 +716,11 @@ router.get('/transactions', auth, async (req, res) => {
         if (type && type !== 'all') {
             query.paymentType = type;
         }
+        if (req.query.direction && req.query.direction !== 'all') {
+            const dir = req.query.direction.toUpperCase();
+            if (dir === 'CREDIT') query.paymentType = 'received';
+            else if (dir === 'DEBIT') query.paymentType = 'paid';
+        }
         if (status && status !== 'all') {
             query.status = status.toUpperCase();
         }
@@ -765,11 +770,12 @@ router.get('/transactions', auth, async (req, res) => {
                 .lean()
         ]);
 
-        // Mask bank accounts in response for security
+        // Mask bank accounts in response for security and ensure direction is explicit
         const sanitizedItems = items.map(item => ({
             ...item,
+            direction: item.direction || (item.paymentType === 'received' ? 'CREDIT' : 'DEBIT'),
             maskedAccountNumber: maskAccountNumber(item.bankAccountNumber),
-            bankAccountNumber: maskAccountNumber(item.bankAccountNumber) // never expose full number in list
+            bankAccountNumber: maskAccountNumber(item.bankAccountNumber)
         }));
 
         res.json({

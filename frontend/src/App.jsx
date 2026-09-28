@@ -59,6 +59,7 @@ const AdminSecurityDashboard = lazyWithRetry(() => import('./components/AdminSec
 const VendorDirectoryModule = lazyWithRetry(() => import('./components/VendorDirectoryModule'), 'VendorDirectoryModule');
 const MembershipCardManagement = lazyWithRetry(() => import('./components/MembershipCardManagement'), 'MembershipCardManagement');
 const EnterprisePaymentDashboard = lazyWithRetry(() => import('./components/EnterprisePaymentDashboard'), 'EnterprisePaymentDashboard');
+const PaymentHistoryModule = lazyWithRetry(() => import('./components/PaymentHistoryModule'), 'PaymentHistoryModule');
 const PayrollManagement = lazyWithRetry(() => import('./components/PayrollManagement'), 'PayrollManagement');
 const CustomerSupportTeamManagement = lazyWithRetry(() => import('./components/CustomerSupportTeamManagement'), 'CustomerSupportTeamManagement');
 const AgentDirectoryModule = lazyWithRetry(() => import('./components/AgentDirectoryModule'), 'AgentDirectoryModule');
@@ -166,20 +167,16 @@ const getAgentEarnings = (agent) => {
   if (explicit > 0) return explicit;
 
   const vendorsCount = Number(agent.vendorsAdded || agent.vendorCount || 0);
-  const rawLvl = agent.level || 'pincode';
-  const lvl = String(
-    rawLvl === 1 || rawLvl === '1' ? 'state' :
-    rawLvl === 2 || rawLvl === '2' ? 'district' :
-    rawLvl === 3 || rawLvl === '3' ? 'division' :
-    rawLvl === 4 || rawLvl === '4' ? 'pincode' :
-    rawLvl
-  ).toLowerCase();
-  const perVendorRate = lvl === 'state' ? 2500 : lvl === 'district' ? 1800 : ['division', 'divisional'].includes(lvl) ? 1200 : 800;
-  const baseTierAccrual = lvl === 'state' ? 15000 : lvl === 'district' ? 10000 : ['division', 'divisional'].includes(lvl) ? 6000 : 3500;
-  const status = String(agent.status || agent.kycStatus || '').toLowerCase();
-  if (status === 'approved' || status === 'active' || agent.isActive) {
-    return (vendorsCount * perVendorRate) + baseTierAccrual;
-  } else if (vendorsCount > 0) {
+  if (vendorsCount > 0) {
+    const rawLvl = agent.level || 'pincode';
+    const lvl = String(
+      rawLvl === 1 || rawLvl === '1' ? 'state' :
+      rawLvl === 2 || rawLvl === '2' ? 'district' :
+      rawLvl === 3 || rawLvl === '3' ? 'division' :
+      rawLvl === 4 || rawLvl === '4' ? 'pincode' :
+      rawLvl
+    ).toLowerCase();
+    const perVendorRate = lvl === 'state' ? 2500 : lvl === 'district' ? 1800 : ['division', 'divisional'].includes(lvl) ? 1200 : 800;
     return vendorsCount * perVendorRate;
   }
   return 0;
@@ -1758,6 +1755,12 @@ function App() {
               >
                 <DollarSign className="w-4 h-4 text-emerald-400" /> Payment Dashboard
               </button>
+              <button
+                onClick={() => handleTabSelect('payment-history')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'payment-history' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <FileText className="w-4 h-4 text-amber-400" /> Payment History
+              </button>
 
               {/* ── MANAGERS ── */}
               <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Managers</p>
@@ -2512,6 +2515,11 @@ function App() {
           {/* ENTERPRISE PAYMENT DASHBOARD */}
           {activeTab === 'payment-enterprise' && (
             <EnterprisePaymentDashboard token={token} API_BASE={API_BASE} currentUser={user} onToast={addToast} />
+          )}
+
+          {/* PAYMENT & TRANSACTION HISTORY */}
+          {activeTab === 'payment-history' && (
+            <PaymentHistoryModule token={token} API_BASE={API_BASE} onToast={addToast} />
           )}
 
           {/* HIERARCHICAL ADMIN MANAGEMENT */}

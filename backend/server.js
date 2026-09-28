@@ -183,6 +183,74 @@ io.on('connection', (socket) => {
     });
 });
 
+// Redis Real-Time Pub/Sub Subscriber for Cross-App Synchronization
+const initRedisSubscriber = () => {
+    const redisUrl = process.env.REDIS_URL || (process.env.REDIS_HOST ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : null);
+    if (!redisUrl) return;
+
+    try {
+        const Redis = require('ioredis');
+        const cleanUrl = redisUrl.replace(/^redis-cli\s+-u\s+/i, '').trim();
+        const subClient = new Redis(cleanUrl, {
+            retryStrategy: (times) => Math.min(times * 500, 5000),
+            lazyConnect: true
+        });
+
+        subClient.connect().then(() => {
+            console.log('✅ [Redis Pub/Sub] Connected to Redis event broker');
+            subClient.subscribe('connect:realtime:events', 'connect:realtime:cache_invalidate', (err, count) => {
+                if (err) console.error('[Redis Pub/Sub] Subscription error:', err.message);
+                else console.log(`✅ [Redis Pub/Sub] Subscribed to ${count} channels`);
+            });
+
+            subClient.on('message', async (channel, message) => {
+                try {
+                    const event = JSON.parse(message);
+                    const cacheService = require('./utils/cacheService');
+
+                    if (channel === 'connect:realtime:cache_invalidate') {
+                        if (event.pattern) await cacheService.delPattern(event.pattern).catch(() => {});
+                        return;
+                    }
+
+                    if (channel === 'connect:realtime:events') {
+                        const entity = (event.entity || '').toLowerCase();
+                        const action = (event.action || '').toLowerCase();
+
+                        if (entity === 'membership') {
+                            await cacheService.del('membership_sync_cooldown').catch(() => {});
+                            await cacheService.delPattern('admin_membership_*').catch(() => {});
+                            io.emit('membership_updated', event.data);
+                            io.emit('membership:updated', event.data);
+                            console.log(`📡 [Realtime Event] Broadcasted membership ${action} to Admin clients`);
+                        } else if (entity === 'order') {
+                            io.emit('order_updated', event.data);
+                            io.emit('order:updated', event.data);
+                            io.emit('new_order_placed', event.data);
+                        } else if (entity === 'vendor') {
+                            io.emit('vendor_updated', event.data);
+                        } else if (entity === 'agent') {
+                            io.emit('agent_updated', event.data);
+                        }
+                    }
+                } catch (parseErr) {
+                    console.warn('[Redis Pub/Sub] Message parsing warning:', parseErr.message);
+                }
+            });
+        }).catch((connErr) => {
+            console.warn('[Redis Pub/Sub] Redis connection warning (falling back gracefully):', connErr.message);
+        });
+
+        subClient.on('error', (err) => {
+            console.warn('[Redis Pub/Sub] Client error:', err.message);
+        });
+    } catch (e) {
+        console.warn('[Redis Pub/Sub] ioredis setup skipped:', e.message);
+    }
+};
+
+initRedisSubscriber();
+
 // Define Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/auth', require('./routes/auth'));
