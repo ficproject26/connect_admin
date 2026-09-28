@@ -16,6 +16,7 @@ const Pincode = require('../models/Pincode');
 const TerritoryAuditLog = require('../models/TerritoryAuditLog');
 const AuditLog = require('../models/AuditLog');
 const { validateTerritoryHierarchy } = require('./territory');
+const TerritoryAssignmentService = require('../utils/territoryAssignmentService');
 
 // MANAGER LIMITS CONFIGURATION
 const MANAGER_LIMITS = {
@@ -110,7 +111,7 @@ const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap
 // ============================================================
 // 1. GET HIERARCHICAL ADMINS (SCOPED BY CALLER TERRITORY)
 // ============================================================
-router.get('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
+const getHierarchyAdminsHandler = async (req, res) => {
     try {
         const { search, role, status } = req.query;
         const territoryFilter = req.territoryFilter || {};
@@ -167,6 +168,15 @@ router.get('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
                 (String(a.assignedPincode || '').includes(q))
             );
         }
+
+        // Filter out Super Admin admin@example.com and records without assignedState
+        adminDocs = adminDocs.filter(a => {
+            if (a.email === 'admin@example.com') return false;
+            if (a.role === 'super-admin' && (!a.assignedState || a.assignedState === 'General State')) return false;
+            const st = (a.assignedState || '').trim();
+            if (!st || st.toLowerCase() === 'general state' || st.toLowerCase() === 'state') return false;
+            return true;
+        });
 
         // Preload parents to avoid N+1 lookups
         const parentIds = adminDocs.map(a => a.parentAdminId).filter(Boolean);
@@ -227,9 +237,13 @@ router.get('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
             adminDocs.map(a => formatAdminForResponse(a, parentMap, countsMap))
         );
 
+        // Fetch strict assigned hierarchy tree (only locations with real assigned admins)
+        const assignedHierarchy = await TerritoryAssignmentService.getAssignedHierarchyTree('admins', req.territoryFilter || {});
+
         res.json({
             success: true,
             admins: formattedAdmins,
+            hierarchy: assignedHierarchy,
             currentUserTier: req.adminUser.adminTier,
             isMainAdmin: req.adminUser.isMainAdmin,
             total: formattedAdmins.length
@@ -237,6 +251,27 @@ router.get('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
     } catch (err) {
         console.error('Fetch hierarchy admins error:', err);
         res.status(500).json({ msg: 'Server error retrieving administrators', error: err.message });
+    }
+};
+
+router.get('/hierarchy-admins', [auth, territoryScope], getHierarchyAdminsHandler);
+router.get('/admins', [auth, territoryScope], getHierarchyAdminsHandler);
+
+router.get('/admins/assigned-hierarchy', [auth, territoryScope], async (req, res) => {
+    try {
+        const tree = await TerritoryAssignmentService.getAssignedHierarchyTree('admins', req.territoryFilter || {});
+        res.json({ success: true, hierarchy: tree });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.get('/hierarchy-admins/assigned-hierarchy', [auth, territoryScope], async (req, res) => {
+    try {
+        const tree = await TerritoryAssignmentService.getAssignedHierarchyTree('admins', req.territoryFilter || {});
+        res.json({ success: true, hierarchy: tree });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -509,7 +544,7 @@ router.get('/admins/:id', [auth, territoryScope], getSingleAdminHandler);
 // ============================================================
 // 2. CREATE HIERARCHY ADMIN (STRICT ONBOARDING ACCESS CONTROL)
 // ============================================================
-router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
+const createHierarchyAdminHandler = async (req, res) => {
     try {
         const {
             name,
@@ -823,12 +858,15 @@ router.post('/hierarchy-admins', [auth, territoryScope], async (req, res) => {
         }
         res.status(500).json({ msg: 'Server error creating administrator', error: err.message });
     }
-});
+};
+
+router.post('/hierarchy-admins', [auth, territoryScope], createHierarchyAdminHandler);
+router.post('/admins', [auth, territoryScope], createHierarchyAdminHandler);
 
 // ============================================================
-// 3. UPDATE HIERARCHY ADMIN STATUS & DETAILS
+// 3. UPDATE & DELETE HIERARCHY ADMIN STATUS & DETAILS
 // ============================================================
-router.put('/hierarchy-admins/:id', [auth, territoryScope], async (req, res) => {
+const updateHierarchyAdminHandler = async (req, res) => {
     try {
         const targetAdmin = await User.findById(req.params.id);
         if (!targetAdmin) {
@@ -877,7 +915,59 @@ router.put('/hierarchy-admins/:id', [auth, territoryScope], async (req, res) => 
         console.error('Update hierarchy admin error:', err);
         res.status(500).json({ msg: 'Server error updating administrator', error: err.message });
     }
-});
+};
+
+const deleteHierarchyAdminHandler = async (req, res) => {
+    try {
+        const targetAdmin = await User.findById(req.params.id);
+        if (!targetAdmin) return res.status(404).json({ msg: 'Administrator not found' });
+        if (!req.adminUser.isMainAdmin) {
+            const callerState = (req.adminUser.assignedState || '').toLowerCase();
+            const targetState = (targetAdmin.assignedState || '').toLowerCase();
+            if (callerState !== targetState) {
+                return res.status(403).json({ msg: 'Cross-territory deletion forbidden.' });
+            }
+        }
+        await User.findByIdAndDelete(req.params.id);
+        res.json({ success: true, msg: 'Administrator deleted successfully' });
+    } catch (err) {
+        console.error('Delete hierarchy admin error:', err);
+        res.status(500).json({ msg: 'Server error deleting administrator', error: err.message });
+    }
+};
+
+const deleteStateAdminsHandler = async (req, res) => {
+    try {
+        const stateName = decodeURIComponent(req.params.stateName || '').trim();
+        if (!stateName) return res.status(400).json({ success: false, msg: 'State name is required' });
+        if (!req.adminUser.isMainAdmin) {
+            return res.status(403).json({ success: false, msg: 'Only Super Admin can delete state territory' });
+        }
+        const deleteResult = await User.deleteMany({
+            role: { $in: ['admin'] },
+            adminRole: { $nin: ['super-admin'] },
+            $or: [
+                { assignedState: new RegExp(`^${stateName}$`, 'i') },
+                { state: new RegExp(`^${stateName}$`, 'i') }
+            ]
+        });
+        res.json({
+            success: true,
+            msg: `State '${stateName}' deleted successfully (${deleteResult.deletedCount || 0} admins removed)`,
+            deletedCount: deleteResult.deletedCount
+        });
+    } catch (err) {
+        console.error('Delete state admins error:', err);
+        res.status(500).json({ success: false, msg: 'Server error deleting state', error: err.message });
+    }
+};
+
+router.put('/hierarchy-admins/:id', [auth, territoryScope], updateHierarchyAdminHandler);
+router.put('/admins/:id', [auth, territoryScope], updateHierarchyAdminHandler);
+
+router.delete('/hierarchy-admins/:id', [auth, territoryScope], deleteHierarchyAdminHandler);
+router.delete('/admins/:id', [auth, territoryScope], deleteHierarchyAdminHandler);
+router.delete('/admins/state/:stateName', [auth, territoryScope], deleteStateAdminsHandler);
 
 // ============================================================
 // 4. GET MANAGERS (HIERARCHICAL TERRITORY LIST)

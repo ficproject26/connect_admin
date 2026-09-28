@@ -3,7 +3,7 @@ import {
   Users, Search, RefreshCw, Plus, UserCheck, ChevronRight, ChevronDown,
   MapPin, Phone, Mail, Award, AlertTriangle, XCircle, Grid, List, Layers,
   CheckCircle, Clock, Eye, Globe2, Building2, Navigation, Hash, User,
-  CalendarDays, BadgeCheck, ShieldOff, Ban
+  CalendarDays, BadgeCheck, ShieldOff, Ban, LayoutGrid, ArrowRight
 } from 'lucide-react';
 
 // Module-level in-memory cache
@@ -55,7 +55,11 @@ export default function AgentDirectoryModule({
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [agentLevelFilter, setAgentLevelFilter] = useState('all');
-  const [agentViewMode, setAgentViewMode] = useState('tree');
+  const [agentViewMode, setAgentViewMode] = useState('cards');
+  const [drillState, setDrillState] = useState('');
+  const [drillDistrict, setDrillDistrict] = useState('');
+  const [drillDivision, setDrillDivision] = useState('');
+  const [drillPincode, setDrillPincode] = useState('');
   const [expandedNodes, setExpandedNodes] = useState({});
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [selectedScorecardAgent, setSelectedScorecardAgent] = useState(null);
@@ -273,7 +277,7 @@ export default function AgentDirectoryModule({
     return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', 'pending_verification', 'requested'].includes(s) || ['pending', 'under_verification', 'under verification', 'in_review'].includes(k);
   };
   const extractAgentTerritory = (ag) => {
-    if (!ag) return { state: 'General State', district: 'General District', division: 'General Division', pincode: 'N/A' };
+    if (!ag) return { state: '', district: '', division: '', pincode: '' };
     let state = (ag.assignedState || ag.state || ag.territory?.state || '').trim();
     let district = (ag.assignedDistrict || ag.district || ag.territory?.district || '').trim();
     let division = (ag.assignedDivision || ag.division || ag.territory?.division || '').trim();
@@ -283,7 +287,11 @@ export default function AgentDirectoryModule({
       if (!state && parts[0]) state = parts[0]; if (!district && parts[1]) district = parts[1];
       if (!division && parts[2]) division = parts[2]; if (!pincode && parts[3] && /^\d{6}$/.test(parts[3])) pincode = parts[3];
     }
-    return { state: state || 'General State', district: district || 'General District', division: division || 'General Division', pincode: pincode || 'N/A' };
+    if (state.toLowerCase() === 'general state') state = '';
+    if (district.toLowerCase() === 'general district') district = '';
+    if (division.toLowerCase() === 'general division') division = '';
+    if (pincode.toLowerCase() === 'n/a') pincode = '';
+    return { state, district, division, pincode };
   };
 
   const approvedAgents = agents.filter(isApprovedAgent);
@@ -331,12 +339,16 @@ export default function AgentDirectoryModule({
     const map = {};
     filteredAgents.forEach(ag => {
       const t = extractAgentTerritory(ag), s = t.state, d = t.district, v = t.division, p = t.pincode;
+      if (!s || s.toLowerCase() === 'general state' || s.toLowerCase() === 'state') return;
       if (!map[s]) map[s] = { stateName: s, stateAgents: [], districts: {} };
       if (ag.level === 'state') { map[s].stateAgents.push(ag); return; }
+      if (!d || d.toLowerCase() === 'general district') return;
       if (!map[s].districts[d]) map[s].districts[d] = { districtName: d, districtAgents: [], divisions: {} };
       if (ag.level === 'district') { map[s].districts[d].districtAgents.push(ag); return; }
+      if (!v || v.toLowerCase() === 'general division') return;
       if (!map[s].districts[d].divisions[v]) map[s].districts[d].divisions[v] = { divisionName: v, divisionAgents: [], pincodes: {} };
       if (ag.level === 'division') { map[s].districts[d].divisions[v].divisionAgents.push(ag); return; }
+      if (!p || p === 'N/A') return;
       if (!map[s].districts[d].divisions[v].pincodes[p]) map[s].districts[d].divisions[v].pincodes[p] = { pincodeCode: p, pincodeAgents: [] };
       map[s].districts[d].divisions[v].pincodes[p].pincodeAgents.push(ag);
     });
@@ -380,6 +392,48 @@ export default function AgentDirectoryModule({
   const getStateTotalCount = (st) => { let c = st.stateAgents.length; Object.values(st.districts).forEach(d => { c += d.districtAgents.length; Object.values(d.divisions).forEach(dv => { c += dv.divisionAgents.length; Object.values(dv.pincodes).forEach(p => { c += p.pincodeAgents.length; }); }); }); return c; };
   const getDistrictTotalCount = (d) => { let c = d.districtAgents.length; Object.values(d.divisions).forEach(dv => { c += dv.divisionAgents.length; Object.values(dv.pincodes).forEach(p => { c += p.pincodeAgents.length; }); }); return c; };
   const getDivisionTotalCount = (div) => { let c = div.divisionAgents.length; Object.values(div.pincodes).forEach(p => { c += p.pincodeAgents.length; }); return c; };
+
+  const getSubHierarchyCounts = (node, type) => {
+    let districts = 0, divisions = 0, pincodes = 0, totalUsers = 0;
+    if (type === 'state') {
+      totalUsers += (node.stateAgents || []).length;
+      const dList = Object.values(node.districts || {});
+      districts = dList.length;
+      dList.forEach(d => {
+        totalUsers += (d.districtAgents || []).length;
+        const vList = Object.values(d.divisions || {});
+        divisions += vList.length;
+        vList.forEach(v => {
+          totalUsers += (v.divisionAgents || []).length;
+          const pList = Object.values(v.pincodes || {});
+          pincodes += pList.length;
+          pList.forEach(p => {
+            totalUsers += (p.pincodeAgents || []).length;
+          });
+        });
+      });
+    } else if (type === 'district') {
+      totalUsers += (node.districtAgents || []).length;
+      const vList = Object.values(node.divisions || {});
+      divisions = vList.length;
+      vList.forEach(v => {
+        totalUsers += (v.divisionAgents || []).length;
+        const pList = Object.values(v.pincodes || {});
+        pincodes += pList.length;
+        pList.forEach(p => {
+          totalUsers += (p.pincodeAgents || []).length;
+        });
+      });
+    } else if (type === 'division') {
+      totalUsers += (node.divisionAgents || []).length;
+      const pList = Object.values(node.pincodes || {});
+      pincodes = pList.length;
+      pList.forEach(p => {
+        totalUsers += (p.pincodeAgents || []).length;
+      });
+    }
+    return { districts, divisions, pincodes, totalUsers };
+  };
 
   return (
     <div className="space-y-5">
@@ -451,7 +505,7 @@ export default function AgentDirectoryModule({
             {searchTerm && <button onClick={() => setSearchTerm('')} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 text-sm leading-none cursor-pointer shrink-0">&#10005;</button>}
           </div>
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0">
-            {[{ id: 'tree', label: 'Tree', Icon: Layers }, { id: 'list', label: 'List', Icon: List }, { id: 'grid', label: 'Grid', Icon: Grid }].map(v => (
+            {[{ id: 'cards', label: 'Cards', Icon: LayoutGrid }, { id: 'tree', label: 'Tree', Icon: Layers }, { id: 'list', label: 'List', Icon: List }, { id: 'grid', label: 'Grid', Icon: Grid }].map(v => (
               <button key={v.id} type="button" onClick={() => setAgentViewMode(v.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${agentViewMode === v.id ? 'bg-white dark:bg-slate-900 text-primary-600 dark:text-primary-400 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'}`}>
                 <v.Icon className="w-3.5 h-3.5" />{v.label}
@@ -518,7 +572,445 @@ export default function AgentDirectoryModule({
           <p className="text-xs text-slate-400">{debouncedSearch ? `No results for "${debouncedSearch}".` : 'No agents registered under this filter.'}</p>
         </div>
       ) : (
-        <div>
+        <div className="space-y-4">
+          {/* INTERACTIVE BREADCRUMB BAR */}
+          <div className="bg-slate-100/90 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-2xl flex items-center gap-2.5 text-xs font-semibold overflow-x-auto shadow-xs">
+            <span className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-wider shrink-0">Territory Scope:</span>
+            <button
+              onClick={() => { setDrillState(''); setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
+              className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillState ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+            >
+              All States
+            </button>
+            {drillState && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <button
+                  onClick={() => { setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
+                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillDistrict ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+                >
+                  {drillState}
+                </button>
+              </>
+            )}
+            {drillDistrict && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <button
+                  onClick={() => { setDrillDivision(''); setDrillPincode(''); }}
+                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillDivision ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+                >
+                  {drillDistrict}
+                </button>
+              </>
+            )}
+            {drillDivision && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <button
+                  onClick={() => { setDrillPincode(''); }}
+                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillPincode ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+                >
+                  {drillDivision}
+                </button>
+              </>
+            )}
+            {drillPincode && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="font-black text-primary-600 dark:text-primary-400 px-2.5 py-1 rounded-lg bg-primary-500/10 border border-primary-500/30 shrink-0">
+                  {drillPincode}
+                </span>
+              </>
+            )}
+          </div>
+
+          {/* ======== 0. DRILL-DOWN CARDS VIEW ======== */}
+          {agentViewMode === 'cards' && (() => {
+            const hMap = buildHierarchyMap();
+            const stateList = Object.values(hMap);
+
+            return (
+              <div className="space-y-5">
+                {/* SCREEN 1: STATES */}
+                {!drillState && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">States with Assigned Agents</h3>
+                        <p className="text-xs text-slate-400">Click any state card to drill down into assigned districts.</p>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                        {stateList.length} Active {stateList.length === 1 ? 'State' : 'States'}
+                      </span>
+                    </div>
+
+                    {stateList.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-10 text-center space-y-2">
+                        <Globe2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No agent assignments found.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {stateList.map(st => {
+                          const sc = getSubHierarchyCounts(st, 'state');
+                          return (
+                            <div
+                              key={st.stateName}
+                              onClick={() => {
+                                setDrillState(st.stateName);
+                                setDrillDistrict('');
+                                setDrillDivision('');
+                                setDrillPincode('');
+                              }}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-violet-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                            >
+                              <div>
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-600 border border-violet-500/20">
+                                    STATE
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-violet-600 transition-colors">
+                                    View Districts <ArrowRight className="w-3.5 h-3.5" />
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-2xl bg-violet-500/10 text-violet-600 flex items-center justify-center font-black text-lg border border-violet-500/20 shrink-0">
+                                    <Globe2 className="w-5 h-5" />
+                                  </div>
+                                  <div>
+                                    <h4 className="text-base font-black text-slate-900 dark:text-white">{st.stateName}</h4>
+                                    <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                      {st.stateAgents.length > 0 ? (
+                                        <>State Agents: <strong className="text-slate-700 dark:text-slate-300 font-bold">{st.stateAgents.map(a => a.name).join(', ')}</strong></>
+                                      ) : 'No Direct State Agents'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-4 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                  <span className="text-[10px] text-slate-400 block font-semibold">Districts</span>
+                                  <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{sc.districts}</strong>
+                                </div>
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                  <span className="text-[10px] text-slate-400 block font-semibold">Divisions</span>
+                                  <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{sc.divisions}</strong>
+                                </div>
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                  <span className="text-[10px] text-slate-400 block font-semibold">Pincodes</span>
+                                  <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{sc.pincodes}</strong>
+                                </div>
+                                <div className="p-2 bg-violet-500/10 rounded-xl">
+                                  <span className="text-[10px] text-violet-600 dark:text-violet-400 block font-semibold">Agents</span>
+                                  <strong className="text-xs font-black text-violet-600 dark:text-violet-400">{sc.totalUsers}</strong>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SCREEN 2: DISTRICTS */}
+                {drillState && !drillDistrict && (() => {
+                  const st = hMap[drillState];
+                  if (!st) return <div className="text-center py-8 text-slate-400">State not found.</div>;
+                  const districtList = Object.values(st.districts || {});
+
+                  return (
+                    <div className="space-y-5">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => { setDrillState(''); setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
+                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                          >
+                            ← All States
+                          </button>
+                          <div>
+                            <h3 className="text-base font-black text-slate-900 dark:text-white">Districts in {st.stateName}</h3>
+                            <p className="text-xs text-slate-400">Showing only districts with assigned agents.</p>
+                          </div>
+                        </div>
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                          {districtList.length} Assigned {districtList.length === 1 ? 'District' : 'Districts'}
+                        </span>
+                      </div>
+
+                      {st.stateAgents.length > 0 && (
+                        <div className="bg-violet-500/5 border border-violet-500/20 rounded-2xl p-4 space-y-2">
+                          <span className="text-[11px] font-black uppercase text-violet-700 dark:text-violet-400 tracking-wider">
+                            🌐 State Level Agents ({st.stateName}):
+                          </span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {st.stateAgents.map(ag => (
+                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="state" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {districtList.length === 0 ? (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
+                          <Navigation className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned districts found in {st.stateName}.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {districtList.map(d => {
+                            const sc = getSubHierarchyCounts(d, 'district');
+                            return (
+                              <div
+                                key={d.districtName}
+                                onClick={() => {
+                                  setDrillDistrict(d.districtName);
+                                  setDrillDivision('');
+                                  setDrillPincode('');
+                                }}
+                                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between mb-3">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                                      DISTRICT
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-blue-600 transition-colors">
+                                      View Divisions <ArrowRight className="w-3.5 h-3.5" />
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center font-black text-lg border border-blue-500/20 shrink-0">
+                                      <Navigation className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-base font-black text-slate-900 dark:text-white">{d.districtName}</h4>
+                                      <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                        {d.districtAgents.length > 0 ? (
+                                          <>District Agents: <strong className="text-slate-700 dark:text-slate-300 font-bold">{d.districtAgents.map(a => a.name).join(', ')}</strong></>
+                                        ) : 'No Direct District Agents'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                                  <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                    <span className="text-[10px] text-slate-400 block font-semibold">Divisions</span>
+                                    <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{sc.divisions}</strong>
+                                  </div>
+                                  <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                    <span className="text-[10px] text-slate-400 block font-semibold">Pincodes</span>
+                                    <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{sc.pincodes}</strong>
+                                  </div>
+                                  <div className="p-2 bg-blue-500/10 rounded-xl">
+                                    <span className="text-[10px] text-blue-600 dark:text-blue-400 block font-semibold">Agents</span>
+                                    <strong className="text-xs font-black text-blue-600 dark:text-blue-400">{sc.totalUsers}</strong>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* SCREEN 3: DIVISIONS */}
+                {drillState && drillDistrict && !drillDivision && (() => {
+                  const st = hMap[drillState];
+                  const d = st?.districts?.[drillDistrict];
+                  if (!d) return <div className="text-center py-8 text-slate-400">District not found.</div>;
+                  const divisionList = Object.values(d.divisions || {});
+
+                  return (
+                    <div className="space-y-5">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => { setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
+                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                          >
+                            ← {st.stateName} Districts
+                          </button>
+                          <div>
+                            <h3 className="text-base font-black text-slate-900 dark:text-white">Divisions in {d.districtName}</h3>
+                            <p className="text-xs text-slate-400">{st.stateName} &gt; {d.districtName}</p>
+                          </div>
+                        </div>
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                          {divisionList.length} Assigned {divisionList.length === 1 ? 'Division' : 'Divisions'}
+                        </span>
+                      </div>
+
+                      {d.districtAgents.length > 0 && (
+                        <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-4 space-y-2">
+                          <span className="text-[11px] font-black uppercase text-blue-700 dark:text-blue-400 tracking-wider">
+                            📍 District Level Agents ({d.districtName}):
+                          </span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {d.districtAgents.map(ag => (
+                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="district" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {divisionList.length === 0 ? (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
+                          <Building2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned divisions found in {d.districtName}.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {divisionList.map(v => {
+                            const sc = getSubHierarchyCounts(v, 'division');
+                            return (
+                              <div
+                                key={v.divisionName}
+                                onClick={() => {
+                                  setDrillDivision(v.divisionName);
+                                  setDrillPincode('');
+                                }}
+                                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                              >
+                                <div>
+                                  <div className="flex items-center justify-between mb-3">
+                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 border border-indigo-500/20">
+                                      DIVISION
+                                    </span>
+                                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-indigo-600 transition-colors">
+                                      View Pincodes <ArrowRight className="w-3.5 h-3.5" />
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center font-black text-lg border border-indigo-500/20 shrink-0">
+                                      <Building2 className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                      <h4 className="text-base font-black text-slate-900 dark:text-white">{v.divisionName}</h4>
+                                      <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                        {v.divisionAgents.length > 0 ? (
+                                          <>Division Agents: <strong className="text-slate-700 dark:text-slate-300 font-bold">{v.divisionAgents.map(a => a.name).join(', ')}</strong></>
+                                        ) : 'No Direct Division Agents'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                                  <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                    <span className="text-[10px] text-slate-400 block font-semibold">Pincodes</span>
+                                    <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{sc.pincodes}</strong>
+                                  </div>
+                                  <div className="p-2 bg-indigo-500/10 rounded-xl">
+                                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 block font-semibold">Agents</span>
+                                    <strong className="text-xs font-black text-indigo-600 dark:text-indigo-400">{sc.totalUsers}</strong>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* SCREEN 4: PINCODES */}
+                {drillState && drillDistrict && drillDivision && (() => {
+                  const st = hMap[drillState];
+                  const d = st?.districts?.[drillDistrict];
+                  const v = d?.divisions?.[drillDivision];
+                  if (!v) return <div className="text-center py-8 text-slate-400">Division not found.</div>;
+                  const pincodeList = Object.values(v.pincodes || {});
+
+                  return (
+                    <div className="space-y-5">
+                      <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => { setDrillDivision(''); setDrillPincode(''); }}
+                            className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                          >
+                            ← {d.districtName} Divisions
+                          </button>
+                          <div>
+                            <h3 className="text-base font-black text-slate-900 dark:text-white">Pincodes in {v.divisionName}</h3>
+                            <p className="text-xs text-slate-400">{st.stateName} &gt; {d.districtName} &gt; {v.divisionName}</p>
+                          </div>
+                        </div>
+                        <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                          {pincodeList.length} Assigned {pincodeList.length === 1 ? 'Pincode' : 'Pincodes'}
+                        </span>
+                      </div>
+
+                      {v.divisionAgents.length > 0 && (
+                        <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-2xl p-4 space-y-2">
+                          <span className="text-[11px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider">
+                            🏢 Division Level Agents ({v.divisionName}):
+                          </span>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {v.divisionAgents.map(ag => (
+                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="division" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {pincodeList.length === 0 ? (
+                        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
+                          <Hash className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                          <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned pincodes found in {v.divisionName}.</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {pincodeList.map(p => (
+                            <div
+                              key={p.pincodeCode}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs space-y-4"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-black text-sm border border-emerald-500/20">
+                                    <Hash className="w-4 h-4" />
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400">PINCODE</span>
+                                    <h4 className="text-base font-black text-slate-900 dark:text-white">{p.pincodeCode}</h4>
+                                  </div>
+                                </div>
+                                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  Total Assigned Agents: <strong className="text-primary-600 dark:text-primary-400">{p.pincodeAgents.length}</strong>
+                                </span>
+                              </div>
+
+                              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">List of Assigned Agents:</span>
+                                {p.pincodeAgents.length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No agents currently assigned to pincode {p.pincodeCode}.</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {p.pincodeAgents.map(ag => (
+                                      <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="pincode" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            );
+          })()}
 
           {/* ======== 1. TREE VIEW ======== */}
           {agentViewMode === 'tree' && (() => {

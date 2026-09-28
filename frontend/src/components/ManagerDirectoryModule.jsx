@@ -3,7 +3,8 @@ import {
   Users, ChevronRight, ChevronDown, Search, RefreshCw, X, User,
   Phone, Mail, CheckCircle, XCircle, Clock, Globe, Map, MapPin,
   ArrowRight, Eye, Building2, Layers, Navigation, Shield, Building,
-  ChevronLeft, UserCheck, AlertCircle, Plus, List, AlertTriangle
+  ChevronLeft, UserCheck, AlertCircle, Plus, List, AlertTriangle,
+  LayoutGrid, ListTree
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────
@@ -590,6 +591,13 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   const [statesLoading, setStatesLoading] = useState(false);
   const [hierarchy, setHierarchy] = useState({});
 
+  // ── Hierarchy View Mode & Breadcrumb Drill-Down
+  const [managerViewMode, setManagerViewMode] = useState('cards'); // 'cards' | 'tree'
+  const [drillState, setDrillState] = useState('');
+  const [drillDistrict, setDrillDistrict] = useState('');
+  const [drillDivision, setDrillDivision] = useState('');
+  const [drillPincode, setDrillPincode] = useState('');
+
   // ── Requests
   const [requests, setRequests] = useState([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
@@ -672,19 +680,6 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         const data = await apiFetch('/admin/manager-directory/states');
         if (Array.isArray(data?.states)) stateList = data.states;
       } catch {}
-
-      if (!stateList.length) {
-        try {
-          const terrRes = await apiFetch('/admin/territory/states');
-          const raw = Array.isArray(terrRes) ? terrRes : (terrRes?.states || []);
-          stateList = raw.map(s => ({
-            state: s.name || s.state || s,
-            totalManagers: s.totalManagers || 0,
-            activeManagers: s.activeManagers || 0,
-            pendingRequests: s.pendingRequests || 0
-          }));
-        } catch {}
-      }
 
       if (!stateList.length) {
         stateList = [];
@@ -841,11 +836,6 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         if (Array.isArray(data?.districts)) rawD = data.districts;
       } catch {}
 
-      if (!rawD.length) {
-        const dtRes = await apiFetch(`/admin/territory/districts?state=${encodeURIComponent(stateName)}`);
-        const raw = Array.isArray(dtRes) ? dtRes : (dtRes?.districts || []);
-        rawD = raw.map(d => ({ district: d.name || d.district || d, totalManagers: 0, activeManagers: 0 }));
-      }
       setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, districts: buildDistrictMap(rawD) } }));
     } catch {
       setHierarchy(prev => ({ ...prev, [stateName]: { ...prev[stateName], loading: false, error: true } }));
@@ -870,11 +860,6 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         if (Array.isArray(data?.divisions)) rawV = data.divisions;
       } catch {}
 
-      if (!rawV.length) {
-        const dvRes = await apiFetch(`/admin/territory/divisions?district=${encodeURIComponent(districtName)}`);
-        const raw = Array.isArray(dvRes) ? dvRes : (dvRes?.divisions || []);
-        rawV = raw.map(v => ({ division: v.name || v.division || v, totalManagers: 0, activeManagers: 0 }));
-      }
       setHierarchy(prev => ({
         ...prev, [stateName]: { ...prev[stateName], districts: { ...prev[stateName].districts, [districtName]: { ...prev[stateName].districts[districtName], loading: false, divisions: buildDivisionMap(rawV) } } }
       }));
@@ -895,11 +880,6 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         if (Array.isArray(data?.pincodes)) rawP = data.pincodes;
       } catch {}
 
-      if (!rawP.length) {
-        const pcRes = await apiFetch(`/admin/territory/pincodes?division=${encodeURIComponent(divisionName)}`);
-        const raw = Array.isArray(pcRes) ? pcRes : (pcRes?.pincodes || []);
-        rawP = raw.map(p => ({ pincode: p.pincode || p.code || p, totalManagers: 0, activeManagers: 0 }));
-      }
       setHierarchy(prev => updateDivNode(prev, stateName, districtName, divisionName, { loading: false, pincodes: buildPincodeMap(rawP) }));
     } catch { /* silent */ }
   }, [apiFetch, hierarchy]);
@@ -1328,14 +1308,440 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         </button>
       </div>
 
-      {/* ── HIERARCHICAL VIEW TAB (Requirement 14) ── */}
+      {/* ── HIERARCHICAL VIEW TAB (Requirement 14 & Drill-down Cards) ── */}
       {activeTab === 'hierarchy' && (
-        <div>
-          <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium mb-3 px-1">
-            <Navigation className="w-3.5 h-3.5" />
-            Click any state to expand. Navigate: State (Max 8) → District (Max 2) → Division (Max 2) → Pincode (Max 2).
+        <div className="space-y-4">
+          {/* VIEW SWITCHER & BREADCRUMB */}
+          <div className="flex items-center justify-between gap-3 flex-wrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-xs">
+            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setManagerViewMode('cards')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${managerViewMode === 'cards' ? 'bg-white dark:bg-slate-900 text-primary-600 dark:text-primary-400 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" /> Drill-Down Cards
+              </button>
+              <button
+                onClick={() => setManagerViewMode('tree')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${managerViewMode === 'tree' ? 'bg-white dark:bg-slate-900 text-primary-600 dark:text-primary-400 shadow-xs' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`}
+              >
+                <ListTree className="w-3.5 h-3.5" /> Tree View
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-400 font-medium">
+              Strict Assignment Mode: Only territories with assigned managers are displayed.
+            </div>
           </div>
-          {renderTree()}
+
+          {/* INTERACTIVE BREADCRUMB BAR */}
+          <div className="bg-slate-100/90 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 py-2.5 rounded-2xl flex items-center gap-2.5 text-xs font-semibold overflow-x-auto shadow-xs">
+            <span className="text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-wider shrink-0">Territory Scope:</span>
+            <button
+              onClick={() => { setDrillState(''); setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
+              className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillState ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+            >
+              All States
+            </button>
+            {drillState && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <button
+                  onClick={() => { setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
+                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillDistrict ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+                >
+                  {drillState}
+                </button>
+              </>
+            )}
+            {drillDistrict && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <button
+                  onClick={() => { setDrillDivision(''); setDrillPincode(''); }}
+                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillDivision ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+                >
+                  {drillDistrict}
+                </button>
+              </>
+            )}
+            {drillDivision && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <button
+                  onClick={() => { setDrillPincode(''); }}
+                  className={`transition-all cursor-pointer shrink-0 px-2.5 py-1 rounded-lg text-xs font-bold ${!drillPincode ? 'bg-primary-500/10 text-primary-600 dark:text-primary-400 border border-primary-500/30 font-black' : 'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400'}`}
+                >
+                  {drillDivision}
+                </button>
+              </>
+            )}
+            {drillPincode && (
+              <>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <span className="font-black text-primary-600 dark:text-primary-400 px-2.5 py-1 rounded-lg bg-primary-500/10 border border-primary-500/30 shrink-0">
+                  {drillPincode}
+                </span>
+              </>
+            )}
+          </div>
+
+          {managerViewMode === 'cards' ? (
+            /* ── DRILL DOWN CARDS VIEW ── */
+            <div className="space-y-5">
+              {/* SCREEN 1: STATES */}
+              {!drillState && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">States with Assigned Managers</h3>
+                      <p className="text-xs text-slate-400">Click any state card to drill down into assigned districts.</p>
+                    </div>
+                    <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                      {states.length} Active {states.length === 1 ? 'State' : 'States'}
+                    </span>
+                  </div>
+
+                  {statesLoading ? (
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 flex items-center justify-center gap-3 text-slate-400">
+                      <RefreshCw className="w-5 h-5 animate-spin" /> Loading manager territories…
+                    </div>
+                  ) : states.length === 0 ? (
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
+                      <Globe className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                      <p className="text-sm font-semibold text-slate-500">No manager territories found.</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {states.map(s => (
+                        <div
+                          key={s.state}
+                          onClick={() => {
+                            setDrillState(s.state);
+                            setDrillDistrict('');
+                            setDrillDivision('');
+                            setDrillPincode('');
+                            expandState(s.state);
+                          }}
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                STATE
+                              </span>
+                              <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-emerald-600 transition-colors">
+                                View Districts <ArrowRight className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0">
+                                <Globe className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                              </div>
+                              <div>
+                                <h4 className="text-base font-black text-slate-900 dark:text-white">{s.state}</h4>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                  {s.activeManagers || 0} active · {s.pendingRequests || 0} pending
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                            <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                              <span className="text-[10px] text-slate-400 block font-semibold">Active</span>
+                              <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{s.activeManagers || 0}</strong>
+                            </div>
+                            <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                              <span className="text-[10px] text-slate-400 block font-semibold">Pending</span>
+                              <strong className="text-xs font-black text-amber-500">{s.pendingRequests || 0}</strong>
+                            </div>
+                            <div className="p-2 bg-emerald-500/10 rounded-xl">
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">Quota</span>
+                              <strong className="text-xs font-black text-emerald-600 dark:text-emerald-400">{s.totalManagers || 0} / 8</strong>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* SCREEN 2: DISTRICTS */}
+              {drillState && !drillDistrict && (() => {
+                const stateNode = hierarchy[drillState] || {};
+                const districtList = Object.values(stateNode.districts || {});
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { setDrillState(''); setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                          ← All States
+                        </button>
+                        <h3 className="text-base font-black text-slate-900 dark:text-white">Districts in {drillState}</h3>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                        {districtList.length} Assigned {districtList.length === 1 ? 'District' : 'Districts'}
+                      </span>
+                    </div>
+
+                    {stateNode.loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex items-center justify-center gap-3 text-slate-400">
+                        <RefreshCw className="w-5 h-5 animate-spin" /> Loading districts…
+                      </div>
+                    ) : districtList.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center">
+                        <Building2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned districts found in {drillState}.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {districtList.map(d => (
+                          <div
+                            key={d.district}
+                            onClick={() => {
+                              setDrillDistrict(d.district);
+                              setDrillDivision('');
+                              setDrillPincode('');
+                              expandDistrict(drillState, d.district);
+                            }}
+                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                                  DISTRICT
+                                </span>
+                                <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-blue-600 transition-colors">
+                                  View Divisions <ArrowRight className="w-3.5 h-3.5" />
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex-shrink-0">
+                                  <Building2 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <div>
+                                  <h4 className="text-base font-black text-slate-900 dark:text-white">{d.district}</h4>
+                                  <p className="text-xs text-slate-400 mt-0.5">{d.activeManagers || 0} active managers</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                              <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                <span className="text-[10px] text-slate-400 block font-semibold">Active</span>
+                                <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{d.activeManagers || 0}</strong>
+                              </div>
+                              <div className="p-2 bg-blue-500/10 rounded-xl">
+                                <span className="text-[10px] text-blue-600 dark:text-blue-400 block font-semibold">Quota</span>
+                                <strong className="text-xs font-black text-blue-600 dark:text-blue-400">{d.totalManagers || 0} / 2</strong>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* SCREEN 3: DIVISIONS */}
+              {drillState && drillDistrict && !drillDivision && (() => {
+                const distNode = hierarchy[drillState]?.districts?.[drillDistrict] || {};
+                const divisionList = Object.values(distNode.divisions || {});
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { setDrillDistrict(''); setDrillDivision(''); setDrillPincode(''); }}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                          ← {drillState} Districts
+                        </button>
+                        <h3 className="text-base font-black text-slate-900 dark:text-white">Divisions in {drillDistrict}</h3>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                        {divisionList.length} Assigned {divisionList.length === 1 ? 'Division' : 'Divisions'}
+                      </span>
+                    </div>
+
+                    {distNode.loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex items-center justify-center gap-3 text-slate-400">
+                        <RefreshCw className="w-5 h-5 animate-spin" /> Loading divisions…
+                      </div>
+                    ) : divisionList.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center">
+                        <Map className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned divisions found in {drillDistrict}.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {divisionList.map(v => (
+                          <div
+                            key={v.division}
+                            onClick={() => {
+                              setDrillDivision(v.division);
+                              setDrillPincode('');
+                              expandDivision(drillState, drillDistrict, v.division);
+                            }}
+                            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                          >
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 border border-purple-500/20">
+                                  DIVISION
+                                </span>
+                                <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-purple-600 transition-colors">
+                                  View Pincodes <ArrowRight className="w-3.5 h-3.5" />
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="p-2 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex-shrink-0">
+                                  <Map className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                                </div>
+                                <div>
+                                  <h4 className="text-base font-black text-slate-900 dark:text-white">{v.division}</h4>
+                                  <p className="text-xs text-slate-400 mt-0.5">{v.activeManagers || 0} active managers</p>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                              <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                <span className="text-[10px] text-slate-400 block font-semibold">Active</span>
+                                <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{v.activeManagers || 0}</strong>
+                              </div>
+                              <div className="p-2 bg-purple-500/10 rounded-xl">
+                                <span className="text-[10px] text-purple-600 dark:text-purple-400 block font-semibold">Quota</span>
+                                <strong className="text-xs font-black text-purple-600 dark:text-purple-400">{v.totalManagers || 0} / 2</strong>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* SCREEN 4: PINCODES */}
+              {drillState && drillDistrict && drillDivision && (() => {
+                const divNode = hierarchy[drillState]?.districts?.[drillDistrict]?.divisions?.[drillDivision] || {};
+                const pincodeList = Object.values(divNode.pincodes || {});
+
+                return (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { setDrillDivision(''); setDrillPincode(''); }}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                          ← {drillDistrict} Divisions
+                        </button>
+                        <h3 className="text-base font-black text-slate-900 dark:text-white">Pincodes in {drillDivision}</h3>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                        {pincodeList.length} Assigned {pincodeList.length === 1 ? 'Pincode' : 'Pincodes'}
+                      </span>
+                    </div>
+
+                    {divNode.loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex items-center justify-center gap-3 text-slate-400">
+                        <RefreshCw className="w-5 h-5 animate-spin" /> Loading pincodes…
+                      </div>
+                    ) : pincodeList.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center">
+                        <MapPin className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned pincodes found in {drillDivision}.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {pincodeList.map(p => {
+                          const isPinExpanded = p.expanded;
+                          const mgrList = p.managers || [];
+
+                          return (
+                            <div
+                              key={p.pincode}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs space-y-4"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 flex-shrink-0">
+                                    <MapPin className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400">PINCODE</span>
+                                    <h4 className="text-base font-black text-slate-900 dark:text-white">{p.pincode}</h4>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => expandPincode(drillState, drillDistrict, drillDivision, p.pincode)}
+                                    className="text-xs font-bold text-primary-600 hover:text-primary-500 px-3 py-1 rounded-lg bg-primary-500/10 cursor-pointer"
+                                  >
+                                    {isPinExpanded ? 'Hide Managers' : 'View Managers'}
+                                  </button>
+                                </div>
+                              </div>
+
+                              {isPinExpanded && (
+                                <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">List of Managers:</span>
+                                  {p.loading ? (
+                                    <div className="p-3 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                                      <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Loading managers…
+                                    </div>
+                                  ) : mgrList.length === 0 ? (
+                                    <p className="text-xs text-slate-400 italic">No managers currently loaded for pincode {p.pincode}.</p>
+                                  ) : (
+                                    <div className="space-y-2">
+                                      {mgrList.map(mgr => (
+                                        <div
+                                          key={mgr._id}
+                                          className="p-3 bg-slate-50 dark:bg-slate-850/60 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl flex items-center justify-between gap-3"
+                                        >
+                                          <div>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-extrabold text-slate-900 dark:text-white">{mgr.name}</span>
+                                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600">
+                                                Pincode Manager
+                                              </span>
+                                              <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${mgr.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-500/10 text-slate-500'}`}>
+                                                {mgr.status}
+                                              </span>
+                                            </div>
+                                            <div className="text-[11px] text-slate-400 flex items-center gap-3 mt-1">
+                                              <span>Phone: <strong className="text-slate-700 dark:text-slate-300">{mgr.phone || '—'}</strong></span>
+                                              <span>Email: <strong className="text-slate-700 dark:text-slate-300">{mgr.email}</strong></span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            /* ── TREE VIEW ── */
+            renderTree()
+          )}
         </div>
       )}
 

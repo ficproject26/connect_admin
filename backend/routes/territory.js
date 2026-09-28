@@ -1216,39 +1216,67 @@ router.post('/pincodes', [auth, superAdminAuth], async (req, res) => {
             stateObj = await State.findById(stateId);
         }
 
-        // Check if code already exists
-        const existingPin = await Pincode.findOne({ code: trimmedCode });
+        // Check if master pincode already exists
+        let existingPin = await Pincode.findOne({ code: trimmedCode });
         if (existingPin) {
-            // If existing record was orphaned or missing divisionId/districtId, repair and link to target division
-            if (!existingPin.divisionId || !existingPin.districtId || !existingPin.stateId || (divObj && existingPin.divisionId.toString() !== divObj._id.toString() && (!existingPin.division || existingPin.division === 'General' || existingPin.division === 'Central'))) {
-                if (divObj) {
-                    existingPin.divisionId = divObj._id;
-                    existingPin.division = divObj.name;
-                    existingPin.districtId = distObj ? distObj._id : divObj.districtId;
-                    existingPin.district = distObj ? distObj.name : (divObj.districtId?.name || existingPin.district);
-                    existingPin.stateId = stateObj ? stateObj._id : divObj.stateId;
-                    existingPin.state = stateObj ? stateObj.name : (divObj.stateId?.name || existingPin.state);
-                    if (area) existingPin.area = area.trim();
-                    if (postOffice) existingPin.postOffice = postOffice.trim();
-                    if (taluk) existingPin.taluk = taluk.trim();
-                    existingPin.status = status || existingPin.status || 'Active';
-                    await existingPin.save();
-
-                    const io = req.app.get('io');
-                    if (io) {
-                        io.emit('pincode_updated', existingPin);
-                        io.emit('territory_updated', { type: 'pincode', data: existingPin });
-                    }
-
-                    return res.status(200).json({
-                        success: true,
-                        data: existingPin,
-                        msg: `Pincode ${trimmedCode} linked successfully under ${existingPin.state} -> ${existingPin.district} -> ${existingPin.division}`
-                    });
-                }
+            // Requirement 12: Reuse existing master pincode, update hierarchy links, and record assignment
+            if (divObj) {
+                existingPin.divisionId = divObj._id;
+                existingPin.division = divObj.name;
+                existingPin.districtId = distObj ? distObj._id : divObj.districtId;
+                existingPin.district = distObj ? distObj.name : (divObj.districtId?.name || existingPin.district);
+                existingPin.stateId = stateObj ? stateObj._id : divObj.stateId;
+                existingPin.state = stateObj ? stateObj.name : (divObj.stateId?.name || existingPin.state);
+            } else if (distObj) {
+                existingPin.districtId = distObj._id;
+                existingPin.district = distObj.name;
+                existingPin.stateId = stateObj ? stateObj._id : distObj.stateId;
+                existingPin.state = stateObj ? stateObj.name : (distObj.stateId?.name || existingPin.state);
+            } else if (stateObj) {
+                existingPin.stateId = stateObj._id;
+                existingPin.state = stateObj.name;
             }
-            return res.status(400).json({
-                msg: `Pincode ${trimmedCode} is already registered under ${existingPin.state || 'General'} -> ${existingPin.district || 'General'} -> ${existingPin.division || 'General'}`
+
+            if (area && area.trim()) existingPin.area = area.trim();
+            if (postOffice && postOffice.trim()) existingPin.postOffice = postOffice.trim();
+            if (taluk && taluk.trim()) existingPin.taluk = taluk.trim();
+            if (req.body.activeAgentId) existingPin.activeAgentId = req.body.activeAgentId;
+            existingPin.status = status || existingPin.status || 'Active';
+            await existingPin.save();
+
+            // Record Pincode Assignment relationship
+            const PincodeAssignment = require('../models/PincodeAssignment');
+            await PincodeAssignment.findOneAndUpdate(
+                { pincode: trimmedCode },
+                {
+                    $set: {
+                        pincode: trimmedCode,
+                        pincodeId: existingPin._id,
+                        state: existingPin.state,
+                        district: existingPin.district,
+                        division: existingPin.division,
+                        stateId: existingPin.stateId,
+                        districtId: existingPin.districtId,
+                        divisionId: existingPin.divisionId,
+                        assignedAdminId: req.body.assignedAdminId || undefined,
+                        assignedManagerId: req.body.assignedManagerId || undefined,
+                        assignedAgentId: req.body.assignedAgentId || req.body.activeAgentId || undefined,
+                        status: 'Active'
+                    }
+                },
+                { upsert: true, new: true }
+            );
+
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('pincode_updated', existingPin);
+                io.emit('territory_updated', { type: 'pincode', data: existingPin });
+            }
+
+            return res.status(200).json({
+                success: true,
+                data: existingPin,
+                msg: `Pincode ${trimmedCode} assigned successfully under ${existingPin.state} -> ${existingPin.district} -> ${existingPin.division}`
             });
         }
 

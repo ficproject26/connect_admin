@@ -10,6 +10,7 @@ const District = require('../models/District');
 const Division = require('../models/Division');
 const User = require('../models/User');
 const { validateTerritoryHierarchy } = require('./territory');
+const TerritoryAssignmentService = require('../utils/territoryAssignmentService');
 
 // ============================================================
 // MANAGER DIRECTORY ROUTES
@@ -107,7 +108,9 @@ router.get('/manager-directory/states', auth, async (req, res) => {
             if (p._id && stateMap[p._id]) stateMap[p._id].pendingRequests = p.pending;
         });
 
-        const states = Object.values(stateMap).sort((a, b) => a.state.localeCompare(b.state));
+        const states = Object.values(stateMap)
+            .filter(s => s.totalManagers > 0 || s.pendingRequests > 0)
+            .sort((a, b) => a.state.localeCompare(b.state));
 
         res.json({ success: true, states, total: states.length });
     } catch (err) {
@@ -175,7 +178,9 @@ router.get('/manager-directory/states/:state/districts', auth, async (req, res) 
             if (key && districtMap[key]) districtMap[key].pendingRequests = p.pending;
         });
 
-        const districts = Object.values(districtMap).sort((a, b) => a.district.localeCompare(b.district));
+        const districts = Object.values(districtMap)
+            .filter(d => d.totalManagers > 0 || d.pendingRequests > 0)
+            .sort((a, b) => a.district.localeCompare(b.district));
         res.json({ success: true, state: stateName, districts, total: districts.length });
     } catch (err) {
         console.error('Manager directory districts error:', err);
@@ -241,7 +246,9 @@ router.get('/manager-directory/districts/:district/divisions', auth, async (req,
             if (key && divisionMap[key]) divisionMap[key].pendingRequests = p.pending;
         });
 
-        const divisions = Object.values(divisionMap).sort((a, b) => a.division.localeCompare(b.division));
+        const divisions = Object.values(divisionMap)
+            .filter(v => v.totalManagers > 0 || v.pendingRequests > 0)
+            .sort((a, b) => a.division.localeCompare(b.division));
         res.json({ success: true, district: districtName, state: stateName, divisions, total: divisions.length });
     } catch (err) {
         console.error('Manager directory divisions error:', err);
@@ -307,11 +314,27 @@ router.get('/manager-directory/divisions/:division/pincodes', auth, async (req, 
             if (key && pincodeMap[key]) pincodeMap[key].pendingRequests = p.pending;
         });
 
-        const pincodes = Object.values(pincodeMap).sort((a, b) => a.pincode.localeCompare(b.pincode));
+        const pincodes = Object.values(pincodeMap)
+            .filter(p => p.totalManagers > 0 || p.pendingRequests > 0)
+            .sort((a, b) => a.pincode.localeCompare(b.pincode));
         res.json({ success: true, division: divisionName, pincodes, total: pincodes.length });
     } catch (err) {
         console.error('Manager directory pincodes error:', err);
         res.status(500).json({ msg: 'Error fetching pincodes', error: err.message });
+    }
+});
+
+// ============================================================
+// 5B. GET ASSIGNED HIERARCHY TREE FOR MANAGERS
+// GET /manager-directory/assigned-hierarchy
+// ============================================================
+router.get('/manager-directory/assigned-hierarchy', auth, async (req, res) => {
+    try {
+        const tree = await TerritoryAssignmentService.getAssignedHierarchyTree('managers', req.territoryFilter || {});
+        res.json({ success: true, hierarchy: tree });
+    } catch (err) {
+        console.error('Manager assigned hierarchy error:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
