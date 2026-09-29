@@ -1,0 +1,79 @@
+{
+  "name": "connect-app-admin-desktop",
+  "version": "1.0.0",
+  "description": "Connect App Admin Portal — Desktop Application",
+  "main": "main.js",
+  "author": "Connect App",
+  "license": "ISC",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "start:dev": "cross-env NODE_ENV=development electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "mime-types": "^2.1.35"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "in.ficapp.connect-admin",
+    "productName": "Connect App Admin",
+    "copyright": "Copyright © 2024 Connect App",
+    "directories": {
+      "output": "../dist-electron",
+      "buildResources": "assets"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "assets/**"
+    ],
+    "extraResources": [
+      {
+        "from": "../frontend/dist",
+        "to": "app/frontend/dist",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../frontend/public",
+        "to": "app/frontend/public",
+        "filter": ["**/*"]
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.ico",
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Connect App Admin",
+      "installerHeaderBitmap": "assets/header.bmp",
+      "uninstallDisplayName": "Connect App Admin"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.business"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "assets",
+      "category": "Office"
+    }
+  }
+}
