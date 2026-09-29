@@ -998,16 +998,49 @@ router.get('/managers', [auth, territoryScope], async (req, res) => {
             ];
         }
 
-        const managers = await Manager.find(query)
-            .populate('parentAdminId', 'name email role adminRole')
-            .populate('approvedBy', 'name email')
-            .sort({ createdAt: -1 })
-            .lean();
+        const [rawManagers, rawUsers] = await Promise.all([
+            Manager.find(query)
+                .populate('parentAdminId', 'name email role adminRole')
+                .populate('approvedBy', 'name email')
+                .sort({ createdAt: -1 })
+                .lean()
+                .catch(() => []),
+            User.find({
+                role: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'] }
+            }).sort({ createdAt: -1 }).lean().catch(() => [])
+        ]);
+
+        const all = [];
+        const seen = new Set();
+        const normalize = (m) => {
+            const id = String(m._id || m.id);
+            const em = String(m.email || '').toLowerCase().trim();
+            if (seen.has(id) || (em && seen.has(em))) return;
+            if (id) seen.add(id);
+            if (em) seen.add(em);
+            const lvl = m.level === 1 ? 'state' : m.level === 2 ? 'district' : m.level === 3 ? 'division' : m.level === 4 ? 'pincode' : String(m.level || m.role || 'state').replace('_manager', '');
+            all.push({
+                ...m,
+                _id: m._id,
+                id: m.id || m.managerId || `MGR-${lvl.toUpperCase().slice(0, 3)}-${id.slice(-6)}`,
+                managerId: m.managerId || m.id || `MGR-${lvl.toUpperCase().slice(0, 3)}-${id.slice(-6)}`,
+                level: lvl,
+                assignedState: m.assignedState || m.state || '',
+                assignedDistrict: m.assignedDistrict || m.district || '',
+                assignedDivision: m.assignedDivision || m.division || '',
+                assignedPincode: m.assignedPincode ? String(m.assignedPincode) : (m.pincode ? String(m.pincode) : ''),
+                phone: m.phone || m.mobile || '',
+                mobile: m.mobile || m.phone || '',
+                status: (m.status === 'approved' || m.status === 'active' || m.status === 'Active') ? 'Active' : (m.status || 'Active')
+            });
+        };
+        rawManagers.forEach(normalize);
+        rawUsers.forEach(normalize);
 
         res.json({
             success: true,
-            managers,
-            total: managers.length
+            managers: all,
+            total: all.length
         });
     } catch (err) {
         console.error('Get managers error:', err);

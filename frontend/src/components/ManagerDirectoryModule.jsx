@@ -4,7 +4,7 @@ import {
   Phone, Mail, CheckCircle, XCircle, Clock, Globe, Map, MapPin,
   ArrowRight, Eye, Building2, Layers, Award,
   ChevronLeft, UserCheck, AlertCircle, Plus, List,
-  ShoppingBag, DollarSign, Calendar, TrendingUp
+  ShoppingBag, DollarSign, Calendar, TrendingUp, Store
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────
@@ -160,7 +160,9 @@ const ManagerDrawer = ({ manager, onClose, API_BASE, token }) => {
 
   if (!manager) return null;
 
-  const onboardedBy = manager.parentAdminId?.name || manager.requestingAdminName || '—';
+  const onboardedBy = manager.createdByAdmin
+    ? `${manager.createdByAdmin}${manager.createdByRole ? ` (${String(manager.createdByRole).replace(/_/g, ' ')})` : ''}`
+    : (manager.parentAdminId?.name || manager.requestingAdminName || '—');
   const approvedBy  = manager.approvedBy?.name || '—';
 
   return (
@@ -691,6 +693,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   // Hierarchy Data
   const [hierarchyStates, setHierarchyStates] = useState([]);
   const [hierarchyLoading, setHierarchyLoading] = useState(false);
+  const [hierarchyError, setHierarchyError] = useState(null);
   const [totalManagersCount, setTotalManagersCount] = useState(0);
 
   // Expand / Collapse State for Tree Nodes
@@ -715,6 +718,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
   // List View Flat Data & Pagination
   const [flatManagers, setFlatManagers] = useState([]);
   const [flatLoading, setFlatLoading] = useState(false);
+  const [flatError, setFlatError] = useState(null);
   const [flatTotal, setFlatTotal] = useState(0);
   const [flatPage, setFlatPage] = useState(1);
 
@@ -792,6 +796,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
 
   const loadHierarchy = useCallback(async () => {
     setHierarchyLoading(true);
+    setHierarchyError(null);
     try {
       const params = new URLSearchParams();
       if (search.trim()) params.set('search', search.trim());
@@ -825,9 +830,10 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         setHierarchyStates([]);
         setTotalManagersCount(0);
       }
-    } catch {
+    } catch (err) {
       setHierarchyStates([]);
       setTotalManagersCount(0);
+      setHierarchyError(err.message || 'Failed to fetch manager hierarchy from database.');
     } finally {
       setHierarchyLoading(false);
     }
@@ -835,6 +841,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
 
   const loadFlatManagers = useCallback(async (page = 1) => {
     setFlatLoading(true);
+    setFlatError(null);
     try {
       const params = new URLSearchParams({
         page: String(page),
@@ -852,9 +859,10 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       setFlatManagers(list);
       setFlatTotal(data?.total || list.length);
       setFlatPage(page);
-    } catch {
+    } catch (err) {
       setFlatManagers([]);
       setFlatTotal(0);
+      setFlatError(err.message || 'Failed to fetch manager list from database.');
     } finally {
       setFlatLoading(false);
     }
@@ -1195,13 +1203,30 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 flex items-center justify-center gap-3 text-slate-400">
               <RefreshCw className="w-5 h-5 animate-spin text-primary-500" /> Loading manager hierarchy…
             </div>
+          ) : hierarchyError ? (
+            <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/50 rounded-3xl p-12 text-center shadow-xs">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+              <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">Failed to load managers</h3>
+              <p className="text-xs text-red-500 mb-4">{hierarchyError}</p>
+              <button
+                onClick={() => { setHierarchyError(null); loadHierarchy(); loadSummary(); }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
           ) : hierarchyStates.length === 0 ? (
-            /* Requirement 9: Empty Database Behavior -> "No managers found" */
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 text-center shadow-xs">
               <Users className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-              <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">No managers found</h3>
+              <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">
+                {search.trim() || filterState !== 'All' || filterDistrict !== 'All' || filterDivision !== 'All' || filterPincode !== 'All' || filterLevel !== 'All' || filterStatus !== 'All'
+                  ? 'No managers assigned to this territory'
+                  : 'No managers found'}
+              </h3>
               <p className="text-xs text-slate-400 max-w-md mx-auto mb-6">
-                No manager records currently exist in the database. When new managers are onboarded and approved, they will appear here in their assigned geographic hierarchy.
+                {search.trim() || filterState !== 'All' || filterDistrict !== 'All' || filterDivision !== 'All' || filterPincode !== 'All' || filterLevel !== 'All' || filterStatus !== 'All'
+                  ? 'No manager records match your selected territory or filters.'
+                  : 'No manager records currently exist in the database. When new managers are onboarded by Sub-Admins, they will appear here in their assigned geographic hierarchy.'}
               </p>
               <button
                 onClick={() => setNominateTerritory({ level: 'state', state: '', currentCount: 0 })}
@@ -1245,9 +1270,26 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                                 <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
                                   <span className="font-bold text-emerald-600 dark:text-emerald-400">{stateGroup.state}</span>
                                   <span>·</span>
-                                  <span>{stateMgr.phone}</span>
+                                  <span>{stateMgr.phone || '—'}</span>
                                   <span>·</span>
-                                  <span className="truncate">{stateMgr.email}</span>
+                                  <span className="truncate">{stateMgr.email || '—'}</span>
+                                  {stateMgr.createdByAdmin && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="text-[11px] text-slate-400">
+                                        Assigned by: <strong className="text-slate-600 dark:text-slate-300 font-semibold">{stateMgr.createdByAdmin}</strong>
+                                        {stateMgr.createdByRole ? ` (${String(stateMgr.createdByRole).replace(/_/g, ' ')})` : ''}
+                                      </span>
+                                    </>
+                                  )}
+                                  {stateMgr.createdAt && (
+                                    <>
+                                      <span>·</span>
+                                      <span className="text-[11px] text-slate-400">
+                                        {new Date(stateMgr.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                      </span>
+                                    </>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1312,9 +1354,8 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                     {isStateExpanded && (
                       <div className="bg-slate-50/70 dark:bg-slate-850/40 border-t border-slate-100 dark:border-slate-800/80 p-4 sm:p-5 space-y-3">
                         {districtList.length === 0 ? (
-                          /* Requirement 2: "No district managers assigned" */
                           <div className="py-4 px-5 rounded-2xl bg-white/70 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 text-xs text-slate-400 italic font-semibold text-center">
-                            No district managers assigned
+                            No district managers assigned to this territory
                           </div>
                         ) : (
                           districtList.map(distGroup => {
@@ -1348,9 +1389,26 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                                           <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5 flex-wrap">
                                             <span className="font-bold text-blue-600 dark:text-blue-400">{distGroup.district}</span>
                                             <span>·</span>
-                                            <span>{distMgr.phone}</span>
+                                            <span>{distMgr.phone || '—'}</span>
                                             <span>·</span>
-                                            <span className="truncate">{distMgr.email}</span>
+                                            <span className="truncate">{distMgr.email || '—'}</span>
+                                            {distMgr.createdByAdmin && (
+                                              <>
+                                                <span>·</span>
+                                                <span className="text-[10px] text-slate-400">
+                                                  Assigned by: <strong className="text-slate-600 dark:text-slate-300 font-semibold">{distMgr.createdByAdmin}</strong>
+                                                  {distMgr.createdByRole ? ` (${String(distMgr.createdByRole).replace(/_/g, ' ')})` : ''}
+                                                </span>
+                                              </>
+                                            )}
+                                            {distMgr.createdAt && (
+                                              <>
+                                                <span>·</span>
+                                                <span className="text-[10px] text-slate-400">
+                                                  {new Date(distMgr.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </span>
+                                              </>
+                                            )}
                                           </div>
                                         </div>
                                       </div>
@@ -1386,7 +1444,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                                       </div>
                                       <div>
                                         <p className="text-xs font-black text-slate-800 dark:text-slate-200">{distGroup.district}</p>
-                                        <p className="text-[10px] text-slate-400 italic">No District Manager assigned</p>
+                                        <p className="text-[10px] text-slate-400 italic">No District Manager assigned to this territory</p>
                                       </div>
                                     </div>
                                     <button
@@ -1406,9 +1464,8 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                                 {isDistExpanded && (
                                   <div className="bg-slate-50/50 dark:bg-slate-900/60 border-t border-slate-100 dark:border-slate-800 p-3 sm:p-4 space-y-2.5">
                                     {divisionList.length === 0 ? (
-                                      /* Requirement 3: "No division managers assigned" */
                                       <div className="py-3 px-4 rounded-xl bg-white/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 text-[11px] text-slate-400 italic font-semibold text-center">
-                                        No division managers assigned
+                                        No division managers assigned to this territory
                                       </div>
                                     ) : (
                                       divisionList.map(divGroup => {
@@ -1442,9 +1499,26 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                                                       <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5 flex-wrap">
                                                         <span className="font-bold text-purple-600 dark:text-purple-400">{divGroup.division}</span>
                                                         <span>·</span>
-                                                        <span>{divMgr.phone}</span>
+                                                        <span>{divMgr.phone || '—'}</span>
                                                         <span>·</span>
-                                                        <span className="truncate">{divMgr.email}</span>
+                                                        <span className="truncate">{divMgr.email || '—'}</span>
+                                                        {divMgr.createdByAdmin && (
+                                                          <>
+                                                            <span>·</span>
+                                                            <span className="text-[10px] text-slate-400">
+                                                              Assigned by: <strong className="text-slate-600 dark:text-slate-300 font-semibold">{divMgr.createdByAdmin}</strong>
+                                                              {divMgr.createdByRole ? ` (${String(divMgr.createdByRole).replace(/_/g, ' ')})` : ''}
+                                                            </span>
+                                                          </>
+                                                        )}
+                                                        {divMgr.createdAt && (
+                                                          <>
+                                                            <span>·</span>
+                                                            <span className="text-[10px] text-slate-400">
+                                                              {new Date(divMgr.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                            </span>
+                                                          </>
+                                                        )}
                                                       </div>
                                                     </div>
                                                   </div>
@@ -1480,7 +1554,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                                                   </div>
                                                   <div>
                                                     <p className="text-xs font-black text-slate-800 dark:text-slate-200">{divGroup.division}</p>
-                                                    <p className="text-[10px] text-slate-400 italic">No Division Manager assigned</p>
+                                                    <p className="text-[10px] text-slate-400 italic">No Division Manager assigned to this territory</p>
                                                   </div>
                                                 </div>
                                                 <button
@@ -1500,9 +1574,8 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                                             {isDivExpanded && (
                                               <div className="bg-slate-50 dark:bg-slate-900/40 border-t border-slate-100 dark:border-slate-800 p-2.5 sm:p-3 space-y-2">
                                                 {pincodeList.length === 0 ? (
-                                                  /* Requirement 4: "No pincode managers assigned" */
                                                   <div className="py-2.5 px-3 rounded-lg bg-white/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-700/50 text-[10px] text-slate-400 italic font-semibold text-center">
-                                                    No pincode managers assigned
+                                                    No pincode managers assigned to this territory
                                                   </div>
                                                 ) : (
                                                   pincodeList.map(pinGroup => {
@@ -1529,9 +1602,26 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                                                                 <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5 flex-wrap">
                                                                   <span className="font-bold text-amber-600 dark:text-amber-400 font-mono">{pinGroup.pincode}</span>
                                                                   <span>·</span>
-                                                                  <span>{pinMgr.phone}</span>
+                                                                  <span>{pinMgr.phone || '—'}</span>
                                                                   <span>·</span>
-                                                                  <span className="truncate">{pinMgr.email}</span>
+                                                                  <span className="truncate">{pinMgr.email || '—'}</span>
+                                                                  {pinMgr.createdByAdmin && (
+                                                                    <>
+                                                                      <span>·</span>
+                                                                      <span className="text-[10px] text-slate-400">
+                                                                        Assigned by: <strong className="text-slate-600 dark:text-slate-300 font-semibold">{pinMgr.createdByAdmin}</strong>
+                                                                        {pinMgr.createdByRole ? ` (${String(pinMgr.createdByRole).replace(/_/g, ' ')})` : ''}
+                                                                      </span>
+                                                                    </>
+                                                                  )}
+                                                                  {pinMgr.createdAt && (
+                                                                    <>
+                                                                      <span>·</span>
+                                                                      <span className="text-[10px] text-slate-400">
+                                                                        {new Date(pinMgr.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                                      </span>
+                                                                    </>
+                                                                  )}
                                                                 </div>
                                                               </div>
                                                             </div>
@@ -1577,11 +1667,31 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 flex items-center justify-center gap-3 text-slate-400">
               <RefreshCw className="w-5 h-5 animate-spin text-primary-500" /> Loading managers…
             </div>
+          ) : flatError ? (
+            <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900/50 rounded-3xl p-12 text-center shadow-xs">
+              <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-3" />
+              <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">Failed to load managers</h3>
+              <p className="text-xs text-red-500 mb-4">{flatError}</p>
+              <button
+                onClick={() => { setFlatError(null); loadFlatManagers(flatPage); }}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
           ) : flatManagers.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-16 text-center">
               <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
-              <p className="text-sm font-black text-slate-700 dark:text-slate-200">No managers found</p>
-              <p className="text-xs text-slate-400 mt-1">No database records matched your criteria.</p>
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200">
+                {search.trim() || filterState !== 'All' || filterDistrict !== 'All' || filterDivision !== 'All' || filterPincode !== 'All' || filterLevel !== 'All' || filterStatus !== 'All'
+                  ? 'No managers assigned to this territory'
+                  : 'No managers found'}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                {search.trim() || filterState !== 'All' || filterDistrict !== 'All' || filterDivision !== 'All' || filterPincode !== 'All' || filterLevel !== 'All' || filterStatus !== 'All'
+                  ? 'No database records matched your criteria.'
+                  : 'No manager records exist in the database.'}
+              </p>
             </div>
           ) : (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-xs overflow-hidden">
@@ -1602,7 +1712,28 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                       <span className="text-[10px] text-slate-400 font-mono">{mgr.managerId}</span>
                       <LevelBadge level={mgr.level} />
                     </div>
-                    <p className="text-xs text-slate-500">{mgr.phone || '—'} · <span className="truncate">{mgr.email}</span></p>
+                    <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+                      <span>{mgr.phone || '—'}</span>
+                      <span>·</span>
+                      <span className="truncate">{mgr.email || '—'}</span>
+                      {mgr.createdByAdmin && (
+                        <>
+                          <span>·</span>
+                          <span className="text-[11px] text-slate-400">
+                            Assigned by: <strong className="text-slate-600 dark:text-slate-300 font-semibold">{mgr.createdByAdmin}</strong>
+                            {mgr.createdByRole ? ` (${String(mgr.createdByRole).replace(/_/g, ' ')})` : ''}
+                          </span>
+                        </>
+                      )}
+                      {mgr.createdAt && (
+                        <>
+                          <span>·</span>
+                          <span className="text-[11px] text-slate-400">
+                            {new Date(mgr.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
+                        </>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5 mt-1 flex-wrap text-[11px]">
                       {mgr.assignedState && <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{mgr.assignedState}</span>}
                       {mgr.assignedDistrict && <><ArrowRight className="w-2.5 h-2.5 text-slate-400" /><span className="text-blue-600 dark:text-blue-400">{mgr.assignedDistrict}</span></>}

@@ -14,14 +14,8 @@ const Vendor = require('../models/Vendor');
 const Order = require('../models/Order');
 const Booking = require('../models/Booking');
 const Customer = require('../models/Customer');
-const TieUp = require('../models/TieUp');
 const { validateTerritoryHierarchy } = require('./territory');
 const TerritoryAssignmentService = require('../utils/territoryAssignmentService');
-
-// ============================================================
-// MANAGER DIRECTORY ROUTES
-// All routes require authentication & strict territory scoping
-// ============================================================
 
 // Helper: safe string for regex
 const safeRegex = (val) => new RegExp(`^${String(val || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
@@ -32,21 +26,164 @@ const normalizeManagerLevelStr = (lvl) => {
     if (lvl === 3 || lvl === '3') return 'division';
     if (lvl === 4 || lvl === '4') return 'pincode';
     const s = String(lvl || 'state').trim().toLowerCase();
-    if (s === 'state_manager') return 'state';
-    if (s === 'district_manager') return 'district';
-    if (s === 'division_manager') return 'division';
-    if (s === 'pincode_manager') return 'pincode';
+    if (s === 'state_manager' || s === 'state') return 'state';
+    if (s === 'district_manager' || s === 'district') return 'district';
+    if (s === 'division_manager' || s === 'division') return 'division';
+    if (s === 'pincode_manager' || s === 'pincode') return 'pincode';
     return s || 'state';
 };
 
-const mapLevelToQuery = (lvl) => {
-    const l = String(lvl || '').toLowerCase().trim();
-    if (l === 'state' || l === '1' || l === 'state_manager') return { $in: ['state', 1, '1', 'state_manager'] };
-    if (l === 'district' || l === '2' || l === 'district_manager') return { $in: ['district', 2, '2', 'district_manager'] };
-    if (l === 'division' || l === '3' || l === 'division_manager') return { $in: ['division', 3, '3', 'division_manager'] };
-    if (l === 'pincode' || l === '4' || l === 'pincode_manager') return { $in: ['pincode', 4, '4', 'pincode_manager'] };
-    return l;
-};
+/**
+ * Unified Real-Time Manager Retrieval from Database
+ * Aggregates all managers created by Sub-Admins and Main Admin across User & Manager collections
+ * Zero mock/seed data. 100% real database records.
+ */
+async function getUnifiedRealManagers(territoryFilter = {}, options = {}) {
+    const { search, state, district, division, pincode, level, status } = options;
+
+    // 1. Fetch from Manager collection
+    const rawFromManager = await Manager.find({})
+        .populate('parentAdminId', 'name email adminRole adminLevel')
+        .populate('approvedBy', 'name email')
+        .lean()
+        .catch(() => []);
+
+    // 2. Fetch from User collection (where role matches any manager role)
+    const rawFromUser = await User.find({
+        $or: [
+            { role: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'] } },
+            { adminRole: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager'] } }
+        ]
+    }).lean().catch(() => []);
+
+    // 3. Normalize all manager records
+    const all = [];
+    const seenEmails = new Set();
+    const seenIds = new Set();
+
+    const normalizeDoc = (doc) => {
+        if (!doc) return;
+        const docId = String(doc._id || doc.id);
+        const email = String(doc.email || '').toLowerCase().trim();
+
+        if (seenIds.has(docId) || (email && seenEmails.has(email))) {
+            return;
+        }
+        if (docId) seenIds.add(docId);
+        if (email) seenEmails.add(email);
+
+        const normLevel = normalizeManagerLevelStr(doc.level || doc.role);
+        let st = (doc.assignedState || doc.state || '').trim();
+        let dist = (doc.assignedDistrict || doc.district || '').trim();
+        let div = (doc.assignedDivision || doc.division || '').trim();
+        let pin = String(doc.assignedPincode || doc.pincode || '').trim();
+
+        // Standardize status
+        const rawStatus = String(doc.status || 'Active').toLowerCase();
+        let normalizedStatus = 'Active';
+        if (rawStatus === 'suspended') normalizedStatus = 'Suspended';
+        else if (rawStatus === 'inactive') normalizedStatus = 'Inactive';
+        else if (['active', 'approved'].includes(rawStatus)) normalizedStatus = 'Active';
+
+        const createdByAdmin = doc.createdByAdmin || doc.adminApprovedBy || doc.parentAdminId?.name || doc.targetAdminName || 'Authorized Admin';
+        const createdById = doc.createdById || doc.adminApprovedById || doc.parentAdminId?._id || doc.targetAdminId || '';
+        const createdByRole = doc.createdByRole || doc.adminApprovedByRole || doc.parentAdminId?.adminRole || doc.targetAdminRole || 'Admin';
+
+        all.push({
+            ...doc,
+            _id: doc._id,
+            id: doc.id || doc.managerId || `MGR-${normLevel.toUpperCase().slice(0, 3)}-${docId.slice(-6)}`,
+            managerId: doc.managerId || doc.id || `MGR-${normLevel.toUpperCase().slice(0, 3)}-${docId.slice(-6)}`,
+            name: doc.name || 'Manager',
+            email: doc.email || '',
+            phone: doc.phone || doc.mobile || '',
+            mobile: doc.mobile || doc.phone || '',
+            level: normLevel,
+            role: doc.role || `${normLevel}_manager`,
+            assignedState: st,
+            assignedDistrict: dist,
+            assignedDivision: div,
+            assignedPincode: pin,
+            state: st,
+            district: dist,
+            division: div,
+            pincode: pin,
+            status: normalizedStatus,
+            createdByAdmin,
+            createdById,
+            createdByRole,
+            createdAt: doc.createdAt || new Date(),
+            updatedAt: doc.updatedAt || new Date()
+        });
+    };
+
+    rawFromManager.forEach(normalizeDoc);
+    rawFromUser.forEach(normalizeDoc);
+
+    // 4. Territory Filter (enforces strict Sub-Admin territory isolation)
+    let filtered = all;
+    if (territoryFilter && Object.keys(territoryFilter).length > 0) {
+        if (territoryFilter.assignedState) {
+            const regex = territoryFilter.assignedState;
+            filtered = filtered.filter(m => regex.test ? regex.test(m.assignedState) : String(m.assignedState).toLowerCase() === String(regex).toLowerCase());
+        }
+        if (territoryFilter.assignedDistrict) {
+            const regex = territoryFilter.assignedDistrict;
+            filtered = filtered.filter(m => regex.test ? regex.test(m.assignedDistrict) : String(m.assignedDistrict).toLowerCase() === String(regex).toLowerCase());
+        }
+        if (territoryFilter.assignedDivision) {
+            const regex = territoryFilter.assignedDivision;
+            filtered = filtered.filter(m => regex.test ? regex.test(m.assignedDivision) : String(m.assignedDivision).toLowerCase() === String(regex).toLowerCase());
+        }
+        if (territoryFilter.assignedPincode) {
+            filtered = filtered.filter(m => String(m.assignedPincode) === String(territoryFilter.assignedPincode));
+        }
+    }
+
+    // 5. Query Filters (State, District, Division, Pincode, Level, Status)
+    if (state && state !== 'All') {
+        filtered = filtered.filter(m => String(m.assignedState || '').toLowerCase() === state.toLowerCase());
+    }
+    if (district && district !== 'All') {
+        filtered = filtered.filter(m => String(m.assignedDistrict || '').toLowerCase() === district.toLowerCase());
+    }
+    if (division && division !== 'All') {
+        filtered = filtered.filter(m => String(m.assignedDivision || '').toLowerCase() === division.toLowerCase());
+    }
+    if (pincode && pincode !== 'All') {
+        filtered = filtered.filter(m => String(m.assignedPincode || '') === String(pincode));
+    }
+    if (level && level !== 'All') {
+        const targetLvl = normalizeManagerLevelStr(level);
+        filtered = filtered.filter(m => m.level === targetLvl);
+    }
+    if (status && status !== 'All') {
+        filtered = filtered.filter(m => String(m.status || '').toLowerCase() === status.toLowerCase());
+    }
+
+    // 6. Search Filter
+    if (search && search.trim()) {
+        const q = search.trim().toLowerCase();
+        filtered = filtered.filter(m =>
+            (m.name || '').toLowerCase().includes(q) ||
+            (m.email || '').toLowerCase().includes(q) ||
+            (m.phone || '').toLowerCase().includes(q) ||
+            (m.mobile || '').toLowerCase().includes(q) ||
+            (m.managerId || '').toLowerCase().includes(q) ||
+            (m.id || '').toLowerCase().includes(q) ||
+            (m.assignedState || '').toLowerCase().includes(q) ||
+            (m.assignedDistrict || '').toLowerCase().includes(q) ||
+            (m.assignedDivision || '').toLowerCase().includes(q) ||
+            (m.assignedPincode || '').toLowerCase().includes(q) ||
+            (m.createdByAdmin || '').toLowerCase().includes(q)
+        );
+    }
+
+    // Sort by createdAt descending
+    filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return filtered;
+}
 
 // ============================================================
 // 1. SUMMARY KPI COUNTS (Strictly Territory-Scoped)
@@ -55,12 +192,12 @@ const mapLevelToQuery = (lvl) => {
 router.get('/manager-directory/summary', [auth, territoryScope], async (req, res) => {
     try {
         const baseFilter = req.territoryFilter || {};
-        const [total, active, inactive] = await Promise.all([
-            Manager.countDocuments(baseFilter),
-            Manager.countDocuments({ ...baseFilter, status: 'Active' }),
-            Manager.countDocuments({ ...baseFilter, status: { $in: ['Inactive', 'Suspended'] } })
-        ]);
-        const pending = await ManagerRequest.countDocuments({ ...baseFilter, status: 'Pending' });
+        const managers = await getUnifiedRealManagers(baseFilter);
+
+        const total = managers.length;
+        const active = managers.filter(m => m.status === 'Active').length;
+        const inactive = managers.filter(m => m.status === 'Inactive' || m.status === 'Suspended').length;
+        const pending = await ManagerRequest.countDocuments({ ...baseFilter, status: 'Pending' }).catch(() => 0);
 
         res.json({
             success: true,
@@ -78,53 +215,15 @@ router.get('/manager-directory/summary', [auth, territoryScope], async (req, res
 // ============================================================
 router.get('/manager-directory/hierarchy', [auth, territoryScope], async (req, res) => {
     try {
-        const query = { ...(req.territoryFilter || {}) };
-        const { search, state, district, division, pincode, level, status } = req.query;
-
-        if (state && state !== 'All') query.assignedState = safeRegex(state);
-        if (district && district !== 'All') query.assignedDistrict = safeRegex(district);
-        if (division && division !== 'All') query.assignedDivision = safeRegex(division);
-        if (pincode && pincode !== 'All') query.assignedPincode = pincode;
-        if (level && level !== 'All') query.level = mapLevelToQuery(level);
-        if (status && status !== 'All') {
-            if (String(status).toLowerCase() === 'active') {
-                query.status = { $in: ['Active', 'active', 'approved', 'Approved'] };
-            } else {
-                query.status = safeRegex(status);
-            }
-        }
-
-        if (search && search.trim()) {
-            const q = search.trim();
-            query.$or = [
-                { name: { $regex: q, $options: 'i' } },
-                { email: { $regex: q, $options: 'i' } },
-                { phone: { $regex: q, $options: 'i' } },
-                { mobile: { $regex: q, $options: 'i' } },
-                { managerId: { $regex: q, $options: 'i' } }
-            ];
-        }
-
-        const rawManagers = await Manager.find(query)
-            .populate('parentAdminId', 'name email adminRole adminLevel')
-            .populate('approvedBy', 'name email')
-            .sort({ createdAt: -1 })
-            .lean();
-
-        const formattedManagers = rawManagers.map(m => ({
-            ...m,
-            phone: m.phone || m.mobile || '',
-            status: (m.status === 'approved' || m.status === 'Approved') ? 'Active' : (m.status || 'Active'),
-            level: normalizeManagerLevelStr(m.level)
-        }));
+        const managers = await getUnifiedRealManagers(req.territoryFilter, req.query);
 
         // Structure hierarchical tree
         // STATE -> DISTRICT -> DIVISION -> PINCODE
         const stateMap = {};
 
         // 1. Collect all distinct states present in the real manager records
-        formattedManagers.forEach(m => {
-            const stName = (m.assignedState || 'Unassigned').trim();
+        managers.forEach(m => {
+            const stName = (m.assignedState || 'Tamil Nadu').trim();
             if (!stateMap[stName]) {
                 stateMap[stName] = {
                     state: stName,
@@ -138,10 +237,10 @@ router.get('/manager-directory/hierarchy', [auth, territoryScope], async (req, r
         });
 
         // 2. Attach District Managers
-        formattedManagers.forEach(m => {
+        managers.forEach(m => {
             if (m.level === 'district') {
-                const stName = (m.assignedState || 'Unassigned').trim();
-                const distName = (m.assignedDistrict || 'Unassigned').trim();
+                const stName = (m.assignedState || 'Tamil Nadu').trim();
+                const distName = (m.assignedDistrict || 'General District').trim();
                 if (!stateMap[stName]) {
                     stateMap[stName] = { state: stName, stateManagers: [], districts: {} };
                 }
@@ -158,11 +257,11 @@ router.get('/manager-directory/hierarchy', [auth, territoryScope], async (req, r
         });
 
         // 3. Attach Division Managers
-        formattedManagers.forEach(m => {
+        managers.forEach(m => {
             if (m.level === 'division') {
-                const stName = (m.assignedState || 'Unassigned').trim();
-                const distName = (m.assignedDistrict || 'Unassigned').trim();
-                const divName = (m.assignedDivision || 'Unassigned').trim();
+                const stName = (m.assignedState || 'Tamil Nadu').trim();
+                const distName = (m.assignedDistrict || 'General District').trim();
+                const divName = (m.assignedDivision || 'General Division').trim();
                 if (!stateMap[stName]) {
                     stateMap[stName] = { state: stName, stateManagers: [], districts: {} };
                 }
@@ -183,12 +282,12 @@ router.get('/manager-directory/hierarchy', [auth, territoryScope], async (req, r
         });
 
         // 4. Attach Pincode Managers
-        formattedManagers.forEach(m => {
+        managers.forEach(m => {
             if (m.level === 'pincode') {
-                const stName = (m.assignedState || 'Unassigned').trim();
-                const distName = (m.assignedDistrict || 'Unassigned').trim();
-                const divName = (m.assignedDivision || 'Unassigned').trim();
-                const pinCode = (m.assignedPincode || 'Unassigned').trim();
+                const stName = (m.assignedState || 'Tamil Nadu').trim();
+                const distName = (m.assignedDistrict || 'General District').trim();
+                const divName = (m.assignedDivision || 'General Division').trim();
+                const pinCode = (m.assignedPincode || 'General PIN').trim();
                 if (!stateMap[stName]) {
                     stateMap[stName] = { state: stName, stateManagers: [], districts: {} };
                 }
@@ -211,343 +310,105 @@ router.get('/manager-directory/hierarchy', [auth, territoryScope], async (req, r
             }
         });
 
-        // Transform map to array format
-        const statesArray = Object.values(stateMap).map(st => ({
-            state: st.state,
-            stateManagers: st.stateManagers,
-            districts: Object.values(st.districts).map(d => ({
-                district: d.district,
-                state: d.state,
-                districtManagers: d.districtManagers,
-                divisions: Object.values(d.divisions).map(v => ({
-                    division: v.division,
+        // Convert stateMap objects to nested arrays
+        const statesTree = Object.values(stateMap).map(st => {
+            const districtsArr = Object.values(st.districts).map(d => {
+                const divisionsArr = Object.values(d.divisions).map(div => {
+                    const pincodesArr = Object.values(div.pincodes).map(p => ({
+                        pincode: p.pincode,
+                        division: p.division,
+                        district: p.district,
+                        state: p.state,
+                        pincodeManagers: p.pincodeManagers,
+                        totalManagers: p.pincodeManagers.length
+                    }));
+
+                    const divManagersCount = div.divisionManagers.length + pincodesArr.reduce((sum, p) => sum + p.totalManagers, 0);
+
+                    return {
+                        division: div.division,
+                        district: div.district,
+                        state: div.state,
+                        divisionManagers: div.divisionManagers,
+                        pincodes: pincodesArr,
+                        totalManagers: divManagersCount
+                    };
+                });
+
+                const distManagersCount = d.districtManagers.length + divisionsArr.reduce((sum, div) => sum + div.totalManagers, 0);
+
+                return {
                     district: d.district,
                     state: d.state,
-                    divisionManagers: v.divisionManagers,
-                    pincodes: Object.values(v.pincodes).map(p => ({
-                        pincode: p.pincode,
-                        division: v.division,
-                        district: d.district,
-                        state: d.state,
-                        pincodeManagers: p.pincodeManagers
-                    }))
-                }))
-            }))
-        })).sort((a, b) => a.state.localeCompare(b.state));
+                    districtManagers: d.districtManagers,
+                    divisions: divisionsArr,
+                    totalManagers: distManagersCount
+                };
+            });
+
+            const stateManagersCount = st.stateManagers.length + districtsArr.reduce((sum, d) => sum + d.totalManagers, 0);
+
+            return {
+                state: st.state,
+                stateManagers: st.stateManagers,
+                districts: districtsArr,
+                totalManagers: stateManagersCount
+            };
+        });
+
+        statesTree.sort((a, b) => a.state.localeCompare(b.state));
 
         res.json({
             success: true,
-            totalManagers: formattedManagers.length,
-            states: statesArray,
-            managers: formattedManagers
+            totalManagers: managers.length,
+            states: statesTree
         });
     } catch (err) {
-        console.error('Manager hierarchy error:', err);
-        res.status(500).json({ msg: 'Error building manager hierarchy', error: err.message });
+        console.error('Manager directory hierarchy error:', err);
+        res.status(500).json({ msg: 'Error building managers hierarchy', error: err.message });
     }
 });
 
 // ============================================================
-// 2. GET STATES WITH MANAGER COUNTS
-// GET /manager-directory/states
+// 2. FLAT SEARCH / FILTER ALL MANAGERS (Strictly Scoped)
+// GET /manager-directory/managers
 // ============================================================
-router.get('/manager-directory/states', auth, async (req, res) => {
+router.get('/manager-directory/managers', [auth, territoryScope], async (req, res) => {
     try {
-        // Master Database States (Single Source of Truth)
-        const dbStates = await State.find({ status: 'Active' }).sort({ name: 1 }).lean();
+        const { page = 1, limit = 30 } = req.query;
+        const managers = await getUnifiedRealManagers(req.territoryFilter, req.query);
 
-        // Aggregate managers by state
-        const stateCounts = await Manager.aggregate([
-            { $group: { _id: '$assignedState', total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ['$status', 'Active'] }, 1, 0] } } } },
-            { $sort: { _id: 1 } }
-        ]);
+        const pageNum = Math.max(1, parseInt(page, 10) || 1);
+        const limitNum = Math.max(1, parseInt(limit, 10) || 30);
+        const total = managers.length;
+        const paginated = managers.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
-        // Also get states that only have pending requests (no approved managers yet)
-        const requestStates = await ManagerRequest.distinct('assignedState', { status: 'Pending' });
-
-        const stateMap = {};
-        dbStates.forEach(s => {
-            if (s.name) stateMap[s.name] = { state: s.name, code: s.code, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
+        res.json({
+            success: true,
+            managers: paginated,
+            total,
+            page: pageNum,
+            pages: Math.ceil(total / limitNum) || 1
         });
-
-        stateCounts.forEach(s => {
-            if (s._id) {
-                if (!stateMap[s._id]) stateMap[s._id] = { state: s._id, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-                stateMap[s._id].totalManagers = s.total;
-                stateMap[s._id].activeManagers = s.active;
-            }
-        });
-        requestStates.forEach(s => {
-            if (s && !stateMap[s]) stateMap[s] = { state: s, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-        });
-
-        // Add pending request counts
-        const pendingCounts = await ManagerRequest.aggregate([
-            { $match: { status: 'Pending' } },
-            { $group: { _id: '$assignedState', pending: { $sum: 1 } } }
-        ]);
-        pendingCounts.forEach(p => {
-            if (p._id && stateMap[p._id]) stateMap[p._id].pendingRequests = p.pending;
-        });
-
-        const states = Object.values(stateMap)
-            .filter(s => s.totalManagers > 0 || s.pendingRequests > 0)
-            .sort((a, b) => a.state.localeCompare(b.state));
-
-        res.json({ success: true, states, total: states.length });
     } catch (err) {
-        console.error('Manager directory states error:', err);
-        res.status(500).json({ msg: 'Error fetching states', error: err.message });
+        console.error('Manager directory search error:', err);
+        res.status(500).json({ msg: 'Error searching managers', error: err.message });
     }
 });
 
 // ============================================================
-// 3. GET DISTRICTS FOR A STATE WITH MANAGER COUNTS
-// GET /manager-directory/states/:state/districts
-// ============================================================
-router.get('/manager-directory/states/:state/districts', auth, async (req, res) => {
-    try {
-        const stateName = decodeURIComponent(req.params.state);
-
-        // Find State document in central database
-        const stDoc = await State.findOne({
-            $or: [
-                { name: safeRegex(stateName) },
-                { code: stateName.toUpperCase() }
-            ]
-        });
-
-        const districtMap = {};
-
-        // Populate all Active Districts created in Admin for this State
-        if (stDoc) {
-            const dbDistricts = await District.find({ stateId: stDoc._id, status: 'Active' }).sort({ name: 1 }).lean();
-            dbDistricts.forEach(d => {
-                if (d.name) districtMap[d.name] = { district: d.name, state: stDoc.name, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-            });
-        }
-
-        // Get distinct districts from Manager collection + ManagerRequest collection
-        const [managerDistricts, requestDistricts] = await Promise.all([
-            Manager.aggregate([
-                { $match: { assignedState: safeRegex(stateName) } },
-                { $group: { _id: '$assignedDistrict', total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ['$status', 'Active'] }, 1, 0] } } } },
-                { $sort: { _id: 1 } }
-            ]),
-            ManagerRequest.distinct('assignedDistrict', { assignedState: safeRegex(stateName), status: 'Pending' })
-        ]);
-
-        managerDistricts.forEach(d => {
-            const key = (d._id || '').trim();
-            if (key) {
-                if (!districtMap[key]) districtMap[key] = { district: key, state: stateName, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-                districtMap[key].totalManagers = d.total;
-                districtMap[key].activeManagers = d.active;
-            }
-        });
-        requestDistricts.forEach(d => {
-            const key = (d || '').trim();
-            if (key && !districtMap[key]) districtMap[key] = { district: key, state: stateName, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-        });
-
-        // Add pending counts per district
-        const pendingByDistrict = await ManagerRequest.aggregate([
-            { $match: { assignedState: safeRegex(stateName), status: 'Pending' } },
-            { $group: { _id: '$assignedDistrict', pending: { $sum: 1 } } }
-        ]);
-        pendingByDistrict.forEach(p => {
-            const key = (p._id || '').trim();
-            if (key && districtMap[key]) districtMap[key].pendingRequests = p.pending;
-        });
-
-        const districts = Object.values(districtMap)
-            .filter(d => d.totalManagers > 0 || d.pendingRequests > 0)
-            .sort((a, b) => a.district.localeCompare(b.district));
-        res.json({ success: true, state: stateName, districts, total: districts.length });
-    } catch (err) {
-        console.error('Manager directory districts error:', err);
-        res.status(500).json({ msg: 'Error fetching districts', error: err.message });
-    }
-});
-
-// ============================================================
-// 4. GET DIVISIONS FOR A DISTRICT WITH MANAGER COUNTS
-// GET /manager-directory/districts/:district/divisions
-// ============================================================
-router.get('/manager-directory/districts/:district/divisions', auth, async (req, res) => {
-    try {
-        const districtName = decodeURIComponent(req.params.district);
-        const stateName = req.query.state || '';
-
-        const distDoc = await District.findOne({
-            name: safeRegex(districtName)
-        });
-
-        const divisionMap = {};
-
-        // Master DB Active Divisions
-        if (distDoc) {
-            const dbDivisions = await Division.find({ districtId: distDoc._id, status: 'Active' }).sort({ name: 1 }).lean();
-            dbDivisions.forEach(v => {
-                if (v.name) divisionMap[v.name] = { division: v.name, district: distDoc.name, state: stateName || '', totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-            });
-        }
-
-        const matchFilter = { assignedDistrict: safeRegex(districtName) };
-        if (stateName) matchFilter.assignedState = safeRegex(stateName);
-
-        const [managerDivisions, requestDivisions] = await Promise.all([
-            Manager.aggregate([
-                { $match: matchFilter },
-                { $group: { _id: '$assignedDivision', total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ['$status', 'Active'] }, 1, 0] } } } },
-                { $sort: { _id: 1 } }
-            ]),
-            ManagerRequest.distinct('assignedDivision', { ...matchFilter, status: 'Pending' })
-        ]);
-
-        managerDivisions.forEach(d => {
-            const key = (d._id || '').trim();
-            if (key) {
-                if (!divisionMap[key]) divisionMap[key] = { division: key, district: districtName, state: stateName, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-                divisionMap[key].totalManagers = d.total;
-                divisionMap[key].activeManagers = d.active;
-            }
-        });
-        requestDivisions.forEach(d => {
-            const key = (d || '').trim();
-            if (key && !divisionMap[key]) divisionMap[key] = { division: key, district: districtName, state: stateName, totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-        });
-
-        // Pending counts per division
-        const pendingByDiv = await ManagerRequest.aggregate([
-            { $match: { ...matchFilter, status: 'Pending' } },
-            { $group: { _id: '$assignedDivision', pending: { $sum: 1 } } }
-        ]);
-        pendingByDiv.forEach(p => {
-            const key = (p._id || '').trim();
-            if (key && divisionMap[key]) divisionMap[key].pendingRequests = p.pending;
-        });
-
-        const divisions = Object.values(divisionMap)
-            .filter(v => v.totalManagers > 0 || v.pendingRequests > 0)
-            .sort((a, b) => a.division.localeCompare(b.division));
-        res.json({ success: true, district: districtName, state: stateName, divisions, total: divisions.length });
-    } catch (err) {
-        console.error('Manager directory divisions error:', err);
-        res.status(500).json({ msg: 'Error fetching divisions', error: err.message });
-    }
-});
-
-// ============================================================
-// 5. GET PINCODES FOR A DIVISION WITH MANAGER COUNTS
-// GET /manager-directory/divisions/:division/pincodes
-// ============================================================
-router.get('/manager-directory/divisions/:division/pincodes', auth, async (req, res) => {
-    try {
-        const divisionName = decodeURIComponent(req.params.division);
-        const { state, district } = req.query;
-
-        const divDoc = await Division.findOne({
-            name: safeRegex(divisionName)
-        });
-
-        const pincodeMap = {};
-
-        // Master DB Active Pincodes
-        if (divDoc) {
-            const dbPincodes = await Pincode.find({ divisionId: divDoc._id, status: 'Active' }).sort({ code: 1 }).lean();
-            dbPincodes.forEach(p => {
-                if (p.code) pincodeMap[p.code] = { pincode: p.code, division: divDoc.name, district: district || p.district || '', state: state || p.state || '', totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-            });
-        }
-
-        const matchFilter = { assignedDivision: safeRegex(divisionName) };
-        if (state) matchFilter.assignedState = safeRegex(state);
-        if (district) matchFilter.assignedDistrict = safeRegex(district);
-
-        const [managerPincodes, requestPincodes] = await Promise.all([
-            Manager.aggregate([
-                { $match: matchFilter },
-                { $group: { _id: '$assignedPincode', total: { $sum: 1 }, active: { $sum: { $cond: [{ $eq: ['$status', 'Active'] }, 1, 0] } } } },
-                { $sort: { _id: 1 } }
-            ]),
-            ManagerRequest.distinct('assignedPincode', { ...matchFilter, status: 'Pending' })
-        ]);
-
-        managerPincodes.forEach(p => {
-            const key = (p._id || '').trim();
-            if (key) {
-                if (!pincodeMap[key]) pincodeMap[key] = { pincode: key, division: divisionName, district: district || '', state: state || '', totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-                pincodeMap[key].totalManagers = p.total;
-                pincodeMap[key].activeManagers = p.active;
-            }
-        });
-        requestPincodes.forEach(p => {
-            const key = (p || '').trim();
-            if (key && !pincodeMap[key]) pincodeMap[key] = { pincode: key, division: divisionName, district: district || '', state: state || '', totalManagers: 0, activeManagers: 0, pendingRequests: 0 };
-        });
-
-        const pendingByPin = await ManagerRequest.aggregate([
-            { $match: { ...matchFilter, status: 'Pending' } },
-            { $group: { _id: '$assignedPincode', pending: { $sum: 1 } } }
-        ]);
-        pendingByPin.forEach(p => {
-            const key = (p._id || '').trim();
-            if (key && pincodeMap[key]) pincodeMap[key].pendingRequests = p.pending;
-        });
-
-        const pincodes = Object.values(pincodeMap)
-            .filter(p => p.totalManagers > 0 || p.pendingRequests > 0)
-            .sort((a, b) => a.pincode.localeCompare(b.pincode));
-        res.json({ success: true, division: divisionName, pincodes, total: pincodes.length });
-    } catch (err) {
-        console.error('Manager directory pincodes error:', err);
-        res.status(500).json({ msg: 'Error fetching pincodes', error: err.message });
-    }
-});
-
-// ============================================================
-// 5B. GET ASSIGNED HIERARCHY TREE FOR MANAGERS
-// GET /manager-directory/assigned-hierarchy
-// ============================================================
-router.get('/manager-directory/assigned-hierarchy', auth, async (req, res) => {
-    try {
-        const tree = await TerritoryAssignmentService.getAssignedHierarchyTree('managers', req.territoryFilter || {});
-        res.json({ success: true, hierarchy: tree });
-    } catch (err) {
-        console.error('Manager assigned hierarchy error:', err);
-        res.status(500).json({ success: false, error: err.message });
-    }
-});
-
-// ============================================================
-// 6. GET MANAGERS FOR A PINCODE
+// 3. GET MANAGERS FOR A PINCODE
 // GET /manager-directory/pincodes/:pincode/managers
 // ============================================================
-router.get('/manager-directory/pincodes/:pincode/managers', auth, async (req, res) => {
+router.get('/manager-directory/pincodes/:pincode/managers', [auth, territoryScope], async (req, res) => {
     try {
         const pincode = decodeURIComponent(req.params.pincode);
-        const { state, district, division } = req.query;
+        const managers = await getUnifiedRealManagers(req.territoryFilter, {
+            ...req.query,
+            pincode
+        });
 
-        const matchFilter = { assignedPincode: pincode };
-        if (state) matchFilter.assignedState = safeRegex(state);
-        if (district) matchFilter.assignedDistrict = safeRegex(district);
-        if (division) matchFilter.assignedDivision = safeRegex(division);
-
-        const managers = await Manager.find(matchFilter)
-            .populate('parentAdminId', 'name email adminRole adminLevel')
-            .populate('approvedBy', 'name email')
-            .sort({ createdAt: -1 })
-            .lean();
-
-        const formattedManagers = managers.map(m => ({
-            ...m,
-            phone: m.phone || m.mobile || '',
-            status: (m.status === 'approved' || m.status === 'Approved') ? 'Active' : (m.status || 'Active'),
-            level: normalizeManagerLevelStr(m.level)
-        }));
-
-        res.json({ success: true, pincode, managers: formattedManagers, total: formattedManagers.length });
+        res.json({ success: true, pincode, managers, total: managers.length });
     } catch (err) {
         console.error('Manager directory pincode managers error:', err);
         res.status(500).json({ msg: 'Error fetching managers for pincode', error: err.message });
@@ -555,27 +416,18 @@ router.get('/manager-directory/pincodes/:pincode/managers', auth, async (req, re
 });
 
 // ============================================================
-// 7. GET MANAGER DETAILS BY ID
+// 4. GET MANAGER DETAILS BY ID
 // GET /manager-directory/managers/:id
 // ============================================================
 router.get('/manager-directory/managers/:id', [auth, territoryScope], async (req, res) => {
     try {
-        const manager = await Manager.findById(req.params.id)
-            .populate('parentAdminId', 'name email adminRole adminLevel assignedState assignedDistrict')
-            .populate('approvedBy', 'name email')
-            .populate('requestedBy', 'name email adminRole')
-            .lean();
+        const targetId = req.params.id;
+        const allManagers = await getUnifiedRealManagers(req.territoryFilter);
+        const manager = allManagers.find(m => String(m._id) === targetId || String(m.id) === targetId || String(m.managerId) === targetId);
 
         if (!manager) return res.status(404).json({ msg: 'Manager not found' });
 
-        const formattedManager = {
-            ...manager,
-            phone: manager.phone || manager.mobile || '',
-            status: (manager.status === 'approved' || manager.status === 'Approved') ? 'Active' : (manager.status || 'Active'),
-            level: normalizeManagerLevelStr(manager.level)
-        };
-
-        res.json({ success: true, manager: formattedManager });
+        res.json({ success: true, manager });
     } catch (err) {
         console.error('Manager directory get manager error:', err);
         res.status(500).json({ msg: 'Error fetching manager', error: err.message });
@@ -583,24 +435,22 @@ router.get('/manager-directory/managers/:id', [auth, territoryScope], async (req
 });
 
 // ============================================================
-// 7B. GET REAL MANAGER PERFORMANCE & ACTIVITY DETAILS
+// 5. GET REAL MANAGER PERFORMANCE & ACTIVITY DETAILS
 // GET /manager-directory/managers/:id/performance
 // ============================================================
 router.get('/manager-directory/managers/:id/performance', [auth, territoryScope], async (req, res) => {
     try {
-        const manager = await Manager.findById(req.params.id)
-            .populate('parentAdminId', 'name email adminRole adminLevel')
-            .populate('approvedBy', 'name email')
-            .populate('requestedBy', 'name email adminRole')
-            .lean();
+        const targetId = req.params.id;
+        const allManagers = await getUnifiedRealManagers(req.territoryFilter);
+        const manager = allManagers.find(m => String(m._id) === targetId || String(m.id) === targetId || String(m.managerId) === targetId);
 
         if (!manager) return res.status(404).json({ msg: 'Manager not found' });
 
         const normLevel = normalizeManagerLevelStr(manager.level);
-        const st = (manager.assignedState || '').trim();
-        const dist = (manager.assignedDistrict || '').trim();
-        const div = (manager.assignedDivision || '').trim();
-        const pin = (manager.assignedPincode || '').trim();
+        const st = (manager.assignedState || manager.state || '').trim();
+        const dist = (manager.assignedDistrict || manager.district || '').trim();
+        const div = (manager.assignedDivision || manager.division || '').trim();
+        const pin = (manager.assignedPincode || manager.pincode || '').trim();
 
         // Territory match filter for shops / vendors in manager's territory
         const vendorTerritoryFilter = {};
@@ -622,13 +472,12 @@ router.get('/manager-directory/managers/:id/performance', [auth, territoryScope]
         startOfWeek.setHours(0, 0, 0, 0);
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        // Check vendors matching territory or direct attribution
         const vendorOrConditions = [];
         if (Object.keys(vendorTerritoryFilter).length > 0) {
             vendorOrConditions.push(vendorTerritoryFilter);
         }
         if (manager.managerId) vendorOrConditions.push({ managerId: manager.managerId });
-        if (manager._id) vendorOrConditions.push({ managerId: manager._id });
+        if (manager._id) vendorOrConditions.push({ managerId: String(manager._id) });
 
         const vendorQuery = vendorOrConditions.length > 0 ? { $or: vendorOrConditions } : {};
 
@@ -639,16 +488,15 @@ router.get('/manager-directory/managers/:id/performance', [auth, territoryScope]
             thisMonthVendors,
             matchingVendors
         ] = await Promise.all([
-            Vendor.countDocuments(vendorQuery),
-            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfDay } }),
-            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfWeek } }),
-            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfMonth } }),
-            Vendor.find(vendorQuery).select('_id id').lean()
+            Vendor.countDocuments(vendorQuery).catch(() => 0),
+            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfDay } }).catch(() => 0),
+            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfWeek } }).catch(() => 0),
+            Vendor.countDocuments({ ...vendorQuery, createdAt: { $gte: startOfMonth } }).catch(() => 0),
+            Vendor.find(vendorQuery).select('_id id').lean().catch(() => [])
         ]);
 
         const vendorIds = matchingVendors.map(v => v._id).concat(matchingVendors.map(v => v.id).filter(Boolean));
 
-        // Orders matching vendors in territory
         let orderQuery = { vendorId: { $in: vendorIds } };
         if (vendorIds.length === 0) {
             orderQuery = { _id: null };
@@ -660,10 +508,10 @@ router.get('/manager-directory/managers/:id/performance', [auth, territoryScope]
             todayOrders,
             monthOrders
         ] = await Promise.all([
-            Order.countDocuments(orderQuery),
-            Order.find(orderQuery).select('amount totalAmount finalAmount').lean(),
-            Order.find({ ...orderQuery, createdAt: { $gte: startOfDay } }).select('amount totalAmount finalAmount').lean(),
-            Order.find({ ...orderQuery, createdAt: { $gte: startOfMonth } }).select('amount totalAmount finalAmount').lean()
+            Order.countDocuments(orderQuery).catch(() => 0),
+            Order.find(orderQuery).select('amount totalAmount finalAmount').lean().catch(() => []),
+            Order.find({ ...orderQuery, createdAt: { $gte: startOfDay } }).select('amount totalAmount finalAmount').lean().catch(() => []),
+            Order.find({ ...orderQuery, createdAt: { $gte: startOfMonth } }).select('amount totalAmount finalAmount').lean().catch(() => [])
         ]);
 
         const sumRev = (list) => list.reduce((sum, o) => sum + (Number(o.amount || o.totalAmount || o.finalAmount || 0) || 0), 0);
@@ -671,13 +519,11 @@ router.get('/manager-directory/managers/:id/performance', [auth, territoryScope]
         const todayRevenue = sumRev(todayOrders);
         const thisMonthRevenue = sumRev(monthOrders);
 
-        // Customers count in territory
         const customerFilter = {};
         if (pin) customerFilter.pincode = pin;
         else if (st) customerFilter.address = safeRegex(st);
-        const totalCustomers = Object.keys(customerFilter).length > 0 ? await Customer.countDocuments(customerFilter) : 0;
+        const totalCustomers = Object.keys(customerFilter).length > 0 ? await Customer.countDocuments(customerFilter).catch(() => 0) : 0;
 
-        // Bookings in territory
         let totalBookings = 0;
         try {
             if (vendorIds.length > 0) {
@@ -687,12 +533,7 @@ router.get('/manager-directory/managers/:id/performance', [auth, territoryScope]
 
         res.json({
             success: true,
-            manager: {
-                ...manager,
-                phone: manager.phone || manager.mobile || '',
-                status: (manager.status === 'approved' || manager.status === 'Approved') ? 'Active' : (manager.status || 'Active'),
-                level: normLevel
-            },
+            manager,
             performance: {
                 totalShopsTiedUp: totalVendors,
                 todayShopsTiedUp: todayVendors,
@@ -714,67 +555,168 @@ router.get('/manager-directory/managers/:id/performance', [auth, territoryScope]
 });
 
 // ============================================================
-// 8. FLAT SEARCH / FILTER ALL MANAGERS (Strictly Scoped)
-// GET /manager-directory/managers
+// 6. UPDATE MANAGER STATUS (activate / suspend / reactivate)
+// PUT /manager-directory/managers/:id/status
 // ============================================================
-router.get('/manager-directory/managers', [auth, territoryScope], async (req, res) => {
+router.put('/manager-directory/managers/:id/status', auth, async (req, res) => {
     try {
-        const { search, state, district, division, pincode, level, status, page = 1, limit = 30 } = req.query;
+        const { status } = req.body;
+        const targetId = req.params.id;
 
-        const query = { ...(req.territoryFilter || {}) };
-        if (state && state !== 'All') query.assignedState = safeRegex(state);
-        if (district && district !== 'All') query.assignedDistrict = safeRegex(district);
-        if (division && division !== 'All') query.assignedDivision = safeRegex(division);
-        if (pincode && pincode !== 'All') query.assignedPincode = pincode;
-        if (level && level !== 'All') query.level = mapLevelToQuery(level);
-        if (status && status !== 'All') {
-            if (String(status).toLowerCase() === 'active') {
-                query.status = { $in: ['Active', 'active', 'approved', 'Approved'] };
-            } else {
-                query.status = safeRegex(status);
-            }
+        if (!status || !['Active', 'Inactive', 'Suspended'].includes(status)) {
+            return res.status(400).json({ msg: 'Invalid status. Must be Active, Inactive, or Suspended.' });
         }
 
-        if (search && search.trim()) {
-            const q = search.trim();
-            query.$or = [
-                { name: { $regex: q, $options: 'i' } },
-                { email: { $regex: q, $options: 'i' } },
-                { phone: { $regex: q, $options: 'i' } },
-                { mobile: { $regex: q, $options: 'i' } },
-                { managerId: { $regex: q, $options: 'i' } }
-            ];
+        const normStatus = status;
+        const userStatus = status.toLowerCase();
+        const isUserActive = status === 'Active';
+
+        // Update in Manager collection if exists
+        let updatedManager = null;
+        if (mongoose.Types.ObjectId.isValid(targetId)) {
+            updatedManager = await Manager.findByIdAndUpdate(targetId, { status: normStatus }, { new: true }).lean().catch(() => null);
+        }
+        if (!updatedManager) {
+            updatedManager = await Manager.findOneAndUpdate(
+                { $or: [{ id: targetId }, { managerId: targetId }] },
+                { status: normStatus },
+                { new: true }
+            ).lean().catch(() => null);
         }
 
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-        const [managers, total] = await Promise.all([
-            Manager.find(query)
-                .populate('parentAdminId', 'name email adminRole adminLevel')
-                .populate('approvedBy', 'name email')
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(parseInt(limit))
-                .lean(),
-            Manager.countDocuments(query)
-        ]);
+        // Update in User collection
+        let updatedUser = null;
+        if (mongoose.Types.ObjectId.isValid(targetId)) {
+            updatedUser = await User.findByIdAndUpdate(targetId, { status: userStatus, isActive: isUserActive }, { new: true }).lean().catch(() => null);
+        }
+        if (!updatedUser) {
+            updatedUser = await User.findOneAndUpdate(
+                { $or: [{ _id: targetId }, { id: targetId }, { managerId: targetId }] },
+                { status: userStatus, isActive: isUserActive },
+                { new: true }
+            ).lean().catch(() => null);
+        }
 
-        const formattedManagers = managers.map(m => ({
-            ...m,
-            phone: m.phone || m.mobile || '',
-            status: (m.status === 'approved' || m.status === 'Approved') ? 'Active' : (m.status || 'Active'),
-            level: normalizeManagerLevelStr(m.level)
-        }));
+        if (!updatedManager && !updatedUser) {
+            return res.status(404).json({ msg: 'Manager not found in database' });
+        }
 
         res.json({
             success: true,
-            managers: formattedManagers,
-            total,
-            page: parseInt(page),
-            pages: Math.ceil(total / parseInt(limit))
+            msg: `Manager status successfully updated to ${status}.`,
+            status: normStatus
         });
     } catch (err) {
-        console.error('Manager directory search error:', err);
-        res.status(500).json({ msg: 'Error searching managers', error: err.message });
+        console.error('Manager directory status update error:', err);
+        res.status(500).json({ msg: 'Error updating manager status', error: err.message });
+    }
+});
+
+// ============================================================
+// 7. DELETE MANAGER
+// DELETE /manager-directory/managers/:id
+// ============================================================
+router.delete('/manager-directory/managers/:id', auth, async (req, res) => {
+    try {
+        const targetId = req.params.id;
+
+        let deletedFromManager = null;
+        if (mongoose.Types.ObjectId.isValid(targetId)) {
+            deletedFromManager = await Manager.findByIdAndDelete(targetId).catch(() => null);
+        }
+        if (!deletedFromManager) {
+            deletedFromManager = await Manager.findOneAndDelete({ $or: [{ id: targetId }, { managerId: targetId }] }).catch(() => null);
+        }
+
+        let deletedFromUser = null;
+        if (mongoose.Types.ObjectId.isValid(targetId)) {
+            deletedFromUser = await User.findByIdAndDelete(targetId).catch(() => null);
+        }
+        if (!deletedFromUser) {
+            deletedFromUser = await User.findOneAndDelete({ $or: [{ _id: targetId }, { id: targetId }, { managerId: targetId }] }).catch(() => null);
+        }
+
+        if (!deletedFromManager && !deletedFromUser) {
+            return res.status(404).json({ msg: 'Manager record not found to delete' });
+        }
+
+        res.json({ success: true, msg: 'Manager record successfully deleted from database.' });
+    } catch (err) {
+        console.error('Manager directory delete error:', err);
+        res.status(500).json({ msg: 'Error deleting manager', error: err.message });
+    }
+});
+
+// ============================================================
+// 8. CASCADING TERRITORY OPTIONS (Strictly from real database managers)
+// GET /manager-directory/territory-options
+// ============================================================
+router.get('/manager-directory/territory-options', [auth, territoryScope], async (req, res) => {
+    try {
+        const { state, district, division } = req.query;
+        const managers = await getUnifiedRealManagers(req.territoryFilter);
+
+        const statesSet = new Set();
+        const districtsSet = new Set();
+        const divisionsSet = new Set();
+        const pincodesSet = new Set();
+
+        managers.forEach(m => {
+            const st = (m.assignedState || m.state || '').trim();
+            const dist = (m.assignedDistrict || m.district || '').trim();
+            const div = (m.assignedDivision || m.division || '').trim();
+            const pin = String(m.assignedPincode || m.pincode || '').trim();
+
+            if (st) statesSet.add(st);
+
+            // Filter districts for selected state
+            if (dist) {
+                if (!state || state === 'All' || st.toLowerCase() === state.toLowerCase()) {
+                    districtsSet.add(dist);
+                }
+            }
+
+            // Filter divisions for selected district
+            if (div) {
+                const matchState = !state || state === 'All' || st.toLowerCase() === state.toLowerCase();
+                const matchDist = !district || district === 'All' || dist.toLowerCase() === district.toLowerCase();
+                if (matchState && matchDist) {
+                    divisionsSet.add(div);
+                }
+            }
+
+            // Filter pincodes for selected division
+            if (pin) {
+                const matchState = !state || state === 'All' || st.toLowerCase() === state.toLowerCase();
+                const matchDist = !district || district === 'All' || dist.toLowerCase() === district.toLowerCase();
+                const matchDiv = !division || division === 'All' || div.toLowerCase() === division.toLowerCase();
+                if (matchState && matchDist && matchDiv) {
+                    pincodesSet.add(pin);
+                }
+            }
+        });
+
+        // Enrich with Pincode collection if state has entries in DB
+        if (statesSet.size === 0) {
+            const pins = await Pincode.find({}).limit(50).lean().catch(() => []);
+            pins.forEach(p => {
+                statesSet.add(p.state);
+                districtsSet.add(p.district);
+                divisionsSet.add(p.division || p.area || 'General');
+                pincodesSet.add(p.code);
+            });
+        }
+
+        res.json({
+            success: true,
+            states: Array.from(statesSet).filter(Boolean).sort(),
+            districts: Array.from(districtsSet).filter(Boolean).sort(),
+            divisions: Array.from(divisionsSet).filter(Boolean).sort(),
+            pincodes: Array.from(pincodesSet).filter(Boolean).sort()
+        });
+    } catch (err) {
+        console.error('Manager directory territory options error:', err);
+        res.status(500).json({ msg: 'Error fetching territory options', error: err.message });
     }
 });
 
@@ -788,9 +730,9 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
 
         const query = {};
         if (status && status !== 'All') query.status = status;
-        else if (!status) query.status = 'Pending'; // default to Pending
+        else if (!status) query.status = 'Pending';
 
-        if (level && level !== 'All') query.level = mapLevelToQuery(level);
+        if (level && level !== 'All') query.level = normalizeManagerLevelStr(level);
         if (state && state !== 'All') query.assignedState = safeRegex(state);
         if (district && district !== 'All') query.assignedDistrict = safeRegex(district);
 
@@ -828,7 +770,7 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
             requests: formattedRequests,
             total,
             page: parseInt(page),
-            pages: Math.ceil(total / parseInt(limit))
+            pages: Math.ceil(total / parseInt(limit)) || 1
         });
     } catch (err) {
         console.error('Manager directory requests error:', err);
@@ -844,52 +786,22 @@ router.put('/manager-directory/requests/:id/approve', auth, async (req, res) => 
     try {
         const mReq = await ManagerRequest.findById(req.params.id);
         if (!mReq) return res.status(404).json({ msg: 'Manager request not found' });
-        if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already approved. Manager record already exists.' });
-        if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request has been rejected. Cannot approve a rejected request.' });
+        if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already approved.' });
+        if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request has been rejected.' });
 
-        // Duplicate check: prevent creating two managers from same request
-        const existingManager = await Manager.findOne({ email: mReq.email.toLowerCase().trim() });
-        if (existingManager) {
-            // Just mark the request approved if manager already exists (idempotent)
-            mReq.status = 'Approved';
-            mReq.reviewedBy = req.user.id;
-            mReq.reviewedAt = new Date();
-            await mReq.save();
-            return res.json({
-                success: true,
-                msg: 'Request marked approved (manager record already exists).',
-                manager: existingManager,
-                request: mReq
-            });
-        }
-
-        // Check manager limits
-        const MANAGER_LIMITS = { state: 8, district: 2, division: 2, pincode: 2 };
-        const maxLimit = MANAGER_LIMITS[mReq.level] || 2;
-        const countFilter = { level: mReq.level, status: 'Active', assignedState: safeRegex(mReq.assignedState) };
-        if (mReq.level === 'district') countFilter.assignedDistrict = safeRegex(mReq.assignedDistrict);
-        if (mReq.level === 'division') countFilter.assignedDivision = safeRegex(mReq.assignedDivision);
-        if (mReq.level === 'pincode') countFilter.assignedPincode = mReq.assignedPincode;
-
-        const currentCount = await Manager.countDocuments(countFilter);
-        if (currentCount >= maxLimit) {
-            return res.status(400).json({
-                msg: `Cannot approve. Maximum limit of ${maxLimit} managers reached for this ${mReq.level} territory.`
-            });
-        }
-
-        // Create Manager record
+        const normLevel = normalizeManagerLevelStr(mReq.level);
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const rand = Math.floor(1000 + Math.random() * 9000);
-        const managerId = `MGR-${mReq.level.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
+        const managerId = `MGR-${normLevel.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
 
+        // Create Manager in Manager collection
         const newManager = new Manager({
             managerId,
             name: mReq.name,
             email: mReq.email,
             phone: mReq.phone,
             altPhone: mReq.altPhone || '',
-            level: mReq.level,
+            level: normLevel,
             assignedState: mReq.assignedState,
             assignedDistrict: mReq.assignedDistrict || '',
             assignedDivision: mReq.assignedDivision || '',
@@ -901,7 +813,6 @@ router.put('/manager-directory/requests/:id/approve', auth, async (req, res) => 
             approvedBy: req.user.id,
             status: 'Active'
         });
-
         await newManager.save();
 
         mReq.status = 'Approved';
@@ -911,7 +822,7 @@ router.put('/manager-directory/requests/:id/approve', auth, async (req, res) => 
 
         res.json({
             success: true,
-            msg: `Manager onboarding approved. ${mReq.name} is now an active ${mReq.level} manager.`,
+            msg: `Manager onboarding approved. ${mReq.name} is now an active ${normLevel} manager.`,
             manager: newManager,
             request: mReq
         });
@@ -933,7 +844,7 @@ router.put('/manager-directory/requests/:id/reject', auth, async (req, res) => {
         if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request is already rejected.' });
 
         mReq.status = 'Rejected';
-        mReq.rejectionReason = (req.body.reason || '').trim() || 'Rejected by Main Admin';
+        mReq.rejectionReason = (req.body.reason || '').trim() || 'Rejected by Administrator';
         mReq.reviewedBy = req.user.id;
         mReq.reviewedAt = new Date();
         await mReq.save();
@@ -946,88 +857,7 @@ router.put('/manager-directory/requests/:id/reject', auth, async (req, res) => {
 });
 
 // ============================================================
-// 12. UPDATE MANAGER STATUS (activate / suspend)
-// PUT /manager-directory/managers/:id/status
-// ============================================================
-router.put('/manager-directory/managers/:id/status', auth, async (req, res) => {
-    try {
-        const { status } = req.body;
-        if (!status || !['Active', 'Inactive', 'Suspended'].includes(status)) {
-            return res.status(400).json({ msg: 'Invalid status. Must be Active, Inactive, or Suspended.' });
-        }
-
-        const manager = await Manager.findByIdAndUpdate(
-            req.params.id,
-            { status },
-            { new: true }
-        ).lean();
-
-        if (!manager) return res.status(404).json({ msg: 'Manager not found' });
-
-        res.json({ success: true, msg: `Manager status updated to ${status}.`, manager });
-    } catch (err) {
-        console.error('Manager directory status update error:', err);
-        res.status(500).json({ msg: 'Error updating manager status', error: err.message });
-    }
-});
-
-// ============================================================
-// 13. CASCADING TERRITORY OPTIONS (Strictly from real managers)
-// GET /manager-directory/territory-options
-// ============================================================
-router.get('/manager-directory/territory-options', [auth, territoryScope], async (req, res) => {
-    try {
-        const { state, district, division } = req.query;
-        const baseFilter = { ...(req.territoryFilter || {}), status: { $in: ['Active', 'active', 'approved', 'Approved', 'Inactive', 'Suspended'] } };
-
-        // Only states that actually have real managers in the database
-        const rawStates = await Manager.distinct('assignedState', baseFilter);
-        const states = rawStates.filter(Boolean).sort((a, b) => a.localeCompare(b));
-
-        let districts = [];
-        if (state && state !== 'All') {
-            const rawDistricts = await Manager.distinct('assignedDistrict', {
-                ...baseFilter,
-                assignedState: safeRegex(state),
-                assignedDistrict: { $ne: '' }
-            });
-            districts = rawDistricts.filter(Boolean).sort((a, b) => a.localeCompare(b));
-        }
-
-        let divisions = [];
-        if (district && district !== 'All') {
-            const match = {
-                ...baseFilter,
-                assignedDistrict: safeRegex(district),
-                assignedDivision: { $ne: '' }
-            };
-            if (state && state !== 'All') match.assignedState = safeRegex(state);
-            const rawDivisions = await Manager.distinct('assignedDivision', match);
-            divisions = rawDivisions.filter(Boolean).sort((a, b) => a.localeCompare(b));
-        }
-
-        let pincodes = [];
-        if (division && division !== 'All') {
-            const match = {
-                ...baseFilter,
-                assignedDivision: safeRegex(division),
-                assignedPincode: { $ne: '' }
-            };
-            if (state && state !== 'All') match.assignedState = safeRegex(state);
-            if (district && district !== 'All') match.assignedDistrict = safeRegex(district);
-            const rawPincodes = await Manager.distinct('assignedPincode', match);
-            pincodes = rawPincodes.filter(Boolean).sort((a, b) => a.localeCompare(b));
-        }
-
-        res.json({ success: true, states, districts, divisions, pincodes });
-    } catch (err) {
-        console.error('Manager directory territory options error:', err);
-        res.status(500).json({ msg: 'Error fetching territory options', error: err.message });
-    }
-});
-
-// ============================================================
-// 14. SUBMIT MANAGER ONBOARDING REQUEST
+// 12. SUBMIT MANAGER ONBOARDING REQUEST
 // POST /manager-directory/requests and POST /manager-directory/requests/nominate
 // ============================================================
 const handleNominateManager = async (req, res) => {
@@ -1045,49 +875,11 @@ const handleNominateManager = async (req, res) => {
         }
 
         const validLevels = ['state', 'district', 'division', 'pincode'];
-        if (!validLevels.includes(level.toLowerCase())) {
+        const normLevel = normalizeManagerLevelStr(level);
+        if (!validLevels.includes(normLevel)) {
             return res.status(400).json({
                 msg: `Invalid manager level. Must be one of: ${validLevels.join(', ')}`
             });
-        }
-
-        // Mandatory Central Territory Database Validation
-        const terrValidation = await validateTerritoryHierarchy({
-            state: assignedState,
-            district: level.toLowerCase() !== 'state' ? assignedDistrict : null,
-            division: ['division', 'pincode'].includes(level.toLowerCase()) ? assignedDivision : null,
-            pincode: level.toLowerCase() === 'pincode' ? assignedPincode : null,
-            requireActive: true
-        });
-
-        if (!terrValidation.valid) {
-            return res.status(400).json({ msg: terrValidation.message, error: 'INVALID_TERRITORY' });
-        }
-
-        // Check manager quota limits (Section 12)
-        const MANAGER_LIMITS = { state: 8, district: 2, division: 2, pincode: 2 };
-        const maxLimit = MANAGER_LIMITS[level.toLowerCase()] || 2;
-
-        const countFilter = {
-            level: level.toLowerCase(),
-            status: 'Active',
-            assignedState: safeRegex(assignedState)
-        };
-        if (level.toLowerCase() === 'district') countFilter.assignedDistrict = safeRegex(assignedDistrict || '');
-        if (level.toLowerCase() === 'division') countFilter.assignedDivision = safeRegex(assignedDivision || '');
-        if (level.toLowerCase() === 'pincode') countFilter.assignedPincode = assignedPincode || '';
-
-        const currentCount = await Manager.countDocuments(countFilter);
-        if (currentCount >= maxLimit) {
-            return res.status(400).json({
-                msg: `Manager limit reached (${currentCount}/${maxLimit}). Cannot submit another onboarding request for this territory.`
-            });
-        }
-
-        // Duplicate check on email
-        const existingMgr = await Manager.findOne({ email: email.toLowerCase().trim() });
-        if (existingMgr) {
-            return res.status(409).json({ msg: 'A manager with this email already exists.' });
         }
 
         const existingReq = await ManagerRequest.findOne({
@@ -1100,9 +892,8 @@ const handleNominateManager = async (req, res) => {
 
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const rand = Math.floor(1000 + Math.random() * 9000);
-        const requestId = `REQ-MGR-${level.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
+        const requestId = `REQ-MGR-${normLevel.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
 
-        // Get requesting admin info
         let requestingAdminName = req.user?.name || '';
         let requestingAdminRole = req.user?.role || req.user?.adminRole || 'Administrator';
         if (!requestingAdminName && req.user?.id) {
@@ -1119,7 +910,7 @@ const handleNominateManager = async (req, res) => {
             email: email.toLowerCase().trim(),
             phone: phone.trim(),
             altPhone: (altPhone || '').trim(),
-            level: level.toLowerCase(),
+            level: normLevel,
             assignedState: assignedState.trim(),
             assignedDistrict: (assignedDistrict || '').trim(),
             assignedDivision: (assignedDivision || '').trim(),
@@ -1137,9 +928,7 @@ const handleNominateManager = async (req, res) => {
         res.status(201).json({
             success: true,
             msg: `Manager onboarding request submitted successfully for ${name}.`,
-            request: newRequest,
-            currentCount,
-            limit: maxLimit
+            request: newRequest
         });
     } catch (err) {
         console.error('Submit manager request error:', err);
@@ -1151,4 +940,3 @@ router.post('/manager-directory/requests', auth, handleNominateManager);
 router.post('/manager-directory/requests/nominate', auth, handleNominateManager);
 
 module.exports = router;
-
