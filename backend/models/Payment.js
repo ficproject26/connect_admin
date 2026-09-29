@@ -19,6 +19,7 @@ const PaymentSchema = new mongoose.Schema({
         enum: [
             // Received
             'customer_payment',
+            'vendor_subscription',
             'vendor_reg_fee',
             'vendor_tieup_fee',
             'membership_payment',

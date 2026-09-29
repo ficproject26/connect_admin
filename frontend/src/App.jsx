@@ -57,6 +57,7 @@ const AgentPerformanceDashboard = lazyWithRetry(() => import('./components/Agent
 const SecurityDashboard = lazyWithRetry(() => import('./components/SecurityDashboard'), 'SecurityDashboard');
 const AdminSecurityDashboard = lazyWithRetry(() => import('./components/AdminSecurityDashboard'), 'AdminSecurityDashboard');
 const VendorDirectoryModule = lazyWithRetry(() => import('./components/VendorDirectoryModule'), 'VendorDirectoryModule');
+const VendorSubscriptionModule = lazyWithRetry(() => import('./components/VendorSubscriptionModule'), 'VendorSubscriptionModule');
 const MembershipCardManagement = lazyWithRetry(() => import('./components/MembershipCardManagement'), 'MembershipCardManagement');
 const EnterprisePaymentDashboard = lazyWithRetry(() => import('./components/EnterprisePaymentDashboard'), 'EnterprisePaymentDashboard');
 const PaymentHistoryModule = lazyWithRetry(() => import('./components/PaymentHistoryModule'), 'PaymentHistoryModule');
@@ -1704,6 +1705,12 @@ function App() {
               >
                 <Store className="w-4 h-4 text-amber-400" /> Vendor Directory
               </button>
+              <button
+                onClick={() => handleTabSelect('vendor-subscription')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${activeTab === 'vendor-subscription' ? 'bg-primary-600 text-white shadow-md shadow-primary-600/15' : 'text-slate-400 hover:bg-slate-800/50 hover:text-white'}`}
+              >
+                <CreditCard className="w-4 h-4 text-emerald-400" /> Vendor Subscription
+              </button>
 
               {/* ── CUSTOMER ── */}
               <p className="px-4 pt-5 pb-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-slate-500">Customer</p>
@@ -2504,6 +2511,16 @@ function App() {
               API_BASE={API_BASE}
               initialSection={vendorDirInitialSection}
               highlightVendorId={vendorDirHighlightId}
+            />
+          )}
+
+          {/* VENDOR SUBSCRIPTIONS */}
+          {activeTab === 'vendor-subscription' && (
+            <VendorSubscriptionModule
+              token={token}
+              API_BASE={API_BASE}
+              currentUser={user}
+              onToast={addToast}
             />
           )}
 

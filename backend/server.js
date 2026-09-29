@@ -317,6 +317,12 @@ app.use('/admin-api/admin', require('./routes/managerDirectoryRoutes'));
 app.use('/admin-api', require('./routes/managerDirectoryRoutes'));
 app.use('/admin', require('./routes/managerDirectoryRoutes'));
 
+app.use('/api/admin/vendor-subscriptions', require('./routes/vendorSubscriptionRoutes'));
+app.use('/admin-api/admin/vendor-subscriptions', require('./routes/vendorSubscriptionRoutes'));
+app.use('/admin-api/vendor-subscriptions', require('./routes/vendorSubscriptionRoutes'));
+app.use('/admin/vendor-subscriptions', require('./routes/vendorSubscriptionRoutes'));
+app.use('/vendor-subscriptions', require('./routes/vendorSubscriptionRoutes'));
+
 app.use('/api/admin', require('./routes/admin'));
 app.use('/admin-api/admin', require('./routes/admin'));
 app.use('/admin-api', require('./routes/admin'));
