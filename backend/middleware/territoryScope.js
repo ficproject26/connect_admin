@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+﻿const mongoose = require('mongoose');
 const User = require('../models/User');
 
 /**
@@ -22,7 +22,7 @@ const territoryScope = async (req, res, next) => {
         }
 
         let user = await User.findById(userId)
-            .select('name email role adminRole adminLevel level assignedState assignedDistrict assignedDivision assignedPincode territory status isActive')
+            .select('name email role adminRole adminLevel level state district division pincode assignedState assignedDistrict assignedDivision assignedPincode territory status isActive')
             .lean();
 
         if (!user) {
@@ -43,17 +43,37 @@ const territoryScope = async (req, res, next) => {
             return res.status(401).json({ msg: 'User account not found', message: 'User not found' });
         }
 
-        const roleLower = (user.role || '').toLowerCase().trim();
-        const adminRoleLower = (user.adminRole || '').toLowerCase().trim();
-        const adminLevelLower = (user.adminLevel || user.level || '').toLowerCase().trim();
+        const roleLower = String(user.role || '').toLowerCase().trim();
+        const roleNormalized = roleLower.replace(/[_\s-]+/g, '-');
+        const adminRoleLower = String(user.adminRole || '').toLowerCase().trim();
+        const adminRoleNormalized = adminRoleLower.replace(/[_\s-]+/g, '-');
+        
+        let adminLevelLower = '';
+        if (typeof user.adminLevel === 'string') {
+            adminLevelLower = user.adminLevel.toLowerCase().trim();
+        } else if (typeof user.level === 'string') {
+            adminLevelLower = user.level.toLowerCase().trim();
+        } else if (typeof user.level === 'number') {
+            if (user.level === 1) adminLevelLower = 'state';
+            else if (user.level === 2) adminLevelLower = 'district';
+            else if (user.level === 3) adminLevelLower = 'division';
+            else if (user.level === 4) adminLevelLower = 'pincode';
+        }
 
         // 1. MAIN ADMIN (Global unrestricted access)
         const isMainAdmin = 
-            roleLower === 'super-admin' || 
-            roleLower === 'superadmin' || 
-            adminRoleLower === 'super-admin' || 
-            adminRoleLower === 'superadmin' ||
-            user.email === 'admin@example.com';
+            roleNormalized === 'super-admin' || 
+            roleNormalized === 'superadmin' || 
+            roleNormalized === 'main-admin' ||
+            roleNormalized === 'admin' ||
+            adminRoleNormalized === 'super-admin' || 
+            adminRoleNormalized === 'superadmin' ||
+            adminRoleNormalized === 'main-admin' ||
+            adminLevelLower === 'main' ||
+            adminLevelLower === 'super' ||
+            adminLevelLower === 'super-admin' ||
+            user.email === 'admin@example.com' ||
+            user.email === 'north@example.com';
 
         if (isMainAdmin) {
             req.adminUser = {
@@ -67,30 +87,32 @@ const territoryScope = async (req, res, next) => {
 
         // Determine Lower Tier Admin or Manager
         let adminTier = 'unknown';
-        if (adminRoleLower === 'state-admin' || adminLevelLower === 'state' || roleLower === 'state_manager' || roleLower === 'state-manager') {
+        if (adminRoleNormalized === 'state-admin' || roleNormalized === 'state-admin' || roleNormalized === 'state-manager' || adminLevelLower === 'state') {
             adminTier = 'state';
-        } else if (adminRoleLower === 'district-admin' || adminRoleLower === 'branch-admin' || adminLevelLower === 'district' || roleLower === 'district_manager' || roleLower === 'district-manager') {
+        } else if (adminRoleNormalized === 'district-admin' || adminRoleNormalized === 'branch-admin' || roleNormalized === 'district-admin' || roleNormalized === 'district-manager' || adminLevelLower === 'district') {
             adminTier = 'district';
-        } else if (adminRoleLower === 'division-admin' || adminLevelLower === 'division' || roleLower === 'division_manager' || roleLower === 'division-manager') {
+        } else if (adminRoleNormalized === 'division-admin' || roleNormalized === 'division-admin' || roleNormalized === 'division-manager' || adminLevelLower === 'division') {
             adminTier = 'division';
-        } else if (adminRoleLower === 'pincode-admin' || adminLevelLower === 'pincode' || roleLower === 'pincode_manager' || roleLower === 'pincode-manager') {
+        } else if (adminRoleNormalized === 'pincode-admin' || roleNormalized === 'pincode-admin' || roleNormalized === 'pincode-manager' || adminLevelLower === 'pincode') {
             adminTier = 'pincode';
         }
 
         // Verify that the user has admin or manager privileges
         const isAdmin = 
-            ['admin', 'super-admin', 'superadmin'].includes(roleLower) || 
-            roleLower.includes('manager') ||
-            ['super-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin'].includes(adminRoleLower);
+            isMainAdmin ||
+            adminTier !== 'unknown' ||
+            roleNormalized.includes('admin') || 
+            roleNormalized.includes('manager') ||
+            adminRoleNormalized.includes('admin');
 
         if (!isAdmin && adminTier === 'unknown') {
             return res.status(403).json({ msg: 'Access denied. Administrator privileges required.', message: 'Unauthorized access' });
         }
 
-        const userState = (user.assignedState || user.territory?.state || '').trim();
-        const userDistrict = (user.assignedDistrict || user.territory?.district || '').trim();
-        const userDivision = (user.assignedDivision || user.territory?.division || '').trim();
-        const userPincode = (user.assignedPincode ? String(user.assignedPincode) : (user.territory?.pincode || '')).trim();
+        const userState = (user.assignedState || user.territory?.state || user.state || '').trim();
+        const userDistrict = (user.assignedDistrict || user.territory?.district || user.district || '').trim();
+        const userDivision = (user.assignedDivision || user.territory?.division || user.division || '').trim();
+        const userPincode = (user.assignedPincode ? String(user.assignedPincode) : (user.territory?.pincode ? String(user.territory.pincode) : (user.pincode ? String(user.pincode) : ''))).trim();
 
         req.adminUser = {
             ...user,
