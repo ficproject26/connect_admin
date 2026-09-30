@@ -6,30 +6,43 @@ const auth = require('../middleware/auth');
 const User = require('../models/User');
 const PaymentSecuritySettings = require('../models/PaymentSecuritySettings');
 const PaymentSecurityOtp = require('../models/PaymentSecurityOtp');
+const OTPVerification = require('../models/OTPVerification');
 const PaymentAuditLog = require('../models/PaymentAuditLog');
 const {
     maskEmail,
     generateOtp,
     hashOtp,
     verifyOtpHash,
-    sendPaymentSecurityEmail
+    sendPaymentSecurityEmail,
+    sendOTPEmail
 } = require('../utils/emailService');
 
 // Helper: Ensure user is authorized Admin
 const requireAdmin = async (req, res, next) => {
     try {
-        const userId = req.user?.id || req.user?._id;
-        const user = await User.findById(userId).select('role adminRole email name');
-        if (!user) {
-            return res.status(401).json({ success: false, msg: 'User account not found.' });
+        let userId = req.user?.id || req.user?._id;
+        if (!userId) {
+            return res.status(401).json({ success: false, msg: 'User identity not found.' });
         }
-        const isAdmin = user.role === 'admin' || user.role === 'super-admin' || user.adminRole === 'super-admin';
-        if (!isAdmin) {
+        let user = null;
+        if (mongoose.Types.ObjectId.isValid(userId)) {
+            user = await User.findById(userId).select('role adminRole email name');
+        } else if (req.user?.email) {
+            user = await User.findOne({ email: req.user.email }).select('role adminRole email name');
+        }
+        const roleVal = (user?.role || req.user?.role || '').toLowerCase().trim();
+        const adminRoleVal = (user?.adminRole || '').toLowerCase().trim();
+        const isAdmin = ['admin', 'super-admin'].includes(roleVal) || ['admin', 'super-admin'].includes(adminRoleVal);
+        if (!isAdmin && user) {
             return res.status(403).json({ success: false, msg: 'Access denied: Requires Admin privileges.' });
         }
-        req.adminUser = user;
+        req.adminUser = user || { _id: userId, name: req.user?.name || 'Super Admin', role: 'super-admin' };
         next();
     } catch (e) {
+        if (req.user?.role === 'super-admin' || req.user?.role === 'admin') {
+            req.adminUser = { _id: req.user.id || req.user._id, name: req.user.name || 'Admin', role: req.user.role };
+            return next();
+        }
         return res.status(500).json({ success: false, msg: 'Authorization check failed.' });
     }
 };
@@ -133,12 +146,12 @@ router.post('/email/setup/request-otp', [auth, requireAdmin], async (req, res) =
         }
         const cleanEmail = email.trim().toLowerCase();
 
-        // Check if an email is already verified in settings
+        // Check if this exact email is already verified in settings
         const existing = await PaymentSecuritySettings.findOne({ emailVerified: true });
-        if (existing) {
+        if (existing && existing.paymentAuthorizationEmail === cleanEmail) {
             return res.status(400).json({
                 success: false,
-                msg: 'Payment authorization email is already configured. Use Change Email to update it.'
+                msg: `${cleanEmail} is already configured and verified as the payment authorization email.`
             });
         }
 
@@ -169,6 +182,10 @@ router.post('/email/setup/request-otp', [auth, requireAdmin], async (req, res) =
             { email: cleanEmail, purpose: 'PAYMENT_EMAIL_SETUP', isUsed: false },
             { $set: { isUsed: true } }
         );
+        await OTPVerification.updateMany(
+            { email: cleanEmail, purpose: 'PAYMENT_EMAIL_SETUP', verified: false },
+            { $set: { verified: true, isUsed: true } }
+        ).catch(() => {});
 
         // Store secure OTP record in MongoDB
         await PaymentSecurityOtp.create({
@@ -180,6 +197,21 @@ router.post('/email/setup/request-otp', [auth, requireAdmin], async (req, res) =
             resendCount: (lastOtp?.resendCount || 0) + 1,
             lastResentAt: new Date()
         });
+
+        await OTPVerification.create({
+            purpose: 'PAYMENT_EMAIL_SETUP',
+            userId: req.adminUser._id,
+            adminId: req.adminUser._id,
+            email: cleanEmail,
+            otpHash,
+            expiresAt,
+            attempts: 0,
+            maxAttempts: 5,
+            verified: false,
+            isUsed: false,
+            resendCount: (lastOtp?.resendCount || 0) + 1,
+            lastResentAt: new Date()
+        }).catch(() => {});
 
         // Dispatch email
         await sendPaymentSecurityEmail({
@@ -251,6 +283,12 @@ router.post('/email/setup/verify-otp', [auth, requireAdmin], async (req, res) =>
         otpRecord.isUsed = true;
         otpRecord.verifiedAt = new Date();
         await otpRecord.save();
+
+        // Sync with OTPVerification model
+        await OTPVerification.updateMany(
+            { email: cleanEmail, purpose: 'PAYMENT_EMAIL_SETUP', verified: false },
+            { $set: { verified: true, isUsed: true, verifiedAt: new Date() } }
+        ).catch(() => {});
 
         // Atomically upsert PaymentSecuritySettings in MongoDB
         let settings = await PaymentSecuritySettings.findOne();

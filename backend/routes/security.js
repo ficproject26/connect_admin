@@ -167,4 +167,217 @@ router.post('/unlock-account', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// =========================================================================
+// EMAIL OTP VERIFICATION SYSTEM (Section 6 & 7)
+// =========================================================================
+const OTPVerification = require('../models/OTPVerification');
+const PaymentAuditLog = require('../models/PaymentAuditLog');
+const PaymentAuthorizationSession = require('../models/PaymentAuthorizationSession');
+const {
+  maskEmail,
+  generateOtp,
+  hashOtp,
+  verifyOtpHash,
+  sendOTPEmail
+} = require('../utils/emailService');
+
+// @route   POST /api/security/send-otp
+// @desc    Generate and send single-use Email OTP for security operations
+// @access  Private (Admin / Authenticated User)
+router.post('/send-otp', auth, async (req, res) => {
+  try {
+    const { email, purpose, metadata } = req.body;
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ success: false, message: 'Valid email is required.' });
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return res.status(400).json({ success: false, message: 'Invalid email address format.' });
+    }
+
+    const validPurposes = [
+      'PAYMENT_AUTHORIZATION',
+      'EMAIL_CHANGE_OLD',
+      'EMAIL_CHANGE_NEW',
+      'PIN_SETUP',
+      'PIN_CHANGE',
+      'PAYMENT_EMAIL_SETUP',
+      'PAYMENT_EMAIL_CHANGE_OLD',
+      'PAYMENT_EMAIL_CHANGE_NEW',
+      'TRANSACTION_PIN_SETUP',
+      'TRANSACTION_PIN_CHANGE'
+    ];
+    const selectedPurpose = purpose || 'PAYMENT_AUTHORIZATION';
+    if (!validPurposes.includes(selectedPurpose)) {
+      return res.status(400).json({ success: false, message: 'Invalid security operation purpose.' });
+    }
+
+    // Rate limiting & cooldown (30s cooldown, max 5 attempts in 10 mins)
+    const now = Date.now();
+    const lastOtp = await OTPVerification.findOne({
+      email: cleanEmail,
+      purpose: selectedPurpose,
+      verified: false
+    }).sort({ createdAt: -1 });
+
+    if (lastOtp) {
+      if (now - new Date(lastOtp.lastResentAt || lastOtp.createdAt).getTime() < 30 * 1000) {
+        return res.status(429).json({ success: false, message: 'Please wait 30 seconds before requesting another code.' });
+      }
+      if (lastOtp.resendCount >= 5 && (now - new Date(lastOtp.createdAt).getTime() < 10 * 60 * 1000)) {
+        return res.status(429).json({ success: false, message: 'Too many OTP requests. Please wait 10 minutes.' });
+      }
+    }
+
+    const otp = generateOtp();
+    const otpHash = hashOtp(otp, cleanEmail, selectedPurpose);
+    const expiresMinutes = parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 5;
+    const expiresAt = new Date(now + expiresMinutes * 60 * 1000);
+
+    // Invalidate older unverified OTPs for this email and purpose
+    await OTPVerification.updateMany(
+      { email: cleanEmail, purpose: selectedPurpose, verified: false },
+      { $set: { verified: true, isUsed: true } }
+    );
+
+    // Save in MongoDB
+    const userId = req.user?.id || req.user?._id || null;
+    await OTPVerification.create({
+      email: cleanEmail,
+      otpHash,
+      purpose: selectedPurpose,
+      expiresAt,
+      attempts: 0,
+      maxAttempts: 5,
+      verified: false,
+      isUsed: false,
+      userId,
+      adminId: userId,
+      resendCount: (lastOtp?.resendCount || 0) + 1,
+      lastResentAt: new Date(),
+      sessionData: metadata || {}
+    });
+
+    // Send OTP via email service
+    await sendOTPEmail({
+      email: cleanEmail,
+      otp,
+      purpose: selectedPurpose,
+      metadata
+    });
+
+    // Log audit
+    await PaymentAuditLog.create({
+      action: 'otp_sent',
+      user: req.user?.name || 'Admin',
+      userId,
+      role: req.user?.role || 'admin',
+      details: `Security OTP sent to ${cleanEmail} for ${selectedPurpose}`,
+      ipAddress: req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || ''
+    }).catch(() => {});
+
+    res.json({
+      success: true,
+      message: 'OTP sent successfully',
+      maskedEmail: maskEmail(cleanEmail),
+      expiresIn: expiresMinutes * 60
+    });
+  } catch (err) {
+    console.error('Error in POST /api/security/send-otp:', err);
+    res.status(500).json({ success: false, message: 'Failed to dispatch verification code.' });
+  }
+});
+
+// @route   POST /api/security/verify-otp
+// @desc    Verify submitted OTP and grant short-lived authorization
+// @access  Private (Admin / Authenticated User)
+router.post('/verify-otp', auth, async (req, res) => {
+  try {
+    const { email, otp, purpose, authorizationToken } = req.body;
+    if (!email || !otp || !/^\d{6}$/.test(String(otp).trim())) {
+      return res.status(400).json({ success: false, message: 'Valid email and 6-digit numeric OTP are required.' });
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = String(otp).trim();
+    const selectedPurpose = purpose || 'PAYMENT_AUTHORIZATION';
+
+    const otpRecord = await OTPVerification.findOne({
+      email: cleanEmail,
+      purpose: selectedPurpose,
+      verified: false,
+      isUsed: false
+    }).sort({ createdAt: -1 });
+
+    if (!otpRecord) {
+      return res.status(400).json({ success: false, message: 'No active OTP request found. Please request a new code.' });
+    }
+
+    if (new Date() > new Date(otpRecord.expiresAt)) {
+      otpRecord.verified = true;
+      otpRecord.isUsed = true;
+      await otpRecord.save();
+      return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new OTP.' });
+    }
+
+    if (otpRecord.attempts >= otpRecord.maxAttempts) {
+      otpRecord.verified = true;
+      otpRecord.isUsed = true;
+      await otpRecord.save();
+      return res.status(403).json({ success: false, message: 'Too many incorrect attempts. Please request a new OTP.' });
+    }
+
+    const isMatch = verifyOtpHash(cleanOtp, cleanEmail, selectedPurpose, otpRecord.otpHash);
+    if (!isMatch) {
+      otpRecord.attempts += 1;
+      await otpRecord.save();
+      const remaining = otpRecord.maxAttempts - otpRecord.attempts;
+      return res.status(400).json({
+        success: false,
+        message: `Invalid OTP. Please try again. (${remaining} attempt(s) remaining)`
+      });
+    }
+
+    // Mark OTP verified
+    otpRecord.verified = true;
+    otpRecord.isUsed = true;
+    otpRecord.verifiedAt = new Date();
+    await otpRecord.save();
+
+    // Invalidate all previous unverified OTPs for this purpose and email
+    await OTPVerification.updateMany(
+      { email: cleanEmail, purpose: selectedPurpose, _id: { $ne: otpRecord._id } },
+      { $set: { verified: true, isUsed: true } }
+    );
+
+    // If this is payment authorization, update payment authorization session
+    if (authorizationToken) {
+      await PaymentAuthorizationSession.updateOne(
+        { authorizationToken, isExecuted: false },
+        { $set: { otpVerified: true, otpVerifiedAt: new Date() } }
+      );
+    }
+
+    // Log audit
+    await PaymentAuditLog.create({
+      action: 'otp_verified',
+      user: req.user?.name || 'Admin',
+      userId: req.user?.id || req.user?._id,
+      role: req.user?.role || 'admin',
+      details: `Security OTP verified successfully for ${cleanEmail} (${selectedPurpose})`,
+      ipAddress: req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || ''
+    }).catch(() => {});
+
+    res.json({
+      success: true,
+      message: 'OTP verified successfully',
+      verifiedAt: otpRecord.verifiedAt
+    });
+  } catch (err) {
+    console.error('Error in POST /api/security/verify-otp:', err);
+    res.status(500).json({ success: false, message: 'Server error verifying OTP' });
+  }
+});
+
 module.exports = router;
