@@ -275,8 +275,15 @@ app.use('/admin-api/admin/payments', require('./routes/paymentRoutes'));
 app.use('/admin-api/payments', require('./routes/paymentRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/admin/enterprise/payments', require('./routes/paymentRoutes'));
-app.use('/admin/payments', require('./routes/paymentRoutes'));
 app.use('/payments', require('./routes/paymentRoutes'));
+
+// Payment Security Settings & Authorization Verification Routes
+app.use('/api/admin/payment-security', require('./routes/paymentSecurityRoutes'));
+app.use('/admin-api/admin/payment-security', require('./routes/paymentSecurityRoutes'));
+app.use('/admin-api/payment-security', require('./routes/paymentSecurityRoutes'));
+app.use('/api/payment-security', require('./routes/paymentSecurityRoutes'));
+app.use('/admin/payment-security', require('./routes/paymentSecurityRoutes'));
+app.use('/payment-security', require('./routes/paymentSecurityRoutes'));
 
 app.use('/api/admin/enterprise', require('./routes/enterpriseModules'));
 app.use('/admin-api/enterprise', require('./routes/enterpriseModules'));

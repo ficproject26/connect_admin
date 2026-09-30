@@ -55,6 +55,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpTimer, setOtpTimer] = useState(300);
   const [verificationToken, setVerificationToken] = useState('');
+  const [maskedAuthEmail, setMaskedAuthEmail] = useState('');
   const [securityPin, setSecurityPin] = useState(['', '', '', '', '', '']);
   const [pinLoading, setPinLoading] = useState(false);
   const [payError, setPayError] = useState('');
@@ -252,6 +253,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     setPayError('');
     setOtpCode('');
     setVerificationToken('');
+    setMaskedAuthEmail('');
     setSecurityPin(['', '', '', '', '', '']);
     setProcessedResult(null);
     setPayModalOpen(true);
@@ -267,11 +269,21 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         headers: {
           'x-auth-token': token,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+          paymentId: selectedPayable?.paymentId,
+          amount: selectedPayable?.payableAmount || selectedPayable?.amount,
+          recipientId: selectedPayable?.recipientId,
+          recipientName: selectedPayable?.recipientName,
+          recipientType: selectedPayable?.recipientType
+        })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        toast(`Verification OTP dispatched to ${currentUser?.email || 'Super Admin email'}`);
+        if (data.maskedEmail) setMaskedAuthEmail(data.maskedEmail);
+        const tokenVal = data.authorizationToken || data.verificationToken || '';
+        if (tokenVal) setVerificationToken(tokenVal);
+        toast(data.msg || `Verification OTP dispatched to ${data.maskedEmail || currentUser?.email || 'authorized email'}`);
         setOtpTimer(300);
         setPayStep(2);
       } else {
@@ -300,13 +312,18 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ otp: otpCode.trim() })
+        body: JSON.stringify({
+          otp: otpCode.trim(),
+          authorizationToken: verificationToken,
+          verificationToken: verificationToken
+        })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setVerificationToken(data.verificationToken);
+        const tokenVal = data.authorizationToken || data.verificationToken || verificationToken;
+        if (tokenVal) setVerificationToken(tokenVal);
         setPayStep(3);
-        toast('Email OTP verified. Please enter your 6-digit Security PIN.');
+        toast('Email OTP verified. Please enter your Security PIN.');
       } else {
         setPayError(data.msg || 'Invalid or expired OTP code');
       }
@@ -321,8 +338,8 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
   const handleAuthorizeDisbursement = async (e) => {
     e.preventDefault();
     const pinStr = securityPin.join('');
-    if (pinStr.length !== 6) {
-      setPayError('Please enter your full 6-digit Security PIN');
+    if (pinStr.length < 4 || pinStr.length > 6) {
+      setPayError('Please enter your 4 to 6 digit Security PIN');
       return;
     }
 
@@ -336,7 +353,11 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ pin: pinStr, verificationToken })
+        body: JSON.stringify({
+          pin: pinStr,
+          authorizationToken: verificationToken,
+          verificationToken: verificationToken
+        })
       });
       const pinData = await pinRes.json();
       if (!pinRes.ok || !pinData.success) {
@@ -345,7 +366,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         return;
       }
 
-      // 2. Process Disbursement Atomically
+      // 2. Process Disbursement Atomically with server-side authorization session
       const processRes = await fetch(`${API_BASE}/admin/enterprise/payments/process`, {
         method: 'POST',
         headers: {
@@ -354,7 +375,10 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         },
         body: JSON.stringify({
           paymentId: selectedPayable.paymentId,
-          verificationToken,
+          authorizationToken: verificationToken,
+          verificationToken: verificationToken,
+          amount: selectedPayable.payableAmount || selectedPayable.amount,
+          recipientId: selectedPayable.recipientId,
           notes: selectedPayable.paymentPurpose
         })
       });
@@ -1243,8 +1267,8 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
                     Enter Verification Code
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                    A secure 6-digit OTP code has been dispatched to authorized Super Admin email:{' '}
-                    <strong className="text-slate-800 dark:text-slate-200">{currentUser?.email || 'admin@connect.in'}</strong>
+                    A verification OTP has been sent to:{' '}
+                    <strong className="text-slate-800 dark:text-slate-200">{maskedAuthEmail || currentUser?.email || 'Payment Authorization Email'}</strong>
                   </p>
                 </div>
 
@@ -1305,7 +1329,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
                     Enter Security PIN
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-                    Email OTP verified. Please enter your 6-digit Security PIN to finalize and disburse {fmtCurrency(selectedPayable.payableAmount)}.
+                    Email OTP verified. Please enter your Security PIN to finalize and disburse {fmtCurrency(selectedPayable.payableAmount)}.
                   </p>
                 </div>
 
@@ -1357,7 +1381,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
                   </button>
                   <button
                     type="submit"
-                    disabled={pinLoading || securityPin.join('').length !== 6}
+                    disabled={pinLoading || securityPin.join('').length < 4}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
                   >
                     {pinLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}

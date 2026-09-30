@@ -17,13 +17,16 @@ const Pincode = require('../models/Pincode');
 const Payment = require('../models/Payment');
 const PaymentAuditLog = require('../models/PaymentAuditLog');
 const CommissionConfig = require('../models/CommissionConfig');
-
-// In-memory OTP storage with rate limiting and secure hashing
-// email -> { hash, expiresAt, attempts, lastRequestedAt, requestCount }
-const otpStore = new Map();
-
-// token -> { email, userId, expiresAt, otpVerified: boolean, pinVerified: boolean }
-const verificationSessionStore = new Map();
+const PaymentSecuritySettings = require('../models/PaymentSecuritySettings');
+const PaymentSecurityOtp = require('../models/PaymentSecurityOtp');
+const PaymentAuthorizationSession = require('../models/PaymentAuthorizationSession');
+const {
+    maskEmail,
+    generateOtp,
+    hashOtp,
+    verifyOtpHash,
+    sendPaymentSecurityEmail
+} = require('../utils/emailService');
 
 // Helper: Mask Bank Account Number (e.g. ••••••••1234)
 const maskAccountNumber = (accNum) => {
@@ -590,36 +593,124 @@ router.post('/send-otp', auth, async (req, res) => {
             return res.status(403).json({ success: false, msg: 'Unauthorized: Payout disbursement is restricted to Super Admin.' });
         }
 
-        const email = user.email.toLowerCase().trim();
-        const existingSession = otpStore.get(email);
-
-        // Rate Limit: Max 5 requests in 10 minutes
-        const now = Date.now();
-        if (existingSession && existingSession.requestCount >= 5 && (now - existingSession.lastRequestedAt < 10 * 60 * 1000)) {
-            return res.status(429).json({ success: false, msg: 'Too many OTP requests. Please wait 10 minutes before requesting again.' });
+        // Verify Payment Security Settings in MongoDB
+        const securitySettings = await PaymentSecuritySettings.findOne({ emailVerified: true });
+        if (!securitySettings || !securitySettings.paymentAuthorizationEmail) {
+            return res.status(400).json({
+                success: false,
+                msg: 'Payment Authorization Email has not been configured or verified. Please configure it in System Settings first.'
+            });
+        }
+        if (!securitySettings.transactionPinHash) {
+            return res.status(400).json({
+                success: false,
+                msg: 'Transaction PIN has not been configured. Please configure it in System Settings first.'
+            });
+        }
+        if (securitySettings.pinLockedUntil && new Date(securitySettings.pinLockedUntil) > new Date()) {
+            const mins = Math.ceil((new Date(securitySettings.pinLockedUntil) - new Date()) / (60 * 1000));
+            return res.status(403).json({
+                success: false,
+                msg: `Transaction PIN is temporarily locked due to failed attempts. Try again in ${mins} minutes.`
+            });
         }
 
-        // Generate Secure 6-Digit OTP
-        const otp = crypto.randomInt(100000, 999999).toString();
-        const otpHash = crypto.createHash('sha256').update(otp + email).digest('hex');
+        const authEmail = securitySettings.paymentAuthorizationEmail;
+        const now = Date.now();
 
-        otpStore.set(email, {
-            hash: otpHash,
-            expiresAt: now + 5 * 60 * 1000, // 5 min expiry
-            attempts: 0,
-            lastRequestedAt: now,
-            requestCount: (existingSession?.requestCount || 0) + 1
+        // Rate Limit Check in MongoDB (max 5 requests in 10 mins, min 30s resend)
+        const lastOtp = await PaymentSecurityOtp.findOne({
+            email: authEmail,
+            purpose: 'PAYMENT_AUTHORIZATION',
+            isUsed: false
+        }).sort({ createdAt: -1 });
+
+        if (lastOtp) {
+            if (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000) {
+                return res.status(429).json({ success: false, msg: 'Please wait 30 seconds before requesting another code.' });
+            }
+            if (lastOtp.resendCount >= 5 && (now - new Date(lastOtp.createdAt).getTime() < 10 * 60 * 1000)) {
+                return res.status(429).json({ success: false, msg: 'Too many OTP requests. Please wait 10 minutes.' });
+            }
+        }
+
+        const paymentId = String(req.body.paymentId || 'PAY-DISBURSEMENT').trim();
+        const amount = Number(req.body.amount || req.body.payableAmount || 0);
+        const recipientId = String(req.body.recipientId || '').trim();
+        const recipientName = String(req.body.recipientName || '').trim();
+        const recipientType = String(req.body.recipientType || '').trim();
+        const paymentPurpose = String(req.body.paymentPurpose || '').trim();
+        const authorizationToken = crypto.randomBytes(32).toString('hex');
+
+        // Create bound PaymentAuthorizationSession in MongoDB
+        await PaymentAuthorizationSession.create({
+            authorizationToken,
+            userId: user._id,
+            adminEmail: user.email,
+            paymentAuthorizationEmail: authEmail,
+            paymentId,
+            recipientId,
+            recipientName,
+            recipientType,
+            amount,
+            paymentPurpose,
+            accountDetails: req.body.accountDetails || {},
+            otpVerified: false,
+            pinVerified: false,
+            expiresAt: new Date(now + 10 * 60 * 1000) // 10 min validity
+        });
+
+        // Generate Secure 6-Digit OTP
+        const otp = generateOtp();
+        const otpHash = hashOtp(otp, authEmail, 'PAYMENT_AUTHORIZATION');
+
+        await PaymentSecurityOtp.updateMany(
+            { email: authEmail, purpose: 'PAYMENT_AUTHORIZATION', isUsed: false },
+            { $set: { isUsed: true } }
+        );
+
+        await PaymentSecurityOtp.create({
+            purpose: 'PAYMENT_AUTHORIZATION',
+            userId: user._id,
+            email: authEmail,
+            otpHash,
+            expiresAt: new Date(now + 5 * 60 * 1000), // 5 min expiry
+            resendCount: (lastOtp?.resendCount || 0) + 1,
+            lastResentAt: new Date(),
+            sessionData: {
+                authorizationToken,
+                paymentId,
+                amount,
+                recipientId
+            }
+        });
+
+        // Dispatch Email
+        await sendPaymentSecurityEmail({
+            toEmail: authEmail,
+            purpose: 'PAYMENT_AUTHORIZATION',
+            otp,
+            metadata: {
+                paymentId,
+                amount,
+                recipientName,
+                recipientType
+            }
         });
 
         // Audit Trail
-        await logPaymentAudit(req, 'otp_sent', '', `Disbursement verification OTP sent to ${email}`);
-
-        // In production console logging for local demonstration; never return OTP in response payload
-        console.log(`🔐 [Payment Security] Generated 6-digit OTP for ${email}: ${otp} (Expires in 5m)`);
+        await logPaymentAudit(req, 'otp_sent', paymentId, `Disbursement verification OTP sent to authorized email: ${authEmail}`, {
+            paymentId,
+            amount,
+            recipient: recipientName
+        });
 
         res.json({
             success: true,
-            msg: `A secure 6-digit verification code has been dispatched to ${email}.`,
+            msg: `A verification OTP has been sent to: ${maskEmail(authEmail)}.`,
+            maskedEmail: maskEmail(authEmail),
+            authorizationToken,
+            verificationToken: authorizationToken,
             expiresIn: 300
         });
 
@@ -632,58 +723,76 @@ router.post('/send-otp', auth, async (req, res) => {
 router.post('/verify-otp', auth, async (req, res) => {
     try {
         const { otp } = req.body;
-        if (!otp || !/^\d{6}$/.test(otp)) {
+        const token = req.body.authorizationToken || req.body.verificationToken;
+
+        if (!otp || !/^\d{6}$/.test(String(otp).trim())) {
             return res.status(400).json({ success: false, msg: 'Please provide a valid 6-digit numeric OTP code.' });
         }
+        const cleanOtp = String(otp).trim();
 
-        const user = await findUserById(req.user.id || req.user._id, req.user.email, 'email');
-        if (!user) return res.status(404).json({ success: false, msg: 'User not found.' });
-
-        const email = user.email.toLowerCase().trim();
-        const session = otpStore.get(email);
-
-        if (!session) {
-            return res.status(400).json({ success: false, msg: 'No active OTP request found. Please request a new code.' });
+        // 1. Look up PaymentAuthorizationSession in MongoDB
+        const authSession = token ? await PaymentAuthorizationSession.findOne({ authorizationToken: token, isExecuted: false }) : null;
+        if (!authSession) {
+            return res.status(400).json({ success: false, msg: 'Invalid or expired payment authorization session. Please restart payment.' });
         }
 
-        if (Date.now() > session.expiresAt) {
-            otpStore.delete(email);
+        if (new Date() > new Date(authSession.expiresAt)) {
+            return res.status(400).json({ success: false, msg: 'Payment authorization session has expired. Please restart payment.' });
+        }
+
+        // 2. Look up OTP in MongoDB
+        const otpRecord = await PaymentSecurityOtp.findOne({
+            email: authSession.paymentAuthorizationEmail,
+            purpose: 'PAYMENT_AUTHORIZATION',
+            isUsed: false,
+            'sessionData.authorizationToken': authSession.authorizationToken
+        }).sort({ createdAt: -1 });
+
+        if (!otpRecord) {
+            return res.status(400).json({ success: false, msg: 'No active OTP request found for this payment session. Please request a new code.' });
+        }
+
+        if (new Date() > new Date(otpRecord.expiresAt)) {
+            otpRecord.isUsed = true;
+            await otpRecord.save();
             return res.status(400).json({ success: false, msg: 'Verification code has expired. Please request a new code.' });
         }
 
-        if (session.attempts >= 3) {
-            otpStore.delete(email);
-            await logPaymentAudit(req, 'otp_locked', '', `OTP verification locked after 3 failed attempts for ${email}`);
+        if (otpRecord.attempts >= otpRecord.maxAttempts) {
+            otpRecord.isUsed = true;
+            await otpRecord.save();
+            await logPaymentAudit(req, 'otp_locked', authSession.paymentId, 'Payment OTP locked after maximum failed attempts');
             return res.status(403).json({ success: false, msg: 'Maximum verification attempts exceeded. Code invalidated.' });
         }
 
-        const submittedHash = crypto.createHash('sha256').update(otp + email).digest('hex');
-        if (submittedHash !== session.hash) {
-            session.attempts += 1;
-            otpStore.set(email, session);
-            await logPaymentAudit(req, 'otp_failed', '', `Incorrect OTP entered for ${email} (Attempt ${session.attempts}/3)`);
-            return res.status(400).json({ success: false, msg: `Incorrect verification code. ${3 - session.attempts} attempt(s) remaining.` });
+        const isMatch = verifyOtpHash(cleanOtp, authSession.paymentAuthorizationEmail, 'PAYMENT_AUTHORIZATION', otpRecord.otpHash);
+        if (!isMatch) {
+            otpRecord.attempts += 1;
+            await otpRecord.save();
+            await logPaymentAudit(req, 'otp_failed', authSession.paymentId, `Incorrect Payment OTP (Attempt ${otpRecord.attempts}/${otpRecord.maxAttempts})`);
+            return res.status(400).json({
+                success: false,
+                msg: `Invalid or expired OTP. ${otpRecord.maxAttempts - otpRecord.attempts} attempt(s) remaining.`
+            });
         }
 
-        // Invalidate OTP immediately upon successful verification (Single-Use protection)
-        otpStore.delete(email);
+        // Single-use OTP invalidation
+        otpRecord.isUsed = true;
+        otpRecord.verifiedAt = new Date();
+        await otpRecord.save();
 
-        // Issue single-use verification session token
-        const verificationToken = crypto.randomBytes(32).toString('hex');
-        verificationSessionStore.set(verificationToken, {
-            email,
-            userId: user._id,
-            expiresAt: Date.now() + 10 * 60 * 1000, // 10 min window to enter PIN and finish
-            otpVerified: true,
-            pinVerified: false
-        });
+        // Update Authorization Session in MongoDB
+        authSession.otpVerified = true;
+        authSession.otpVerifiedAt = new Date();
+        await authSession.save();
 
-        await logPaymentAudit(req, 'otp_verified', '', `OTP verified successfully for ${email}`);
+        await logPaymentAudit(req, 'otp_verified', authSession.paymentId, `Payment authorization OTP verified successfully for ${authSession.paymentAuthorizationEmail}`);
 
         res.json({
             success: true,
-            msg: 'Email OTP verified successfully. Please enter your 6-digit Security PIN.',
-            verificationToken
+            msg: 'Email OTP verified successfully. Please enter your Transaction PIN.',
+            authorizationToken: authSession.authorizationToken,
+            verificationToken: authSession.authorizationToken
         });
 
     } catch (err) {
@@ -693,19 +802,22 @@ router.post('/verify-otp', auth, async (req, res) => {
 });
 
 // =========================================================================
-// 4. SECURITY: 6-DIGIT PAYMENT PIN (SECTION 9 & 10)
+// 4. SECURITY: TRANSACTION PIN STATUS & VERIFICATION
 // =========================================================================
 router.get('/pin-status', auth, async (req, res) => {
     try {
-        const user = await findUserById(req.user.id || req.user._id, req.user.email, 'paymentPinConfigured paymentPinLockedUntil');
-        const configured = Boolean(user?.paymentPinConfigured);
-        const isLocked = user?.paymentPinLockedUntil && new Date(user.paymentPinLockedUntil) > new Date();
+        const settings = await PaymentSecuritySettings.findOne().sort({ createdAt: -1 });
+        const configured = Boolean(settings && settings.transactionPinHash);
+        const emailConfigured = Boolean(settings && settings.paymentAuthorizationEmail && settings.emailVerified);
+        const isLocked = Boolean(settings && settings.pinLockedUntil && new Date(settings.pinLockedUntil) > new Date());
 
         res.json({
             success: true,
             configured,
+            emailConfigured,
+            maskedEmail: settings?.paymentAuthorizationEmail ? maskEmail(settings.paymentAuthorizationEmail) : '',
             isLocked,
-            lockedUntil: isLocked ? user.paymentPinLockedUntil : null
+            lockedUntil: isLocked ? settings.pinLockedUntil : null
         });
     } catch (err) {
         res.status(500).json({ success: false, msg: 'Error checking PIN status' });
@@ -715,26 +827,28 @@ router.get('/pin-status', auth, async (req, res) => {
 router.post('/setup-pin', auth, async (req, res) => {
     try {
         const { pin, confirmPin } = req.body;
-        if (!pin || !/^\d{6}$/.test(pin)) {
-            return res.status(400).json({ success: false, msg: 'PIN must be exactly 6 numeric digits.' });
+        if (!pin || !/^\d{4,6}$/.test(String(pin).trim())) {
+            return res.status(400).json({ success: false, msg: 'PIN must be between 4 and 6 numeric digits.' });
         }
-        if (pin !== confirmPin) {
+        if (String(pin).trim() !== String(confirmPin || '').trim()) {
             return res.status(400).json({ success: false, msg: 'PIN and Confirm PIN do not match.' });
         }
 
-        const user = await findUserById(req.user.id || req.user._id, req.user.email);
-        if (!user) return res.status(404).json({ success: false, msg: 'User account not found.' });
+        const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
+        if (!settings || !settings.paymentAuthorizationEmail) {
+            return res.status(400).json({ success: false, msg: 'Verified payment authorization email required. Please configure email in System Settings first.' });
+        }
 
-        const hashed = await bcrypt.hash(pin, 10);
-        user.paymentPinHash = hashed;
-        user.paymentPinConfigured = true;
-        user.paymentPinFailedAttempts = 0;
-        user.paymentPinLockedUntil = null;
-        await user.save();
+        const hashed = await bcrypt.hash(String(pin).trim(), 10);
+        settings.transactionPinHash = hashed;
+        settings.failedPinAttempts = 0;
+        settings.pinLockedUntil = null;
+        settings.updatedBy = req.user.id || req.user._id;
+        await settings.save();
 
-        await logPaymentAudit(req, 'pin_setup', '', 'New 6-digit Payment Security PIN configured');
+        await logPaymentAudit(req, 'pin_setup', '', 'New Transaction PIN configured');
 
-        res.json({ success: true, msg: '6-digit Payment Security PIN configured successfully.' });
+        res.json({ success: true, msg: 'Transaction PIN configured successfully.' });
     } catch (err) {
         console.error('Error configuring payment PIN:', err);
         res.status(500).json({ success: false, msg: 'Server error configuring payment PIN' });
@@ -743,55 +857,61 @@ router.post('/setup-pin', auth, async (req, res) => {
 
 router.post('/verify-pin', auth, async (req, res) => {
     try {
-        const { pin, verificationToken } = req.body;
+        const { pin } = req.body;
+        const token = req.body.authorizationToken || req.body.verificationToken;
 
-        if (!pin || !/^\d{6}$/.test(pin)) {
-            return res.status(400).json({ success: false, msg: 'Payment PIN must be exactly 6 numeric digits.' });
+        if (!pin || !/^\d{4,6}$/.test(String(pin).trim())) {
+            return res.status(400).json({ success: false, msg: 'Transaction PIN must be numeric digits.' });
         }
+        const cleanPin = String(pin).trim();
 
-        const session = verificationToken ? verificationSessionStore.get(verificationToken) : null;
-        if (!session || Date.now() > session.expiresAt || !session.otpVerified) {
+        // 1. Validate PaymentAuthorizationSession in MongoDB
+        const authSession = token ? await PaymentAuthorizationSession.findOne({ authorizationToken: token, isExecuted: false }) : null;
+        if (!authSession || new Date() > new Date(authSession.expiresAt) || !authSession.otpVerified) {
             return res.status(401).json({ success: false, msg: 'Session expired or Email OTP verification missing. Please restart verification.' });
         }
 
-        const user = await findUserById(req.user.id || req.user._id, req.user.email);
-        if (!user || !user.paymentPinConfigured || !user.paymentPinHash) {
-            return res.status(400).json({ success: false, msg: 'Payment Security PIN has not been configured. Please configure your PIN first.' });
+        // 2. Validate PIN against PaymentSecuritySettings in MongoDB
+        const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
+        if (!settings || !settings.transactionPinHash) {
+            return res.status(400).json({ success: false, msg: 'Transaction PIN has not been configured. Please configure your PIN first in System Settings.' });
         }
 
         // Check Lockout
-        if (user.paymentPinLockedUntil && new Date(user.paymentPinLockedUntil) > new Date()) {
-            const minutesLeft = Math.ceil((new Date(user.paymentPinLockedUntil) - new Date()) / (60 * 1000));
-            return res.status(403).json({ success: false, msg: `Payment PIN is temporarily locked due to failed attempts. Try again in ${minutesLeft} minutes.` });
+        if (settings.pinLockedUntil && new Date(settings.pinLockedUntil) > new Date()) {
+            const minutesLeft = Math.ceil((new Date(settings.pinLockedUntil) - new Date()) / (60 * 1000));
+            return res.status(403).json({ success: false, msg: `Transaction PIN is temporarily locked due to failed attempts. Try again in ${minutesLeft} minutes.` });
         }
 
-        const isMatch = await bcrypt.compare(pin, user.paymentPinHash);
+        const isMatch = await bcrypt.compare(cleanPin, settings.transactionPinHash);
         if (!isMatch) {
-            user.paymentPinFailedAttempts = (user.paymentPinFailedAttempts || 0) + 1;
-            if (user.paymentPinFailedAttempts >= 5) {
-                user.paymentPinLockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 min lock
-                await user.save();
-                await logPaymentAudit(req, 'pin_failed', '', 'Payment PIN locked after 5 failed attempts');
-                return res.status(403).json({ success: false, msg: 'Incorrect PIN. Maximum attempts reached. Account locked for 15 minutes.' });
+            settings.failedPinAttempts = (settings.failedPinAttempts || 0) + 1;
+            if (settings.failedPinAttempts >= 5) {
+                settings.pinLockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 min lock
+                await settings.save();
+                await logPaymentAudit(req, 'pin_failed', authSession.paymentId, 'Transaction PIN locked after 5 failed attempts');
+                return res.status(403).json({ success: false, msg: 'Invalid Transaction PIN. Maximum attempts reached. Account locked for 15 minutes.' });
             }
-            await user.save();
-            await logPaymentAudit(req, 'pin_failed', '', `Payment PIN attempt failed (${user.paymentPinFailedAttempts}/5)`);
-            return res.status(400).json({ success: false, msg: `Incorrect Payment PIN. ${5 - user.paymentPinFailedAttempts} attempts remaining.` });
+            await settings.save();
+            await logPaymentAudit(req, 'pin_failed', authSession.paymentId, `Transaction PIN attempt failed (${settings.failedPinAttempts}/5)`);
+            return res.status(400).json({ success: false, msg: `Invalid Transaction PIN. ${5 - settings.failedPinAttempts} attempts remaining.` });
         }
 
         // Reset failed attempts on success
-        user.paymentPinFailedAttempts = 0;
-        user.paymentPinLockedUntil = null;
-        await user.save();
+        settings.failedPinAttempts = 0;
+        settings.pinLockedUntil = null;
+        await settings.save();
 
-        session.pinVerified = true;
-        verificationSessionStore.set(verificationToken, session);
+        // Update Authorization Session in MongoDB
+        authSession.pinVerified = true;
+        authSession.pinVerifiedAt = new Date();
+        await authSession.save();
 
-        await logPaymentAudit(req, 'pin_verified', '', 'Payment Security PIN successfully verified');
+        await logPaymentAudit(req, 'pin_verified', authSession.paymentId, 'Transaction PIN successfully verified');
 
         res.json({
             success: true,
-            msg: 'Security PIN verified successfully. You may now process the disbursement.'
+            msg: 'Transaction PIN verified successfully. You may now process the disbursement.'
         });
 
     } catch (err) {
@@ -805,18 +925,48 @@ router.post('/verify-pin', auth, async (req, res) => {
 // =========================================================================
 router.post('/process', auth, async (req, res) => {
     try {
-        const { paymentId, verificationToken, idempotencyKey, notes } = req.body;
+        const { paymentId, idempotencyKey, notes } = req.body;
+        const token = req.body.authorizationToken || req.body.verificationToken;
 
         if (!paymentId) {
             return res.status(400).json({ success: false, msg: 'Payment ID is required.' });
         }
 
-        // Mandatory Two-Factor Security Enforcement: BOTH Email OTP and Security PIN must be verified
-        const session = verificationToken ? verificationSessionStore.get(verificationToken) : null;
-        if (!session || Date.now() > session.expiresAt || !session.otpVerified || !session.pinVerified) {
+        // Mandatory Two-Factor Server-Side Authorization Session Validation
+        const authSession = token ? await PaymentAuthorizationSession.findOne({ authorizationToken: token }) : null;
+        if (!authSession || new Date() > new Date(authSession.expiresAt) || !authSession.otpVerified || !authSession.pinVerified) {
             return res.status(401).json({
                 success: false,
-                msg: 'Unauthorized: Dual-verification required. Complete BOTH Email OTP and Security PIN verification before disbursement.'
+                msg: 'Unauthorized: Dual-verification required. Complete BOTH Email OTP and Transaction PIN verification before disbursement.'
+            });
+        }
+
+        if (authSession.isExecuted) {
+            return res.status(400).json({
+                success: false,
+                msg: 'This payment authorization session has already been executed.'
+            });
+        }
+
+        // Parameter Integrity Check (Requirement 6: Invalidate if parameters changed)
+        const reqAmount = req.body.amount !== undefined ? Number(req.body.amount) : (req.body.payableAmount !== undefined ? Number(req.body.payableAmount) : null);
+        if (reqAmount !== null && Math.abs(reqAmount - Number(authSession.amount)) > 0.01) {
+            authSession.isExecuted = true;
+            await authSession.save();
+            await logPaymentAudit(req, 'payment_failed', paymentId, `Disbursement amount changed after authorization. Expected ₹${authSession.amount}, received ₹${reqAmount}`);
+            return res.status(400).json({
+                success: false,
+                msg: 'Security Alert: Payment amount was changed after verification. Authorization invalidated. Please re-verify.'
+            });
+        }
+
+        if (req.body.recipientId && String(req.body.recipientId) !== String(authSession.recipientId)) {
+            authSession.isExecuted = true;
+            await authSession.save();
+            await logPaymentAudit(req, 'payment_failed', paymentId, 'Disbursement recipient changed after authorization');
+            return res.status(400).json({
+                success: false,
+                msg: 'Security Alert: Payment recipient was changed after verification. Authorization invalidated. Please re-verify.'
             });
         }
 
@@ -852,10 +1002,10 @@ router.post('/process', auth, async (req, res) => {
                 // If not yet persisted, verify and match against real operational database payables
                 const payables = await computeRecipientPayables();
                 const allItems = [
-                    ...payables.recipients.agents,
-                    ...payables.recipients.vendors,
-                    ...payables.recipients.deliveryPartners,
-                    ...payables.recipients.technicians
+                    ...(payables?.agents || []),
+                    ...(payables?.vendors || []),
+                    ...(payables?.deliveryPartners || []),
+                    ...(payables?.technicians || [])
                 ];
                 const matched = allItems.find(i => i.paymentId === paymentId || String(i._id) === String(paymentId));
                 if (matched) {
@@ -869,6 +1019,21 @@ router.post('/process', auth, async (req, res) => {
                         amount: matched.payableAmount,
                         paymentPurpose: matched.paymentPurpose,
                         sourceReference: matched.sourceReference,
+                        status: 'PROCESSING'
+                    });
+                    await payment.save();
+                } else if (authSession && authSession.amount > 0) {
+                    // Fallback to authorized session parameters
+                    payment = new Payment({
+                        paymentId,
+                        paymentType: 'paid',
+                        paymentCategory: inferPaymentCategory(authSession.recipientType || 'Vendor'),
+                        recipientName: authSession.recipientName || 'Authorized Recipient',
+                        recipientType: authSession.recipientType || 'Vendor',
+                        recipientId: authSession.recipientId || paymentId,
+                        amount: authSession.amount,
+                        paymentPurpose: notes || 'Authorized financial disbursement',
+                        sourceReference: `TXN-${paymentId}`,
                         status: 'PROCESSING'
                     });
                     await payment.save();
@@ -905,8 +1070,10 @@ router.post('/process', auth, async (req, res) => {
 
         await payment.save();
 
-        // Single-use token invalidated
-        verificationSessionStore.delete(verificationToken);
+        // Invalidate Authorization Session in MongoDB
+        authSession.isExecuted = true;
+        authSession.executedAt = new Date();
+        await authSession.save();
 
         // Sync with source model if applicable (e.g. Settlement / Order)
         if (payment.sourceModel === 'Settlement' && payment.sourceId) {

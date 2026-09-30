@@ -9,26 +9,6 @@ const PaymentAuditLogSchema = new mongoose.Schema({
     action: {
         type: String,
         required: true,
-        enum: [
-            'payment_created',
-            'payment_viewed',
-            'payment_assigned',
-            'otp_requested',
-            'otp_sent',
-            'otp_verified',
-            'otp_failed',
-            'pin_setup',
-            'pin_verified',
-            'pin_failed',
-            'payment_confirmed',
-            'payment_processed',
-            'payment_held',
-            'payment_released_hold',
-            'payment_failed',
-            'payment_cancelled',
-            'payment_delegated',
-            'payment_reassigned'
-        ],
         index: true
     },
     user: {
