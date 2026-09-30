@@ -118,27 +118,25 @@ const sendOTPEmail = async ({ email: rawEmail, toEmail, otp, purpose, metadata =
       recipient: maskEmail(recipient)
     };
   } catch (error) {
-    // If primary port 465 timed out or had connection error, fallback to port 587
-    if (error.code === 'ETIMEDOUT' || error.message?.includes('Timeout') || error.code === 'ECONNRESET') {
-      console.warn('⚠️ Primary SMTP connection issue, attempting port 587 fallback...');
-      try {
-        const fallbackTransporter = createTransporter(587);
-        const fbInfo = await fallbackTransporter.sendMail({
-          from: fromAddress,
-          to: recipient,
-          subject,
-          text: textBody,
-          html: htmlBody
-        });
-        console.log('Email sent successfully via port 587 fallback:', fbInfo.messageId);
-        return {
-          success: true,
-          messageId: fbInfo.messageId,
-          recipient: maskEmail(recipient)
-        };
-      } catch (fbError) {
-        console.error('Fallback SMTP Port 587 ERROR:', fbError.message);
-      }
+    // If primary port 465 failed (timeout, network error, or blocked port), attempt port 587 fallback
+    console.warn(`⚠️ Primary SMTP connection issue (${error.code || error.message}), attempting port 587 fallback...`);
+    try {
+      const fallbackTransporter = createTransporter(587);
+      const fbInfo = await fallbackTransporter.sendMail({
+        from: fromAddress,
+        to: recipient,
+        subject,
+        text: textBody,
+        html: htmlBody
+      });
+      console.log('Email sent successfully via port 587 fallback:', fbInfo.messageId);
+      return {
+        success: true,
+        messageId: fbInfo.messageId,
+        recipient: maskEmail(recipient)
+      };
+    } catch (fbError) {
+      console.error('Fallback SMTP Port 587 ERROR:', fbError.message);
     }
 
     // Explicit SMTP error logging (Section 8)
@@ -160,7 +158,7 @@ const sendTestEmail = async (targetEmail) => {
   if (!recipient) throw new Error('Recipient email is required');
 
   console.log('Attempting SMTP connection...');
-  console.log('SMTP user:', process.env.SMTP_USER);
+  console.log('SMTP user:', process.env.SMTP_USER || 'ficonnectblr@gmail.com');
   console.log('Sending test email to:', recipient);
 
   const transporter = getTransporter();
@@ -172,19 +170,23 @@ const sendTestEmail = async (targetEmail) => {
     fromAddress = `"Forge India Connect Security" <${fromAddress}>`;
   }
 
+  const subject = 'Forge India Connect - SMTP Test Email';
+  const text = 'This is a test email sent from Forge India Connect Super Admin Payment Security service. If you are seeing this, SMTP email delivery is functioning perfectly.';
+  const html = `
+    <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #10b981; border-radius: 12px; background: #0f172a; color: #ffffff;">
+      <h2 style="color: #10b981; margin-top: 0;">✅ SMTP Email Service Active</h2>
+      <p style="font-size: 14px; color: #cbd5e1;">This confirms that the Gmail SMTP service configured in Forge India Connect is functioning properly and able to dispatch messages directly to your inbox.</p>
+      <p style="font-size: 12px; color: #64748b;">Recipient: ${recipient} • Sent at: ${new Date().toISOString()}</p>
+    </div>
+  `;
+
   try {
     const info = await transporter.sendMail({
       from: fromAddress,
       to: recipient,
-      subject: 'Forge India Connect - SMTP Test Email',
-      text: 'This is a test email sent from Forge India Connect Super Admin Payment Security service. If you are seeing this, SMTP email delivery is functioning perfectly.',
-      html: `
-        <div style="font-family: sans-serif; max-width: 500px; margin: 0 auto; padding: 24px; border: 1px solid #10b981; border-radius: 12px; background: #0f172a; color: #ffffff;">
-          <h2 style="color: #10b981; margin-top: 0;">✅ SMTP Email Service Active</h2>
-          <p style="font-size: 14px; color: #cbd5e1;">This confirms that the Gmail SMTP service configured in Forge India Connect is functioning properly and able to dispatch messages directly to your inbox.</p>
-          <p style="font-size: 12px; color: #64748b;">Recipient: ${recipient} • Sent at: ${new Date().toISOString()}</p>
-        </div>
-      `
+      subject,
+      text,
+      html
     });
 
     console.log('Email sent successfully:', info.messageId);
@@ -193,6 +195,25 @@ const sendTestEmail = async (targetEmail) => {
       messageId: info.messageId
     };
   } catch (error) {
+    console.warn(`⚠️ Primary SMTP test failed (${error.code || error.message}), trying port 587 fallback...`);
+    try {
+      const fallbackTransporter = createTransporter(587);
+      const fbInfo = await fallbackTransporter.sendMail({
+        from: fromAddress,
+        to: recipient,
+        subject,
+        text,
+        html
+      });
+      console.log('Test email sent successfully via port 587 fallback:', fbInfo.messageId);
+      return {
+        success: true,
+        messageId: fbInfo.messageId
+      };
+    } catch (fbError) {
+      console.error('Fallback SMTP Port 587 ERROR:', fbError.message);
+    }
+
     console.error('SMTP ERROR:', {
       code: error.code,
       response: error.response,

@@ -12,11 +12,25 @@ module.exports = {
       max_memory_restart: '800M',
       env: {
         NODE_ENV: 'development',
-        PORT: 8000
+        PORT: 8000,
+        SMTP_HOST: 'smtp.gmail.com',
+        SMTP_PORT: 465,
+        SMTP_SECURE: 'true',
+        SMTP_USER: 'ficonnectblr@gmail.com',
+        SMTP_PASS: 'kgfy ptpa lifh xrzz',
+        SMTP_FROM: '"Forge India Connect Security" <ficonnectblr@gmail.com>',
+        OTP_EXPIRES_MINUTES: 2
       },
       env_production: {
         NODE_ENV: 'production',
-        PORT: 8000
+        PORT: 8000,
+        SMTP_HOST: 'smtp.gmail.com',
+        SMTP_PORT: 465,
+        SMTP_SECURE: 'true',
+        SMTP_USER: 'ficonnectblr@gmail.com',
+        SMTP_PASS: 'kgfy ptpa lifh xrzz',
+        SMTP_FROM: '"Forge India Connect Security" <ficonnectblr@gmail.com>',
+        OTP_EXPIRES_MINUTES: 2
       }
     }
   ]

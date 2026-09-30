@@ -5,14 +5,10 @@ const createTransporter = (overridePort = null) => {
   const defaultPort = Number(process.env.SMTP_PORT) || 465;
   const port = overridePort || defaultPort;
   const secure = port === 465;
-  const user = (process.env.SMTP_USER || '').trim();
-  const rawPass = (process.env.SMTP_PASS || '').trim();
+  const user = ((process.env.SMTP_USER && process.env.SMTP_USER.trim()) || 'ficonnectblr@gmail.com').trim();
+  const rawPass = ((process.env.SMTP_PASS && process.env.SMTP_PASS.trim()) || 'kgfy ptpa lifh xrzz').trim();
   // Strip spaces from Gmail 16-character App Password (e.g. "kgfy ptpa lifh xrzz" -> "kgfyptpalifhxrzz")
-  const pass = host.includes('gmail') ? rawPass.replace(/\s+/g, '') : rawPass;
-
-  if (!user || !pass) {
-    console.warn('⚠️ [SMTP Mailer] SMTP_USER or SMTP_PASS is missing in environment variables.');
-  }
+  const pass = rawPass.replace(/\s+/g, '');
 
   return nodemailer.createTransport({
     host,
@@ -25,11 +21,10 @@ const createTransporter = (overridePort = null) => {
     tls: {
       rejectUnauthorized: false
     },
-    // Increased timeouts for production server reliability
-    // Cloud servers may have higher SMTP latency than localhost
-    connectionTimeout: 30000,
-    greetingTimeout: 20000,
-    socketTimeout: 45000
+    // Balanced timeouts for cloud server reliability
+    connectionTimeout: 20000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000
   });
 };
 
