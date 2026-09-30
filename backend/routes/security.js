@@ -231,7 +231,7 @@ router.post('/send-otp', auth, async (req, res) => {
 
     const otp = generateOtp();
     const otpHash = hashOtp(otp, cleanEmail, selectedPurpose);
-    const expiresMinutes = parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 5;
+    const expiresMinutes = parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 2;
     const expiresAt = new Date(now + expiresMinutes * 60 * 1000);
 
     // Invalidate older unverified OTPs for this email and purpose

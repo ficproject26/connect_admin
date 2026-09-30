@@ -296,7 +296,11 @@ router.post('/email/setup/verify-otp', [auth, requireAdmin], async (req, res) =>
         if (new Date() > new Date(otpRecord.expiresAt)) {
             otpRecord.isUsed = true;
             await otpRecord.save();
-            return res.status(400).json({ success: false, msg: 'Verification code has expired. Please request a new code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please request a new OTP.',
+                msg: 'OTP has expired. Please request a new OTP.'
+            });
         }
 
         if (otpRecord.attempts >= otpRecord.maxAttempts) {
@@ -513,8 +517,8 @@ router.post(['/email/change/verify-old-otp', '/verify-current-email-otp'], [auth
             await otpRecord.save();
             return res.status(400).json({
                 success: false,
-                message: 'OTP has expired. Please resend a new OTP.',
-                msg: 'OTP has expired. Please resend a new OTP.'
+                message: 'OTP has expired. Please request a new OTP.',
+                msg: 'OTP has expired. Please request a new OTP.'
             });
         }
 
@@ -736,8 +740,8 @@ router.post(['/email/change/verify-new-otp', '/verify-new-email-otp'], [auth, re
             await otpRecord.save();
             return res.status(400).json({
                 success: false,
-                message: 'OTP has expired. Please resend a new OTP.',
-                msg: 'OTP has expired. Please resend a new OTP.'
+                message: 'OTP has expired. Please request a new OTP.',
+                msg: 'OTP has expired. Please request a new OTP.'
             });
         }
 
@@ -926,7 +930,11 @@ router.post('/pin/setup/verify-and-save', [auth, requireAdmin], async (req, res)
         if (new Date() > new Date(otpRecord.expiresAt)) {
             otpRecord.isUsed = true;
             await otpRecord.save();
-            return res.status(400).json({ success: false, msg: 'Verification code has expired. Please request a new code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please request a new OTP.',
+                msg: 'OTP has expired. Please request a new OTP.'
+            });
         }
 
         if (otpRecord.attempts >= otpRecord.maxAttempts) {
@@ -1109,7 +1117,11 @@ router.post('/pin/change/verify-and-save', [auth, requireAdmin], async (req, res
         if (new Date() > new Date(otpRecord.expiresAt)) {
             otpRecord.isUsed = true;
             await otpRecord.save();
-            return res.status(400).json({ success: false, msg: 'Verification code has expired. Please request a new code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please request a new OTP.',
+                msg: 'OTP has expired. Please request a new OTP.'
+            });
         }
 
         if (otpRecord.attempts >= otpRecord.maxAttempts) {

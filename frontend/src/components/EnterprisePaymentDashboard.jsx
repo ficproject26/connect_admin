@@ -53,7 +53,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
   const [selectedPayable, setSelectedPayable] = useState(null);
   const [otpCode, setOtpCode] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
-  const [otpTimer, setOtpTimer] = useState(300);
+  const [otpTimer, setOtpTimer] = useState(120);
   const [verificationToken, setVerificationToken] = useState('');
   const [maskedAuthEmail, setMaskedAuthEmail] = useState('');
   const [securityPin, setSecurityPin] = useState(['', '', '', '', '', '']);
@@ -284,7 +284,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         const tokenVal = data.authorizationToken || data.verificationToken || '';
         if (tokenVal) setVerificationToken(tokenVal);
         toast(data.msg || `Verification OTP dispatched to ${data.maskedEmail || currentUser?.email || 'authorized email'}`);
-        setOtpTimer(300);
+        setOtpTimer(data.expiresIn || 120);
         setPayStep(2);
       } else {
         setPayError(data.msg || 'Failed to dispatch email verification code');

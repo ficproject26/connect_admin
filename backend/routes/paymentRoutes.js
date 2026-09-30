@@ -674,7 +674,7 @@ router.post('/send-otp', auth, async (req, res) => {
             userId: user._id,
             email: authEmail,
             otpHash,
-            expiresAt: new Date(now + 5 * 60 * 1000), // 5 min expiry
+            expiresAt: new Date(now + 2 * 60 * 1000), // 2 min expiry
             resendCount: (lastOtp?.resendCount || 0) + 1,
             lastResentAt: new Date(),
             sessionData: {
@@ -711,7 +711,7 @@ router.post('/send-otp', auth, async (req, res) => {
             maskedEmail: maskEmail(authEmail),
             authorizationToken,
             verificationToken: authorizationToken,
-            expiresIn: 300
+            expiresIn: 120
         });
 
     } catch (err) {
@@ -761,7 +761,11 @@ router.post('/verify-otp', auth, async (req, res) => {
         if (new Date() > new Date(otpRecord.expiresAt)) {
             otpRecord.isUsed = true;
             await otpRecord.save();
-            return res.status(400).json({ success: false, msg: 'Verification code has expired. Please request a new code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please request a new OTP.',
+                msg: 'OTP has expired. Please request a new OTP.'
+            });
         }
 
         if (otpRecord.attempts >= otpRecord.maxAttempts) {
