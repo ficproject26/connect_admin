@@ -363,6 +363,7 @@ router.post('/email/setup/verify-otp', [auth, requireAdmin], async (req, res) =>
 // Step 1: Send OTP to CURRENT verified email
 router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/request-current-email-otp'], [auth, requireAdmin], async (req, res) => {
     let currentEmail = null;
+    let newOtpRecord = null;
     try {
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.paymentAuthorizationEmail) {
@@ -373,6 +374,13 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
             });
         }
         currentEmail = settings.paymentAuthorizationEmail;
+
+        // Reset any stale emailChangeOldVerified flag from a previous incomplete flow
+        if (settings.emailChangeOldVerified) {
+            settings.emailChangeOldVerified = false;
+            settings.tempNewEmail = null;
+            await settings.save();
+        }
 
         // Check throttle: 30s resend cooldown
         const lastOtp = await PaymentSecurityOtp.findOne({
@@ -401,7 +409,11 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
             { $set: { isUsed: true } }
         );
 
-        await PaymentSecurityOtp.create({
+        // CRITICAL: Save OTP to MongoDB BEFORE sending email.
+        // The OTP record must persist even if the SMTP call fails transiently.
+        // The user can use "Resend OTP" to get a new code; we must NOT delete
+        // this record on SMTP failure as that would cause "No active OTP found".
+        newOtpRecord = await PaymentSecurityOtp.create({
             purpose: 'PAYMENT_AUTH_EMAIL_CHANGE',
             userId: req.adminUser._id,
             email: currentEmail,
@@ -411,13 +423,26 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
             lastResentAt: new Date()
         });
 
-        await sendPaymentSecurityEmail({
-            toEmail: currentEmail,
-            purpose: 'PAYMENT_AUTH_EMAIL_CHANGE',
-            otp
-        });
+        // Send email AFTER OTP is persisted. If SMTP fails transiently, return error
+        // WITHOUT deleting the OTP record. The user can click "Resend OTP" to retry.
+        try {
+            await sendPaymentSecurityEmail({
+                toEmail: currentEmail,
+                purpose: 'PAYMENT_AUTH_EMAIL_CHANGE',
+                otp
+            });
+        } catch (smtpErr) {
+            console.error('[OTP EMAIL] SMTP dispatch failed — OTP record preserved for resend. Error:', smtpErr.message);
+            // Mark the OTP record as needing resend (not invalidated)
+            // Do NOT delete the OTP — preserve it so the user can resend.
+            return res.status(500).json({
+                success: false,
+                message: 'Unable to send OTP email. Please try again.',
+                msg: 'Unable to send OTP email. Please use the Resend OTP button to retry.'
+            });
+        }
 
-        await logSecurityAudit(req, 'otp_sent', `Email change authorization OTP sent to current email: ${currentEmail}`);
+        await logSecurityAudit(req, 'otp_sent', `Email change authorization OTP sent to current email: ${maskEmail(currentEmail)}`).catch(() => {});
 
         return res.json({
             success: true,
@@ -431,7 +456,9 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
         });
     } catch (err) {
         console.error('Error requesting current email OTP:', err.message || err);
-        if (currentEmail) {
+        // Only delete OTP if it was never created (pre-creation error)
+        // Do NOT delete if newOtpRecord was set — that means OTP exists and SMTP is the only issue
+        if (currentEmail && !newOtpRecord) {
             await PaymentSecurityOtp.deleteMany({ email: currentEmail, purpose: { $in: ['PAYMENT_AUTH_EMAIL_CHANGE', 'CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, isUsed: false }).catch(() => {});
             await OTPVerification.deleteMany({ email: currentEmail, purpose: { $in: ['PAYMENT_AUTH_EMAIL_CHANGE', 'CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, verified: false }).catch(() => {});
         }
@@ -546,6 +573,7 @@ router.post(['/email/change/verify-old-otp', '/verify-current-email-otp'], [auth
 // Step 3: Send OTP to the NEW email address
 router.post(['/email/change/request-new-otp', '/send-new-email-otp', '/request-new-email-otp'], [auth, requireAdmin], async (req, res) => {
     let cleanNewEmail = null;
+    let newOtpRecord = null;
     try {
         const { newEmail } = req.body;
         if (!isValidEmail(newEmail)) {
@@ -601,7 +629,8 @@ router.post(['/email/change/request-new-otp', '/send-new-email-otp', '/request-n
             { $set: { isUsed: true } }
         );
 
-        await PaymentSecurityOtp.create({
+        // CRITICAL: Save OTP before sending email - preserve record on SMTP failure
+        newOtpRecord = await PaymentSecurityOtp.create({
             purpose: 'NEW_EMAIL_CHANGE',
             userId: req.adminUser._id,
             email: cleanNewEmail,
@@ -615,13 +644,22 @@ router.post(['/email/change/request-new-otp', '/send-new-email-otp', '/request-n
         settings.tempNewEmail = cleanNewEmail;
         await settings.save();
 
-        await sendPaymentSecurityEmail({
-            toEmail: cleanNewEmail,
-            purpose: 'NEW_EMAIL_CHANGE',
-            otp
-        });
+        try {
+            await sendPaymentSecurityEmail({
+                toEmail: cleanNewEmail,
+                purpose: 'NEW_EMAIL_CHANGE',
+                otp
+            });
+        } catch (smtpErr) {
+            console.error('[OTP EMAIL] New email SMTP failed — OTP preserved. Error:', smtpErr.message);
+            return res.status(500).json({
+                success: false,
+                message: 'Unable to send OTP to new email address. Please try again.',
+                msg: 'Unable to send OTP to new email address. Please use the Resend OTP button to retry.'
+            });
+        }
 
-        await logSecurityAudit(req, 'otp_sent', `Email change new OTP sent to new email: ${cleanNewEmail}`);
+        await logSecurityAudit(req, 'otp_sent', `Email change new OTP sent to new email: ${maskEmail(cleanNewEmail)}`).catch(() => {});
 
         return res.json({
             success: true,
@@ -635,7 +673,7 @@ router.post(['/email/change/request-new-otp', '/send-new-email-otp', '/request-n
         });
     } catch (err) {
         console.error('Error requesting new email OTP:', err.message || err);
-        if (cleanNewEmail) {
+        if (cleanNewEmail && !newOtpRecord) {
             await PaymentSecurityOtp.deleteMany({ email: cleanNewEmail, purpose: { $in: ['NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_NEW'] }, isUsed: false }).catch(() => {});
             await OTPVerification.deleteMany({ email: cleanNewEmail, purpose: { $in: ['NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_NEW'] }, verified: false }).catch(() => {});
         }
@@ -772,6 +810,7 @@ router.post(['/email/change/verify-new-otp', '/verify-new-email-otp'], [auth, re
 // Step 1: Request OTP to Set/Change Transaction PIN
 router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => {
     let email = null;
+    let newOtpRecord = null;
     try {
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.paymentAuthorizationEmail) {
@@ -809,7 +848,8 @@ router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => 
             { $set: { isUsed: true } }
         );
 
-        await PaymentSecurityOtp.create({
+        // CRITICAL: Save OTP before sending email - preserve record on SMTP failure
+        newOtpRecord = await PaymentSecurityOtp.create({
             purpose: 'TRANSACTION_PIN_SETUP',
             userId: req.adminUser._id,
             email,
@@ -819,13 +859,18 @@ router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => 
             lastResentAt: new Date()
         });
 
-        await sendPaymentSecurityEmail({
-            toEmail: email,
-            purpose: 'TRANSACTION_PIN_SETUP',
-            otp
-        });
+        try {
+            await sendPaymentSecurityEmail({
+                toEmail: email,
+                purpose: 'TRANSACTION_PIN_SETUP',
+                otp
+            });
+        } catch (smtpErr) {
+            console.error('[OTP EMAIL] PIN setup SMTP failed — OTP preserved. Error:', smtpErr.message);
+            return res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP email for PIN setup. Please use the Resend OTP button to retry.' });
+        }
 
-        await logSecurityAudit(req, 'otp_sent', `Transaction PIN setup OTP sent to ${email}`);
+        await logSecurityAudit(req, 'otp_sent', `Transaction PIN setup OTP sent to ${maskEmail(email)}`).catch(() => {});
 
         res.json({
             success: true,
@@ -837,7 +882,7 @@ router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => 
         });
     } catch (err) {
         console.error('Error requesting PIN setup OTP:', err.message || err);
-        if (email) {
+        if (email && !newOtpRecord) {
             await PaymentSecurityOtp.deleteMany({ email, purpose: 'TRANSACTION_PIN_SETUP', isUsed: false }).catch(() => {});
             await OTPVerification.deleteMany({ email, purpose: 'TRANSACTION_PIN_SETUP', verified: false }).catch(() => {});
         }
@@ -939,6 +984,7 @@ router.post('/pin/setup/verify-and-save', [auth, requireAdmin], async (req, res)
 // Request OTP to CHANGE Transaction PIN
 router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) => {
     let email = null;
+    let newOtpRecord = null;
     try {
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.paymentAuthorizationEmail) {
@@ -982,7 +1028,8 @@ router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) =>
             { $set: { isUsed: true } }
         );
 
-        await PaymentSecurityOtp.create({
+        // CRITICAL: Save OTP before sending email - preserve record on SMTP failure
+        newOtpRecord = await PaymentSecurityOtp.create({
             purpose: 'TRANSACTION_PIN_CHANGE',
             userId: req.adminUser._id,
             email,
@@ -992,13 +1039,18 @@ router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) =>
             lastResentAt: new Date()
         });
 
-        await sendPaymentSecurityEmail({
-            toEmail: email,
-            purpose: 'TRANSACTION_PIN_CHANGE',
-            otp
-        });
+        try {
+            await sendPaymentSecurityEmail({
+                toEmail: email,
+                purpose: 'TRANSACTION_PIN_CHANGE',
+                otp
+            });
+        } catch (smtpErr) {
+            console.error('[OTP EMAIL] PIN change SMTP failed — OTP preserved. Error:', smtpErr.message);
+            return res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP email for PIN change. Please use the Resend OTP button to retry.' });
+        }
 
-        await logSecurityAudit(req, 'otp_sent', `Transaction PIN change OTP sent to ${email}`);
+        await logSecurityAudit(req, 'otp_sent', `Transaction PIN change OTP sent to ${maskEmail(email)}`).catch(() => {});
 
         res.json({
             success: true,
@@ -1010,7 +1062,7 @@ router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) =>
         });
     } catch (err) {
         console.error('Error requesting PIN change OTP:', err.message || err);
-        if (email) {
+        if (email && !newOtpRecord) {
             await PaymentSecurityOtp.deleteMany({ email, purpose: 'TRANSACTION_PIN_CHANGE', isUsed: false }).catch(() => {});
             await OTPVerification.deleteMany({ email, purpose: 'TRANSACTION_PIN_CHANGE', verified: false }).catch(() => {});
         }

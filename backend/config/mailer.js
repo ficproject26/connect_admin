@@ -25,9 +25,11 @@ const createTransporter = (overridePort = null) => {
     tls: {
       rejectUnauthorized: false
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000
+    // Increased timeouts for production server reliability
+    // Cloud servers may have higher SMTP latency than localhost
+    connectionTimeout: 30000,
+    greetingTimeout: 20000,
+    socketTimeout: 45000
   });
 };
 
