@@ -377,7 +377,7 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
         // Check throttle: 30s resend cooldown
         const lastOtp = await PaymentSecurityOtp.findOne({
             email: currentEmail,
-            purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] },
+            purpose: { $in: ['PAYMENT_AUTH_EMAIL_CHANGE', 'CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] },
             isUsed: false
         }).sort({ createdAt: -1 });
 
@@ -392,17 +392,17 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
         }
 
         const otp = generateOtp();
-        const otpHash = hashOtp(otp, currentEmail, 'CURRENT_EMAIL_CHANGE');
+        const otpHash = hashOtp(otp, currentEmail, 'PAYMENT_AUTH_EMAIL_CHANGE');
         const expiresAt = new Date(now + 5 * 60 * 1000);
 
         // Invalidate previous active OTPs for this purpose
         await PaymentSecurityOtp.updateMany(
-            { email: currentEmail, purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, isUsed: false },
+            { email: currentEmail, purpose: { $in: ['PAYMENT_AUTH_EMAIL_CHANGE', 'CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, isUsed: false },
             { $set: { isUsed: true } }
         );
 
         await PaymentSecurityOtp.create({
-            purpose: 'CURRENT_EMAIL_CHANGE',
+            purpose: 'PAYMENT_AUTH_EMAIL_CHANGE',
             userId: req.adminUser._id,
             email: currentEmail,
             otpHash,
@@ -413,7 +413,7 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
 
         await sendPaymentSecurityEmail({
             toEmail: currentEmail,
-            purpose: 'CURRENT_EMAIL_CHANGE',
+            purpose: 'PAYMENT_AUTH_EMAIL_CHANGE',
             otp
         });
 
@@ -427,18 +427,18 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
             expiresIn: 300,
             maskedEmail: maskEmail(currentEmail),
             currentEmail: currentEmail,
-            purpose: 'CURRENT_EMAIL_CHANGE'
+            purpose: 'PAYMENT_AUTH_EMAIL_CHANGE'
         });
     } catch (err) {
         console.error('Error requesting current email OTP:', err.message || err);
         if (currentEmail) {
-            await PaymentSecurityOtp.deleteMany({ email: currentEmail, purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, isUsed: false }).catch(() => {});
-            await OTPVerification.deleteMany({ email: currentEmail, purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, verified: false }).catch(() => {});
+            await PaymentSecurityOtp.deleteMany({ email: currentEmail, purpose: { $in: ['PAYMENT_AUTH_EMAIL_CHANGE', 'CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, isUsed: false }).catch(() => {});
+            await OTPVerification.deleteMany({ email: currentEmail, purpose: { $in: ['PAYMENT_AUTH_EMAIL_CHANGE', 'CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, verified: false }).catch(() => {});
         }
         return res.status(500).json({
             success: false,
             message: 'Unable to send OTP email. Please try again.',
-            msg: 'Unable to send OTP to current email. Please try again.'
+            msg: 'Unable to send OTP email. Please try again.'
         });
     }
 });
@@ -469,7 +469,7 @@ router.post(['/email/change/verify-old-otp', '/verify-current-email-otp'], [auth
 
         const otpRecord = await PaymentSecurityOtp.findOne({
             email: currentEmail,
-            purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] },
+            purpose: { $in: ['PAYMENT_AUTH_EMAIL_CHANGE', 'CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] },
             isUsed: false
         }).sort({ createdAt: -1 });
 
@@ -501,9 +501,10 @@ router.post(['/email/change/verify-old-otp', '/verify-current-email-otp'], [auth
             });
         }
 
-        const isMatch = verifyOtpHash(cleanOtp, currentEmail, otpRecord.purpose || 'CURRENT_EMAIL_CHANGE', otpRecord.otpHash) ||
-                        verifyOtpHash(cleanOtp, currentEmail, 'PAYMENT_EMAIL_CHANGE_OLD', otpRecord.otpHash) ||
-                        verifyOtpHash(cleanOtp, currentEmail, 'CURRENT_EMAIL_CHANGE', otpRecord.otpHash);
+        const isMatch = verifyOtpHash(cleanOtp, currentEmail, otpRecord.purpose || 'PAYMENT_AUTH_EMAIL_CHANGE', otpRecord.otpHash) ||
+                        verifyOtpHash(cleanOtp, currentEmail, 'PAYMENT_AUTH_EMAIL_CHANGE', otpRecord.otpHash) ||
+                        verifyOtpHash(cleanOtp, currentEmail, 'CURRENT_EMAIL_CHANGE', otpRecord.otpHash) ||
+                        verifyOtpHash(cleanOtp, currentEmail, 'PAYMENT_EMAIL_CHANGE_OLD', otpRecord.otpHash);
 
         if (!isMatch) {
             otpRecord.attempts += 1;
@@ -733,7 +734,7 @@ router.post(['/email/change/verify-new-otp', '/verify-new-email-otp'], [auth, re
 
         // Invalidate all previous email change OTPs
         await PaymentSecurityOtp.updateMany(
-            { purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD', 'PAYMENT_EMAIL_CHANGE_NEW'] }, isUsed: false },
+            { purpose: { $in: ['PAYMENT_AUTH_EMAIL_CHANGE', 'CURRENT_EMAIL_CHANGE', 'NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD', 'PAYMENT_EMAIL_CHANGE_NEW'] }, isUsed: false },
             { $set: { isUsed: true } }
         );
 

@@ -345,7 +345,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
       }
     } catch (err) {
       console.error('Request current email OTP error:', err);
-      const errorMsg = 'Unable to send OTP to current email. Please try again.';
+      const errorMsg = 'Unable to send OTP email. Please try again.';
       setError(errorMsg);
       setModalError(errorMsg);
     } finally {

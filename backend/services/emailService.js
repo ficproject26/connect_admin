@@ -1,4 +1,4 @@
-const { getTransporter } = require('../config/mailer');
+const { getTransporter, createTransporter } = require('../config/mailer');
 const { OTP_EXPIRES_MINUTES, maskEmail } = require('./otpService');
 
 /**
@@ -19,6 +19,7 @@ const sendOTPEmail = async ({ email: rawEmail, toEmail, otp, purpose, metadata =
       subject = 'Payment Authorization Email Setup OTP';
       actionDesc = 'configuring the official Payment Authorization Email for the Admin Portal';
       break;
+    case 'PAYMENT_AUTH_EMAIL_CHANGE':
     case 'CURRENT_EMAIL_CHANGE':
     case 'EMAIL_CHANGE_OLD':
     case 'PAYMENT_EMAIL_CHANGE_OLD':
@@ -117,6 +118,29 @@ const sendOTPEmail = async ({ email: rawEmail, toEmail, otp, purpose, metadata =
       recipient: maskEmail(recipient)
     };
   } catch (error) {
+    // If primary port 465 timed out or had connection error, fallback to port 587
+    if (error.code === 'ETIMEDOUT' || error.message?.includes('Timeout') || error.code === 'ECONNRESET') {
+      console.warn('⚠️ Primary SMTP connection issue, attempting port 587 fallback...');
+      try {
+        const fallbackTransporter = createTransporter(587);
+        const fbInfo = await fallbackTransporter.sendMail({
+          from: fromAddress,
+          to: recipient,
+          subject,
+          text: textBody,
+          html: htmlBody
+        });
+        console.log('Email sent successfully via port 587 fallback:', fbInfo.messageId);
+        return {
+          success: true,
+          messageId: fbInfo.messageId,
+          recipient: maskEmail(recipient)
+        };
+      } catch (fbError) {
+        console.error('Fallback SMTP Port 587 ERROR:', fbError.message);
+      }
+    }
+
     // Explicit SMTP error logging (Section 8)
     console.error('SMTP ERROR:', {
       code: error.code,

@@ -10,6 +10,7 @@ const PaymentSecurityOtpSchema = new mongoose.Schema({
             'PAYMENT_EMAIL_CHANGE_NEW',
             'CURRENT_EMAIL_CHANGE',
             'NEW_EMAIL_CHANGE',
+            'PAYMENT_AUTH_EMAIL_CHANGE',
             'TRANSACTION_PIN_SETUP',
             'TRANSACTION_PIN_CHANGE',
             'PAYMENT_AUTHORIZATION'
