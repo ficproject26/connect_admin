@@ -428,6 +428,25 @@ const seedAdminUser = async () => {
         } else {
             console.log('✅ Super Admin exists in database');
         }
+
+        const districtAdmin = await User.findOne({ email: 'north@example.com' });
+        if (!districtAdmin) {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash('admin123', salt);
+            const newDistAdmin = new User({
+                name: 'North District Admin',
+                email: 'north@example.com',
+                password: hashedPassword,
+                role: 'admin',
+                adminRole: 'district-admin',
+                adminLevel: 'district',
+                level: 'district',
+                status: 'approved',
+                isActive: true
+            });
+            await newDistAdmin.save();
+            console.log('✅ Auto-seeded District Admin (north@example.com / admin123)');
+        }
     } catch (err) {
         console.error('Admin seed check failed:', err.message);
     }

@@ -748,7 +748,7 @@ export default function AgentDirectoryModule({
                           </span>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {st.stateAgents.map(ag => (
-                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="state" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />
+                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="state" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} compact={false} />
                             ))}
                           </div>
                         </div>
@@ -854,7 +854,7 @@ export default function AgentDirectoryModule({
                           </span>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {d.districtAgents.map(ag => (
-                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="district" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />
+                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="district" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} compact={false} />
                             ))}
                           </div>
                         </div>
@@ -956,7 +956,7 @@ export default function AgentDirectoryModule({
                           </span>
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                             {v.divisionAgents.map(ag => (
-                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="division" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />
+                              <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="division" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} compact={false} />
                             ))}
                           </div>
                         </div>
@@ -996,7 +996,7 @@ export default function AgentDirectoryModule({
                                 ) : (
                                   <div className="space-y-2">
                                     {p.pincodeAgents.map(ag => (
-                                      <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="pincode" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />
+                                      <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="pincode" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} compact={false} />
                                     ))}
                                   </div>
                                 )}
@@ -1056,7 +1056,7 @@ export default function AgentDirectoryModule({
                           {st.stateAgents.length > 0 && (
                             <div className="px-4 pt-3 pb-2 space-y-2">
                               <p className="text-[10px] font-extrabold uppercase tracking-widest text-violet-500 flex items-center gap-1.5"><User className="w-3 h-3" /> State Level Agents ({st.stateAgents.length})</p>
-                              {st.stateAgents.map(ag => <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="state" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />)}
+                              {st.stateAgents.map(ag => <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="state" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} compact={true} />)}
                             </div>
                           )}
 
@@ -1086,7 +1086,7 @@ export default function AgentDirectoryModule({
                                     {dist.districtAgents.length > 0 && (
                                       <div className="px-4 pl-16 pt-3 pb-2 space-y-2">
                                         <p className="text-[10px] font-extrabold uppercase tracking-widest text-blue-500 flex items-center gap-1.5"><User className="w-3 h-3" /> District Agents ({dist.districtAgents.length})</p>
-                                        {dist.districtAgents.map(ag => <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="district" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />)}
+                                        {dist.districtAgents.map(ag => <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="district" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} compact={true} />)}
                                       </div>
                                     )}
 
@@ -1116,7 +1116,7 @@ export default function AgentDirectoryModule({
                                               {div.divisionAgents.length > 0 && (
                                                 <div className="px-4 pl-24 pt-3 pb-2 space-y-2">
                                                   <p className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-500 flex items-center gap-1.5"><User className="w-3 h-3" /> Division Agents ({div.divisionAgents.length})</p>
-                                                  {div.divisionAgents.map(ag => <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="division" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />)}
+                                                  {div.divisionAgents.map(ag => <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="division" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} compact={true} />)}
                                                 </div>
                                               )}
                                               {pincodeList.length === 0 && div.divisionAgents.length === 0 && <p className="text-[11px] text-slate-400 italic pl-24 pr-4 py-3">No pincode data.</p>}
@@ -1145,7 +1145,7 @@ export default function AgentDirectoryModule({
                                                       <div className="bg-white dark:bg-slate-900/80 border-t border-slate-100 dark:border-slate-800/60 pl-32 pr-4 pt-3 pb-3 space-y-2">
                                                         <p className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-500 flex items-center gap-1.5 mb-1.5"><User className="w-3 h-3" /> Pincode Agents ({pin.pincodeAgents.length})</p>
                                                         {pin.pincodeAgents.length > 0
-                                                          ? pin.pincodeAgents.map(ag => <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="pincode" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} />)
+                                                          ? pin.pincodeAgents.map(ag => <AgentLeafCard key={ag._id || ag.registrationId} agent={ag} level="pincode" onInspect={openAgentScorecard} onAction={handleOpenActionConfirm} compact={true} />)
                                                           : <p className="text-[11px] text-slate-400 italic">No agents registered under this pincode.</p>}
                                                       </div>
                                                     )}
@@ -1396,57 +1396,177 @@ export default function AgentDirectoryModule({
   );
 }
 
-// Agent Leaf Card — individual agent row/card
-function AgentLeafCard({ agent, level, onInspect, onAction, compact = true }) {
+// Agent Leaf Card — individual agent card/row
+function AgentLeafCard({ agent, level, onInspect, onAction, compact = false }) {
   const cfg = LEVEL_CONFIG[level] || LEVEL_CONFIG.pincode;
   const st = getStatusConfig(agent.status);
   const formattedId = agent.registrationId || (agent._id ? `REG-${String(agent._id).substring(0, 8).toUpperCase()}` : 'REG-N/A');
   const regDate = agent.createdAt ? new Date(agent.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
-  const territory = [agent.assignedState || agent.territory?.state, agent.assignedDistrict || agent.territory?.district, agent.assignedDivision || agent.territory?.division, (agent.assignedPincode?.code || agent.assignedPincode || agent.territory?.pincode)].filter(Boolean).join(' \u203a ');
+  const territory = [
+    agent.assignedState || agent.territory?.state,
+    agent.assignedDistrict || agent.territory?.district,
+    agent.assignedDivision || agent.territory?.division,
+    (agent.assignedPincode?.code || agent.assignedPincode || agent.territory?.pincode)
+  ].filter(Boolean).join(' \u203a ');
 
-  return (
-    <div className={`group relative bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md transition-all cursor-pointer border-l-4 ${cfg.accentBorder}`}
-      onClick={() => onInspect && onInspect(agent)}>
-      <div className={`flex ${compact ? 'items-center gap-3 px-3.5 py-3' : 'flex-col gap-3 p-4'}`}>
-        <div className={`flex items-center gap-3 ${compact ? 'flex-1 min-w-0' : ''}`}>
-          <div className={`shrink-0 ${compact ? 'w-9 h-9' : 'w-11 h-11'} rounded-xl ${cfg.bg} border ${cfg.border} flex items-center justify-center font-black text-base ${cfg.text}`}>
-            {(agent.name || 'A')[0].toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-[13px] text-slate-900 dark:text-slate-100 truncate">{agent.name}</span>
-              <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${cfg.badge} shrink-0`}>{cfg.label} AGENT</span>
-              <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${st.cls} shrink-0`}><span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />{st.label}</span>
+  if (!compact) {
+    return (
+      <div
+        className={`group relative bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md transition-all cursor-pointer border-l-4 ${cfg.accentBorder} flex flex-col justify-between p-4 gap-3.5`}
+        onClick={() => onInspect && onInspect(agent)}
+      >
+        {/* Top Header: Avatar + Name/ID + Status & Role Badges */}
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className={`shrink-0 w-10 h-10 rounded-xl ${cfg.bg} border ${cfg.border} flex items-center justify-center font-black text-sm ${cfg.text} shadow-xs`}>
+              {(agent.name || 'A')[0].toUpperCase()}
             </div>
-            <p className="text-[10px] font-mono text-slate-400 mt-0.5">{formattedId}</p>
+            <div className="min-w-0 flex-1">
+              <h4 className="font-bold text-[13px] text-slate-900 dark:text-slate-100 truncate leading-tight" title={agent.name}>
+                {agent.name}
+              </h4>
+              <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5" title={formattedId}>
+                {formattedId}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className={`inline-flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full ${st.cls}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+              {st.label}
+            </span>
+            <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md ${cfg.badge}`}>
+              {cfg.label} AGENT
+            </span>
           </div>
         </div>
 
-        {compact ? (
-          <div className="hidden md:flex items-center gap-4 shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
-            {agent.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3 shrink-0" />{agent.phone}</span>}
-            {territory && <span className="flex items-center gap-1 max-w-[180px] truncate"><MapPin className="w-3 h-3 shrink-0 text-amber-500" />{territory}</span>}
-            <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3 shrink-0" />{regDate}</span>
+        {/* Middle Details Grid */}
+        <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 dark:text-slate-400 bg-slate-50/80 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60">
+          <div className="flex items-center gap-1.5 min-w-0" title={agent.phone || 'No phone'}>
+            <Phone className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+            <span className="truncate font-medium">{agent.phone || 'No phone'}</span>
           </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
-            {agent.email && <span className="flex items-center gap-1 truncate col-span-2"><Mail className="w-3 h-3 shrink-0" />{agent.email}</span>}
-            {agent.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3 shrink-0" />{agent.phone}</span>}
-            <span className="flex items-center gap-1"><CalendarDays className="w-3 h-3 shrink-0" />{regDate}</span>
-            {territory && <span className="flex items-center gap-1 truncate col-span-2"><MapPin className="w-3 h-3 shrink-0 text-amber-500" />{territory}</span>}
+          <div className="flex items-center gap-1.5 min-w-0 justify-end" title={regDate}>
+            <CalendarDays className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+            <span className="truncate font-medium text-slate-500 dark:text-slate-400">{regDate}</span>
           </div>
-        )}
+
+          {agent.email && (
+            <div className="flex items-center gap-1.5 col-span-2 min-w-0 pt-1.5 border-t border-slate-200/50 dark:border-slate-700/40" title={agent.email}>
+              <Mail className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+              <span className="truncate font-medium">{agent.email}</span>
+            </div>
+          )}
+
+          {territory && (
+            <div className={`flex items-center gap-1.5 col-span-2 min-w-0 ${agent.email ? '' : 'pt-1.5 border-t border-slate-200/50 dark:border-slate-700/40'}`} title={territory}>
+              <MapPin className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+              <span className="truncate font-medium text-slate-700 dark:text-slate-300">{territory}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom Actions Bar */}
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 gap-2" onClick={e => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={() => onInspect && onInspect(agent)}
+            className="h-7 px-2.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+            title="View Agent Scorecard"
+          >
+            <Eye className="w-3 h-3" /> Inspect
+          </button>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onAction && agent.status?.toLowerCase() === 'suspended' ? (
+              <>
+                <button type="button" onClick={() => onAction(agent, 'reactivate')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 transition-colors cursor-pointer">Reactivate</button>
+                <button type="button" onClick={() => onAction(agent, 'revoke')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors cursor-pointer">Revoke</button>
+              </>
+            ) : onAction && !['revoked', 'rejected'].includes(agent.status?.toLowerCase()) ? (
+              <>
+                <button type="button" onClick={() => onAction(agent, 'suspend')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 border border-amber-500/20 transition-colors cursor-pointer">Suspend</button>
+                <button type="button" onClick={() => onAction(agent, 'revoke')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors cursor-pointer">Revoke</button>
+              </>
+            ) : agent.status?.toLowerCase() === 'revoked' ? (
+              <span className="h-7 px-2.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center">Revoked</span>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Compact Row Mode (Accordion list rows)
+  return (
+    <div
+      className={`group relative bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-md transition-all cursor-pointer border-l-4 ${cfg.accentBorder}`}
+      onClick={() => onInspect && onInspect(agent)}
+    >
+      <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={`shrink-0 w-8 h-8 rounded-lg ${cfg.bg} border ${cfg.border} flex items-center justify-center font-black text-xs ${cfg.text}`}>
+            {(agent.name || 'A')[0].toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              <span className="font-bold text-[13px] text-slate-900 dark:text-slate-100 truncate" title={agent.name}>
+                {agent.name}
+              </span>
+              <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded ${cfg.badge} shrink-0`}>
+                {cfg.label}
+              </span>
+              <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${st.cls} shrink-0`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${st.dot}`} />
+                {st.label}
+              </span>
+            </div>
+            <p className="text-[10px] font-mono text-slate-400 truncate mt-0.5" title={formattedId}>
+              {formattedId}
+            </p>
+          </div>
+        </div>
+
+        <div className="hidden lg:flex items-center gap-4 shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
+          {agent.phone && (
+            <span className="flex items-center gap-1">
+              <Phone className="w-3 h-3 shrink-0" />
+              {agent.phone}
+            </span>
+          )}
+          {territory && (
+            <span className="flex items-center gap-1 max-w-[160px] truncate" title={territory}>
+              <MapPin className="w-3 h-3 shrink-0 text-amber-500" />
+              {territory}
+            </span>
+          )}
+          <span className="flex items-center gap-1">
+            <CalendarDays className="w-3 h-3 shrink-0" />
+            {regDate}
+          </span>
+        </div>
 
         <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-          <button type="button" onClick={() => onInspect && onInspect(agent)}
+          <button
+            type="button"
+            onClick={() => onInspect && onInspect(agent)}
             className="h-7 px-2.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 transition-colors flex items-center gap-1 cursor-pointer"
-            title="View Agent Scorecard"><Eye className="w-3 h-3" /> Inspect</button>
+            title="View Agent Scorecard"
+          >
+            <Eye className="w-3 h-3" /> Inspect
+          </button>
           {onAction && agent.status?.toLowerCase() === 'suspended' ? (
-            <><button type="button" onClick={() => onAction(agent, 'reactivate')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 transition-colors cursor-pointer">Reactivate</button>
-            <button type="button" onClick={() => onAction(agent, 'revoke')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors cursor-pointer">Revoke</button></>
+            <>
+              <button type="button" onClick={() => onAction(agent, 'reactivate')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-emerald-500/10 hover:bg-emerald-600 hover:text-white text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 transition-colors cursor-pointer">Reactivate</button>
+              <button type="button" onClick={() => onAction(agent, 'revoke')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors cursor-pointer">Revoke</button>
+            </>
           ) : onAction && !['revoked', 'rejected'].includes(agent.status?.toLowerCase()) ? (
-            <><button type="button" onClick={() => onAction(agent, 'suspend')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 border border-amber-500/20 transition-colors cursor-pointer">Suspend</button>
-            <button type="button" onClick={() => onAction(agent, 'revoke')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors cursor-pointer">Revoke</button></>
+            <>
+              <button type="button" onClick={() => onAction(agent, 'suspend')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-amber-500/10 hover:bg-amber-500 hover:text-white text-amber-700 dark:text-amber-400 border border-amber-500/20 transition-colors cursor-pointer">Suspend</button>
+              <button type="button" onClick={() => onAction(agent, 'revoke')} className="h-7 px-2 rounded-lg text-[10px] font-bold bg-rose-500/10 hover:bg-rose-600 hover:text-white text-rose-600 dark:text-rose-400 border border-rose-500/20 transition-colors cursor-pointer">Revoke</button>
+            </>
           ) : agent.status?.toLowerCase() === 'revoked' ? (
             <span className="h-7 px-2.5 text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center">Revoked</span>
           ) : null}

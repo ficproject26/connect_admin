@@ -22,7 +22,9 @@
   "devDependencies": {
     "cross-env": "^7.0.3",
     "electron": "^31.0.0",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.5"
   },
   "build": {
     "appId": "in.ficapp.connect-admin",
@@ -41,17 +43,26 @@
       {
         "from": "../frontend/dist",
         "to": "app/frontend/dist",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "../frontend/public",
         "to": "app/frontend/public",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
       "target": [
-        { "target": "nsis", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "assets/icon.ico",
       "requestedExecutionLevel": "requireAdministrator"
@@ -62,7 +73,6 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Connect App Admin",
-      "installerHeaderBitmap": "assets/header.bmp",
       "uninstallDisplayName": "Connect App Admin"
     },
     "mac": {
@@ -71,7 +81,10 @@
       "category": "public.app-category.business"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "assets",
       "category": "Office"
     }
