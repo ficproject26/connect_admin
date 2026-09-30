@@ -204,7 +204,7 @@ router.post('/email/setup/request-otp', [auth, requireAdmin], async (req, res) =
         // Generate and Hash OTP
         const otp = generateOtp();
         const otpHash = hashOtp(otp, cleanEmail, 'PAYMENT_EMAIL_SETUP');
-        const expiresAt = new Date(now + 5 * 60 * 1000); // 5 mins
+        const expiresAt = new Date(now + 2 * 60 * 1000); // 2 mins
 
         // Invalidate older setup OTPs
         await PaymentSecurityOtp.updateMany(
@@ -253,9 +253,9 @@ router.post('/email/setup/request-otp', [auth, requireAdmin], async (req, res) =
 
         res.json({
             success: true,
-            msg: `A verification OTP has been sent to ${cleanEmail}. Valid for 5 minutes.`,
+            msg: `A verification OTP has been sent to ${cleanEmail}. Valid for 2 minutes.`,
             maskedEmail: maskEmail(cleanEmail),
-            expiresIn: 300
+            expiresIn: 120
         });
     } catch (err) {
         console.error('Error requesting email setup OTP:', err.message || err);
@@ -401,7 +401,7 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
 
         const otp = generateOtp();
         const otpHash = hashOtp(otp, currentEmail, 'PAYMENT_AUTH_EMAIL_CHANGE');
-        const expiresAt = new Date(now + 5 * 60 * 1000);
+        const expiresAt = new Date(now + 2 * 60 * 1000); // 2 mins
 
         // Invalidate previous active OTPs for this purpose
         await PaymentSecurityOtp.updateMany(
@@ -449,7 +449,7 @@ router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/reque
             message: 'OTP sent successfully',
             msg: `A verification OTP has been sent to your current payment authorization email (${maskEmail(currentEmail)}).`,
             expiresAt: expiresAt.toISOString(),
-            expiresIn: 300,
+            expiresIn: 120,
             maskedEmail: maskEmail(currentEmail),
             currentEmail: currentEmail,
             purpose: 'PAYMENT_AUTH_EMAIL_CHANGE'
@@ -621,7 +621,7 @@ router.post(['/email/change/request-new-otp', '/send-new-email-otp', '/request-n
 
         const otp = generateOtp();
         const otpHash = hashOtp(otp, cleanNewEmail, 'NEW_EMAIL_CHANGE');
-        const expiresAt = new Date(now + 5 * 60 * 1000);
+        const expiresAt = new Date(now + 2 * 60 * 1000); // 2 mins
 
         // Invalidate previous active OTPs for this new email
         await PaymentSecurityOtp.updateMany(
@@ -666,7 +666,7 @@ router.post(['/email/change/request-new-otp', '/send-new-email-otp', '/request-n
             message: 'OTP sent successfully',
             msg: `A verification OTP has been sent to ${cleanNewEmail}.`,
             expiresAt: expiresAt.toISOString(),
-            expiresIn: 300,
+            expiresIn: 120,
             maskedEmail: maskEmail(cleanNewEmail),
             newEmail: cleanNewEmail,
             purpose: 'NEW_EMAIL_CHANGE'
@@ -841,7 +841,7 @@ router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => 
 
         const otp = generateOtp();
         const otpHash = hashOtp(otp, email, 'TRANSACTION_PIN_SETUP');
-        const expiresAt = new Date(now + 5 * 60 * 1000);
+        const expiresAt = new Date(now + 2 * 60 * 1000); // 2 mins
 
         await PaymentSecurityOtp.updateMany(
             { email, purpose: 'TRANSACTION_PIN_SETUP', isUsed: false },
@@ -878,7 +878,7 @@ router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => 
             msg: `A verification OTP has been sent to your payment authorization email (${maskEmail(email)}).`,
             expiresAt: expiresAt.toISOString(),
             maskedEmail: maskEmail(email),
-            expiresIn: 300
+            expiresIn: 120
         });
     } catch (err) {
         console.error('Error requesting PIN setup OTP:', err.message || err);
@@ -1021,7 +1021,7 @@ router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) =>
 
         const otp = generateOtp();
         const otpHash = hashOtp(otp, email, 'TRANSACTION_PIN_CHANGE');
-        const expiresAt = new Date(now + 5 * 60 * 1000);
+        const expiresAt = new Date(now + 2 * 60 * 1000); // 2 mins
 
         await PaymentSecurityOtp.updateMany(
             { email, purpose: 'TRANSACTION_PIN_CHANGE', isUsed: false },
@@ -1058,7 +1058,7 @@ router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) =>
             msg: `A verification OTP has been sent to your payment authorization email (${maskEmail(email)}).`,
             expiresAt: expiresAt.toISOString(),
             maskedEmail: maskEmail(email),
-            expiresIn: 300
+            expiresIn: 120
         });
     } catch (err) {
         console.error('Error requesting PIN change OTP:', err.message || err);

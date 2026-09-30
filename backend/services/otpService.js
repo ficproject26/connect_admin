@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
 const PEPPER_SECRET = process.env.JWT_SECRET || 'connect_secret_key_prod_2026';
-const OTP_EXPIRES_MINUTES = parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 5;
+const OTP_EXPIRES_MINUTES = parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 2;
 
 /**
  * Mask email for safe UI display (e.g. "admin@example.com" -> "a******@example.com")

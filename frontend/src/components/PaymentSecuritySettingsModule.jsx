@@ -225,7 +225,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
       const data = await res.json();
       if (res.ok && data.success) {
         setSetupEmailStep(2);
-        setSetupOtpTimer(300);
+        setSetupOtpTimer(120);
         toast(`Verification OTP dispatched to ${setupEmail}`, 'success');
       } else {
         const errorMsg = data.msg || data.message || 'Unable to send OTP. Please try again.';
@@ -330,7 +330,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         if (data.expiresAt) {
           setOtpExpiresAt(data.expiresAt);
         } else {
-          setOtpExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+          setOtpExpiresAt(new Date(Date.now() + 2 * 60 * 1000).toISOString());
         }
         setOtpPurpose(data.purpose || 'CURRENT_EMAIL_CHANGE');
         setResendCooldown(30);
@@ -442,7 +442,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         if (data.expiresAt) {
           setOtpExpiresAt(data.expiresAt);
         } else {
-          setOtpExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+          setOtpExpiresAt(new Date(Date.now() + 2 * 60 * 1000).toISOString());
         }
         setOtpPurpose(data.purpose || 'NEW_EMAIL_CHANGE');
         setResendCooldown(30);
@@ -540,7 +540,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
           if (data.expiresAt) {
             setOtpExpiresAt(data.expiresAt);
           } else {
-            setOtpExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+            setOtpExpiresAt(new Date(Date.now() + 2 * 60 * 1000).toISOString());
           }
           setResendCooldown(30);
           setCurrentEmailOtp('');
@@ -575,7 +575,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
           if (data.expiresAt) {
             setOtpExpiresAt(data.expiresAt);
           } else {
-            setOtpExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+            setOtpExpiresAt(new Date(Date.now() + 2 * 60 * 1000).toISOString());
           }
           setResendCooldown(30);
           setNewEmailOtp('');
@@ -619,7 +619,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setPinOtpTimer(300);
+        setPinOtpTimer(120);
         toast(`A verification OTP has been sent to ${data.maskedEmail || settings.maskedEmail}`, 'info');
       } else {
         setModalError(data.msg || data.message || 'Unable to send OTP. Please try again.');
@@ -703,7 +703,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setChangePinOtpTimer(300);
+        setChangePinOtpTimer(120);
         toast(`A verification OTP has been sent to ${data.maskedEmail || settings.maskedEmail}`, 'info');
       } else {
         setModalError(data.msg || data.message || 'Unable to send OTP. Please try again.');
