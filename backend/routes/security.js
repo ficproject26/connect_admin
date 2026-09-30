@@ -284,8 +284,15 @@ router.post('/send-otp', auth, async (req, res) => {
       expiresIn: expiresMinutes * 60
     });
   } catch (err) {
-    console.error('Error in POST /api/security/send-otp:', err);
-    res.status(500).json({ success: false, message: 'Failed to dispatch verification code.' });
+    console.error('Error in POST /api/security/send-otp:', err.message || err);
+    if (cleanEmail) {
+      await OTPVerification.deleteMany({ email: cleanEmail, purpose: selectedPurpose, verified: false }).catch(() => {});
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Unable to send OTP email',
+      msg: 'Unable to send OTP. Please try again.'
+    });
   }
 });
 

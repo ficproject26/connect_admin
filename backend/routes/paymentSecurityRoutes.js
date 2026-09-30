@@ -14,7 +14,8 @@ const {
     hashOtp,
     verifyOtpHash,
     sendPaymentSecurityEmail,
-    sendOTPEmail
+    sendOTPEmail,
+    sendTestEmail
 } = require('../utils/emailService');
 
 // Helper: Ensure user is authorized Admin
@@ -115,22 +116,30 @@ router.get('/status', [auth, requireAdmin], async (req, res) => {
             securityStatus = 'EMAIL_PENDING';
         }
 
-        res.json({
-            success: true,
+        const statusData = {
             configured: emailConfigured && pinConfigured,
             emailConfigured,
             emailVerified: Boolean(settings?.emailVerified),
             paymentAuthorizationEmail: settings?.paymentAuthorizationEmail || '',
+            email: settings?.paymentAuthorizationEmail || '',
             maskedEmail: settings?.paymentAuthorizationEmail ? maskEmail(settings.paymentAuthorizationEmail) : '',
             pinConfigured,
+            transactionPinConfigured: pinConfigured,
             isPinLocked,
             pinLockedUntil: isPinLocked ? settings.pinLockedUntil : null,
             securityStatus,
             updatedAt: settings?.updatedAt || null
+        };
+
+        res.json({
+            success: true,
+            data: statusData,
+            settings: statusData,
+            ...statusData
         });
     } catch (err) {
         console.error('Error fetching payment security status:', err);
-        res.status(500).json({ success: false, msg: 'Server error retrieving security status' });
+        res.status(500).json({ success: false, msg: 'Server error retrieving security status', message: 'Server error retrieving security status' });
     }
 });
 
@@ -229,8 +238,17 @@ router.post('/email/setup/request-otp', [auth, requireAdmin], async (req, res) =
             expiresIn: 300
         });
     } catch (err) {
-        console.error('Error requesting email setup OTP:', err);
-        res.status(500).json({ success: false, msg: 'Failed to dispatch verification code.' });
+        console.error('Error requesting email setup OTP:', err.message || err);
+        // Rollback unverified OTP so invalid records do not linger
+        if (cleanEmail) {
+            await PaymentSecurityOtp.deleteMany({ email: cleanEmail, purpose: 'PAYMENT_EMAIL_SETUP', isUsed: false }).catch(() => {});
+            await OTPVerification.deleteMany({ email: cleanEmail, purpose: 'PAYMENT_EMAIL_SETUP', verified: false }).catch(() => {});
+        }
+        res.status(500).json({
+            success: false,
+            message: 'Unable to send OTP email',
+            msg: 'Unable to send OTP. Please try again.'
+        });
     }
 });
 
@@ -377,8 +395,12 @@ router.post('/email/change/request-old-otp', [auth, requireAdmin], async (req, r
             expiresIn: 300
         });
     } catch (err) {
-        console.error('Error requesting old email OTP:', err);
-        res.status(500).json({ success: false, msg: 'Failed to send OTP to current email.' });
+        console.error('Error requesting old email OTP:', err.message || err);
+        if (currentEmail) {
+            await PaymentSecurityOtp.deleteMany({ email: currentEmail, purpose: 'PAYMENT_EMAIL_CHANGE_OLD', isUsed: false }).catch(() => {});
+            await OTPVerification.deleteMany({ email: currentEmail, purpose: 'PAYMENT_EMAIL_CHANGE_OLD', verified: false }).catch(() => {});
+        }
+        res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP to current email. Please try again.' });
     }
 });
 
@@ -522,8 +544,12 @@ router.post('/email/change/request-new-otp', [auth, requireAdmin], async (req, r
             expiresIn: 300
         });
     } catch (err) {
-        console.error('Error requesting new email OTP:', err);
-        res.status(500).json({ success: false, msg: 'Failed to send OTP to new email address.' });
+        console.error('Error requesting new email OTP:', err.message || err);
+        if (cleanNewEmail) {
+            await PaymentSecurityOtp.deleteMany({ email: cleanNewEmail, purpose: 'PAYMENT_EMAIL_CHANGE_NEW', isUsed: false }).catch(() => {});
+            await OTPVerification.deleteMany({ email: cleanNewEmail, purpose: 'PAYMENT_EMAIL_CHANGE_NEW', verified: false }).catch(() => {});
+        }
+        res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP to new email address. Please try again.' });
     }
 });
 
@@ -672,8 +698,12 @@ router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => 
             expiresIn: 300
         });
     } catch (err) {
-        console.error('Error requesting PIN setup OTP:', err);
-        res.status(500).json({ success: false, msg: 'Failed to dispatch verification code.' });
+        console.error('Error requesting PIN setup OTP:', err.message || err);
+        if (email) {
+            await PaymentSecurityOtp.deleteMany({ email, purpose: 'TRANSACTION_PIN_SETUP', isUsed: false }).catch(() => {});
+            await OTPVerification.deleteMany({ email, purpose: 'TRANSACTION_PIN_SETUP', verified: false }).catch(() => {});
+        }
+        res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP email for PIN setup. Please try again.' });
     }
 });
 
@@ -825,8 +855,12 @@ router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) =>
             expiresIn: 300
         });
     } catch (err) {
-        console.error('Error requesting PIN change OTP:', err);
-        res.status(500).json({ success: false, msg: 'Failed to dispatch verification code.' });
+        console.error('Error requesting PIN change OTP:', err.message || err);
+        if (email) {
+            await PaymentSecurityOtp.deleteMany({ email, purpose: 'TRANSACTION_PIN_CHANGE', isUsed: false }).catch(() => {});
+            await OTPVerification.deleteMany({ email, purpose: 'TRANSACTION_PIN_CHANGE', verified: false }).catch(() => {});
+        }
+        res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP email for PIN change. Please try again.' });
     }
 });
 
@@ -947,6 +981,37 @@ router.get('/audit-logs', [auth, requireAdmin], async (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ success: false, msg: 'Failed to retrieve security logs' });
+    }
+});
+
+// =========================================================================
+// 6. TEST EMAIL ENDPOINT (Section 9: Super Admin Protected Diagnostics)
+// =========================================================================
+router.post('/test-email', [auth, requireAdmin], async (req, res) => {
+    try {
+        const { email } = req.body;
+        const targetEmail = email || req.adminUser?.email;
+        if (!isValidEmail(targetEmail)) {
+            return res.status(400).json({ success: false, message: 'Valid email address is required for test email dispatch.' });
+        }
+        const cleanEmail = targetEmail.trim().toLowerCase();
+
+        await sendTestEmail(cleanEmail);
+
+        await logSecurityAudit(req, 'test_email_sent', `Super Admin dispatched SMTP test email to ${cleanEmail}`);
+
+        res.json({
+            success: true,
+            message: 'Test email sent successfully',
+            msg: 'Test email sent successfully'
+        });
+    } catch (err) {
+        console.error('SMTP Test Email Error:', err.message);
+        res.status(500).json({
+            success: false,
+            message: `Unable to send test email: ${err.message}`,
+            msg: `Unable to send test email: ${err.message}`
+        });
     }
 });
 

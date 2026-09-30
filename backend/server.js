@@ -596,7 +596,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 8004;
 
-// Connect Database, seed admin, then start server
+// Connect Database, verify SMTP mailer, seed admin, then start server
 const startServer = async () => {
     server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
     try {
@@ -604,8 +604,10 @@ const startServer = async () => {
         await seedAdminUser();
         await seedMainCategoriesIfNeeded();
         await syncSuspendedVendorProductsOnBoot();
+        const { verifyTransporter } = require('./config/mailer');
+        await verifyTransporter();
     } catch (err) {
-        console.error('Initialization warning (DB/Seed):', err.message);
+        console.error('Initialization warning (DB/Seed/SMTP):', err.message);
     }
 };
 

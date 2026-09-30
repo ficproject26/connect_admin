@@ -63,6 +63,13 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
     else console.log(`[${type.toUpperCase()}] ${msg}`);
   }, [onToast]);
 
+  const maskEmail = (em) => {
+    if (!em || !em.includes('@')) return em || '';
+    const [u, d] = em.split('@');
+    if (u.length <= 1) return `${u}******@${d}`;
+    return `${u[0]}******@${d}`;
+  };
+
   // 1. Fetch Current Security Settings from MongoDB via Backend API
   const fetchSettings = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
@@ -74,13 +81,25 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         }
       });
       const data = await res.json();
-      if (res.ok && data.success && data.settings) {
-        setSettings(data.settings);
+      const resolvedSettings = data?.settings || data?.data || (data?.success ? data : null);
+      if (res.ok && data?.success && resolvedSettings) {
+        setSettings({
+          paymentAuthorizationEmail: resolvedSettings.paymentAuthorizationEmail || resolvedSettings.email || '',
+          maskedEmail: resolvedSettings.maskedEmail || maskEmail(resolvedSettings.paymentAuthorizationEmail || resolvedSettings.email || ''),
+          emailVerified: Boolean(resolvedSettings.emailVerified || resolvedSettings.emailConfigured),
+          pinConfigured: Boolean(resolvedSettings.pinConfigured || resolvedSettings.transactionPinConfigured),
+          isPinLocked: Boolean(resolvedSettings.isPinLocked),
+          pinLockedUntil: resolvedSettings.pinLockedUntil || null,
+          securityStatus: resolvedSettings.securityStatus || 'UNCONFIGURED',
+          updatedAt: resolvedSettings.updatedAt || null
+        });
       } else {
-        if (!isSilent) toast(data.msg || 'Unable to fetch payment security status', 'error');
+        console.error('Payment security status error:', data);
+        if (!isSilent) toast(data?.msg || data?.message || 'Payment security service is currently unavailable.', 'error');
       }
     } catch (err) {
-      if (!isSilent) toast('Network error while querying payment security settings', 'error');
+      console.error('Payment security status error:', err);
+      if (!isSilent) toast('Payment security service is currently unavailable.', 'error');
     } finally {
       if (!isSilent) setLoading(false);
     }
@@ -156,6 +175,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ email: setupEmail.trim().toLowerCase() })
@@ -166,10 +186,14 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         setSetupOtpTimer(300);
         toast(`Verification OTP dispatched to ${setupEmail}`, 'success');
       } else {
-        setModalError(data.msg || 'Failed to dispatch email verification code');
+        const errorMsg = data.msg || data.message || 'Unable to send OTP. Please try again.';
+        setModalError(errorMsg);
+        toast(errorMsg, 'error');
       }
     } catch (err) {
-      setModalError('Network error while requesting verification OTP');
+      console.error('Request setup email OTP error:', err);
+      setModalError('Unable to send OTP. Please try again.');
+      toast('Unable to send OTP. Please try again.', 'error');
     } finally {
       setModalLoading(false);
     }
@@ -188,6 +212,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -202,9 +227,10 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         await fetchSettings(true);
         setTimeout(() => closeModal(), 1800);
       } else {
-        setModalError(data.msg || 'Invalid or expired verification OTP');
+        setModalError(data.msg || data.message || 'Invalid OTP. Please check your email and try again.');
       }
     } catch (err) {
+      console.error('Verify setup email OTP error:', err);
       setModalError('Network error verifying OTP code');
     } finally {
       setModalLoading(false);
@@ -226,6 +252,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -234,10 +261,11 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         setChangeOtpTimer(300);
         toast(`A verification OTP has been sent to your current payment authorization email (${data.maskedEmail || ''})`, 'info');
       } else {
-        setModalError(data.msg || 'Failed to dispatch verification code to current email');
+        setModalError(data.msg || data.message || 'Unable to send OTP. Please try again.');
       }
     } catch (err) {
-      setModalError('Network error while requesting old email OTP');
+      console.error('Request old email OTP error:', err);
+      setModalError('Unable to send OTP. Please try again.');
     } finally {
       setModalLoading(false);
     }
@@ -256,6 +284,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ otp: oldEmailOtp.trim() })
@@ -265,10 +294,11 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         setChangeEmailStep(2);
         toast('Current email verified. Please enter the new email address.', 'success');
       } else {
-        setModalError(data.msg || 'Invalid or expired OTP for current email');
+        setModalError(data.msg || data.message || 'Invalid OTP. Please check your email and try again.');
       }
     } catch (err) {
-      setModalError('Network error verifying current email OTP');
+      console.error('Verify old email OTP error:', err);
+      setModalError('Invalid OTP. Please check your email and try again.');
     } finally {
       setModalLoading(false);
     }
@@ -287,6 +317,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ newEmail: newEmail.trim().toLowerCase() })
@@ -297,10 +328,11 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         setChangeOtpTimer(300);
         toast(`A new verification OTP has been sent to ${newEmail}`, 'success');
       } else {
-        setModalError(data.msg || 'Failed to dispatch verification code to new email');
+        setModalError(data.msg || data.message || 'Unable to send OTP. Please try again.');
       }
     } catch (err) {
-      setModalError('Network error requesting new email OTP');
+      console.error('Request new email OTP error:', err);
+      setModalError('Unable to send OTP. Please try again.');
     } finally {
       setModalLoading(false);
     }
@@ -319,6 +351,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ otp: newEmailOtp.trim() })
@@ -330,10 +363,11 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         await fetchSettings(true);
         setTimeout(() => closeModal(), 1800);
       } else {
-        setModalError(data.msg || 'Invalid or expired OTP for new email');
+        setModalError(data.msg || data.message || 'Invalid OTP. Please check your email and try again.');
       }
     } catch (err) {
-      setModalError('Network error verifying new email OTP');
+      console.error('Verify new email OTP error:', err);
+      setModalError('Invalid OTP. Please check your email and try again.');
     } finally {
       setModalLoading(false);
     }
@@ -357,6 +391,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -365,10 +400,11 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         setPinOtpTimer(300);
         toast(`A verification OTP has been sent to ${data.maskedEmail || settings.maskedEmail}`, 'info');
       } else {
-        setModalError(data.msg || 'Failed to dispatch verification code for PIN setup');
+        setModalError(data.msg || data.message || 'Unable to send OTP. Please try again.');
       }
     } catch (err) {
-      setModalError('Network error requesting PIN setup OTP');
+      console.error('Request PIN setup OTP error:', err);
+      setModalError('Unable to send OTP. Please try again.');
     } finally {
       setModalLoading(false);
     }
@@ -395,6 +431,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -410,10 +447,11 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         await fetchSettings(true);
         setTimeout(() => closeModal(), 1800);
       } else {
-        setModalError(data.msg || 'Failed to set Transaction PIN');
+        setModalError(data.msg || data.message || 'Invalid OTP. Please check your email and try again.');
       }
     } catch (err) {
-      setModalError('Network error while saving Transaction PIN');
+      console.error('Save Transaction PIN error:', err);
+      setModalError('Failed to save Transaction PIN. Please try again.');
     } finally {
       setModalLoading(false);
     }
@@ -437,6 +475,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -445,10 +484,11 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         setChangePinOtpTimer(300);
         toast(`A verification OTP has been sent to ${data.maskedEmail || settings.maskedEmail}`, 'info');
       } else {
-        setModalError(data.msg || 'Failed to dispatch OTP for PIN change');
+        setModalError(data.msg || data.message || 'Unable to send OTP. Please try again.');
       }
     } catch (err) {
-      setModalError('Network error requesting PIN change OTP');
+      console.error('Request PIN change OTP error:', err);
+      setModalError('Unable to send OTP. Please try again.');
     } finally {
       setModalLoading(false);
     }
@@ -475,6 +515,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         method: 'POST',
         headers: {
           'x-auth-token': token,
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -490,10 +531,11 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
         await fetchSettings(true);
         setTimeout(() => closeModal(), 1800);
       } else {
-        setModalError(data.msg || 'Failed to change Transaction PIN');
+        setModalError(data.msg || data.message || 'Invalid OTP. Please check your email and try again.');
       }
     } catch (err) {
-      setModalError('Network error while saving changed Transaction PIN');
+      console.error('Change PIN error:', err);
+      setModalError('Failed to change Transaction PIN. Please try again.');
     } finally {
       setModalLoading(false);
     }

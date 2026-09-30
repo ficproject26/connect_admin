@@ -715,8 +715,14 @@ router.post('/send-otp', auth, async (req, res) => {
         });
 
     } catch (err) {
-        console.error('Error sending payment OTP:', err);
-        res.status(500).json({ success: false, msg: 'Server error generating OTP' });
+        console.error('Error sending payment OTP:', err.message || err);
+        if (authorizationToken) {
+            await PaymentAuthorizationSession.deleteOne({ authorizationToken }).catch(() => {});
+        }
+        if (authEmail) {
+            await PaymentSecurityOtp.deleteMany({ email: authEmail, purpose: 'PAYMENT_AUTHORIZATION', isUsed: false }).catch(() => {});
+        }
+        res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP email. Please check SMTP configuration or try again.' });
     }
 });
 
