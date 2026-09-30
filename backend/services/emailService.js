@@ -19,11 +19,13 @@ const sendOTPEmail = async ({ email: rawEmail, toEmail, otp, purpose, metadata =
       subject = 'Payment Authorization Email Setup OTP';
       actionDesc = 'configuring the official Payment Authorization Email for the Admin Portal';
       break;
+    case 'CURRENT_EMAIL_CHANGE':
     case 'EMAIL_CHANGE_OLD':
     case 'PAYMENT_EMAIL_CHANGE_OLD':
       subject = 'Security Alert: Authorize Payment Email Change';
       actionDesc = 'verifying your current payment email address before changing to a new one';
       break;
+    case 'NEW_EMAIL_CHANGE':
     case 'EMAIL_CHANGE_NEW':
     case 'PAYMENT_EMAIL_CHANGE_NEW':
       subject = 'Verify New Payment Authorization Email';

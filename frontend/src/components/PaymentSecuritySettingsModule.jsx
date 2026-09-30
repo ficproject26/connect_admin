@@ -31,12 +31,20 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
   const [setupOtp, setSetupOtp] = useState('');
   const [setupOtpTimer, setSetupOtpTimer] = useState(0);
 
-  // Change Email Form State (Strict 2-step verification)
-  const [changeEmailStep, setChangeEmailStep] = useState(1); // 1: Old OTP, 2: New Email, 3: New OTP
-  const [oldEmailOtp, setOldEmailOtp] = useState('');
-  const [newEmail, setNewEmail] = useState('');
-  const [newEmailOtp, setNewEmailOtp] = useState('');
-  const [changeOtpTimer, setChangeOtpTimer] = useState(0);
+  // Change Payment Authorization Email State (Strict 2-step verification per Step 6)
+  const [changeEmailStep, setChangeEmailStep] = useState(1); // 1: Current Email OTP, 2: New Email, 3: Verify New
+  const [currentEmail, setCurrentEmail] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [currentEmailOtp, setCurrentEmailOtp] = useState("");
+  const [newEmailOtp, setNewEmailOtp] = useState("");
+  const [otpExpiresAt, setOtpExpiresAt] = useState(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [otpPurpose, setOtpPurpose] = useState(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [error, setError] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isCurrentEmailLoading, setIsCurrentEmailLoading] = useState(false);
 
   // Setup PIN Form State
   const [setupPinStep, setSetupPinStep] = useState(1); // 1: OTP, 2: PIN Setup
@@ -109,20 +117,45 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
     fetchSettings();
   }, [fetchSettings]);
 
-  // Timers countdown
+  // Dynamic countdown timer calculating remainingSeconds from backend expiresAt (STEP 2)
+  useEffect(() => {
+    if (!otpExpiresAt) {
+      setRemainingSeconds(0);
+      return;
+    }
+    const updateCountdown = () => {
+      const expiry = new Date(otpExpiresAt).getTime();
+      const now = Date.now();
+      const diff = Math.max(0, Math.floor((expiry - now) / 1000));
+      setRemainingSeconds(diff);
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [otpExpiresAt]);
+
+  // Resend cooldown countdown (STEP 8: 30-second cooldown)
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown(prev => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
+  // Timers countdown for other modals (Setup Email, PIN Setup, PIN Change)
   useEffect(() => {
     let interval = null;
     if (setupOtpTimer > 0) {
       interval = setInterval(() => setSetupOtpTimer(prev => prev - 1), 1000);
-    } else if (changeOtpTimer > 0) {
-      interval = setInterval(() => setChangeOtpTimer(prev => prev - 1), 1000);
     } else if (pinOtpTimer > 0) {
       interval = setInterval(() => setPinOtpTimer(prev => prev - 1), 1000);
     } else if (changePinOtpTimer > 0) {
       interval = setInterval(() => setChangePinOtpTimer(prev => prev - 1), 1000);
     }
     return () => clearInterval(interval);
-  }, [setupOtpTimer, changeOtpTimer, pinOtpTimer, changePinOtpTimer]);
+  }, [setupOtpTimer, pinOtpTimer, changePinOtpTimer]);
 
   // Reset all modal forms on close
   const closeModal = () => {
@@ -134,11 +167,20 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
     setSetupEmail('');
     setSetupEmailStep(1);
     setSetupOtp('');
-    // Change Email
+    // Change Email (Reset all separate states per Step 6)
     setChangeEmailStep(1);
-    setOldEmailOtp('');
+    setCurrentEmail('');
     setNewEmail('');
+    setCurrentEmailOtp('');
     setNewEmailOtp('');
+    setOtpExpiresAt(null);
+    setRemainingSeconds(0);
+    setOtpPurpose(null);
+    setIsSendingOtp(false);
+    setIsVerifyingOtp(false);
+    setError('');
+    setResendCooldown(0);
+    setIsCurrentEmailLoading(false);
     // Setup PIN
     setSetupPinStep(1);
     setSetupPinOtp('');
@@ -244,10 +286,36 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
     closeModal();
     setModalType('CHANGE_EMAIL');
     setChangeEmailStep(1);
-    setModalLoading(true);
+    setIsCurrentEmailLoading(true);
+    setIsSendingOtp(true);
+    setError('');
     setModalError('');
-    // Automatically trigger OTP to current old email
+    setCurrentEmailOtp('');
+
     try {
+      // STEP 1: Fetch currently configured email from backend
+      let emailFromBackend = settings.paymentAuthorizationEmail || '';
+      try {
+        const emailRes = await fetch(`${API_BASE}/admin/payment-security/current-email`, {
+          headers: {
+            'x-auth-token': token,
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        if (emailRes.ok) {
+          const emailData = await emailRes.json();
+          if (emailData?.currentEmail) {
+            emailFromBackend = emailData.currentEmail;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn('Fallback fetching current email via status:', fetchErr);
+      }
+
+      setCurrentEmail(emailFromBackend);
+      setIsCurrentEmailLoading(false);
+
+      // STEP 1 & 7: Request OTP to CURRENT payment authorization email
       const res = await fetch(`${API_BASE}/admin/payment-security/email/change/request-old-otp`, {
         method: 'POST',
         headers: {
@@ -258,60 +326,106 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        setChangeOtpTimer(300);
-        toast(`A verification OTP has been sent to your current payment authorization email (${data.maskedEmail || ''})`, 'info');
+        // STEP 2: Use backend-generated expiresAt
+        if (data.expiresAt) {
+          setOtpExpiresAt(data.expiresAt);
+        } else {
+          setOtpExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+        }
+        setOtpPurpose(data.purpose || 'CURRENT_EMAIL_CHANGE');
+        setResendCooldown(30);
+        if (data.currentEmail) {
+          setCurrentEmail(data.currentEmail);
+        }
+        toast(data.msg || data.message || `A verification OTP has been sent to your current payment authorization email (${data.maskedEmail || maskEmail(emailFromBackend)})`, 'info');
       } else {
-        setModalError(data.msg || data.message || 'Unable to send OTP. Please try again.');
+        const errorMsg = data.message || data.msg || 'Unable to send OTP. Please try again.';
+        setError(errorMsg);
+        setModalError(errorMsg);
       }
     } catch (err) {
-      console.error('Request old email OTP error:', err);
-      setModalError('Unable to send OTP. Please try again.');
+      console.error('Request current email OTP error:', err);
+      const errorMsg = 'Unable to send OTP to current email. Please try again.';
+      setError(errorMsg);
+      setModalError(errorMsg);
     } finally {
-      setModalLoading(false);
+      setIsSendingOtp(false);
+      setIsCurrentEmailLoading(false);
     }
   };
 
-  const handleVerifyOldEmailOtp = async (e) => {
-    e.preventDefault();
-    if (!oldEmailOtp || oldEmailOtp.trim().length !== 6) {
+  // STEP 3: Verify Current Email OTP
+  const handleVerifyCurrentEmailOtp = async (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!currentEmailOtp || currentEmailOtp.trim().length !== 6) {
+      setError('Please enter the 6-digit OTP sent to your current email');
       setModalError('Please enter the 6-digit OTP sent to your current email');
       return;
     }
-    setModalLoading(true);
+    if (remainingSeconds === 0 && otpExpiresAt) {
+      const expiredMsg = 'OTP has expired. Please resend a new OTP.';
+      setError(expiredMsg);
+      setModalError(expiredMsg);
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setError('');
     setModalError('');
+
     try {
-      const res = await fetch(`${API_BASE}/admin/payment-security/email/change/verify-old-otp`, {
+      const res = await fetch(`${API_BASE}/admin/payment-security/verify-current-email-otp`, {
         method: 'POST',
         headers: {
           'x-auth-token': token,
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ otp: oldEmailOtp.trim() })
+        body: JSON.stringify({ otp: currentEmailOtp.trim() })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setChangeEmailStep(2);
-        toast('Current email verified. Please enter the new email address.', 'success');
+        setOtpExpiresAt(null);
+        setRemainingSeconds(0);
+        setError('');
+        setModalError('');
+        toast('Current email verified successfully. Please enter the new email.', 'success');
       } else {
-        setModalError(data.msg || data.message || 'Invalid OTP. Please check your email and try again.');
+        const errorMsg = data.message || data.msg || 'Invalid OTP. Please check the code and try again.';
+        setError(errorMsg);
+        setModalError(errorMsg);
       }
     } catch (err) {
-      console.error('Verify old email OTP error:', err);
-      setModalError('Invalid OTP. Please check your email and try again.');
+      console.error('Verify current email OTP error:', err);
+      const errorMsg = 'Invalid OTP. Please check the code and try again.';
+      setError(errorMsg);
+      setModalError(errorMsg);
     } finally {
-      setModalLoading(false);
+      setIsVerifyingOtp(false);
     }
   };
 
+  // STEP 4: Request OTP for NEW email
   const handleRequestNewEmailOtp = async (e) => {
-    e.preventDefault();
-    if (!newEmail || !newEmail.includes('@')) {
+    if (e && e.preventDefault) e.preventDefault();
+    const cleanEmail = (newEmail || '').trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      setError('Please enter a valid new email address');
       setModalError('Please enter a valid new email address');
       return;
     }
-    setModalLoading(true);
+    if (cleanEmail === (currentEmail || '').trim().toLowerCase()) {
+      setError('The new email address cannot be the same as the current email');
+      setModalError('The new email address cannot be the same as the current email');
+      return;
+    }
+
+    setIsSendingOtp(true);
+    setError('');
     setModalError('');
+
     try {
       const res = await fetch(`${API_BASE}/admin/payment-security/email/change/request-new-otp`, {
         method: 'POST',
@@ -320,56 +434,164 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ newEmail: newEmail.trim().toLowerCase() })
+        body: JSON.stringify({ newEmail: cleanEmail })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         setChangeEmailStep(3);
-        setChangeOtpTimer(300);
-        toast(`A new verification OTP has been sent to ${newEmail}`, 'success');
+        if (data.expiresAt) {
+          setOtpExpiresAt(data.expiresAt);
+        } else {
+          setOtpExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+        }
+        setOtpPurpose(data.purpose || 'NEW_EMAIL_CHANGE');
+        setResendCooldown(30);
+        setError('');
+        setModalError('');
+        toast(data.msg || data.message || `A verification OTP has been sent to ${cleanEmail}`, 'success');
       } else {
-        setModalError(data.msg || data.message || 'Unable to send OTP. Please try again.');
+        const errorMsg = data.message || data.msg || 'Unable to send OTP. Please try again.';
+        setError(errorMsg);
+        setModalError(errorMsg);
       }
     } catch (err) {
       console.error('Request new email OTP error:', err);
-      setModalError('Unable to send OTP. Please try again.');
+      const errorMsg = 'Unable to send OTP to new email address. Please try again.';
+      setError(errorMsg);
+      setModalError(errorMsg);
     } finally {
-      setModalLoading(false);
+      setIsSendingOtp(false);
     }
   };
 
+  // STEP 5: Verify NEW email OTP and save to database
   const handleVerifyNewEmailOtp = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!newEmailOtp || newEmailOtp.trim().length !== 6) {
+      setError('Please enter the 6-digit OTP sent to your new email');
       setModalError('Please enter the 6-digit OTP sent to your new email');
       return;
     }
-    setModalLoading(true);
+    if (remainingSeconds === 0 && otpExpiresAt) {
+      const expiredMsg = 'OTP has expired. Please resend a new OTP.';
+      setError(expiredMsg);
+      setModalError(expiredMsg);
+      return;
+    }
+
+    setIsVerifyingOtp(true);
+    setError('');
     setModalError('');
+
     try {
-      const res = await fetch(`${API_BASE}/admin/payment-security/email/change/verify-new-otp`, {
+      const res = await fetch(`${API_BASE}/admin/payment-security/verify-new-email-otp`, {
         method: 'POST',
         headers: {
           'x-auth-token': token,
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ otp: newEmailOtp.trim() })
+        body: JSON.stringify({
+          otp: newEmailOtp.trim(),
+          newEmail: (newEmail || '').trim().toLowerCase()
+        })
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        toast('Payment authorization email replaced and verified successfully.', 'success');
         setModalSuccess('Payment authorization email updated successfully.');
+        toast('Payment authorization email replaced and verified successfully.', 'success');
         await fetchSettings(true);
         setTimeout(() => closeModal(), 1800);
       } else {
-        setModalError(data.msg || data.message || 'Invalid OTP. Please check your email and try again.');
+        const errorMsg = data.message || data.msg || 'Invalid OTP. Please check the code and try again.';
+        setError(errorMsg);
+        setModalError(errorMsg);
       }
     } catch (err) {
       console.error('Verify new email OTP error:', err);
-      setModalError('Invalid OTP. Please check your email and try again.');
+      const errorMsg = 'Invalid OTP. Please check the code and try again.';
+      setError(errorMsg);
+      setModalError(errorMsg);
     } finally {
-      setModalLoading(false);
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  // STEP 8: Resend OTP with cooldown
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || isSendingOtp) return;
+    setError('');
+    setModalError('');
+
+    if (changeEmailStep === 1) {
+      // Resend current email OTP
+      setIsSendingOtp(true);
+      try {
+        const res = await fetch(`${API_BASE}/admin/payment-security/email/change/request-old-otp`, {
+          method: 'POST',
+          headers: {
+            'x-auth-token': token,
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (data.expiresAt) {
+            setOtpExpiresAt(data.expiresAt);
+          } else {
+            setOtpExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+          }
+          setResendCooldown(30);
+          setCurrentEmailOtp('');
+          toast(data.msg || data.message || 'A new verification OTP has been sent to your current payment authorization email.', 'info');
+        } else {
+          const errorMsg = data.message || data.msg || 'Unable to resend OTP. Please try again.';
+          setError(errorMsg);
+          setModalError(errorMsg);
+        }
+      } catch (err) {
+        console.error('Resend old email OTP error:', err);
+        setError('Unable to resend OTP. Please try again.');
+        setModalError('Unable to resend OTP. Please try again.');
+      } finally {
+        setIsSendingOtp(false);
+      }
+    } else if (changeEmailStep === 3) {
+      // Resend new email OTP
+      setIsSendingOtp(true);
+      try {
+        const res = await fetch(`${API_BASE}/admin/payment-security/email/change/request-new-otp`, {
+          method: 'POST',
+          headers: {
+            'x-auth-token': token,
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ newEmail: (newEmail || '').trim().toLowerCase() })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (data.expiresAt) {
+            setOtpExpiresAt(data.expiresAt);
+          } else {
+            setOtpExpiresAt(new Date(Date.now() + 5 * 60 * 1000).toISOString());
+          }
+          setResendCooldown(30);
+          setNewEmailOtp('');
+          toast(data.msg || data.message || `A new verification OTP has been sent to ${newEmail}`, 'info');
+        } else {
+          const errorMsg = data.message || data.msg || 'Unable to resend OTP. Please try again.';
+          setError(errorMsg);
+          setModalError(errorMsg);
+        }
+      } catch (err) {
+        console.error('Resend new email OTP error:', err);
+        setError('Unable to resend OTP. Please try again.');
+        setModalError('Unable to resend OTP. Please try again.');
+      } finally {
+        setIsSendingOtp(false);
+      }
     }
   };
 
@@ -940,7 +1162,7 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
                   Change Payment Authorization Email
                 </h4>
               </div>
-              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600">
+              <button onClick={closeModal} className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -954,10 +1176,10 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
               <span className={changeEmailStep >= 3 ? 'text-amber-500 font-bold' : ''}>3. Verify New</span>
             </div>
 
-            {modalError && (
+            {(error || modalError) && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                <span>{modalError}</span>
+                <span>{error || modalError}</span>
               </div>
             )}
 
@@ -970,11 +1192,120 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
 
             {/* STEP 1: Verify OTP from current email */}
             {changeEmailStep === 1 && !modalSuccess && (
-              <form onSubmit={handleVerifyOldEmailOtp} className="space-y-4">
+              isCurrentEmailLoading ? (
+                <div className="flex flex-col items-center justify-center py-8 space-y-3 text-slate-500">
+                  <RefreshCw className="w-6 h-6 animate-spin text-amber-500" />
+                  <span className="text-xs font-medium">Fetching payment authorization email...</span>
+                </div>
+              ) : (
+                <form onSubmit={handleVerifyCurrentEmailOtp} className="space-y-4">
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
+                    A verification OTP has been sent to your current payment authorization email:
+                    <div className="font-mono font-bold mt-1 text-slate-900 dark:text-white">
+                      {currentEmail ? maskEmail(currentEmail) : (settings.maskedEmail || maskEmail(settings.paymentAuthorizationEmail) || 'Configured Email')}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                      Enter Verification Code
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      autoFocus
+                      placeholder="Enter 6-digit OTP"
+                      value={currentEmailOtp}
+                      onChange={(e) => setCurrentEmailOtp(e.target.value.replace(/\D/g, ''))}
+                      className="w-full text-center text-2xl tracking-[0.5em] font-mono font-bold py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                    />
+                    <div className="flex justify-between items-center text-[11px] text-slate-400 mt-2">
+                      <span>Expires in: {fmtTime(remainingSeconds)}</span>
+                      <button
+                        type="button"
+                        disabled={resendCooldown > 0 || isSendingOtp}
+                        onClick={handleResendOtp}
+                        className={`font-bold transition ${
+                          resendCooldown > 0 || isSendingOtp
+                            ? 'text-slate-400 cursor-not-allowed'
+                            : 'text-amber-600 dark:text-amber-400 hover:underline cursor-pointer'
+                        }`}
+                      >
+                        {isSendingOtp ? 'Sending...' : resendCooldown > 0 ? `Resend OTP (${resendCooldown}s)` : 'Resend OTP'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isVerifyingOtp || isSendingOtp || currentEmailOtp.length !== 6 || (remainingSeconds === 0 && otpExpiresAt !== null)}
+                      className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl transition cursor-pointer disabled:opacity-50"
+                    >
+                      {isVerifyingOtp && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                      <span>Verify Current Email</span>
+                    </button>
+                  </div>
+                </form>
+              )
+            )}
+
+            {/* STEP 2: Enter new email */}
+            {changeEmailStep === 2 && !modalSuccess && (
+              <form onSubmit={handleRequestNewEmailOtp} className="space-y-4">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Current email verified. Now enter the new email address you want to set as the Payment Authorization Email.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
+                    Enter New Payment Authorization Email
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    autoFocus
+                    placeholder="new-email@gmail.com"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div className="pt-2 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={closeModal}
+                    className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSendingOtp || !newEmail || !newEmail.includes('@')}
+                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl transition cursor-pointer disabled:opacity-50"
+                  >
+                    {isSendingOtp && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Send Verification OTP</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* STEP 3: Verify OTP from new email */}
+            {changeEmailStep === 3 && !modalSuccess && (
+              <form onSubmit={handleVerifyNewEmailOtp} className="space-y-4">
                 <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300">
-                  A verification OTP has been sent to your current payment authorization email:
+                  A verification OTP has been sent to:
                   <div className="font-mono font-bold mt-1 text-slate-900 dark:text-white">
-                    {settings.maskedEmail || settings.paymentAuthorizationEmail}
+                    {maskEmail(newEmail) || newEmail}
                   </div>
                 </div>
 
@@ -987,137 +1318,48 @@ export const PaymentSecuritySettingsModule = ({ token, API_BASE, onToast }) => {
                     maxLength={6}
                     autoFocus
                     placeholder="Enter 6-digit OTP"
-                    value={oldEmailOtp}
-                    onChange={(e) => setOldEmailOtp(e.target.value.replace(/\D/g, ''))}
-                    className="w-full text-center text-2xl tracking-[0.5em] font-mono font-bold py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                  <div className="flex justify-between items-center text-[11px] text-slate-400 mt-2">
-                    <span>Expires in: {fmtTime(changeOtpTimer)}</span>
-                    {changeOtpTimer === 0 && (
-                      <button
-                        type="button"
-                        onClick={handleStartChangeEmail}
-                        className="text-amber-600 dark:text-amber-400 font-bold hover:underline"
-                      >
-                        Resend OTP
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={modalLoading || oldEmailOtp.length !== 6}
-                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl transition cursor-pointer disabled:opacity-50"
-                  >
-                    {modalLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                    <span>Verify Current Email</span>
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* STEP 2: Enter new email */}
-            {changeEmailStep === 2 && !modalSuccess && (
-              <form onSubmit={handleRequestNewEmailOtp} className="space-y-4">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Current email verified. Now enter the new email address you want to set as the Payment Authorization Email.
-                </p>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1">
-                    New Payment Authorization Email
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    autoFocus
-                    placeholder="e.g. newfinance@connectapp.in"
-                    value={newEmail}
-                    onChange={(e) => setNewEmail(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
-                  />
-                </div>
-
-                <div className="pt-2 flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={closeModal}
-                    className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={modalLoading || !newEmail}
-                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl transition cursor-pointer disabled:opacity-50"
-                  >
-                    {modalLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                    <span>Send Verification Code to New Email</span>
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* STEP 3: Verify OTP from new email */}
-            {changeEmailStep === 3 && !modalSuccess && (
-              <form onSubmit={handleVerifyNewEmailOtp} className="space-y-4">
-                <div className="text-center space-y-1">
-                  <p className="text-xs text-slate-500">
-                    A confirmation OTP code has been dispatched to:
-                  </p>
-                  <p className="font-mono text-sm font-bold text-slate-800 dark:text-slate-200">
-                    {newEmail}
-                  </p>
-                </div>
-
-                <div>
-                  <input
-                    type="text"
-                    maxLength={6}
-                    autoFocus
-                    placeholder="Enter 6-digit OTP"
                     value={newEmailOtp}
                     onChange={(e) => setNewEmailOtp(e.target.value.replace(/\D/g, ''))}
                     className="w-full text-center text-2xl tracking-[0.5em] font-mono font-bold py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500"
                   />
                   <div className="flex justify-between items-center text-[11px] text-slate-400 mt-2">
-                    <span>Expires in: {fmtTime(changeOtpTimer)}</span>
-                    {changeOtpTimer === 0 && (
-                      <button
-                        type="button"
-                        onClick={handleRequestNewEmailOtp}
-                        className="text-amber-600 dark:text-amber-400 font-bold hover:underline"
-                      >
-                        Resend OTP
-                      </button>
-                    )}
+                    <span>Expires in: {fmtTime(remainingSeconds)}</span>
+                    <button
+                      type="button"
+                      disabled={resendCooldown > 0 || isSendingOtp}
+                      onClick={handleResendOtp}
+                      className={`font-bold transition ${
+                        resendCooldown > 0 || isSendingOtp
+                          ? 'text-slate-400 cursor-not-allowed'
+                          : 'text-amber-600 dark:text-amber-400 hover:underline cursor-pointer'
+                      }`}
+                    >
+                      {isSendingOtp ? 'Sending...' : resendCooldown > 0 ? `Resend OTP (${resendCooldown}s)` : 'Resend OTP'}
+                    </button>
                   </div>
                 </div>
 
                 <div className="pt-2 flex justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setChangeEmailStep(2)}
-                    className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
+                    onClick={() => {
+                      setChangeEmailStep(2);
+                      setOtpExpiresAt(null);
+                      setRemainingSeconds(0);
+                      setError('');
+                      setModalError('');
+                    }}
+                    className="px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl cursor-pointer"
                   >
                     Back
                   </button>
                   <button
                     type="submit"
-                    disabled={modalLoading || newEmailOtp.length !== 6}
-                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl transition cursor-pointer disabled:opacity-50"
+                    disabled={isVerifyingOtp || isSendingOtp || newEmailOtp.length !== 6 || (remainingSeconds === 0 && otpExpiresAt !== null)}
+                    className="inline-flex items-center gap-2 px-5 py-2 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl transition cursor-pointer disabled:opacity-50"
                   >
-                    {modalLoading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                    <span>Confirm & Replace Email</span>
+                    {isVerifyingOtp && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Verify & Save Email</span>
                   </button>
                 </div>
               </form>

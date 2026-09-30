@@ -143,6 +143,26 @@ router.get('/status', [auth, requireAdmin], async (req, res) => {
     }
 });
 
+// GET Current Payment Authorization Email (Step 1 requirement)
+router.get('/current-email', [auth, requireAdmin], async (req, res) => {
+    try {
+        const settings = await PaymentSecuritySettings.findOne().sort({ createdAt: -1 });
+        const currentEmail = settings?.paymentAuthorizationEmail || '';
+        const isVerified = Boolean(settings?.emailVerified);
+        return res.json({
+            success: true,
+            currentEmail: isVerified ? currentEmail : '',
+            paymentAuthorizationEmail: isVerified ? currentEmail : '',
+            maskedEmail: (isVerified && currentEmail) ? maskEmail(currentEmail) : '',
+            emailVerified: isVerified,
+            configured: Boolean(isVerified && currentEmail)
+        });
+    } catch (err) {
+        console.error('Error retrieving current email:', err);
+        return res.status(500).json({ success: false, message: 'Server error retrieving current email', msg: 'Server error retrieving current email' });
+    }
+});
+
 // =========================================================================
 // 2. FIRST-TIME EMAIL CONFIGURATION
 // =========================================================================
@@ -340,38 +360,49 @@ router.post('/email/setup/verify-otp', [auth, requireAdmin], async (req, res) =>
 // =========================================================================
 // 3. CHANGE PAYMENT AUTHORIZATION EMAIL (TWO-STEP VERIFICATION)
 // =========================================================================
-// Step 1: Send OTP to CURRENT/OLD verified email
-router.post('/email/change/request-old-otp', [auth, requireAdmin], async (req, res) => {
+// Step 1: Send OTP to CURRENT verified email
+router.post(['/email/change/request-old-otp', '/send-current-email-otp', '/request-current-email-otp'], [auth, requireAdmin], async (req, res) => {
+    let currentEmail = null;
     try {
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.paymentAuthorizationEmail) {
-            return res.status(400).json({ success: false, msg: 'No verified payment email is currently configured.' });
+            return res.status(400).json({
+                success: false,
+                message: 'No verified payment email is currently configured.',
+                msg: 'No verified payment email is currently configured.'
+            });
         }
-        const currentEmail = settings.paymentAuthorizationEmail;
+        currentEmail = settings.paymentAuthorizationEmail;
 
-        // Check throttle
+        // Check throttle: 30s resend cooldown
         const lastOtp = await PaymentSecurityOtp.findOne({
             email: currentEmail,
-            purpose: 'PAYMENT_EMAIL_CHANGE_OLD',
+            purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] },
             isUsed: false
         }).sort({ createdAt: -1 });
 
         const now = Date.now();
-        if (lastOtp && (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000)) {
-            return res.status(429).json({ success: false, msg: 'Please wait 30 seconds before requesting another code.' });
+        if (lastOtp && lastOtp.lastResentAt && (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000)) {
+            const waitSecs = Math.ceil((30 * 1000 - (now - new Date(lastOtp.lastResentAt).getTime())) / 1000);
+            return res.status(429).json({
+                success: false,
+                message: `Please wait ${waitSecs} seconds before requesting another code.`,
+                msg: `Please wait ${waitSecs} seconds before requesting another code.`
+            });
         }
 
         const otp = generateOtp();
-        const otpHash = hashOtp(otp, currentEmail, 'PAYMENT_EMAIL_CHANGE_OLD');
+        const otpHash = hashOtp(otp, currentEmail, 'CURRENT_EMAIL_CHANGE');
         const expiresAt = new Date(now + 5 * 60 * 1000);
 
+        // Invalidate previous active OTPs for this purpose
         await PaymentSecurityOtp.updateMany(
-            { email: currentEmail, purpose: 'PAYMENT_EMAIL_CHANGE_OLD', isUsed: false },
+            { email: currentEmail, purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, isUsed: false },
             { $set: { isUsed: true } }
         );
 
         await PaymentSecurityOtp.create({
-            purpose: 'PAYMENT_EMAIL_CHANGE_OLD',
+            purpose: 'CURRENT_EMAIL_CHANGE',
             userId: req.adminUser._id,
             email: currentEmail,
             otpHash,
@@ -382,72 +413,105 @@ router.post('/email/change/request-old-otp', [auth, requireAdmin], async (req, r
 
         await sendPaymentSecurityEmail({
             toEmail: currentEmail,
-            purpose: 'PAYMENT_EMAIL_CHANGE_OLD',
+            purpose: 'CURRENT_EMAIL_CHANGE',
             otp
         });
 
         await logSecurityAudit(req, 'otp_sent', `Email change authorization OTP sent to current email: ${currentEmail}`);
 
-        res.json({
+        return res.json({
             success: true,
+            message: 'OTP sent successfully',
             msg: `A verification OTP has been sent to your current payment authorization email (${maskEmail(currentEmail)}).`,
+            expiresAt: expiresAt.toISOString(),
+            expiresIn: 300,
             maskedEmail: maskEmail(currentEmail),
-            expiresIn: 300
+            currentEmail: currentEmail,
+            purpose: 'CURRENT_EMAIL_CHANGE'
         });
     } catch (err) {
-        console.error('Error requesting old email OTP:', err.message || err);
+        console.error('Error requesting current email OTP:', err.message || err);
         if (currentEmail) {
-            await PaymentSecurityOtp.deleteMany({ email: currentEmail, purpose: 'PAYMENT_EMAIL_CHANGE_OLD', isUsed: false }).catch(() => {});
-            await OTPVerification.deleteMany({ email: currentEmail, purpose: 'PAYMENT_EMAIL_CHANGE_OLD', verified: false }).catch(() => {});
+            await PaymentSecurityOtp.deleteMany({ email: currentEmail, purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, isUsed: false }).catch(() => {});
+            await OTPVerification.deleteMany({ email: currentEmail, purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] }, verified: false }).catch(() => {});
         }
-        res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP to current email. Please try again.' });
+        return res.status(500).json({
+            success: false,
+            message: 'Unable to send OTP email. Please try again.',
+            msg: 'Unable to send OTP to current email. Please try again.'
+        });
     }
 });
 
-// Step 2: Verify OTP from CURRENT/OLD email
-router.post('/email/change/verify-old-otp', [auth, requireAdmin], async (req, res) => {
+// Step 2: Verify OTP from CURRENT email
+router.post(['/email/change/verify-old-otp', '/verify-current-email-otp'], [auth, requireAdmin], async (req, res) => {
+    let currentEmail = null;
     try {
         const { otp } = req.body;
         if (!otp || !/^\d{6}$/.test(String(otp).trim())) {
-            return res.status(400).json({ success: false, msg: 'Please provide a valid 6-digit numeric OTP code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide a valid 6-digit numeric OTP code.',
+                msg: 'Please provide a valid 6-digit numeric OTP code.'
+            });
         }
         const cleanOtp = String(otp).trim();
 
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.paymentAuthorizationEmail) {
-            return res.status(400).json({ success: false, msg: 'No active payment authorization email found.' });
+            return res.status(400).json({
+                success: false,
+                message: 'No active payment authorization email found.',
+                msg: 'No active payment authorization email found.'
+            });
         }
-        const currentEmail = settings.paymentAuthorizationEmail;
+        currentEmail = settings.paymentAuthorizationEmail;
 
         const otpRecord = await PaymentSecurityOtp.findOne({
             email: currentEmail,
-            purpose: 'PAYMENT_EMAIL_CHANGE_OLD',
+            purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD'] },
             isUsed: false
         }).sort({ createdAt: -1 });
 
         if (!otpRecord) {
-            return res.status(400).json({ success: false, msg: 'No active OTP request found. Please request a new code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'No active OTP request found. Please request a new code.',
+                msg: 'No active OTP request found. Please request a new code.'
+            });
         }
 
         if (new Date() > new Date(otpRecord.expiresAt)) {
             otpRecord.isUsed = true;
             await otpRecord.save();
-            return res.status(400).json({ success: false, msg: 'Verification code has expired. Please request a new code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please resend a new OTP.',
+                msg: 'OTP has expired. Please resend a new OTP.'
+            });
         }
 
         if (otpRecord.attempts >= otpRecord.maxAttempts) {
             otpRecord.isUsed = true;
             await otpRecord.save();
-            return res.status(403).json({ success: false, msg: 'Maximum verification attempts exceeded. Code invalidated.' });
+            return res.status(403).json({
+                success: false,
+                message: 'Maximum verification attempts exceeded. Code invalidated.',
+                msg: 'Maximum verification attempts exceeded. Code invalidated.'
+            });
         }
 
-        const isMatch = verifyOtpHash(cleanOtp, currentEmail, 'PAYMENT_EMAIL_CHANGE_OLD', otpRecord.otpHash);
+        const isMatch = verifyOtpHash(cleanOtp, currentEmail, otpRecord.purpose || 'CURRENT_EMAIL_CHANGE', otpRecord.otpHash) ||
+                        verifyOtpHash(cleanOtp, currentEmail, 'PAYMENT_EMAIL_CHANGE_OLD', otpRecord.otpHash) ||
+                        verifyOtpHash(cleanOtp, currentEmail, 'CURRENT_EMAIL_CHANGE', otpRecord.otpHash);
+
         if (!isMatch) {
             otpRecord.attempts += 1;
             await otpRecord.save();
             return res.status(400).json({
                 success: false,
-                msg: `Invalid verification code. ${otpRecord.maxAttempts - otpRecord.attempts} attempt(s) remaining.`
+                message: 'Invalid OTP. Please check the code and try again.',
+                msg: 'Invalid OTP. Please check the code and try again.'
             });
         }
 
@@ -463,60 +527,81 @@ router.post('/email/change/verify-old-otp', [auth, requireAdmin], async (req, re
 
         await logSecurityAudit(req, 'otp_verified', `Old payment email OTP verified successfully for ${currentEmail}`);
 
-        res.json({
+        return res.json({
             success: true,
+            message: 'Current email verified successfully',
             msg: 'Current email verified successfully. Please enter the new payment authorization email address.'
         });
     } catch (err) {
-        console.error('Error verifying old email OTP:', err);
-        res.status(500).json({ success: false, msg: 'Server error verifying current email code' });
+        console.error('Error verifying current email OTP:', err);
+        return res.status(500).json({
+            success: false,
+            message: 'Server error verifying current email code',
+            msg: 'Server error verifying current email code'
+        });
     }
 });
 
 // Step 3: Send OTP to the NEW email address
-router.post('/email/change/request-new-otp', [auth, requireAdmin], async (req, res) => {
+router.post(['/email/change/request-new-otp', '/send-new-email-otp', '/request-new-email-otp'], [auth, requireAdmin], async (req, res) => {
+    let cleanNewEmail = null;
     try {
         const { newEmail } = req.body;
         if (!isValidEmail(newEmail)) {
-            return res.status(400).json({ success: false, msg: 'Please provide a valid new email address.' });
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide a valid new email address.',
+                msg: 'Please provide a valid new email address.'
+            });
         }
-        const cleanNewEmail = newEmail.trim().toLowerCase();
+        cleanNewEmail = newEmail.trim().toLowerCase();
 
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.emailChangeOldVerified) {
             return res.status(403).json({
                 success: false,
+                message: 'Unauthorized. You must verify your current email before submitting a new email.',
                 msg: 'Unauthorized. You must verify your current email before submitting a new email.'
             });
         }
 
-        if (cleanNewEmail === settings.paymentAuthorizationEmail) {
-            return res.status(400).json({ success: false, msg: 'The new email address cannot be the same as the current email.' });
+        if (cleanNewEmail === settings.paymentAuthorizationEmail.toLowerCase()) {
+            return res.status(400).json({
+                success: false,
+                message: 'The new email address cannot be the same as the current email.',
+                msg: 'The new email address cannot be the same as the current email.'
+            });
         }
 
-        // Throttling
+        // Throttling 30s resend cooldown
         const now = Date.now();
         const lastOtp = await PaymentSecurityOtp.findOne({
             email: cleanNewEmail,
-            purpose: 'PAYMENT_EMAIL_CHANGE_NEW',
+            purpose: { $in: ['NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_NEW'] },
             isUsed: false
         }).sort({ createdAt: -1 });
 
-        if (lastOtp && (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000)) {
-            return res.status(429).json({ success: false, msg: 'Please wait 30 seconds before requesting another code.' });
+        if (lastOtp && lastOtp.lastResentAt && (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000)) {
+            const waitSecs = Math.ceil((30 * 1000 - (now - new Date(lastOtp.lastResentAt).getTime())) / 1000);
+            return res.status(429).json({
+                success: false,
+                message: `Please wait ${waitSecs} seconds before requesting another code.`,
+                msg: `Please wait ${waitSecs} seconds before requesting another code.`
+            });
         }
 
         const otp = generateOtp();
-        const otpHash = hashOtp(otp, cleanNewEmail, 'PAYMENT_EMAIL_CHANGE_NEW');
+        const otpHash = hashOtp(otp, cleanNewEmail, 'NEW_EMAIL_CHANGE');
         const expiresAt = new Date(now + 5 * 60 * 1000);
 
+        // Invalidate previous active OTPs for this new email
         await PaymentSecurityOtp.updateMany(
-            { email: cleanNewEmail, purpose: 'PAYMENT_EMAIL_CHANGE_NEW', isUsed: false },
+            { email: cleanNewEmail, purpose: { $in: ['NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_NEW'] }, isUsed: false },
             { $set: { isUsed: true } }
         );
 
         await PaymentSecurityOtp.create({
-            purpose: 'PAYMENT_EMAIL_CHANGE_NEW',
+            purpose: 'NEW_EMAIL_CHANGE',
             userId: req.adminUser._id,
             email: cleanNewEmail,
             otpHash,
@@ -531,76 +616,113 @@ router.post('/email/change/request-new-otp', [auth, requireAdmin], async (req, r
 
         await sendPaymentSecurityEmail({
             toEmail: cleanNewEmail,
-            purpose: 'PAYMENT_EMAIL_CHANGE_NEW',
+            purpose: 'NEW_EMAIL_CHANGE',
             otp
         });
 
         await logSecurityAudit(req, 'otp_sent', `Email change new OTP sent to new email: ${cleanNewEmail}`);
 
-        res.json({
+        return res.json({
             success: true,
+            message: 'OTP sent successfully',
             msg: `A verification OTP has been sent to ${cleanNewEmail}.`,
+            expiresAt: expiresAt.toISOString(),
+            expiresIn: 300,
             maskedEmail: maskEmail(cleanNewEmail),
-            expiresIn: 300
+            newEmail: cleanNewEmail,
+            purpose: 'NEW_EMAIL_CHANGE'
         });
     } catch (err) {
         console.error('Error requesting new email OTP:', err.message || err);
         if (cleanNewEmail) {
-            await PaymentSecurityOtp.deleteMany({ email: cleanNewEmail, purpose: 'PAYMENT_EMAIL_CHANGE_NEW', isUsed: false }).catch(() => {});
-            await OTPVerification.deleteMany({ email: cleanNewEmail, purpose: 'PAYMENT_EMAIL_CHANGE_NEW', verified: false }).catch(() => {});
+            await PaymentSecurityOtp.deleteMany({ email: cleanNewEmail, purpose: { $in: ['NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_NEW'] }, isUsed: false }).catch(() => {});
+            await OTPVerification.deleteMany({ email: cleanNewEmail, purpose: { $in: ['NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_NEW'] }, verified: false }).catch(() => {});
         }
-        res.status(500).json({ success: false, message: 'Unable to send OTP email', msg: 'Unable to send OTP to new email address. Please try again.' });
+        return res.status(500).json({
+            success: false,
+            message: 'Unable to send OTP to new email address. Please try again.',
+            msg: 'Unable to send OTP to new email address. Please try again.'
+        });
     }
 });
 
 // Step 4: Verify NEW email OTP and finalize email replacement
-router.post('/email/change/verify-new-otp', [auth, requireAdmin], async (req, res) => {
+router.post(['/email/change/verify-new-otp', '/verify-new-email-otp'], [auth, requireAdmin], async (req, res) => {
+    let targetNewEmail = null;
     try {
         const { otp, newEmail } = req.body;
         if (!otp || !/^\d{6}$/.test(String(otp).trim())) {
-            return res.status(400).json({ success: false, msg: 'Please provide a valid 6-digit numeric OTP code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'Please provide a valid 6-digit numeric OTP code.',
+                msg: 'Please provide a valid 6-digit numeric OTP code.'
+            });
         }
         const cleanOtp = String(otp).trim();
 
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.emailChangeOldVerified) {
-            return res.status(403).json({ success: false, msg: 'Unauthorized. Step 1 verification required.' });
+            return res.status(403).json({
+                success: false,
+                message: 'Unauthorized. Step 1 verification required.',
+                msg: 'Unauthorized. Step 1 verification required.'
+            });
         }
 
-        const targetNewEmail = (newEmail || settings.tempNewEmail || '').trim().toLowerCase();
+        targetNewEmail = (newEmail || settings.tempNewEmail || '').trim().toLowerCase();
         if (!isValidEmail(targetNewEmail)) {
-            return res.status(400).json({ success: false, msg: 'New email address is required.' });
+            return res.status(400).json({
+                success: false,
+                message: 'New email address is required.',
+                msg: 'New email address is required.'
+            });
         }
 
         const otpRecord = await PaymentSecurityOtp.findOne({
             email: targetNewEmail,
-            purpose: 'PAYMENT_EMAIL_CHANGE_NEW',
+            purpose: { $in: ['NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_NEW'] },
             isUsed: false
         }).sort({ createdAt: -1 });
 
         if (!otpRecord) {
-            return res.status(400).json({ success: false, msg: 'No active OTP request found for the new email.' });
+            return res.status(400).json({
+                success: false,
+                message: 'No active OTP request found for the new email.',
+                msg: 'No active OTP request found for the new email.'
+            });
         }
 
         if (new Date() > new Date(otpRecord.expiresAt)) {
             otpRecord.isUsed = true;
             await otpRecord.save();
-            return res.status(400).json({ success: false, msg: 'Verification code has expired. Please request a new code.' });
+            return res.status(400).json({
+                success: false,
+                message: 'OTP has expired. Please resend a new OTP.',
+                msg: 'OTP has expired. Please resend a new OTP.'
+            });
         }
 
         if (otpRecord.attempts >= otpRecord.maxAttempts) {
             otpRecord.isUsed = true;
             await otpRecord.save();
-            return res.status(403).json({ success: false, msg: 'Maximum verification attempts exceeded. Code invalidated.' });
+            return res.status(403).json({
+                success: false,
+                message: 'Maximum verification attempts exceeded. Code invalidated.',
+                msg: 'Maximum verification attempts exceeded. Code invalidated.'
+            });
         }
 
-        const isMatch = verifyOtpHash(cleanOtp, targetNewEmail, 'PAYMENT_EMAIL_CHANGE_NEW', otpRecord.otpHash);
+        const isMatch = verifyOtpHash(cleanOtp, targetNewEmail, otpRecord.purpose || 'NEW_EMAIL_CHANGE', otpRecord.otpHash) ||
+                        verifyOtpHash(cleanOtp, targetNewEmail, 'PAYMENT_EMAIL_CHANGE_NEW', otpRecord.otpHash) ||
+                        verifyOtpHash(cleanOtp, targetNewEmail, 'NEW_EMAIL_CHANGE', otpRecord.otpHash);
+
         if (!isMatch) {
             otpRecord.attempts += 1;
             await otpRecord.save();
             return res.status(400).json({
                 success: false,
-                msg: `Invalid verification code. ${otpRecord.maxAttempts - otpRecord.attempts} attempt(s) remaining.`
+                message: 'Invalid OTP. Please check the code and try again.',
+                msg: 'Invalid OTP. Please check the code and try again.'
             });
         }
 
@@ -611,10 +733,11 @@ router.post('/email/change/verify-new-otp', [auth, requireAdmin], async (req, re
 
         // Invalidate all previous email change OTPs
         await PaymentSecurityOtp.updateMany(
-            { purpose: { $in: ['PAYMENT_EMAIL_CHANGE_OLD', 'PAYMENT_EMAIL_CHANGE_NEW'] }, isUsed: false },
+            { purpose: { $in: ['CURRENT_EMAIL_CHANGE', 'NEW_EMAIL_CHANGE', 'PAYMENT_EMAIL_CHANGE_OLD', 'PAYMENT_EMAIL_CHANGE_NEW'] }, isUsed: false },
             { $set: { isUsed: true } }
         );
 
+        // ONLY AFTER SUCCESSFUL VERIFICATION: UPDATE PAYMENT AUTHORIZATION EMAIL IN DATABASE
         const oldEmail = settings.paymentAuthorizationEmail;
         settings.paymentAuthorizationEmail = targetNewEmail;
         settings.emailVerified = true;
@@ -625,15 +748,20 @@ router.post('/email/change/verify-new-otp', [auth, requireAdmin], async (req, re
 
         await logSecurityAudit(req, 'payment_email_changed', `Payment authorization email changed from ${oldEmail} to ${targetNewEmail}`);
 
-        res.json({
+        return res.json({
             success: true,
+            message: 'Payment authorization email changed successfully.',
             msg: 'Payment authorization email changed successfully.',
             paymentAuthorizationEmail: targetNewEmail,
             maskedEmail: maskEmail(targetNewEmail)
         });
     } catch (err) {
         console.error('Error finalizing new email verification:', err);
-        res.status(500).json({ success: false, msg: 'Server error completing email change' });
+        return res.status(500).json({
+            success: false,
+            message: 'Server error completing email change',
+            msg: 'Server error completing email change'
+        });
     }
 });
 
@@ -642,15 +770,17 @@ router.post('/email/change/verify-new-otp', [auth, requireAdmin], async (req, re
 // =========================================================================
 // Step 1: Request OTP to Set/Change Transaction PIN
 router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => {
+    let email = null;
     try {
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.paymentAuthorizationEmail) {
             return res.status(400).json({
                 success: false,
+                message: 'Payment authorization email must be configured and verified before setting a Transaction PIN.',
                 msg: 'Payment authorization email must be configured and verified before setting a Transaction PIN.'
             });
         }
-        const email = settings.paymentAuthorizationEmail;
+        email = settings.paymentAuthorizationEmail;
 
         // Rate Limit check
         const now = Date.now();
@@ -660,8 +790,13 @@ router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => 
             isUsed: false
         }).sort({ createdAt: -1 });
 
-        if (lastOtp && (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000)) {
-            return res.status(429).json({ success: false, msg: 'Please wait 30 seconds before requesting another code.' });
+        if (lastOtp && lastOtp.lastResentAt && (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000)) {
+            const waitSecs = Math.ceil((30 * 1000 - (now - new Date(lastOtp.lastResentAt).getTime())) / 1000);
+            return res.status(429).json({
+                success: false,
+                message: `Please wait ${waitSecs} seconds before requesting another code.`,
+                msg: `Please wait ${waitSecs} seconds before requesting another code.`
+            });
         }
 
         const otp = generateOtp();
@@ -693,7 +828,9 @@ router.post('/pin/setup/request-otp', [auth, requireAdmin], async (req, res) => 
 
         res.json({
             success: true,
+            message: 'OTP sent successfully',
             msg: `A verification OTP has been sent to your payment authorization email (${maskEmail(email)}).`,
+            expiresAt: expiresAt.toISOString(),
             maskedEmail: maskEmail(email),
             expiresIn: 300
         });
@@ -800,15 +937,24 @@ router.post('/pin/setup/verify-and-save', [auth, requireAdmin], async (req, res)
 
 // Request OTP to CHANGE Transaction PIN
 router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) => {
+    let email = null;
     try {
         const settings = await PaymentSecuritySettings.findOne({ emailVerified: true });
         if (!settings || !settings.paymentAuthorizationEmail) {
-            return res.status(400).json({ success: false, msg: 'Verified payment authorization email required.' });
+            return res.status(400).json({
+                success: false,
+                message: 'Verified payment authorization email required.',
+                msg: 'Verified payment authorization email required.'
+            });
         }
         if (!settings.transactionPinHash) {
-            return res.status(400).json({ success: false, msg: 'No existing PIN found. Please use Set Transaction PIN.' });
+            return res.status(400).json({
+                success: false,
+                message: 'No existing PIN found. Please use Set Transaction PIN.',
+                msg: 'No existing PIN found. Please use Set Transaction PIN.'
+            });
         }
-        const email = settings.paymentAuthorizationEmail;
+        email = settings.paymentAuthorizationEmail;
 
         const now = Date.now();
         const lastOtp = await PaymentSecurityOtp.findOne({
@@ -817,8 +963,13 @@ router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) =>
             isUsed: false
         }).sort({ createdAt: -1 });
 
-        if (lastOtp && (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000)) {
-            return res.status(429).json({ success: false, msg: 'Please wait 30 seconds before requesting another code.' });
+        if (lastOtp && lastOtp.lastResentAt && (now - new Date(lastOtp.lastResentAt).getTime() < 30 * 1000)) {
+            const waitSecs = Math.ceil((30 * 1000 - (now - new Date(lastOtp.lastResentAt).getTime())) / 1000);
+            return res.status(429).json({
+                success: false,
+                message: `Please wait ${waitSecs} seconds before requesting another code.`,
+                msg: `Please wait ${waitSecs} seconds before requesting another code.`
+            });
         }
 
         const otp = generateOtp();
@@ -850,7 +1001,9 @@ router.post('/pin/change/request-otp', [auth, requireAdmin], async (req, res) =>
 
         res.json({
             success: true,
+            message: 'OTP sent successfully',
             msg: `A verification OTP has been sent to your payment authorization email (${maskEmail(email)}).`,
+            expiresAt: expiresAt.toISOString(),
             maskedEmail: maskEmail(email),
             expiresIn: 300
         });

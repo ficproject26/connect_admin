@@ -20,6 +20,8 @@ const OTPVerificationSchema = new mongoose.Schema({
             'PAYMENT_AUTHORIZATION',
             'EMAIL_CHANGE_OLD',
             'EMAIL_CHANGE_NEW',
+            'CURRENT_EMAIL_CHANGE',
+            'NEW_EMAIL_CHANGE',
             'PIN_SETUP',
             'PIN_CHANGE',
             // Enterprise & payment compatibility purposes
