@@ -124,9 +124,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       const queryString = queryParams.toString();
       const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
       let targetUrl = `${baseClean}/admin/agent-performance/overview?${queryString}`;
-      if (targetUrl.includes('api.ficapp.in/admin-api/admin/') && !targetUrl.includes('api.ficapp.in/admin-api/admin-api/')) {
-        targetUrl = targetUrl.replace('api.ficapp.in/admin-api/admin/', 'api.ficapp.in/admin-api/admin-api/admin/');
-      }
+      targetUrl = targetUrl.replace(/\/admin-api\/admin-api\//g, '/admin-api/');
       const authToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
 
       let successData = null;

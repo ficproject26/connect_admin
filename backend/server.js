@@ -85,12 +85,17 @@ const corsOptions = {
 // 1. Centralized CORS Middleware & Dynamic Response Headers
 app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && isOriginAllowed(origin)) {
+    if (origin) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'x-auth-token, Authorization, Content-Type, Cache-Control, Pragma, Expires, x-requested-with, Accept, Origin');
     }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    const requestedHeaders = req.headers['access-control-request-headers'];
+    const defaultHeaders = 'x-auth-token, Authorization, Content-Type, Cache-Control, Pragma, Expires, expires, x-requested-with, Accept, Origin, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods';
+    res.setHeader('Access-Control-Allow-Headers', requestedHeaders ? `${requestedHeaders}, ${defaultHeaders}` : defaultHeaders);
+    res.setHeader('Access-Control-Expose-Headers', 'x-auth-token, Authorization, Content-Type');
+    res.setHeader('Access-Control-Max-Age', '86400');
+
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
@@ -98,6 +103,14 @@ app.use((req, res, next) => {
 });
 
 app.use(cors(corsOptions));
+
+// Normalize redundant /admin-api/admin-api prefixes (legacy or proxy artifacts)
+app.use((req, res, next) => {
+    if (req.url.startsWith('/admin-api/admin-api')) {
+        req.url = req.url.replace(/^\/admin-api\/admin-api/, '/admin-api');
+    }
+    next();
+});
 
 // 2. Express Body Parsers (Parse JSON & URL-encoded request bodies up to 50MB)
 app.use(express.json({ limit: '50mb' }));

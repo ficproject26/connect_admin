@@ -72,6 +72,15 @@ const PaymentSecuritySettingsModule = lazyWithRetry(() => import('./components/P
 import dataSyncManager from './utils/dataSyncManager';
 
 const resolveSanitizedApiBase = () => {
+  if (typeof window !== 'undefined' && window.location) {
+    const hostname = window.location.hostname;
+    // On Vercel deployments, use same-origin /admin-api which proxies seamlessly via vercel.json rewrites
+    // This completely eliminates CORS preflight issues and avoids cross-origin blocking
+    if (hostname.endsWith('.vercel.app')) {
+      return `${window.location.origin}/admin-api`;
+    }
+  }
+
   let envUrl = '';
   if (typeof import.meta !== 'undefined' && import.meta.env) {
     envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || '';
@@ -899,11 +908,7 @@ function App() {
       }
       targetUrl = targetUrl.replace('https://api.ficapp.in/api/', 'https://api.ficapp.in/admin-api/');
       targetUrl = targetUrl.replace(/([^:])\/\//g, '$1/');
-      if (targetUrl.includes('api.ficapp.in/admin-api/admin/') && !targetUrl.includes('api.ficapp.in/admin-api/admin-api/')) {
-        targetUrl = targetUrl.replace('api.ficapp.in/admin-api/admin/', 'api.ficapp.in/admin-api/admin-api/admin/');
-      } else if (!targetUrl.includes('api.ficapp.in/')) {
-        targetUrl = targetUrl.replace(/\/admin-api\/admin-api\//g, '/admin-api/');
-      }
+      targetUrl = targetUrl.replace(/\/admin-api\/admin-api\//g, '/admin-api/');
 
       for (let attempt = 0; attempt <= retries; attempt++) {
         try {
