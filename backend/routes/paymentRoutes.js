@@ -1387,84 +1387,217 @@ router.get('/breakdown/:paymentId', auth, async (req, res) => {
         }
 
         const effective = pRecord || matched;
+        const db = mongoose.connection.db;
 
-        // Extract or fetch related order or settlement details
-        let orderSettlement = {
-            relatedOrderId: effective.orderReference || effective.sourceReference || 'Not available',
-            orderDate: effective.lastUpdated ? new Date(effective.lastUpdated).toLocaleDateString('en-IN') : 'Not available',
-            orderItems: effective.eligibleOrder || effective.eligibleWork || effective.completedWork || 'Not available',
-            quantity: effective.quantity || 1,
-            orderAmount: effective.grossAmount || effective.amount || effective.payableAmount || 0,
-            settlementReference: effective.sourceReference || effective.orderReference || 'Not available',
-            settlementDate: effective.paymentDate || effective.lastUpdated || 'Not available'
+        // ─── CATEGORY LABEL HELPER ───────────────────────────────────────────
+        const getCategoryLabel = (type) => {
+            const map = { 'Food': 'Food Order', 'Services': 'Service Booking', 'Stay': 'Stay Booking', 'Travel': 'Travel Booking', 'Job': 'Job Application', 'Daily Needs': 'Daily Needs Order', 'Products': 'Product Order' };
+            return map[type] || type || 'Product Order';
         };
 
-        // If source is a settlement, lookup full settlement
-        if (effective.sourceId && mongoose.isValidObjectId(effective.sourceId)) {
-            const settl = await mongoose.connection.db.collection('settlements').findOne({ _id: new mongoose.Types.ObjectId(effective.sourceId) });
-            if (settl) {
-                orderSettlement = {
-                    relatedOrderId: settl.settlementReference || `SETTL-${String(settl._id).slice(-6).toUpperCase()}`,
-                    orderDate: settl.settlementDate ? new Date(settl.settlementDate).toLocaleDateString('en-IN') : new Date(settl.createdAt).toLocaleDateString('en-IN'),
-                    orderItems: settl.ordersIncluded ? `${settl.ordersIncluded.length} verified orders` : 'Settlement batch items',
-                    quantity: settl.ordersIncluded?.length || 1,
-                    orderAmount: settl.grossAmount || settl.amount || effective.grossAmount,
-                    settlementReference: settl.referenceNumber || settl.settlementReference || `SETTL-${String(settl._id).slice(-6).toUpperCase()}`,
-                    settlementDate: settl.settlementDate ? new Date(settl.settlementDate).toLocaleDateString('en-IN') : 'Not available'
-                };
+        // ─── RESOLVE SETTLEMENT ───────────────────────────────────────────────
+        const allSettlements = await db.collection('settlements').find({}).toArray();
+        const sourceRef = effective.sourceId || effective.sourceReference || '';
+        const settlementRecord = allSettlements.find(s =>
+            String(s._id) === String(sourceRef) ||
+            String(s._id) === cleanId ||
+            `PAY-VND-${String(s._id).slice(-6).toUpperCase()}` === cleanId ||
+            `SETTL-${String(s._id).slice(-6).toUpperCase()}` === (effective.orderReference || effective.sourceReference || '')
+        ) || null;
+
+        // ─── RESOLVE VENDOR ───────────────────────────────────────────────────
+        let vId = settlementRecord?.vendorId || null;
+        let vendorRecord = null;
+        if (vId) {
+            if (mongoose.isValidObjectId(vId)) vendorRecord = await db.collection('vendors').findOne({ _id: new mongoose.Types.ObjectId(vId) });
+            if (!vendorRecord) vendorRecord = await db.collection('vendors').findOne({ _id: vId });
+            if (!vendorRecord && mongoose.isValidObjectId(vId)) {
+                const u = await db.collection('users').findOne({ _id: new mongoose.Types.ObjectId(vId) });
+                if (u) vendorRecord = { ...u, businessName: u.businessName || u.name, vendorType: u.vendorType || u.category || 'General' };
+            }
+            if (!vendorRecord) {
+                const u = await db.collection('users').findOne({ _id: vId });
+                if (u) vendorRecord = { ...u, businessName: u.businessName || u.name, vendorType: u.vendorType || u.category || 'General' };
             }
         }
+
+        // ─── FETCH ORDERS ─────────────────────────────────────────────────────
+        let rawOrders = [];
+        if (vId) {
+            const orClauses = [{ vendorId: vId }, { vendor_id: vId }];
+            if (mongoose.isValidObjectId(vId)) {
+                orClauses.push({ vendorId: new mongoose.Types.ObjectId(vId) });
+                orClauses.push({ vendor_id: new mongoose.Types.ObjectId(vId) });
+            }
+            rawOrders = await db.collection('orders').find({ $or: orClauses }).sort({ created_at: -1 }).toArray();
+        }
+        if (settlementRecord?.ordersIncluded?.length) {
+            const incSet = new Set(settlementRecord.ordersIncluded.map(String));
+            rawOrders = rawOrders.filter(o => incSet.has(String(o._id)) || incSet.has(o.order_number) || incSet.has(o.id));
+        }
+
+        // ─── MAP TRANSACTIONS ─────────────────────────────────────────────────
+        const rawRate = settlementRecord?.commissionRate !== undefined ? settlementRecord.commissionRate : (effective.commissionRate !== undefined ? effective.commissionRate : 0);
+        const commRateNum = parseFloat(String(rawRate).replace(/[^0-9.-]/g, '')) || 0;
+        const transactions = rawOrders.map(o => {
+            const grossAmt = Number(o.finalAmount || o.totalAmount || o.amount || 0);
+            const commAmt = Math.round(grossAmt * (commRateNum / 100)) || 0;
+            const refundAmt = Number(o.refundAmount || 0);
+            const eligible = Math.max(0, grossAmt - commAmt - refundAmt);
+            const items = Array.isArray(o.items) ? o.items : [];
+            const primaryItem = items[0];
+            const productName = primaryItem?.name || o.product_details || 'Not specified';
+            const quantity = items.reduce((sum, it) => sum + Number(it.quantity || 1), 0) || 1;
+            const unitPrice = primaryItem?.price || (quantity > 0 ? Math.round(grossAmt / quantity) : grossAmt);
+            return {
+                orderId: o.order_number || o.id || `ORD-${String(o._id).slice(-6).toUpperCase()}`,
+                transactionId: o.transactionId || `TXN_${o.order_number || String(o._id).slice(-6).toUpperCase()}`,
+                orderDate: o.created_at || o.createdAt || null,
+                productName,
+                category: o.type || o.category || 'Products',
+                categoryLabel: getCategoryLabel(o.type || o.category),
+                quantity,
+                unitPrice,
+                grossAmount: grossAmt,
+                discount: Number(o.discount || 0),
+                tax: Number(o.tax || 0),
+                deliveryCharge: Number(o.deliveryCharge || o.delivery_charge || 0),
+                commission: commAmt,
+                fees: 0,
+                refundAmount: refundAmt,
+                eligibleAmount: eligible,
+                orderStatus: o.status || 'Unknown',
+                paymentStatus: o.paymentStatus || o.payment_status || 'Unknown',
+                paymentMethod: o.paymentMethod || o.payment_method || 'Not specified',
+                items,
+                appointmentDate: o.appointmentDate || null,
+                doctorName: o.doctorName || null,
+                tableNumber: o.tableNumber || null,
+                roomNumber: o.roomNumber || null,
+                candidateEmail: o.candidateEmail || null
+            };
+        });
+
+        // ─── PRODUCT SALES BREAKDOWN ──────────────────────────────────────────
+        const productSalesMap = new Map();
+        for (const tx of transactions) {
+            const key = `${tx.productName}__${tx.category}`;
+            if (!productSalesMap.has(key)) productSalesMap.set(key, { productName: tx.productName, category: tx.category, categoryLabel: tx.categoryLabel, quantitySold: 0, totalSales: 0 });
+            const e = productSalesMap.get(key);
+            e.quantitySold += tx.quantity;
+            e.totalSales += tx.grossAmount;
+        }
+        const productSales = Array.from(productSalesMap.values());
+
+        // ─── TRANSACTION SUMMARY KPIs ─────────────────────────────────────────
+        const completedSet = new Set(['delivered', 'completed', 'done', 'Delivered', 'Completed', 'Order Received', 'Confirmed']);
+        const cancelledSet = new Set(['cancelled', 'Cancelled', 'rejected', 'Rejected']);
+        const refundedSet = new Set(['refunded', 'Refunded']);
+        const totalOrders = transactions.length;
+        const completedOrders = transactions.filter(t => completedSet.has(t.orderStatus)).length;
+        const cancelledOrders = transactions.filter(t => cancelledSet.has(t.orderStatus)).length;
+        const refundedOrders = transactions.filter(t => refundedSet.has(t.orderStatus)).length;
+        const totalRefunds = transactions.reduce((sum, t) => sum + (Number(t.refundAmount) || 0), 0);
+        const totalCommission = transactions.reduce((sum, t) => sum + (Number(t.commission) || 0), 0);
 
         const gross = Number(effective.grossAmount || effective.amount || effective.payableAmount || 0);
         const payable = Number(effective.payableAmount || effective.amount || 0);
         const commissionAmount = Math.max(0, gross - payable);
 
-        const breakdown = {
-            summary: {
+        const transactionSummary = { totalOrders, completedOrders, cancelledOrders, refundedOrders, grossSales: transactions.reduce((sum, t) => sum + (Number(t.grossAmount) || 0), 0), commission: totalCommission, fees: 0, refunds: totalRefunds, adjustments: 0, finalNetPayable: payable };
+        const auditCalculation = { eligibleTransactionsCount: totalOrders, grossTransactionValue: gross, commissionRate: `${commRateNum}%`, commissionAmount, applicableFees: 0, refunds: totalRefunds, adjustments: 0, finalNetPayable: payable };
+
+        // ─── SETTLEMENT INFO ──────────────────────────────────────────────────
+        let orderSettlement = {
+            relatedOrderId: effective.orderReference || effective.sourceReference || 'Not available',
+            orderDate: effective.lastUpdated ? new Date(effective.lastUpdated).toLocaleDateString('en-IN') : 'Not available',
+            orderItems: effective.eligibleOrder || effective.eligibleWork || effective.completedWork || 'Not available',
+            quantity: effective.quantity || 1,
+            orderAmount: gross,
+            settlementReference: effective.sourceReference || effective.orderReference || 'Not available',
+            settlementDate: effective.paymentDate || effective.lastUpdated || 'Not available',
+            settlementPeriod: 'Not available',
+            paymentId: effective.paymentId || cleanId,
+            paymentMethod: effective.paymentMethod || 'Bank Transfer',
+            txnReference: effective.transactionReference || 'Not available',
+            status: effective.status || 'PENDING'
+        };
+        if (settlementRecord) {
+            const sId = String(settlementRecord._id);
+            const sDate = settlementRecord.settlementDate ? new Date(settlementRecord.settlementDate).toLocaleDateString('en-IN') : 'Not available';
+            orderSettlement = {
+                relatedOrderId: `SETTL-${sId.slice(-6).toUpperCase()}`,
+                orderDate: settlementRecord.settlementDate ? new Date(settlementRecord.settlementDate).toLocaleDateString('en-IN') : new Date(settlementRecord.createdAt).toLocaleDateString('en-IN'),
+                orderItems: rawOrders.length > 0 ? `${rawOrders.length} verified orders` : 'Settlement batch',
+                quantity: rawOrders.length || 1,
+                orderAmount: settlementRecord.grossAmount || gross,
+                settlementReference: settlementRecord.referenceNumber || settlementRecord.settlementReference || `SETTL-${sId.slice(-6).toUpperCase()}`,
+                settlementDate: sDate,
+                settlementPeriod: settlementRecord.settlementPeriod || `${new Date(settlementRecord.createdAt).toLocaleDateString('en-IN')} – ${sDate}`,
                 paymentId: effective.paymentId || cleanId,
-                receiptId: effective.receiptNumber || (effective.status === 'PAID' ? `RCP-${cleanId.replace(/[^A-Za-z0-9]/g, '').slice(-8)}` : 'Not available'),
-                transactionReference: effective.transactionReference || 'Not available',
-                status: effective.status || 'PENDING',
-                paymentDate: effective.paymentDate ? new Date(effective.paymentDate).toLocaleDateString('en-IN') : 'Not available',
-                paymentTime: effective.paymentDate ? new Date(effective.paymentDate).toLocaleTimeString('en-IN') : 'Not available',
-                paymentAmount: payable,
                 paymentMethod: effective.paymentMethod || 'Bank Transfer',
-                paymentPurpose: effective.paymentPurpose || 'Verified service compensation'
-            },
-            vendor: {
-                recipientName: effective.recipientName || 'Not available',
-                recipientId: effective.recipientId || cleanId,
-                recipientType: effective.recipientType || 'Vendor',
-                businessName: effective.businessName || effective.recipientName || 'Not available',
-                businessType: effective.businessType || 'Not available',
-                email: effective.recipientEmail || 'Not available',
-                phone: effective.recipientPhone || 'Not available',
-                bankDetails: {
-                    accountHolder: effective.bankDetails?.accountHolder || effective.bankAccountHolder || effective.recipientName || 'Not available',
-                    accountNumber: effective.bankDetails?.accountNumber || effective.bankAccountNumber || 'Not available',
-                    ifsc: effective.bankDetails?.ifsc || effective.bankDetails?.ifscCode || effective.bankIfsc || 'Not available',
-                    bankName: effective.bankDetails?.bankName || effective.bankName || 'Direct Transfer'
-                }
-            },
-            calculation: {
-                grossAmount: gross,
-                commissionRate: effective.commissionRate !== undefined ? `${effective.commissionRate}` : '0%',
-                commissionBasis: effective.commissionBasis || 'Platform Agreement',
-                commissionAmount: commissionAmount,
-                vendorPayableAmount: payable,
-                applicableFees: 0,
-                finalPayableAmount: payable
-            },
-            orderSettlement
+                txnReference: effective.transactionReference || 'Not available',
+                status: settlementRecord.status || effective.status || 'PENDING'
+            };
+        }
+
+        // ─── VENDOR INFO ──────────────────────────────────────────────────────
+        const vendorInfo = {
+            recipientName: vendorRecord?.name || effective.recipientName || settlementRecord?.vendorBusinessName || 'Not available',
+            recipientId: vId ? `VND-${String(vId).slice(-6).toUpperCase()}` : (effective.recipientId || 'Not available'),
+            recipientType: effective.recipientType || 'Vendor',
+            businessName: vendorRecord?.businessName || vendorRecord?.name || settlementRecord?.vendorBusinessName || effective.businessName || 'Not available',
+            businessType: vendorRecord?.vendorType || vendorRecord?.category || effective.businessType || 'General',
+            email: vendorRecord?.email || effective.recipientEmail || 'Not available',
+            phone: vendorRecord?.phone || effective.recipientPhone || 'Not available',
+            state: vendorRecord?.state || vendorRecord?.territory?.state || 'Not available',
+            district: vendorRecord?.district || vendorRecord?.territory?.district || 'Not available',
+            division: vendorRecord?.division || vendorRecord?.territory?.division || 'Not available',
+            pincode: vendorRecord?.pincode || vendorRecord?.territory?.pincode || 'Not available',
+            address: vendorRecord?.address || vendorRecord?.fullAddress || 'Not available',
+            bankDetails: {
+                accountHolder: vendorRecord?.bankDetails?.accountHolder || vendorRecord?.name || effective.bankDetails?.accountHolder || 'Not available',
+                accountNumber: vendorRecord?.bankDetails?.accountNumber ? maskAccountNumber(vendorRecord.bankDetails.accountNumber) : (effective.bankDetails?.accountNumber || 'Not Provided'),
+                ifsc: vendorRecord?.bankDetails?.ifscCode || vendorRecord?.bankDetails?.ifsc || effective.bankDetails?.ifsc || 'Not available',
+                bankName: vendorRecord?.bankDetails?.bankName || effective.bankDetails?.bankName || 'Direct Transfer'
+            }
         };
 
-        res.json({ success: true, breakdown });
+        res.json({
+            success: true,
+            breakdown: {
+                summary: {
+                    paymentId: effective.paymentId || cleanId,
+                    receiptId: effective.receiptNumber || (effective.status === 'PAID' ? `RCP-${cleanId.replace(/[^A-Za-z0-9]/g, '').slice(-8)}` : 'Not available'),
+                    transactionReference: effective.transactionReference || 'Not available',
+                    status: effective.status || 'PENDING',
+                    paymentDate: effective.paymentDate ? new Date(effective.paymentDate).toLocaleDateString('en-IN') : 'Not available',
+                    paymentTime: effective.paymentDate ? new Date(effective.paymentDate).toLocaleTimeString('en-IN') : 'Not available',
+                    paymentAmount: payable,
+                    amount: payable,
+                    paymentMethod: effective.paymentMethod || 'Bank Transfer',
+                    paymentPurpose: effective.paymentPurpose || 'Verified service compensation'
+                },
+                vendor: vendorInfo,
+                recipient: { name: vendorInfo.recipientName, recipientId: vendorInfo.recipientId, recipientType: vendorInfo.recipientType, businessName: vendorInfo.businessName, businessType: vendorInfo.businessType, phone: vendorInfo.phone, email: vendorInfo.email },
+                settlement: orderSettlement,
+                transactionSummary,
+                auditCalculation,
+                productSales,
+                transactions,
+                calculation: { grossAmount: gross, commissionRate: effective.commissionRate !== undefined ? `${effective.commissionRate}` : '0%', commissionBasis: effective.commissionBasis || 'Platform Agreement', commissionAmount, vendorPayableAmount: payable, applicableFees: 0, finalPayableAmount: payable },
+                orderSettlement
+            }
+        });
 
     } catch (err) {
         console.error('Payment breakdown retrieval error:', err);
         res.status(500).json({ success: false, msg: 'Failed to retrieve payment breakdown statement' });
     }
 });
+
+
+
 
 // =========================================================================
 // 6. HOLD & RELEASE PAYMENT (SECTION 11 & 13)

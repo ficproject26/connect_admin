@@ -111,6 +111,9 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
   const [breakdownModalOpen, setBreakdownModalOpen] = useState(false);
   const [breakdownLoading, setBreakdownLoading] = useState(false);
   const [breakdownData, setBreakdownData] = useState(null);
+  const [txnSearch, setTxnSearch] = useState('');
+  const [txnCategoryFilter, setTxnCategoryFilter] = useState('ALL');
+  const [txnStatusFilter, setTxnStatusFilter] = useState('ALL');
 
   const toast = useCallback((msg, type = 'info') => {
     if (onToast) onToast(msg, type);
@@ -2609,232 +2612,294 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
 
       {/* ── 12. DETAILED PAYMENT BREAKDOWN STATEMENT MODAL (REQUIREMENT 7) ── */}
       {breakdownModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col my-4">
             {/* Header */}
-            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-900 z-10">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
                   <FileText className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-black text-slate-900 dark:text-white">
-                    Payment Statement Breakdown
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Comprehensive real-time financial audit and order settlement record
-                  </p>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">Vendor Payment Breakdown Statement</h3>
+                  <p className="text-[11px] text-slate-400">Complete financial audit — real-time from verified database records</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
-                  title="Print statement"
-                >
-                  <Printer className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setBreakdownModalOpen(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <button type="button" onClick={() => window.print()} className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer" title="Print statement"><Printer className="w-4 h-4" /></button>
+                <button type="button" onClick={() => { setBreakdownModalOpen(false); setTxnSearch(''); setTxnCategoryFilter('ALL'); setTxnStatusFilter('ALL'); }} className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"><X className="w-5 h-5" /></button>
               </div>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-4 overflow-y-auto">
+            <div className="p-6 space-y-5 overflow-y-auto">
               {breakdownLoading ? (
                 <div className="py-16 text-center space-y-3">
                   <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
                   <p className="text-xs text-slate-400">Loading verified database statement...</p>
                 </div>
               ) : breakdownData ? (
-                <div className="space-y-4 text-xs">
-                  {/* 1. PAYMENT SUMMARY */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                <div className="space-y-5 text-xs">
+
+                  {/* ── SECTION 1: VENDOR INFORMATION ── */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block pb-2 border-b border-slate-200/60 dark:border-slate-700/60">1. Vendor Information</span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {[['Vendor Name', breakdownData.vendor?.recipientName || breakdownData.recipient?.name],
+                        ['Vendor ID', breakdownData.vendor?.recipientId || breakdownData.recipient?.recipientId],
+                        ['Business Name', breakdownData.vendor?.businessName || breakdownData.recipient?.businessName],
+                        ['Business Type', breakdownData.vendor?.businessType || breakdownData.recipient?.businessType],
+                        ['Phone', breakdownData.vendor?.phone || breakdownData.recipient?.phone],
+                        ['Email', breakdownData.vendor?.email || breakdownData.recipient?.email],
+                        ['State', breakdownData.vendor?.state],
+                        ['District', breakdownData.vendor?.district],
+                        ['Pincode', breakdownData.vendor?.pincode],
+                      ].map(([label, val]) => (
+                        <div key={label}>
+                          <span className="text-[10px] text-slate-400 block">{label}</span>
+                          <span className="font-medium text-slate-800 dark:text-slate-200 break-all">{val || 'Not available'}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400 block">Address</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{breakdownData.vendor?.address || 'Not available'}</span>
+                    </div>
+                  </div>
+
+                  {/* ── SECTION 2: SETTLEMENT / PAYMENT INFORMATION ── */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
                     <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
-                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                        1. Payment Summary
-                      </span>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">2. Settlement / Payment Information</span>
                       {renderStatusBadge(breakdownData.summary?.status)}
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Payment ID</span>
-                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                          {breakdownData.summary?.paymentId || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Receipt ID</span>
-                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                          {breakdownData.summary?.receiptId || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Transaction Reference</span>
-                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
-                          {breakdownData.summary?.transactionReference || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Payment Date & Time</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.summary?.paymentDate !== 'Not available' ? `${breakdownData.summary?.paymentDate} ${breakdownData.summary?.paymentTime || ''}` : 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Payment Method</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.summary?.paymentMethod || 'Direct Bank Transfer / NEFT'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Payment Amount</span>
-                        <span className="font-black text-slate-900 dark:text-white text-sm">
-                          {fmtCurrency(breakdownData.summary?.amount)}
-                        </span>
-                      </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {[['Settlement Ref', breakdownData.settlement?.settlementReference || breakdownData.orderSettlement?.settlementReference],
+                        ['Payment ID', breakdownData.summary?.paymentId],
+                        ['Settlement Period', breakdownData.settlement?.settlementPeriod || breakdownData.orderSettlement?.settlementPeriod],
+                        ['Settlement Date', breakdownData.settlement?.settlementDate || breakdownData.orderSettlement?.settlementDate],
+                        ['Payment Date', breakdownData.summary?.paymentDate !== 'Not available' ? `${breakdownData.summary?.paymentDate} ${breakdownData.summary?.paymentTime || ''}`.trim() : 'Not available'],
+                        ['Payment Method', breakdownData.settlement?.paymentMethod || breakdownData.summary?.paymentMethod],
+                        ['Txn Reference', breakdownData.settlement?.txnReference || breakdownData.summary?.transactionReference],
+                        ['Payment Status', breakdownData.settlement?.status || breakdownData.summary?.status],
+                        ['Receipt ID', breakdownData.summary?.receiptId],
+                      ].map(([label, val]) => (
+                        <div key={label}>
+                          <span className="text-[10px] text-slate-400 block">{label}</span>
+                          <span className="font-mono font-medium text-slate-800 dark:text-slate-200">{val || 'Not available'}</span>
+                        </div>
+                      ))}
                     </div>
-                    <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                    <div>
                       <span className="text-[10px] text-slate-400 block">Payment Purpose</span>
-                      <span className="font-medium text-slate-700 dark:text-slate-300">
-                        {breakdownData.summary?.paymentPurpose || 'Verified service compensation'}
-                      </span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">{breakdownData.summary?.paymentPurpose || 'Verified service compensation'}</span>
                     </div>
                   </div>
 
-                  {/* 2. VENDOR / RECIPIENT DETAILS */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
-                      2. Vendor / Recipient Details
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Recipient Name</span>
-                        <span className="font-bold text-slate-800 dark:text-slate-200">
-                          {breakdownData.recipient?.name || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Recipient ID</span>
-                        <span className="font-mono text-slate-700 dark:text-slate-300">
-                          {breakdownData.recipient?.recipientId || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Role / Category</span>
-                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                          {breakdownData.recipient?.recipientType || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Business Name</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.recipient?.businessName || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Business Type</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.recipient?.businessType || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Phone / Contact</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.recipient?.phone || 'Not available'}
-                        </span>
+                  {/* ── SECTION 3: TRANSACTION SUMMARY KPI CARDS ── */}
+                  {breakdownData.transactionSummary && (
+                    <div className="p-4 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/60 space-y-3">
+                      <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider block pb-2 border-b border-indigo-100 dark:border-indigo-900/60">3. Transaction Summary</span>
+                      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        {[['Total Orders', breakdownData.transactionSummary.totalOrders, 'text-slate-700 dark:text-slate-300'],
+                          ['Completed', breakdownData.transactionSummary.completedOrders, 'text-emerald-600 dark:text-emerald-400'],
+                          ['Cancelled', breakdownData.transactionSummary.cancelledOrders, 'text-rose-500 dark:text-rose-400'],
+                          ['Refunded', breakdownData.transactionSummary.refundedOrders, 'text-amber-500 dark:text-amber-400'],
+                        ].map(([label, val, cls]) => (
+                          <div key={label} className="bg-white dark:bg-slate-800 rounded-xl p-2.5 text-center border border-slate-100 dark:border-slate-700">
+                            <div className={`font-black text-lg leading-none ${cls}`}>{val ?? '—'}</div>
+                            <div className="text-[9px] text-slate-400 mt-1">{label}</div>
+                          </div>
+                        ))}
+                        {[['Gross Sales', fmtCurrency(breakdownData.transactionSummary.grossSales), 'text-slate-800 dark:text-slate-200'],
+                          ['Net Payable', fmtCurrency(breakdownData.transactionSummary.finalNetPayable), 'text-emerald-600 dark:text-emerald-400 font-black'],
+                        ].map(([label, val, cls]) => (
+                          <div key={label} className="bg-white dark:bg-slate-800 rounded-xl p-2.5 text-center border border-slate-100 dark:border-slate-700">
+                            <div className={`font-bold text-sm leading-tight ${cls}`}>{val}</div>
+                            <div className="text-[9px] text-slate-400 mt-1">{label}</div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* 3. PAYMENT CALCULATION */}
+                  {/* ── SECTION 4: HOW THIS PAYMENT WAS CALCULATED (AUDIT) ── */}
                   <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60 space-y-2">
-                    <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider block pb-1 border-b border-indigo-100 dark:border-indigo-900/60">
-                      3. Payment Calculation
-                    </span>
-                    <div className="space-y-1.5 pt-1">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Gross Amount</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {fmtCurrency(breakdownData.calculation?.grossAmount)}
-                        </span>
+                    <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider block pb-1 border-b border-indigo-100 dark:border-indigo-900/60">4. How This Payment Was Calculated</span>
+                    {breakdownData.auditCalculation ? (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Eligible Transactions</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{breakdownData.auditCalculation.eligibleTransactionsCount} orders</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Gross Transaction Value</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{fmtCurrency(breakdownData.auditCalculation.grossTransactionValue)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Commission Rate</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{breakdownData.auditCalculation.commissionRate}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Commission Deducted</span>
+                          <span className="font-semibold text-rose-600 dark:text-rose-400">- {fmtCurrency(breakdownData.auditCalculation.commissionAmount)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Applicable Fees</span>
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">- {fmtCurrency(breakdownData.auditCalculation.applicableFees || 0)}</span>
+                        </div>
+                        {(breakdownData.auditCalculation.refunds || 0) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Refunds</span>
+                            <span className="font-semibold text-rose-600 dark:text-rose-400">- {fmtCurrency(breakdownData.auditCalculation.refunds)}</span>
+                          </div>
+                        )}
+                        <div className="pt-2 border-t border-indigo-200 dark:border-indigo-800 flex justify-between items-baseline">
+                          <span className="font-bold text-slate-900 dark:text-white text-xs">Final Net Payable = Gross − Commission − Fees − Refunds</span>
+                          <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{fmtCurrency(breakdownData.auditCalculation.finalNetPayable)}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Commission Rate</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {breakdownData.calculation?.commissionRate || '0%'}
-                        </span>
+                    ) : (
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between"><span className="text-slate-500">Gross Amount</span><span className="font-semibold text-slate-800 dark:text-slate-200">{fmtCurrency(breakdownData.calculation?.grossAmount)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Commission Rate</span><span className="font-semibold text-slate-800 dark:text-slate-200">{breakdownData.calculation?.commissionRate || '0%'}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Commission Amount</span><span className="font-semibold text-rose-600 dark:text-rose-400">- {fmtCurrency(breakdownData.calculation?.commissionAmount)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Applicable Fees</span><span className="font-semibold text-slate-800 dark:text-slate-200">{fmtCurrency(breakdownData.calculation?.applicableFees || 0)}</span></div>
+                        <div className="pt-2 border-t border-indigo-200 dark:border-indigo-800 flex justify-between items-baseline">
+                          <span className="font-bold text-slate-900 dark:text-white">Final Net Payable</span>
+                          <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">{fmtCurrency(breakdownData.calculation?.finalPayableAmount)}</span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Commission Amount</span>
-                        <span className="font-semibold text-rose-600 dark:text-rose-400">
-                          - {fmtCurrency(breakdownData.calculation?.commissionAmount)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Applicable Fees</span>
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                          {fmtCurrency(breakdownData.calculation?.applicableFees || 0)}
-                        </span>
-                      </div>
-                      <div className="pt-2 border-t border-indigo-200 dark:border-indigo-800 flex justify-between items-baseline">
-                        <span className="font-bold text-slate-900 dark:text-white">Final Net Payable</span>
-                        <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
-                          {fmtCurrency(breakdownData.calculation?.finalPayableAmount)}
-                        </span>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  {/* 4. ORDER / SETTLEMENT DETAILS */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
-                      4. Order / Settlement Details
-                    </span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Related Order ID</span>
-                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                          {breakdownData.orderSettlement?.relatedOrderId || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Order Date</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.orderSettlement?.orderDate || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Quantity</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.orderSettlement?.quantity ?? 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Order Items / Task</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.orderSettlement?.orderItems || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Settlement Reference</span>
-                        <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.orderSettlement?.settlementReference || 'Not available'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-slate-400 block">Settlement Date / Run</span>
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
-                          {breakdownData.orderSettlement?.settlementDate || 'Not available'}
-                        </span>
+                  {/* ── SECTION 5: PRODUCT / SERVICE SALES BREAKDOWN ── */}
+                  {breakdownData.productSales?.length > 0 && (
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block pb-2 border-b border-slate-200/60 dark:border-slate-700/60">5. Product / Service Sales Breakdown</span>
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[400px]">
+                          <thead>
+                            <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                              <th className="text-left py-1.5 pr-2">Product / Service</th>
+                              <th className="text-left py-1.5 pr-2">Category</th>
+                              <th className="text-right py-1.5 pr-2">Qty Sold</th>
+                              <th className="text-right py-1.5">Total Sales</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {breakdownData.productSales.map((ps, idx) => (
+                              <tr key={idx} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-100/50 dark:hover:bg-slate-700/20">
+                                <td className="py-1.5 pr-2 font-medium text-slate-800 dark:text-slate-200">{ps.productName}</td>
+                                <td className="py-1.5 pr-2"><span className="px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[9px] font-semibold">{ps.categoryLabel || ps.category}</span></td>
+                                <td className="py-1.5 pr-2 text-right font-semibold text-slate-700 dark:text-slate-300">{ps.quantitySold}</td>
+                                <td className="py-1.5 text-right font-bold text-slate-900 dark:text-white">{fmtCurrency(ps.totalSales)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
+                  )}
+
+                  {/* ── SECTION 6: TRANSACTION HISTORY TABLE ── */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-3">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block pb-2 border-b border-slate-200/60 dark:border-slate-700/60">6. Transaction History</span>
+                    {/* Search & Filter */}
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        type="text"
+                        placeholder="Search order ID, product..."
+                        value={txnSearch}
+                        onChange={e => setTxnSearch(e.target.value)}
+                        className="flex-1 min-w-[160px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <select
+                        value={txnCategoryFilter}
+                        onChange={e => setTxnCategoryFilter(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+                      >
+                        <option value="ALL">All Categories</option>
+                        {[...new Set((breakdownData.transactions || []).map(t => t.category))].map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={txnStatusFilter}
+                        onChange={e => setTxnStatusFilter(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-700 dark:text-slate-300 focus:outline-none cursor-pointer"
+                      >
+                        <option value="ALL">All Statuses</option>
+                        {[...new Set((breakdownData.transactions || []).map(t => t.orderStatus))].map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {/* Table */}
+                    {(() => {
+                      const q = txnSearch.toLowerCase();
+                      const filtered = (breakdownData.transactions || []).filter(t =>
+                        (txnCategoryFilter === 'ALL' || t.category === txnCategoryFilter) &&
+                        (txnStatusFilter === 'ALL' || t.orderStatus === txnStatusFilter) &&
+                        (!q || t.orderId?.toLowerCase().includes(q) || t.productName?.toLowerCase().includes(q) || t.transactionId?.toLowerCase().includes(q))
+                      );
+                      if (filtered.length === 0) {
+                        return <div className="py-6 text-center text-slate-400 text-[11px]">No eligible transactions found for this settlement.</div>;
+                      }
+                      return (
+                        <div className="overflow-x-auto">
+                          <table className="w-full min-w-[760px]">
+                            <thead>
+                              <tr className="text-[9px] uppercase text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                                <th className="text-left py-1.5 pr-2">Order ID</th>
+                                <th className="text-left py-1.5 pr-2">Date</th>
+                                <th className="text-left py-1.5 pr-2">Product</th>
+                                <th className="text-left py-1.5 pr-2">Category</th>
+                                <th className="text-right py-1.5 pr-2">Qty</th>
+                                <th className="text-right py-1.5 pr-2">Unit Price</th>
+                                <th className="text-right py-1.5 pr-2">Gross</th>
+                                <th className="text-right py-1.5 pr-2">Commission</th>
+                                <th className="text-right py-1.5 pr-2">Eligible</th>
+                                <th className="text-left py-1.5 pr-2">Order Status</th>
+                                <th className="text-left py-1.5">Payment</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filtered.map((t, idx) => (
+                                <tr key={idx} className="border-b border-slate-100 dark:border-slate-700/50 hover:bg-slate-100/50 dark:hover:bg-slate-700/20 align-top">
+                                  <td className="py-1.5 pr-2 font-mono font-bold text-indigo-600 dark:text-indigo-400 whitespace-nowrap">{t.orderId}</td>
+                                  <td className="py-1.5 pr-2 text-slate-500 whitespace-nowrap">{t.orderDate ? new Date(t.orderDate).toLocaleDateString('en-IN') : '—'}</td>
+                                  <td className="py-1.5 pr-2 font-medium text-slate-800 dark:text-slate-200 max-w-[120px] truncate" title={t.productName}>{t.productName}</td>
+                                  <td className="py-1.5 pr-2">
+                                    <span className="px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[9px] font-semibold whitespace-nowrap">
+                                      {t.categoryLabel || t.category}
+                                    </span>
+                                  </td>
+                                  <td className="py-1.5 pr-2 text-right font-semibold text-slate-700 dark:text-slate-300">{t.quantity}</td>
+                                  <td className="py-1.5 pr-2 text-right text-slate-600 dark:text-slate-400">{fmtCurrency(t.unitPrice)}</td>
+                                  <td className="py-1.5 pr-2 text-right font-bold text-slate-800 dark:text-slate-200">{fmtCurrency(t.grossAmount)}</td>
+                                  <td className="py-1.5 pr-2 text-right text-rose-500">{t.commission > 0 ? `- ${fmtCurrency(t.commission)}` : '—'}</td>
+                                  <td className="py-1.5 pr-2 text-right font-bold text-emerald-600 dark:text-emerald-400">{fmtCurrency(t.eligibleAmount)}</td>
+                                  <td className="py-1.5 pr-2 whitespace-nowrap">
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                      ['delivered','completed','done','Delivered','Completed','Order Received','Confirmed'].includes(t.orderStatus) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' :
+                                      ['cancelled','Cancelled','rejected','Rejected'].includes(t.orderStatus) ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400' :
+                                      'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400'
+                                    }`}>{t.orderStatus}</span>
+                                  </td>
+                                  <td className="py-1.5 whitespace-nowrap">
+                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-semibold ${
+                                      ['Paid','paid','PAID','success','Success'].includes(t.paymentStatus) ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' :
+                                      'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
+                                    }`}>{t.paymentStatus}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   <div className="text-[11px] text-slate-400 text-center italic">
@@ -2852,7 +2917,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
             <div className="px-6 py-3.5 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2.5">
               <button
                 type="button"
-                onClick={() => setBreakdownModalOpen(false)}
+                onClick={() => { setBreakdownModalOpen(false); setTxnSearch(''); setTxnCategoryFilter('ALL'); setTxnStatusFilter('ALL'); }}
                 className="px-5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-black transition cursor-pointer"
               >
                 Close
