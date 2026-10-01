@@ -634,12 +634,38 @@ router.post('/send-otp', auth, async (req, res) => {
             }
         }
 
-        const paymentId = String(req.body.paymentId || 'PAY-DISBURSEMENT').trim();
-        const amount = Number(req.body.amount || req.body.payableAmount || 0);
-        const recipientId = String(req.body.recipientId || '').trim();
-        const recipientName = String(req.body.recipientName || '').trim();
-        const recipientType = String(req.body.recipientType || '').trim();
-        const paymentPurpose = String(req.body.paymentPurpose || '').trim();
+        const isBulk = Array.isArray(req.body.paymentIds) && req.body.paymentIds.length > 0;
+        let paymentId = String(req.body.paymentId || 'PAY-DISBURSEMENT').trim();
+        let amount = Number(req.body.amount || req.body.payableAmount || 0);
+        let recipientId = String(req.body.recipientId || '').trim();
+        let recipientName = String(req.body.recipientName || '').trim();
+        let recipientType = String(req.body.recipientType || '').trim();
+        let paymentPurpose = String(req.body.paymentPurpose || '').trim();
+
+        if (isBulk) {
+            paymentId = `BULK-PAYOUT-${Date.now()}`;
+            recipientName = `${req.body.paymentIds.length} Recipients (Bulk Payout)`;
+            recipientType = 'Bulk';
+            paymentPurpose = paymentPurpose || `Bulk disbursement for ${req.body.paymentIds.length} pending payouts`;
+
+            // Calculate server-verified total amount across requested paymentIds
+            const payables = await computeRecipientPayables();
+            const allItems = [
+                ...(payables?.agents || []),
+                ...(payables?.vendors || []),
+                ...(payables?.deliveryPartners || []),
+                ...(payables?.technicians || [])
+            ];
+            let calculatedTotal = 0;
+            req.body.paymentIds.forEach(pid => {
+                const found = allItems.find(i => String(i.paymentId) === String(pid) || String(i._id) === String(pid));
+                if (found && (found.status === 'PENDING' || found.status === 'ELIGIBLE' || !found.status)) {
+                    calculatedTotal += Number(found.payableAmount || found.amount || 0);
+                }
+            });
+            amount = calculatedTotal > 0 ? calculatedTotal : amount;
+        }
+
         const authorizationToken = crypto.randomBytes(32).toString('hex');
 
         // Create bound PaymentAuthorizationSession in MongoDB
@@ -654,7 +680,7 @@ router.post('/send-otp', auth, async (req, res) => {
             recipientType,
             amount,
             paymentPurpose,
-            accountDetails: req.body.accountDetails || {},
+            accountDetails: { ...(req.body.accountDetails || {}), isBulk, paymentIds: req.body.paymentIds || [] },
             otpVerified: false,
             pinVerified: false,
             expiresAt: new Date(now + 10 * 60 * 1000) // 10 min validity
@@ -691,10 +717,10 @@ router.post('/send-otp', auth, async (req, res) => {
             purpose: 'PAYMENT_AUTHORIZATION',
             otp,
             metadata: {
-                paymentId,
+                paymentId: isBulk ? `Bulk Payout (${req.body.paymentIds.length} items)` : paymentId,
                 amount,
-                recipientName,
-                recipientType
+                recipientName: isBulk ? `${req.body.paymentIds.length} Selected Recipients` : recipientName,
+                recipientType: isBulk ? 'Bulk Payout' : recipientType
             }
         });
 
@@ -702,7 +728,8 @@ router.post('/send-otp', auth, async (req, res) => {
         await logPaymentAudit(req, 'otp_sent', paymentId, `Disbursement verification OTP sent to authorized email: ${authEmail}`, {
             paymentId,
             amount,
-            recipient: recipientName
+            recipient: recipientName,
+            isBulk
         });
 
         res.json({
@@ -1123,6 +1150,319 @@ router.post('/process', auth, async (req, res) => {
     } catch (err) {
         console.error('Error processing disbursement:', err);
         res.status(500).json({ success: false, msg: 'Server error processing disbursement.' });
+    }
+});
+
+// Alias for bulk-send-otp
+router.post('/bulk-send-otp', auth, async (req, res) => {
+    // Forward to existing send-otp handler logic
+    req.url = '/send-otp';
+    return router.handle(req, res);
+});
+
+// =========================================================================
+// 5B. BULK PAYMENT PROCESSING (REQUIREMENTS 2, 5, 9, 10, 13)
+// =========================================================================
+router.post('/bulk-process', auth, async (req, res) => {
+    try {
+        const { paymentIds, idempotencyKey } = req.body;
+        const token = req.body.authorizationToken || req.body.verificationToken;
+
+        if (!Array.isArray(paymentIds) || paymentIds.length === 0) {
+            return res.status(400).json({ success: false, msg: 'At least one payment ID is required for bulk processing.' });
+        }
+
+        // 1. Mandatory Two-Factor Server-Side Authorization Session Validation
+        const authSession = token ? await PaymentAuthorizationSession.findOne({ authorizationToken: token }) : null;
+        if (!authSession || new Date() > new Date(authSession.expiresAt) || !authSession.otpVerified || !authSession.pinVerified) {
+            return res.status(401).json({
+                success: false,
+                msg: 'Unauthorized: Dual-verification required. Complete BOTH Email OTP and Transaction PIN verification before disbursement.'
+            });
+        }
+
+        if (authSession.isExecuted) {
+            return res.status(400).json({
+                success: false,
+                msg: 'This payment authorization session has already been executed.'
+            });
+        }
+
+        // 2. Pre-fetch real operational database payables to match and validate
+        const payables = await computeRecipientPayables();
+        const allItems = [
+            ...(payables?.agents || []),
+            ...(payables?.vendors || []),
+            ...(payables?.deliveryPartners || []),
+            ...(payables?.technicians || [])
+        ];
+        const payablesMap = new Map();
+        allItems.forEach(item => {
+            if (item.paymentId) payablesMap.set(String(item.paymentId), item);
+            if (item._id) payablesMap.set(String(item._id), item);
+        });
+
+        const actorName = req.user?.name || 'Super Admin';
+        const actorId = req.user?.id || req.user?._id;
+
+        const results = [];
+        let totalDisbursed = 0;
+        let successCount = 0;
+        let failedCount = 0;
+
+        for (const paymentId of paymentIds) {
+            const cleanId = String(paymentId).trim();
+            if (!cleanId) continue;
+
+            const idFilter = [{ paymentId: cleanId }];
+            if (mongoose.isValidObjectId(cleanId)) idFilter.push({ _id: cleanId });
+
+            // Atomic Locking: Transition to PROCESSING atomically
+            let payment = await Payment.findOneAndUpdate(
+                {
+                    $or: idFilter,
+                    status: { $in: ['PENDING', 'ELIGIBLE', 'HOLD'] }
+                },
+                {
+                    $set: { status: 'PROCESSING' }
+                },
+                { new: true }
+            );
+
+            if (!payment) {
+                const existing = await Payment.findOne({ $or: idFilter }).lean();
+                if (existing) {
+                    results.push({
+                        paymentId: cleanId,
+                        recipientName: existing.recipientName || 'Recipient',
+                        amount: existing.amount || 0,
+                        status: 'FAILED',
+                        reason: `Payment is already ${existing.status} and cannot be processed.`
+                    });
+                    failedCount++;
+                    continue;
+                }
+
+                // If not yet in Payment collection, check computed payables
+                const matched = payablesMap.get(cleanId);
+                if (matched && (matched.status === 'PENDING' || matched.status === 'ELIGIBLE' || !matched.status)) {
+                    payment = new Payment({
+                        paymentId: cleanId,
+                        paymentType: 'paid',
+                        paymentCategory: inferPaymentCategory(matched.recipientType),
+                        recipientName: matched.recipientName,
+                        recipientType: matched.recipientType,
+                        recipientId: matched.recipientId,
+                        amount: matched.payableAmount,
+                        paymentPurpose: matched.paymentPurpose,
+                        sourceReference: matched.sourceReference,
+                        status: 'PROCESSING'
+                    });
+                    await payment.save();
+                } else {
+                    results.push({
+                        paymentId: cleanId,
+                        recipientName: matched?.recipientName || 'Unknown',
+                        amount: matched?.payableAmount || 0,
+                        status: 'FAILED',
+                        reason: matched ? `Payment status is ${matched.status} (must be PENDING).` : 'Disbursement record not found.'
+                    });
+                    failedCount++;
+                    continue;
+                }
+            }
+
+            // Verify amount
+            const verifiedAmount = Number(payment.amount || 0);
+            if (verifiedAmount <= 0) {
+                payment.status = 'FAILED';
+                payment.failureReason = 'Invalid server-side disbursement amount';
+                await payment.save();
+                results.push({
+                    paymentId: cleanId,
+                    recipientName: payment.recipientName,
+                    amount: 0,
+                    status: 'FAILED',
+                    reason: 'Payment amount must be greater than zero.'
+                });
+                failedCount++;
+                continue;
+            }
+
+            // Finalize Payment state to PAID
+            const txnRef = `TXN-FIC-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+            payment.status = 'PAID';
+            payment.amount = verifiedAmount;
+            payment.paymentDate = new Date();
+            payment.transactionReference = txnRef;
+            payment.idempotencyKey = txnRef;
+            payment.processedBy = actorName;
+            payment.processedById = actorId;
+
+            await payment.save();
+
+            // Sync with source model (e.g. settlements)
+            if (payment.sourceModel === 'Settlement' && payment.sourceId) {
+                await mongoose.connection.db.collection('settlements').updateOne(
+                    { _id: new mongoose.Types.ObjectId(payment.sourceId) },
+                    { $set: { status: 'Completed', updatedAt: new Date() } }
+                ).catch(() => {});
+            }
+
+            // Log Immutable Audit Trail
+            await logPaymentAudit(req, 'payment_processed', cleanId, `Bulk disbursement of ₹${verifiedAmount} to ${payment.recipientName} (${payment.recipientType}) completed`, {
+                transactionReference: txnRef,
+                amount: verifiedAmount,
+                recipient: payment.recipientName,
+                recipientType: payment.recipientType,
+                isBulk: true
+            }).catch(() => {});
+
+            // Real-Time Broadcast
+            emitPaymentRealtime(req, 'processed', payment.toObject());
+
+            totalDisbursed += verifiedAmount;
+            successCount++;
+
+            results.push({
+                paymentId: cleanId,
+                recipientName: payment.recipientName,
+                recipientType: payment.recipientType,
+                amount: verifiedAmount,
+                status: 'SUCCESS',
+                transactionReference: txnRef,
+                paymentDate: payment.paymentDate
+            });
+        }
+
+        // Invalidate Authorization Session in MongoDB
+        authSession.isExecuted = true;
+        authSession.executedAt = new Date();
+        await authSession.save();
+
+        res.json({
+            success: true,
+            msg: `Bulk payment completed: ${successCount} successful, ${failedCount} failed. Total disbursed: ₹${totalDisbursed.toLocaleString('en-IN')}`,
+            summary: {
+                total: paymentIds.length,
+                successful: successCount,
+                failed: failedCount,
+                totalDisbursed
+            },
+            results
+        });
+
+    } catch (err) {
+        console.error('Bulk payment processing error:', err);
+        res.status(500).json({ success: false, msg: `Bulk payment processing failed: ${err.message}` });
+    }
+});
+
+// =========================================================================
+// 5C. DETAILED PAYMENT BREAKDOWN STATEMENT (REQUIREMENT 7)
+// =========================================================================
+router.get('/breakdown/:paymentId', auth, async (req, res) => {
+    try {
+        const { paymentId } = req.params;
+        const cleanId = String(paymentId).trim();
+
+        // 1. Check database Payment record
+        const idFilter = [{ paymentId: cleanId }];
+        if (mongoose.isValidObjectId(cleanId)) idFilter.push({ _id: cleanId });
+
+        const pRecord = await Payment.findOne({ $or: idFilter }).lean();
+
+        // 2. Check computed payables
+        const payables = await computeRecipientPayables();
+        const allItems = [
+            ...(payables?.agents || []),
+            ...(payables?.vendors || []),
+            ...(payables?.deliveryPartners || []),
+            ...(payables?.technicians || [])
+        ];
+        const matched = allItems.find(i => String(i.paymentId) === cleanId || String(i._id) === cleanId);
+
+        if (!pRecord && !matched) {
+            return res.status(404).json({ success: false, msg: 'Payment record not found.' });
+        }
+
+        const effective = pRecord || matched;
+
+        // Extract or fetch related order or settlement details
+        let orderSettlement = {
+            relatedOrderId: effective.orderReference || effective.sourceReference || 'Not available',
+            orderDate: effective.lastUpdated ? new Date(effective.lastUpdated).toLocaleDateString('en-IN') : 'Not available',
+            orderItems: effective.eligibleOrder || effective.eligibleWork || effective.completedWork || 'Not available',
+            quantity: effective.quantity || 1,
+            orderAmount: effective.grossAmount || effective.amount || effective.payableAmount || 0,
+            settlementReference: effective.sourceReference || effective.orderReference || 'Not available',
+            settlementDate: effective.paymentDate || effective.lastUpdated || 'Not available'
+        };
+
+        // If source is a settlement, lookup full settlement
+        if (effective.sourceId && mongoose.isValidObjectId(effective.sourceId)) {
+            const settl = await mongoose.connection.db.collection('settlements').findOne({ _id: new mongoose.Types.ObjectId(effective.sourceId) });
+            if (settl) {
+                orderSettlement = {
+                    relatedOrderId: settl.settlementReference || `SETTL-${String(settl._id).slice(-6).toUpperCase()}`,
+                    orderDate: settl.settlementDate ? new Date(settl.settlementDate).toLocaleDateString('en-IN') : new Date(settl.createdAt).toLocaleDateString('en-IN'),
+                    orderItems: settl.ordersIncluded ? `${settl.ordersIncluded.length} verified orders` : 'Settlement batch items',
+                    quantity: settl.ordersIncluded?.length || 1,
+                    orderAmount: settl.grossAmount || settl.amount || effective.grossAmount,
+                    settlementReference: settl.referenceNumber || settl.settlementReference || `SETTL-${String(settl._id).slice(-6).toUpperCase()}`,
+                    settlementDate: settl.settlementDate ? new Date(settl.settlementDate).toLocaleDateString('en-IN') : 'Not available'
+                };
+            }
+        }
+
+        const gross = Number(effective.grossAmount || effective.amount || effective.payableAmount || 0);
+        const payable = Number(effective.payableAmount || effective.amount || 0);
+        const commissionAmount = Math.max(0, gross - payable);
+
+        const breakdown = {
+            summary: {
+                paymentId: effective.paymentId || cleanId,
+                receiptId: effective.receiptNumber || (effective.status === 'PAID' ? `RCP-${cleanId.replace(/[^A-Za-z0-9]/g, '').slice(-8)}` : 'Not available'),
+                transactionReference: effective.transactionReference || 'Not available',
+                status: effective.status || 'PENDING',
+                paymentDate: effective.paymentDate ? new Date(effective.paymentDate).toLocaleDateString('en-IN') : 'Not available',
+                paymentTime: effective.paymentDate ? new Date(effective.paymentDate).toLocaleTimeString('en-IN') : 'Not available',
+                paymentAmount: payable,
+                paymentMethod: effective.paymentMethod || 'Bank Transfer',
+                paymentPurpose: effective.paymentPurpose || 'Verified service compensation'
+            },
+            vendor: {
+                recipientName: effective.recipientName || 'Not available',
+                recipientId: effective.recipientId || cleanId,
+                recipientType: effective.recipientType || 'Vendor',
+                businessName: effective.businessName || effective.recipientName || 'Not available',
+                businessType: effective.businessType || 'Not available',
+                email: effective.recipientEmail || 'Not available',
+                phone: effective.recipientPhone || 'Not available',
+                bankDetails: {
+                    accountHolder: effective.bankDetails?.accountHolder || effective.bankAccountHolder || effective.recipientName || 'Not available',
+                    accountNumber: effective.bankDetails?.accountNumber || effective.bankAccountNumber || 'Not available',
+                    ifsc: effective.bankDetails?.ifsc || effective.bankDetails?.ifscCode || effective.bankIfsc || 'Not available',
+                    bankName: effective.bankDetails?.bankName || effective.bankName || 'Direct Transfer'
+                }
+            },
+            calculation: {
+                grossAmount: gross,
+                commissionRate: effective.commissionRate !== undefined ? `${effective.commissionRate}` : '0%',
+                commissionBasis: effective.commissionBasis || 'Platform Agreement',
+                commissionAmount: commissionAmount,
+                vendorPayableAmount: payable,
+                applicableFees: 0,
+                finalPayableAmount: payable
+            },
+            orderSettlement
+        };
+
+        res.json({ success: true, breakdown });
+
+    } catch (err) {
+        console.error('Payment breakdown retrieval error:', err);
+        res.status(500).json({ success: false, msg: 'Failed to retrieve payment breakdown statement' });
     }
 });
 

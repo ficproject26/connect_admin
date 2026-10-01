@@ -4,7 +4,8 @@ import {
   AlertTriangle, XCircle, Search, ChevronRight, Eye, Lock, Key, ArrowRight,
   Check, X, Printer, MapPin, Building, User, Users, Send, AlertCircle,
   FileCheck, ArrowUpRight, ArrowDownRight, Share2, HelpCircle, Briefcase,
-  Truck, Wrench, Store, PauseCircle, Ban, PlayCircle, Hash, ExternalLink
+  Truck, Wrench, Store, PauseCircle, Ban, PlayCircle, Hash, ExternalLink,
+  Zap
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 
@@ -89,6 +90,27 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
   // Receipt Modal
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [receiptData, setReceiptData] = useState(null);
+
+  // Bulk Payment Selection & Multi-Step Processing States (Requirements 2, 3, 4, 5, 9, 10)
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState(new Set());
+  const [bulkModalOpen, setBulkModalOpen] = useState(false);
+  const [bulkStep, setBulkStep] = useState(1); // 1: review, 2: otp, 3: pin, 4: results
+  const [bulkItems, setBulkItems] = useState([]);
+  const [bulkOtpCode, setBulkOtpCode] = useState('');
+  const [bulkOtpLoading, setBulkOtpLoading] = useState(false);
+  const [bulkOtpTimer, setBulkOtpTimer] = useState(120);
+  const [bulkVerificationToken, setBulkVerificationToken] = useState('');
+  const [bulkMaskedAuthEmail, setBulkMaskedAuthEmail] = useState('');
+  const [bulkSecurityPin, setBulkSecurityPin] = useState(['', '', '', '', '', '']);
+  const [bulkPinLoading, setBulkPinLoading] = useState(false);
+  const [bulkError, setBulkError] = useState('');
+  const [bulkSummary, setBulkSummary] = useState(null);
+  const [bulkResults, setBulkResults] = useState([]);
+
+  // Detailed Payment Breakdown Statement Modal States (Requirement 7)
+  const [breakdownModalOpen, setBreakdownModalOpen] = useState(false);
+  const [breakdownLoading, setBreakdownLoading] = useState(false);
+  const [breakdownData, setBreakdownData] = useState(null);
 
   const toast = useCallback((msg, type = 'info') => {
     if (onToast) onToast(msg, type);
@@ -188,7 +210,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     };
   }, [API_BASE, fetchDashboardData]);
 
-  // OTP Countdown Timer
+  // OTP Countdown Timer (Single Pay)
   useEffect(() => {
     let interval = null;
     if (payModalOpen && payStep === 2 && otpTimer > 0) {
@@ -198,6 +220,17 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     }
     return () => clearInterval(interval);
   }, [payModalOpen, payStep, otpTimer]);
+
+  // Bulk OTP Countdown Timer (Requirements 2, 5, 9, 10)
+  useEffect(() => {
+    let interval = null;
+    if (bulkModalOpen && bulkStep === 2 && bulkOtpTimer > 0) {
+      interval = setInterval(() => {
+        setBulkOtpTimer(prev => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [bulkModalOpen, bulkStep, bulkOtpTimer]);
 
   // Format currency
   const fmtCurrency = (val) => {
@@ -243,6 +276,67 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
       return true;
     });
   }, [recipients, activeTab, statusFilter, searchTerm]);
+
+  // Selectable pending items in the currently visible list (Requirements 3, 4)
+  const pendingItemsInCurrentList = useMemo(() => {
+    return currentList.filter(item => {
+      const s = (item.status || 'PENDING').toUpperCase();
+      return s === 'PENDING' || s === 'ELIGIBLE';
+    });
+  }, [currentList]);
+
+  // Header Select All state for current visible pending items
+  const isAllSelected = useMemo(() => {
+    if (pendingItemsInCurrentList.length === 0) return false;
+    return pendingItemsInCurrentList.every(item => selectedPaymentIds.has(item.paymentId || item._id));
+  }, [pendingItemsInCurrentList, selectedPaymentIds]);
+
+  const isSomeSelected = useMemo(() => {
+    if (isAllSelected) return false;
+    return pendingItemsInCurrentList.some(item => selectedPaymentIds.has(item.paymentId || item._id));
+  }, [pendingItemsInCurrentList, selectedPaymentIds, isAllSelected]);
+
+  // Total amount of currently selected pending items
+  const bulkSelectedAmount = useMemo(() => {
+    const allItems = [
+      ...(recipients.agents || []),
+      ...(recipients.vendors || []),
+      ...(recipients.deliveryPartners || []),
+      ...(recipients.technicians || [])
+    ];
+    let total = 0;
+    allItems.forEach(item => {
+      const id = item.paymentId || item._id;
+      if (selectedPaymentIds.has(id)) {
+        const s = (item.status || 'PENDING').toUpperCase();
+        if (s === 'PENDING' || s === 'ELIGIBLE') {
+          total += Number(item.payableAmount || item.amount || 0);
+        }
+      }
+    });
+    return total;
+  }, [recipients, selectedPaymentIds]);
+
+  const handleToggleSelectAll = () => {
+    setSelectedPaymentIds(prev => {
+      const next = new Set(prev);
+      if (isAllSelected) {
+        pendingItemsInCurrentList.forEach(item => next.delete(item.paymentId || item._id));
+      } else {
+        pendingItemsInCurrentList.forEach(item => next.add(item.paymentId || item._id));
+      }
+      return next;
+    });
+  };
+
+  const handleToggleSelectOne = (id) => {
+    setSelectedPaymentIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   // -------------------------------------------------------------
   // ACTION: INITIATE PAY FLOW (Step 1)
@@ -600,6 +694,284 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     }
   };
 
+  // -------------------------------------------------------------
+  // ACTION: BULK PAYMENT FLOW (REQUIREMENTS 2, 4, 5, 9, 10, 13)
+  // -------------------------------------------------------------
+  const handleInitiatePayAll = () => {
+    const allItems = [
+      ...(recipients.agents || []),
+      ...(recipients.vendors || []),
+      ...(recipients.deliveryPartners || []),
+      ...(recipients.technicians || [])
+    ];
+    const selected = allItems.filter(i => 
+      (selectedPaymentIds.has(i.paymentId) || selectedPaymentIds.has(i._id)) &&
+      (i.status === 'PENDING' || i.status === 'ELIGIBLE' || !i.status)
+    );
+
+    if (selected.length === 0) {
+      toast('Please select at least one pending disbursement to process', 'warning');
+      return;
+    }
+
+    setBulkItems(selected);
+    setBulkStep(1);
+    setBulkError('');
+    setBulkOtpCode('');
+    setBulkSecurityPin(['', '', '', '', '', '']);
+    setBulkResults([]);
+    setBulkSummary(null);
+    setBulkModalOpen(true);
+  };
+
+  const handleInitiateProcessAll = () => {
+    let itemsToProcess = [];
+    if (selectedPaymentIds.size > 0) {
+      const allItems = [
+        ...(recipients.agents || []),
+        ...(recipients.vendors || []),
+        ...(recipients.deliveryPartners || []),
+        ...(recipients.technicians || [])
+      ];
+      itemsToProcess = allItems.filter(i => 
+        (selectedPaymentIds.has(i.paymentId) || selectedPaymentIds.has(i._id)) &&
+        (i.status === 'PENDING' || i.status === 'ELIGIBLE' || !i.status)
+      );
+    } else {
+      itemsToProcess = pendingItemsInCurrentList;
+    }
+
+    if (itemsToProcess.length === 0) {
+      toast('No pending disbursements found to process in the current view', 'warning');
+      return;
+    }
+
+    // Select the items to process
+    const newSel = new Set(selectedPaymentIds);
+    itemsToProcess.forEach(i => newSel.add(i.paymentId || i._id));
+    setSelectedPaymentIds(newSel);
+
+    setBulkItems(itemsToProcess);
+    setBulkStep(1);
+    setBulkError('');
+    setBulkOtpCode('');
+    setBulkSecurityPin(['', '', '', '', '', '']);
+    setBulkResults([]);
+    setBulkSummary(null);
+    setBulkModalOpen(true);
+  };
+
+  const handleBulkRequestOtp = async () => {
+    setBulkOtpLoading(true);
+    setBulkError('');
+    try {
+      const paymentIds = bulkItems.map(i => i.paymentId || i._id);
+      const totalAmt = bulkItems.reduce((acc, i) => acc + Number(i.payableAmount || i.amount || 0), 0);
+      const res = await fetch(`${API_BASE}/admin/enterprise/payments/send-otp`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          paymentIds,
+          isBulk: true,
+          amount: totalAmt,
+          recipientName: `${bulkItems.length} Recipients (Bulk Payout)`,
+          recipientType: 'Bulk Payout',
+          paymentPurpose: `Bulk disbursement for ${bulkItems.length} verified payouts`
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setBulkVerificationToken(data.authorizationToken || data.verificationToken);
+        setBulkMaskedAuthEmail(data.maskedEmail || '');
+        setBulkOtpTimer(120);
+        setBulkStep(2);
+        toast(data.msg || 'Bulk verification OTP sent to authorized email');
+      } else {
+        setBulkError(data.msg || 'Failed to dispatch verification OTP');
+      }
+    } catch (err) {
+      setBulkError('Network error requesting OTP');
+    } finally {
+      setBulkOtpLoading(false);
+    }
+  };
+
+  const handleBulkVerifyOtp = async (e) => {
+    e.preventDefault();
+    if (!bulkOtpCode || bulkOtpCode.trim().length !== 6) {
+      setBulkError('Please enter a complete 6-digit OTP code');
+      return;
+    }
+    setBulkOtpLoading(true);
+    setBulkError('');
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/payments/verify-otp`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          otp: bulkOtpCode.trim(),
+          authorizationToken: bulkVerificationToken,
+          verificationToken: bulkVerificationToken
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const tokenVal = data.authorizationToken || data.verificationToken || bulkVerificationToken;
+        if (tokenVal) setBulkVerificationToken(tokenVal);
+        setBulkStep(3);
+        toast('Email OTP verified. Please enter your Security PIN.');
+      } else {
+        setBulkError(data.msg || 'Invalid or expired OTP code');
+      }
+    } catch (err) {
+      setBulkError('Network error verifying OTP code');
+    } finally {
+      setBulkOtpLoading(false);
+    }
+  };
+
+  const handleBulkAuthorizeDisbursement = async (e) => {
+    e.preventDefault();
+    const pinStr = bulkSecurityPin.join('');
+    if (pinStr.length < 4 || pinStr.length > 6) {
+      setBulkError('Please enter your 4 to 6 digit Security PIN');
+      return;
+    }
+
+    setBulkPinLoading(true);
+    setBulkError('');
+    try {
+      // 1. Verify PIN
+      const pinRes = await fetch(`${API_BASE}/admin/enterprise/payments/verify-pin`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          pin: pinStr,
+          authorizationToken: bulkVerificationToken,
+          verificationToken: bulkVerificationToken
+        })
+      });
+      const pinData = await pinRes.json();
+      if (!pinRes.ok || !pinData.success) {
+        setBulkError(pinData.msg || 'Incorrect Security PIN');
+        setBulkPinLoading(false);
+        return;
+      }
+
+      // 2. Process Bulk Disbursement Atomically
+      const paymentIds = bulkItems.map(i => i.paymentId || i._id);
+      const processRes = await fetch(`${API_BASE}/admin/enterprise/payments/bulk-process`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          paymentIds,
+          authorizationToken: bulkVerificationToken,
+          verificationToken: bulkVerificationToken
+        })
+      });
+      const processData = await processRes.json();
+      if (processRes.ok && processData.success) {
+        setBulkSummary(processData.summary);
+        setBulkResults(processData.results || []);
+        setBulkStep(4);
+        toast(processData.msg || 'Bulk payment processed successfully');
+        setSelectedPaymentIds(new Set());
+        fetchDashboardData(true);
+      } else {
+        setBulkError(processData.msg || 'Bulk payment processing failed');
+      }
+    } catch (err) {
+      setBulkError('Disbursement transaction failed due to network error');
+    } finally {
+      setBulkPinLoading(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // ACTION: VIEW DETAILED BREAKDOWN STATEMENT (REQUIREMENT 7)
+  // -------------------------------------------------------------
+  const handleOpenBreakdown = async (item) => {
+    setBreakdownLoading(true);
+    setBreakdownData(null);
+    setBreakdownModalOpen(true);
+    try {
+      const pId = item.paymentId || item._id;
+      const res = await fetch(`${API_BASE}/admin/enterprise/payments/breakdown/${pId}`, {
+        headers: {
+          'x-auth-token': token,
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.breakdown) {
+          setBreakdownData(data.breakdown);
+          return;
+        }
+      }
+      // Accurate fallback from database record properties
+      const gross = Number(item.grossAmount || item.amount || item.payableAmount || 0);
+      const payable = Number(item.payableAmount || item.amount || 0);
+      const comm = Math.max(0, gross - payable);
+      const commRate = item.commissionRate || (gross > 0 && comm > 0 ? `${((comm / gross) * 100).toFixed(1)}%` : '0%');
+      setBreakdownData({
+        summary: {
+          paymentId: item.paymentId || 'Not available',
+          receiptId: item.receiptNumber || item.receiptId || (item.transactionReference ? `REC-${item.paymentId}` : 'Not available'),
+          transactionReference: item.transactionReference || 'Not available',
+          status: item.status || 'PENDING',
+          paymentDate: item.paymentDate ? new Date(item.paymentDate).toLocaleDateString('en-IN') : 'Not available',
+          paymentTime: item.paymentDate ? new Date(item.paymentDate).toLocaleTimeString('en-IN') : 'Not available',
+          amount: payable,
+          paymentMethod: item.paymentMethod || 'Direct Bank Transfer / NEFT',
+          paymentPurpose: item.paymentPurpose || 'Not available'
+        },
+        recipient: {
+          name: item.recipientName || 'Not available',
+          recipientId: item.recipientId || 'Not available',
+          recipientType: item.recipientType || (activeTab === 'agents' ? 'Agent' : activeTab === 'vendors' ? 'Vendor' : activeTab === 'delivery' ? 'Delivery Partner' : 'Technician'),
+          businessName: item.businessName || 'Not available',
+          businessType: item.businessType || item.role || 'Not available',
+          phone: item.recipientPhone || item.phone || 'Not available',
+          email: item.recipientEmail || item.email || 'Not available'
+        },
+        calculation: {
+          grossAmount: gross,
+          commissionRate: commRate,
+          commissionAmount: comm,
+          vendorPayableAmount: payable,
+          applicableFees: 0,
+          finalPayableAmount: payable
+        },
+        orderSettlement: {
+          relatedOrderId: item.orderReference || item.sourceReference || 'Not available',
+          orderDate: item.lastUpdated ? new Date(item.lastUpdated).toLocaleDateString('en-IN') : 'Not available',
+          orderItems: item.eligibleOrder || item.eligibleWork || item.completedWork || 'Not available',
+          quantity: item.quantity || 1,
+          orderAmount: gross,
+          settlementReference: item.sourceReference || item.orderReference || 'Not available',
+          settlementDate: item.paymentDate || item.lastUpdated ? new Date(item.lastUpdated || item.paymentDate).toLocaleDateString('en-IN') : 'Not available'
+        }
+      });
+    } catch (err) {
+      console.error('Breakdown fetch error:', err);
+    } finally {
+      setBreakdownLoading(false);
+    }
+  };
+
   // Render Status Badge
   const renderStatusBadge = (status, holdReason, cancelReason) => {
     const s = (status || 'PENDING').toUpperCase();
@@ -660,28 +1032,28 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Live Sync Status */}
-          <div
-            title={isLiveConnected ? 'Connected to live event broker' : 'Connecting to real-time events...'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
-          >
-            <span className={`w-2 h-2 rounded-full ${isLiveConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-            <span>{isLiveConnected ? 'Live Sync Active' : 'Connecting...'}</span>
-          </div>
-
-          {/* Security PIN Button */}
+          {/* Refresh Button (Position 1) */}
           <button
             type="button"
-            onClick={() => {
-              setPinSetupError('');
-              setNewPin('');
-              setConfirmPin('');
-              setPinConfigModalOpen(true);
-            }}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-xs font-bold bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs cursor-pointer"
+            onClick={() => fetchDashboardData(false)}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs cursor-pointer disabled:opacity-50 text-xs font-bold"
+            title="Refresh dashboard records from database"
           >
-            <Key className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-            <span>{pinStatus.configured ? 'Security PIN' : 'Configure PIN'}</span>
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+
+          {/* Process All Button (Position 2) */}
+          <button
+            type="button"
+            onClick={handleInitiateProcessAll}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-sm cursor-pointer disabled:opacity-50"
+            title="Process pending payouts through dual verification"
+          >
+            <Zap className="w-3.5 h-3.5" />
+            <span>Process All</span>
           </button>
 
           {/* Audit Log Button */}
@@ -692,17 +1064,6 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
           >
             <FileText className="w-3.5 h-3.5 text-slate-500" />
             <span>Audit Log</span>
-          </button>
-
-          {/* Refresh Button */}
-          <button
-            type="button"
-            onClick={() => fetchDashboardData(false)}
-            disabled={loading}
-            className="inline-flex items-center justify-center p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs cursor-pointer disabled:opacity-50"
-            title="Refresh dashboard records"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
@@ -899,6 +1260,48 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
           </div>
         </div>
 
+        {/* ── Bulk Selection Bar (Requirements 4, 5) ── */}
+        <div className="flex items-center justify-between gap-4 p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                Selected: <span className="text-indigo-600 dark:text-indigo-400 font-black">{selectedPaymentIds.size}</span>
+              </span>
+              {selectedPaymentIds.size > 0 && bulkSelectedAmount > 0 && (
+                <span className="text-xs text-slate-500 font-semibold">
+                  (Total: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{fmtCurrency(bulkSelectedAmount)}</span>)
+                </span>
+              )}
+            </div>
+            {selectedPaymentIds.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelectedPaymentIds(new Set())}
+                className="text-[11px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 underline cursor-pointer"
+              >
+                Clear Selection
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleInitiatePayAll}
+              disabled={selectedPaymentIds.size === 0 || loading}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer ${
+                selectedPaymentIds.size > 0
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-500/20'
+                  : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed opacity-60'
+              }`}
+              title={selectedPaymentIds.size > 0 ? `Pay ${selectedPaymentIds.size} selected disbursements` : 'Select at least one pending disbursement'}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Pay All {selectedPaymentIds.size > 0 ? `(${selectedPaymentIds.size})` : ''}</span>
+            </button>
+          </div>
+        </div>
+
         {/* ── 4. RECIPIENT TABLES ── */}
         {loading ? (
           <div className="py-20 text-center space-y-3">
@@ -928,6 +1331,18 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] uppercase font-black tracking-wider text-slate-400">
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={isAllSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = isSomeSelected;
+                      }}
+                      onChange={handleToggleSelectAll}
+                      className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-700 cursor-pointer"
+                      title={isAllSelected ? 'Deselect all pending disbursements' : 'Select all pending disbursements'}
+                    />
+                  </th>
                   <th className="py-3 px-3">Recipient / ID</th>
                   {activeTab === 'agents' && <th className="py-3 px-3">Role & Territory</th>}
                   {activeTab === 'vendors' && <th className="py-3 px-3">Business & Outlets</th>}
@@ -943,7 +1358,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
                 {currentList.map((item) => {
-                  const isPending = item.status === 'PENDING' || item.status === 'ELIGIBLE';
+                  const isPending = item.status === 'PENDING' || item.status === 'ELIGIBLE' || !item.status;
                   const isHold = item.status === 'HOLD';
                   const isPaid = item.status === 'PAID';
                   const isCancelled = item.status === 'CANCELLED';
@@ -953,6 +1368,18 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
                       key={item._id || item.paymentId}
                       className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition"
                     >
+                      {/* Checkbox before Receipt / Payment Record (Requirement 3) */}
+                      <td className="py-3.5 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedPaymentIds.has(item.paymentId || item._id)}
+                          disabled={!isPending}
+                          onChange={() => handleToggleSelectOne(item.paymentId || item._id)}
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 dark:border-slate-700 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                          title={isPending ? 'Select for bulk disbursement' : `Cannot select ${item.status || 'non-pending'} disbursement`}
+                        />
+                      </td>
+
                       {/* Recipient / ID */}
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-2.5">
@@ -1040,6 +1467,17 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
                       {/* Actions */}
                       <td className="py-3.5 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
+                          {/* View / Breakdown Button for Every Record (Requirement 7) */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenBreakdown(item)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs cursor-pointer"
+                            title="View detailed payment breakdown statement"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-indigo-500" />
+                            <span>View</span>
+                          </button>
+
                           {/* Pay Action Button */}
                           {(isPending || isHold) && (
                             <button
@@ -1829,6 +2267,596 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
                   Close
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 11. BULK PAYMENT MULTI-STEP MODAL (REQUIREMENTS 2, 5, 9, 10) ── */}
+      {bulkModalOpen && bulkItems.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Modal Header */}
+            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Zap className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    {bulkStep === 1 && `Review Bulk Payout (${bulkItems.length} items)`}
+                    {bulkStep === 2 && 'Step 1: Email OTP Verification'}
+                    {bulkStep === 3 && 'Step 2: Security PIN Verification'}
+                    {bulkStep === 4 && 'Bulk Disbursement Summary'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Dual-factor server-side payment security protocol
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBulkModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Error Message Alert */}
+            {bulkError && (
+              <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900 flex items-center gap-2 text-xs font-semibold text-rose-700 dark:text-rose-400">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{bulkError}</span>
+              </div>
+            )}
+
+            {/* Step 1: Review List of Selected Payments */}
+            {bulkStep === 1 && (
+              <div className="p-6 space-y-4 overflow-y-auto">
+                <div className="p-4 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-900/60 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider block">
+                      TOTAL BULK PAYABLE
+                    </span>
+                    <div className="text-2xl font-black text-slate-900 dark:text-white mt-0.5">
+                      {fmtCurrency(bulkItems.reduce((acc, i) => acc + Number(i.payableAmount || i.amount || 0), 0))}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-white dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 shadow-2xs">
+                      {bulkItems.length} Recipient{bulkItems.length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Selected Payouts to Disburse:
+                  </span>
+                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl">
+                    {bulkItems.map((item, idx) => (
+                      <div key={item.paymentId || item._id || idx} className="p-3 flex items-center justify-between text-xs hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white">
+                            {item.recipientName}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {item.recipientType} • Ref: {item.sourceReference || item.orderReference || item.paymentId}
+                          </div>
+                        </div>
+                        <div className="text-right font-black text-slate-900 dark:text-white">
+                          {fmtCurrency(item.payableAmount || item.amount)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs">
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
+                    Security Authorization
+                  </span>
+                  <p className="text-slate-700 dark:text-slate-300 font-medium">
+                    Dual-factor authentication is required. Clicking continue will dispatch an email OTP to the authorized enterprise payment security account.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setBulkModalOpen(false)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkRequestOtp}
+                    disabled={bulkOtpLoading}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-md shadow-indigo-500/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {bulkOtpLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    <span>Confirm & Send Email OTP</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Email OTP Entry */}
+            {bulkStep === 2 && (
+              <form onSubmit={handleBulkVerifyOtp} className="p-6 space-y-4">
+                <div className="text-center space-y-1">
+                  <div className="w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto">
+                    <Send className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Enter Verification Code
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    A bulk verification OTP has been sent to:{' '}
+                    <strong className="text-slate-800 dark:text-slate-200">{bulkMaskedAuthEmail || currentUser?.email || 'Authorized Email'}</strong>
+                  </p>
+                </div>
+
+                <div>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    autoFocus
+                    value={bulkOtpCode}
+                    onChange={(e) => setBulkOtpCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Enter 6-digit OTP"
+                    className="w-full text-center text-2xl tracking-[0.5em] font-mono font-bold py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                  <div className="flex items-center justify-between text-xs text-slate-400 mt-2">
+                    <span>Expires in: {Math.floor(bulkOtpTimer / 60)}:{(bulkOtpTimer % 60).toString().padStart(2, '0')}</span>
+                    {bulkOtpTimer === 0 ? (
+                      <button
+                        type="button"
+                        onClick={handleBulkRequestOtp}
+                        className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer"
+                      >
+                        Resend Code
+                      </button>
+                    ) : (
+                      <span>Single-use code</span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setBulkStep(1)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={bulkOtpLoading || bulkOtpCode.length !== 6}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {bulkOtpLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    <span>Verify Email OTP</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Step 3: Security PIN Entry */}
+            {bulkStep === 3 && (
+              <form onSubmit={handleBulkAuthorizeDisbursement} className="p-6 space-y-4">
+                <div className="text-center space-y-1">
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                    <Lock className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Enter Security PIN
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Email OTP verified. Please enter your Security PIN to finalize and disburse payouts to {bulkItems.length} recipients.
+                  </p>
+                </div>
+
+                {/* 6 Digit Input Boxes */}
+                <div className="flex justify-center gap-2.5 my-3">
+                  {[0, 1, 2, 3, 4, 5].map((idx) => (
+                    <input
+                      key={idx}
+                      id={`bulk-pin-box-${idx}`}
+                      type="password"
+                      maxLength={1}
+                      autoFocus={idx === 0}
+                      value={bulkSecurityPin[idx] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        const copy = [...bulkSecurityPin];
+                        copy[idx] = val;
+                        setBulkSecurityPin(copy);
+                        if (val && idx < 5) {
+                          const next = document.getElementById(`bulk-pin-box-${idx + 1}`);
+                          if (next) next.focus();
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Backspace' && !bulkSecurityPin[idx] && idx > 0) {
+                          const prev = document.getElementById(`bulk-pin-box-${idx - 1}`);
+                          if (prev) prev.focus();
+                        }
+                      }}
+                      className="w-11 h-12 text-center text-xl font-bold bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono"
+                    />
+                  ))}
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-center text-xs text-slate-500">
+                  <span>Server-side verified total disbursement: </span>
+                  <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+                    {fmtCurrency(bulkItems.reduce((acc, i) => acc + Number(i.payableAmount || i.amount || 0), 0))}
+                  </strong>
+                </div>
+
+                <div className="pt-3 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setBulkStep(2)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 transition cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={bulkPinLoading || bulkSecurityPin.join('').length < 4}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {bulkPinLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    <span>Authorize & Disburse All</span>
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* Step 4: Bulk Results & Reconciliation */}
+            {bulkStep === 4 && (
+              <div className="p-6 space-y-4 overflow-y-auto">
+                <div className="text-center space-y-1">
+                  <div className="w-14 h-14 rounded-full bg-emerald-50 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+                    <CheckCircle className="w-8 h-8" />
+                  </div>
+                  <h4 className="text-base font-black text-slate-900 dark:text-white">
+                    Bulk Payout Execution Completed
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Disbursement batch has been processed atomically by the server.
+                  </p>
+                </div>
+
+                {/* KPI Result Badges */}
+                <div className="grid grid-cols-3 gap-2.5 text-center">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-400 font-bold block uppercase">Total</span>
+                    <span className="text-base font-black text-slate-900 dark:text-white">
+                      {bulkSummary?.total ?? bulkResults.length}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800">
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold block uppercase">Success</span>
+                    <span className="text-base font-black text-emerald-700 dark:text-emerald-300">
+                      {bulkSummary?.successful ?? bulkResults.filter(r => r.status === 'SUCCESS').length}
+                    </span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800">
+                    <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold block uppercase">Failed</span>
+                    <span className="text-base font-black text-rose-700 dark:text-rose-300">
+                      {bulkSummary?.failed ?? bulkResults.filter(r => r.status !== 'SUCCESS').length}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Per-Item Results List */}
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Individual Disbursement Status:
+                  </span>
+                  <div className="max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl">
+                    {bulkResults.map((r, idx) => (
+                      <div key={idx} className="p-3 flex items-center justify-between text-xs">
+                        <div>
+                          <div className="font-bold text-slate-900 dark:text-white">
+                            {r.recipientName}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {r.status === 'SUCCESS' ? `Txn: ${r.transactionReference}` : `Reason: ${r.reason || 'Verification rejected'}`}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-black text-slate-900 dark:text-white">
+                            {fmtCurrency(r.amount)}
+                          </div>
+                          <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            r.status === 'SUCCESS'
+                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
+                          }`}>
+                            {r.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkModalOpen(false);
+                      setSelectedPaymentIds(new Set());
+                      fetchDashboardData(true);
+                    }}
+                    className="px-8 py-2.5 rounded-xl text-xs font-bold bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-900 transition cursor-pointer"
+                  >
+                    Done & Refresh Records
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── 12. DETAILED PAYMENT BREAKDOWN STATEMENT MODAL (REQUIREMENT 7) ── */}
+      {breakdownModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-4.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-950/80 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">
+                    Payment Statement Breakdown
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Comprehensive real-time financial audit and order settlement record
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer"
+                  title="Print statement"
+                >
+                  <Printer className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBreakdownModalOpen(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4 overflow-y-auto">
+              {breakdownLoading ? (
+                <div className="py-16 text-center space-y-3">
+                  <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
+                  <p className="text-xs text-slate-400">Loading verified database statement...</p>
+                </div>
+              ) : breakdownData ? (
+                <div className="space-y-4 text-xs">
+                  {/* 1. PAYMENT SUMMARY */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                        1. Payment Summary
+                      </span>
+                      {renderStatusBadge(breakdownData.summary?.status)}
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Payment ID</span>
+                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                          {breakdownData.summary?.paymentId || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Receipt ID</span>
+                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                          {breakdownData.summary?.receiptId || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Transaction Reference</span>
+                        <span className="font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                          {breakdownData.summary?.transactionReference || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Payment Date & Time</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.summary?.paymentDate !== 'Not available' ? `${breakdownData.summary?.paymentDate} ${breakdownData.summary?.paymentTime || ''}` : 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Payment Method</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.summary?.paymentMethod || 'Direct Bank Transfer / NEFT'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Payment Amount</span>
+                        <span className="font-black text-slate-900 dark:text-white text-sm">
+                          {fmtCurrency(breakdownData.summary?.amount)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-[10px] text-slate-400 block">Payment Purpose</span>
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {breakdownData.summary?.paymentPurpose || 'Verified service compensation'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 2. VENDOR / RECIPIENT DETAILS */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
+                      2. Vendor / Recipient Details
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Recipient Name</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                          {breakdownData.recipient?.name || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Recipient ID</span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300">
+                          {breakdownData.recipient?.recipientId || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Role / Category</span>
+                        <span className="font-semibold text-indigo-600 dark:text-indigo-400">
+                          {breakdownData.recipient?.recipientType || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Business Name</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.recipient?.businessName || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Business Type</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.recipient?.businessType || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Phone / Contact</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.recipient?.phone || 'Not available'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 3. PAYMENT CALCULATION */}
+                  <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/60 space-y-2">
+                    <span className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 tracking-wider block pb-1 border-b border-indigo-100 dark:border-indigo-900/60">
+                      3. Payment Calculation
+                    </span>
+                    <div className="space-y-1.5 pt-1">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Gross Amount</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {fmtCurrency(breakdownData.calculation?.grossAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Commission Rate</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {breakdownData.calculation?.commissionRate || '0%'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Commission Amount</span>
+                        <span className="font-semibold text-rose-600 dark:text-rose-400">
+                          - {fmtCurrency(breakdownData.calculation?.commissionAmount)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Applicable Fees</span>
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {fmtCurrency(breakdownData.calculation?.applicableFees || 0)}
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-indigo-200 dark:border-indigo-800 flex justify-between items-baseline">
+                        <span className="font-bold text-slate-900 dark:text-white">Final Net Payable</span>
+                        <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                          {fmtCurrency(breakdownData.calculation?.finalPayableAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. ORDER / SETTLEMENT DETAILS */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block pb-2 border-b border-slate-200/60 dark:border-slate-700/60">
+                      4. Order / Settlement Details
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Related Order ID</span>
+                        <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                          {breakdownData.orderSettlement?.relatedOrderId || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Order Date</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.orderSettlement?.orderDate || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Quantity</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.orderSettlement?.quantity ?? 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Order Items / Task</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.orderSettlement?.orderItems || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Settlement Reference</span>
+                        <span className="font-mono font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.orderSettlement?.settlementReference || 'Not available'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Settlement Date / Run</span>
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                          {breakdownData.orderSettlement?.settlementDate || 'Not available'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 text-center italic">
+                    All payment values and financial statements are strictly loaded from verified operational database records.
+                  </div>
+                </div>
+              ) : (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Statement details could not be retrieved from the database.
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3.5 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setBreakdownModalOpen(false)}
+                className="px-5 py-2 rounded-xl text-xs font-bold bg-slate-900 text-white hover:bg-black transition cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
