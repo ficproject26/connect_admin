@@ -257,135 +257,177 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             return res.json(cached);
         }
 
+        const db = mongoose.connection.db || (mongoose.connection.client ? mongoose.connection.client.db() : null);
+
+        // Branch-scoped vendor and order filters
+        let branchVendorIds = null;
+        if (isBranchScoped) {
+            const bv = await Vendor.find({ branchId }).select('_id').lean();
+            branchVendorIds = bv.map(v => v._id);
+        }
+
+        const orderFilter = { status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } };
+        const bookingFilter = { status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } };
+        if (isBranchScoped && branchVendorIds) {
+            orderFilter.vendorId = { $in: branchVendorIds };
+            bookingFilter.vendorId = { $in: branchVendorIds };
+        }
+
         // Execute all independent database queries concurrently in parallel
         const [
             totalCustomers,
-            userVendorsCount,
-            docVendorsCount,
-            totalAgents,
-            totalDistrictAgents,
             totalBranches,
             totalHospitals,
             totalHotels,
             totalServices,
             activeMembershipPlans,
-            userPendingVendors,
-            docPendingVendors,
-            pendingAgentApprovals,
-            pendingVendorKYC,
-            stateAgents,
-            districtAgents,
-            subDistrictAgents,
-            pincodeAgents,
             subAdmins,
-            allVendors,
             branchesList,
-            agentsList,
+            agentsUsers,
+            rawAgentsList,
+            userVendorsList,
+            docVendorsList,
+            completedOrders,
+            completedBookings,
             latestVendors,
             latestAgents,
             latestOrders
         ] = await Promise.all([
             Customer.countDocuments(isBranchScoped ? { branchId } : {}),
-            User.countDocuments({ role: { $in: ['vendor', 'Vendor', 'merchant', 'Merchant'] }, ...(isBranchScoped ? { branchId } : {}) }),
-            Vendor.countDocuments(isBranchScoped ? { branchId } : {}),
-            User.countDocuments({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) }),
-            User.countDocuments({ role: 'agent', level: 'district', ...(isBranchScoped ? { branchId } : {}) }),
             Branch.countDocuments(),
             Vendor.countDocuments({ category: 'Hospitals', ...(isBranchScoped ? { branchId } : {}) }),
             Vendor.countDocuments({ category: 'Hotels', ...(isBranchScoped ? { branchId } : {}) }),
             Vendor.countDocuments({ category: 'Services', ...(isBranchScoped ? { branchId } : {}) }),
             MembershipPlan.countDocuments({ isActive: true }),
-            User.countDocuments({
-                role: { $in: ['vendor', 'Vendor', 'merchant', 'Merchant'] },
-                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'active', 'Active', 'ACTIVE'] },
-                ...(isBranchScoped ? { branchId } : {})
-            }),
-            Vendor.countDocuments({
-                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'active', 'Active', 'ACTIVE'] },
-                ...(isBranchScoped ? { branchId } : {})
-            }),
-            User.countDocuments({ role: 'agent', ...pendingStatusFilter, ...agentBranchFilter }),
-            Vendor.countDocuments({ kycStatus: { $in: ['pending', 'Pending'] }, ...(isBranchScoped ? { branchId } : {}) }),
-            User.countDocuments({ role: 'agent', level: 'state', ...agentBranchFilter }),
-            User.countDocuments({ role: 'agent', level: 'district', ...agentBranchFilter }),
-            User.countDocuments({ role: 'agent', level: 'division', ...agentBranchFilter }),
-            User.countDocuments({ role: 'agent', level: 'pincode', ...agentBranchFilter }),
             User.countDocuments({ role: 'admin', adminRole: { $in: ['branch-admin', 'staff'] }, ...(isBranchScoped ? { branchId } : {}) }),
-            Vendor.find(isBranchScoped ? { branchId } : {}).select('_id name businessName category branchId agentId vendorType').lean(),
             Branch.find().select('_id name').lean(),
-            User.find({ role: 'agent' }).select('_id name').lean(),
+            User.find({ role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] }, ...(isBranchScoped ? { branchId } : {}) })
+                .select('_id name fullName email phone altPhone role level agentLevel assignedRole agentType status kycStatus isActive isApproved registrationId branchId createdAt')
+                .lean(),
+            db ? db.collection('agents').find(isBranchScoped ? { branchId } : {}, {
+                projection: { _id: 1, name: 1, fullName: 1, email: 1, phone: 1, altPhone: 1, role: 1, level: 1, agentLevel: 1, assignedRole: 1, agentType: 1, status: 1, kycStatus: 1, isActive: 1, isApproved: 1, registrationId: 1, branchId: 1, createdAt: 1 }
+            }).toArray().catch(() => []) : [],
+            User.find({ role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] }, ...(isBranchScoped ? { branchId } : {}) })
+                .select('_id name businessName email phone status kycStatus isActive isApproved registrationId branchId category vendorType createdAt')
+                .lean(),
+            Vendor.find(isBranchScoped ? { branchId } : {})
+                .select('_id name businessName email phone status kycStatus isActive isApproved registrationId branchId category vendorType createdAt agentId')
+                .lean(),
+            Order.find(orderFilter).select('finalAmount totalAmount amount vendorId type category createdAt status').lean(),
+            Booking.find(bookingFilter).select('finalAmount totalAmount amount vendorId type category createdAt status').lean(),
             Vendor.find(isBranchScoped ? { branchId } : {}).sort({ createdAt: -1 }).limit(5).populate('agentId', 'name').lean(),
             User.find({ role: 'agent', ...(isBranchScoped ? { branchId } : {}) }).select('_id name email phone role level status kycStatus createdAt registrationId').sort({ createdAt: -1 }).limit(5).lean(),
             Order.find().sort({ createdAt: -1 }).limit(5).populate('vendorId', 'businessName').populate('customerId', 'name').lean()
         ]);
 
-        const db = mongoose.connection.db;
-        let rawAgents = [];
-        if (db) {
-            try {
-                rawAgents = await db.collection('agents').find({}, { projection: { _id: 1, registrationId: 1, email: 1, level: 1, role: 1, status: 1, kycStatus: 1 } }).toArray();
-            } catch (aErr) {}
-        }
+        // ── 1. DEDUPLICATE AND RESOLVE AGENTS (MATCHES AGENT DIRECTORY) ────────
+        const resolveAgentCleanLevel = (item) => {
+            if (!item) return 'pincode';
+            const l = (item.level || item.agentLevel || item.role || item.assignedRole || item.agentType || item.type || '').toString().toLowerCase().trim();
+            if (l.includes('state')) return 'state';
+            if (l.includes('district') || l.includes('dist')) return 'district';
+            if (l.includes('divis') || l.includes('division')) return 'division';
+            if (l.includes('pincode') || l.includes('pin')) return 'pincode';
+            return 'pincode';
+        };
 
         const agentMap = new Map();
-        (agentsList || []).forEach(a => {
-            const key = (a.registrationId || a.email || (a._id ? a._id.toString() : '')).toLowerCase().trim();
-            if (key) agentMap.set(key, a);
-        });
-        rawAgents.forEach(raw => {
-            const key = (raw.registrationId || raw.email || (raw._id ? raw._id.toString() : '')).toLowerCase().trim();
-            if (key && !agentMap.has(key)) {
-                agentMap.set(key, raw);
+        [...(agentsUsers || []), ...(rawAgentsList || [])].forEach(agent => {
+            if (!agent) return;
+            const emailKey = (agent.email || '').toLowerCase().trim();
+            const phoneKey = (agent.phone || agent.mobile || agent.altPhone || '').replace(/\D/g, '');
+            const regKey = (agent.registrationId || agent.id || '').toLowerCase().trim();
+            const idKey = agent._id ? agent._id.toString() : '';
+
+            let key = idKey;
+            if (regKey && !regKey.includes('undefined')) key = regKey;
+            else if (emailKey && !emailKey.includes('agent_') && !emailKey.includes('@connect.app')) key = emailKey;
+            else if (phoneKey && phoneKey.length >= 10) key = phoneKey;
+
+            let statusVal = (agent.status && String(agent.status) !== 'undefined') ? String(agent.status).toLowerCase().trim() : (agent.kycStatus ? String(agent.kycStatus).toLowerCase().trim() : 'pending');
+            let kycStatusVal = (agent.kycStatus && String(agent.kycStatus) !== 'undefined') ? String(agent.kycStatus).toLowerCase().trim() : statusVal;
+
+            let cleanStatus = 'approved';
+            if (['rejected', 'suspended', 'deactivated', 'blocked'].includes(statusVal) || ['rejected', 'suspended', 'deactivated', 'blocked'].includes(kycStatusVal)) {
+                cleanStatus = 'rejected';
+            } else if (['pending', 'pending_approval', 'under_verification', 'in_review'].includes(statusVal) && agent.isActive !== true && agent.isApproved !== true) {
+                cleanStatus = 'pending';
+            }
+
+            const cleanLevel = resolveAgentCleanLevel(agent);
+
+            if (!agentMap.has(key)) {
+                agentMap.set(key, { ...agent, cleanLevel, cleanStatus, kycStatus: kycStatusVal });
+            } else {
+                const existing = agentMap.get(key);
+                const preferStatus = existing.cleanStatus === 'approved' || cleanStatus === 'approved' ? 'approved' : cleanStatus;
+                agentMap.set(key, { ...existing, ...agent, cleanLevel: cleanLevel || existing.cleanLevel, cleanStatus: preferStatus, kycStatus: existing.kycStatus || kycStatusVal });
             }
         });
 
-        const combinedAgentList = Array.from(agentMap.values());
-        const combinedTotalAgents = Math.max(totalAgents, combinedAgentList.length);
-        const combinedStateAgents = Math.max(stateAgents, combinedAgentList.filter(a => ((a.level || a.role || '').toLowerCase()).includes('state')).length);
-        const combinedDistrictAgents = Math.max(districtAgents, combinedAgentList.filter(a => ((a.level || a.role || '').toLowerCase()).includes('district')).length);
-        const combinedSubDistrictAgents = Math.max(subDistrictAgents, combinedAgentList.filter(a => ((a.level || a.role || '').toLowerCase()).includes('divis')).length);
-        const combinedPincodeAgents = Math.max(pincodeAgents, combinedAgentList.filter(a => ((a.level || a.role || '').toLowerCase()).includes('pincode')).length);
+        const allAgentsList = Array.from(agentMap.values());
+        const approvedAgents = allAgentsList.filter(a => a.cleanStatus === 'approved');
+        const combinedTotalAgents = approvedAgents.length;
+        const combinedStateAgents = approvedAgents.filter(a => a.cleanLevel === 'state').length;
+        const combinedDistrictAgents = approvedAgents.filter(a => a.cleanLevel === 'district').length;
+        const combinedSubDistrictAgents = approvedAgents.filter(a => a.cleanLevel === 'division').length;
+        const combinedPincodeAgents = approvedAgents.filter(a => a.cleanLevel === 'pincode').length;
+        const pendingAgentApprovals = allAgentsList.filter(a => a.cleanStatus === 'pending').length;
+        const pendingAgentKYC = allAgentsList.filter(a => (a.kycStatus || '').toLowerCase().includes('pending')).length;
+        const pendingKYCRequests = pendingAgentKYC;
 
-        const totalVendors = userVendorsCount + docVendorsCount;
-        const pendingVendorApprovals = userPendingVendors + docPendingVendors;
-        const pendingKYCRequests = pendingAgentApprovals;
-        const pendingAgentKYC = pendingAgentApprovals;
+        // ── 2. DEDUPLICATE AND RESOLVE VENDORS (MATCHES VENDOR DIRECTORY) ──────
+        const vendorMap = new Map();
+        const vendorIdToCategory = {};
+        [...(userVendorsList || []), ...(docVendorsList || [])].forEach(v => {
+            if (!v) return;
+            const emailKey = (v.email || '').toLowerCase().trim();
+            const phoneKey = (v.phone || '').replace(/\D/g, '');
+            const bizKey = (v.businessName || v.name || '').toLowerCase().trim().replace(/[^a-z0-9]/g, '');
+            const idKey = v._id ? String(v._id) : '';
 
-        // Fetch Orders & Bookings for revenue calculation
-        let ordersCount = 0;
-        let bookingsCount = 0;
-        let completedOrders = [];
-        let completedBookings = [];
+            let key = idKey;
+            if (emailKey && !emailKey.includes('vendor_') && !emailKey.includes('@connect.app')) key = emailKey;
+            else if (phoneKey && phoneKey.length >= 10) key = phoneKey;
+            else if (bizKey && bizKey.length > 3) key = bizKey;
 
-        if (isBranchScoped) {
-            const vendorIds = allVendors.map(v => v._id);
-            const [oCount, bCount, cOrders, cBookings] = await Promise.all([
-                Order.countDocuments({ vendorId: { $in: vendorIds } }),
-                Booking.countDocuments({ vendorId: { $in: vendorIds } }),
-                Order.find({ vendorId: { $in: vendorIds }, status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } }).select('finalAmount totalAmount amount vendorId createdAt').lean(),
-                Booking.find({ vendorId: { $in: vendorIds }, status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } }).select('finalAmount totalAmount amount vendorId createdAt').lean()
-            ]);
-            ordersCount = oCount;
-            bookingsCount = bCount;
-            completedOrders = cOrders;
-            completedBookings = cBookings;
-        } else {
-            const [oCount, bCount, cOrders, cBookings] = await Promise.all([
-                Order.countDocuments(),
-                Booking.countDocuments(),
-                Order.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } }).select('finalAmount totalAmount amount vendorId createdAt').lean(),
-                Booking.find({ status: { $nin: ['cancelled', 'Cancelled', 'rejected', 'Rejected'] } }).select('finalAmount totalAmount amount vendorId createdAt').lean()
-            ]);
-            ordersCount = oCount;
-            bookingsCount = bCount;
-            completedOrders = cOrders;
-            completedBookings = cBookings;
-        }
+            let statusVal = (v.status || 'pending').toLowerCase().trim();
+            let kycVal = (v.kycStatus || v.status || 'pending').toLowerCase().trim();
 
+            let cleanStatus = 'approved';
+            if (['rejected', 'suspended', 'deactivated', 'blocked'].includes(statusVal)) {
+                cleanStatus = 'rejected';
+            } else if (['pending', 'pending_approval', 'under_verification'].includes(statusVal) && v.isActive !== true && v.isApproved !== true) {
+                cleanStatus = 'pending';
+            }
+
+            const cat = v.category || v.vendorType || 'General';
+            if (v._id) {
+                vendorIdToCategory[v._id.toString()] = cat;
+            }
+
+            if (!vendorMap.has(key)) {
+                vendorMap.set(key, { ...v, cleanStatus, kycVal, category: cat });
+            } else {
+                const existing = vendorMap.get(key);
+                const preferActive = ['active', 'approved'].includes(statusVal) ? 'approved' : existing.cleanStatus;
+                vendorMap.set(key, { ...existing, ...v, cleanStatus: preferActive, kycVal: existing.kycVal || kycVal, category: cat || existing.category });
+            }
+        });
+
+        const allVendorsList = Array.from(vendorMap.values());
+        const approvedVendorsList = allVendorsList.filter(v => v.cleanStatus === 'approved');
+        const totalVendors = approvedVendorsList.length;
+        const pendingVendorApprovals = allVendorsList.filter(v => v.cleanStatus === 'pending').length;
+        const pendingVendorKYC = allVendorsList.filter(v => (v.kycVal || '').includes('pending')).length;
+
+        // ── 3. REVENUE & ORDER TOTALS ─────────────────────────────────────────
         const getItemAmount = (item) => Number(item.finalAmount || item.totalAmount || item.amount || item.price || item.total || 0);
-        const totalRevenue = completedOrders.reduce((sum, o) => sum + getItemAmount(o), 0) + completedBookings.reduce((sum, b) => sum + getItemAmount(b), 0);
+        const totalRevenue = (completedOrders || []).reduce((sum, o) => sum + getItemAmount(o), 0) + (completedBookings || []).reduce((sum, b) => sum + getItemAmount(b), 0);
+        const ordersCount = (completedOrders || []).length;
+        const bookingsCount = (completedBookings || []).length;
 
-        // Dynamic Month-Wise Revenue Trends (last 6 months)
+        // ── 4. DYNAMIC MONTH-WISE REVENUE TRENDS (LAST 6 MONTHS) ──────────────
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const last6Months = [];
         for (let i = 5; i >= 0; i--) {
@@ -395,71 +437,80 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
                 name: monthNames[d.getMonth()],
                 year: d.getFullYear(),
                 monthIndex: d.getMonth(),
-                revenue: 0
+                revenue: 0,
+                orders: 0
             });
         }
 
-        completedOrders.forEach(o => {
+        (completedOrders || []).forEach(o => {
             const oDate = new Date(o.createdAt || Date.now());
             const match = last6Months.find(m => m.monthIndex === oDate.getMonth() && m.year === oDate.getFullYear());
-            if (match) match.revenue += getItemAmount(o);
+            if (match) {
+                match.revenue += getItemAmount(o);
+                match.orders += 1;
+            }
         });
-        completedBookings.forEach(b => {
+        (completedBookings || []).forEach(b => {
             const bDate = new Date(b.createdAt || Date.now());
             const match = last6Months.find(m => m.monthIndex === bDate.getMonth() && m.year === bDate.getFullYear());
-            if (match) match.revenue += getItemAmount(b);
-        });
-
-        const totalCalcRev = last6Months.reduce((sum, m) => sum + m.revenue, 0);
-        const revenueOverview = last6Months.map((m, idx) => ({
-            month: m.name,
-            revenue: totalCalcRev > 0 ? m.revenue : Math.round(45000 + (idx * 22000) + (Math.sin(idx) * 8000))
-        }));
-
-        // Category Wise Revenue
-        const categoryMap = {
-            'Daily Needs': 0,
-            'Food & Dining': 0,
-            'Services': 0,
-            'Retail & Stores': 0,
-            'Hospitality': 0
-        };
-        const vendorMap = {};
-        allVendors.forEach(v => {
-            if (v && v._id) {
-                const cat = v.category || v.vendorType || 'Retail & Stores';
-                const bId = v.branchId?._id ? v.branchId._id.toString() : (v.branchId ? v.branchId.toString() : null);
-                const aId = v.agentId?._id ? v.agentId._id.toString() : (v.agentId ? v.agentId.toString() : null);
-                vendorMap[v._id.toString()] = {
-                    category: cat,
-                    name: v.businessName || v.name,
-                    branchId: bId,
-                    agentId: aId
-                };
-                categoryMap[cat] = (categoryMap[cat] || 0);
+            if (match) {
+                match.revenue += getItemAmount(b);
+                match.orders += 1;
             }
         });
 
-        completedOrders.forEach(o => {
-            const vIdStr = o.vendorId?._id ? o.vendorId._id.toString() : (o.vendorId ? o.vendorId.toString() : null);
-            const vInfo = vIdStr ? vendorMap[vIdStr] : null;
-            const catKey = vInfo ? vInfo.category : 'Daily Needs';
-            categoryMap[catKey] = (categoryMap[catKey] || 0) + getItemAmount(o);
+        const revenueOverview = last6Months.map(m => ({
+            month: m.name,
+            revenue: m.revenue || 0,
+            orders: m.orders || 0
+        }));
+
+        // ── 5. CATEGORY WISE REVENUE (REAL DATABASE ATTRIBUTION) ───────────────
+        const categoryMap = {};
+        const resolveOrderCategory = (item) => {
+            const rawCat = (item.type || item.category || '').trim();
+            if (rawCat) {
+                const lower = rawCat.toLowerCase();
+                if (lower === 'daily needs' || lower === 'dailyneeds' || lower === 'daily_needs') return 'Daily Needs';
+                if (lower.includes('food') || lower.includes('dining') || lower.includes('restaurant')) return 'Food';
+                if (lower.includes('product') || lower.includes('retail') || lower.includes('store')) return 'Products';
+                if (lower.includes('service')) return 'Services';
+                if (lower.includes('stay') || lower.includes('hotel') || lower.includes('resort')) return 'Stay';
+                if (lower.includes('travel') || lower.includes('bus') || lower.includes('cab') || lower.includes('tour')) return 'Travel';
+                if (lower.includes('job')) return 'Jobs';
+                return rawCat.charAt(0).toUpperCase() + rawCat.slice(1);
+            }
+            const vIdStr = item.vendorId?._id ? item.vendorId._id.toString() : (item.vendorId ? item.vendorId.toString() : null);
+            if (vIdStr && vendorIdToCategory[vIdStr]) {
+                return vendorIdToCategory[vIdStr];
+            }
+            return 'General';
+        };
+
+        (completedOrders || []).forEach(o => {
+            const cat = resolveOrderCategory(o);
+            const amt = getItemAmount(o);
+            if (amt > 0) {
+                categoryMap[cat] = (categoryMap[cat] || 0) + amt;
+            }
         });
-        completedBookings.forEach(b => {
-            const vIdStr = b.vendorId?._id ? b.vendorId._id.toString() : (b.vendorId ? b.vendorId.toString() : null);
-            const vInfo = vIdStr ? vendorMap[vIdStr] : null;
-            const catKey = vInfo ? vInfo.category : 'Services';
-            categoryMap[catKey] = (categoryMap[catKey] || 0) + getItemAmount(b);
+        (completedBookings || []).forEach(b => {
+            const cat = resolveOrderCategory(b);
+            const amt = getItemAmount(b);
+            if (amt > 0) {
+                categoryMap[cat] = (categoryMap[cat] || 0) + amt;
+            }
         });
 
-        const catTotal = Object.values(categoryMap).reduce((a, b) => a + b, 0);
-        const categoryWiseRevenue = Object.keys(categoryMap).map(cat => ({
-            category: cat,
-            value: categoryMap[cat] || 0
-        })).filter(c => c.value > 0);
+        const categoryWiseRevenue = Object.keys(categoryMap)
+            .map(cat => ({
+                category: cat,
+                value: categoryMap[cat] || 0
+            }))
+            .filter(c => c.value > 0)
+            .sort((a, b) => b.value - a.value);
 
-        // Branch / District Wise Revenue Comparison
+        // ── 6. BRANCH / DISTRICT WISE REVENUE ─────────────────────────────────
         const branchMap = {};
         const branchIdToName = {};
         branchesList.forEach(b => {
@@ -470,12 +521,11 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         });
 
         const allTransactions = [...(completedOrders || []), ...(completedBookings || [])];
-
         allTransactions.forEach(o => {
             const vIdStr = o.vendorId?._id ? o.vendorId._id.toString() : (o.vendorId ? o.vendorId.toString() : null);
-            const vInfo = vIdStr ? vendorMap[vIdStr] : null;
-            if (vInfo && vInfo.branchId && branchIdToName[vInfo.branchId]) {
-                const bName = branchIdToName[vInfo.branchId];
+            const v = vIdStr ? allVendorsList.find(item => item._id && item._id.toString() === vIdStr) : null;
+            if (v && v.branchId && branchIdToName[v.branchId.toString()]) {
+                const bName = branchIdToName[v.branchId.toString()];
                 branchMap[bName] = (branchMap[bName] || 0) + getItemAmount(o);
             }
         });
@@ -485,18 +535,18 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             name: bName,
             revenue: branchTotal > 0 ? branchMap[bName] : 0
         }));
-
         if (branchWiseRevenue.length === 0 || branchTotal === 0) {
             branchWiseRevenue = [];
         }
 
-        // Vendor Wise Revenue Performance
+        // ── 7. VENDOR & AGENT REVENUE PERFORMANCE ─────────────────────────────
         const vendorRevMap = {};
         allTransactions.forEach(o => {
             const vIdStr = o.vendorId?._id ? o.vendorId._id.toString() : (o.vendorId ? o.vendorId.toString() : null);
-            const vInfo = vIdStr ? vendorMap[vIdStr] : null;
-            if (vInfo && vInfo.name) {
-                vendorRevMap[vInfo.name] = (vendorRevMap[vInfo.name] || 0) + getItemAmount(o);
+            const v = vIdStr ? allVendorsList.find(item => item._id && item._id.toString() === vIdStr) : null;
+            const vName = v?.businessName || v?.name;
+            if (vName) {
+                vendorRevMap[vName] = (vendorRevMap[vName] || 0) + getItemAmount(o);
             }
         });
 
@@ -505,20 +555,14 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             revenue: vendorRevMap[vName]
         })).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
-        // Agent Wise Revenue Performance
         const agentRevMap = {};
-        const agentIdToName = {};
-        agentsList.forEach(a => {
-            if (a && a._id) {
-                agentIdToName[a._id.toString()] = a.name;
-            }
-        });
-
         allTransactions.forEach(o => {
             const vIdStr = o.vendorId?._id ? o.vendorId._id.toString() : (o.vendorId ? o.vendorId.toString() : null);
-            const vInfo = vIdStr ? vendorMap[vIdStr] : null;
-            if (vInfo && vInfo.agentId && agentIdToName[vInfo.agentId]) {
-                const aName = agentIdToName[vInfo.agentId];
+            const v = vIdStr ? allVendorsList.find(item => item._id && item._id.toString() === vIdStr) : null;
+            if (v && v.agentId) {
+                const aIdStr = v.agentId.toString();
+                const ag = allAgentsList.find(a => a._id && a._id.toString() === aIdStr);
+                const aName = ag?.name || ag?.fullName;
                 if (aName) {
                     agentRevMap[aName] = (agentRevMap[aName] || 0) + getItemAmount(o);
                 }

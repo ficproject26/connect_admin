@@ -558,64 +558,39 @@ function App() {
     }
   };
 
-  // Default Fallback Stats for Instant 0ms Render
+  // Initial empty dashboard state (Real database data loaded via API)
   const defaultDashboardStats = {
     kpis: {
-      totalRevenue: 124500,
-      totalOrders: 72,
-      totalAgents: 10,
-      pendingAgentApprovals: 0,
-      pendingAgentKYC: 0,
-      pendingVendorKYC: 0,
-      stateAgents: 3,
-      districtAgents: 4,
-      subDistrictAgents: 2,
-      pincodeAgents: 3,
-      totalVendors: 3,
-      pendingVendorApprovals: 1,
-      totalCustomers: 154,
-      totalCardHolders: 28,
-      activeSupportTickets: 4,
-      completedBookings: 19,
-      pendingWithdrawalsAmount: 4500,
-      totalJobsApplied: 32
+      totalRevenue: null,
+      totalOrders: null,
+      totalAgents: null,
+      pendingAgentApprovals: null,
+      pendingAgentKYC: null,
+      pendingVendorKYC: null,
+      stateAgents: undefined,
+      districtAgents: undefined,
+      subDistrictAgents: undefined,
+      pincodeAgents: undefined,
+      totalVendors: null,
+      pendingVendorApprovals: null,
+      totalCustomers: null,
+      totalCardHolders: null,
+      activeSupportTickets: null,
+      completedBookings: null,
+      pendingWithdrawalsAmount: null,
+      totalJobsApplied: null
     },
     charts: {
-      revenueOverview: [
-        { month: 'Jan', revenue: 45000, orders: 12 },
-        { month: 'Feb', revenue: 52000, orders: 15 },
-        { month: 'Mar', revenue: 61000, orders: 18 },
-        { month: 'Apr', revenue: 75000, orders: 22 },
-        { month: 'May', revenue: 89000, orders: 28 },
-        { month: 'Jun', revenue: 104000, orders: 35 },
-        { month: 'Jul', revenue: 124500, orders: 42 }
-      ],
-      categoryWiseRevenue: [
-        { category: 'Daily Needs', value: 45000 },
-        { category: 'Food & Hospitality', value: 35000 },
-        { category: 'Services', value: 25000 },
-        { category: 'Travel & Packages', value: 19500 }
-      ],
-      branchWiseRevenue: [
-        { name: 'Bangalore Urban', revenue: 55000 },
-        { name: 'Chennai', revenue: 42000 },
-        { name: 'Mysore', revenue: 27500 }
-      ]
+      revenueOverview: [],
+      categoryWiseRevenue: [],
+      branchWiseRevenue: []
     },
     recent: {
       latestVendors: [],
       latestAgents: []
     },
     recentTransactions: [],
-    revenueTrend: [
-      { month: 'Jan', revenue: 45000, orders: 12 },
-      { month: 'Feb', revenue: 52000, orders: 15 },
-      { month: 'Mar', revenue: 61000, orders: 18 },
-      { month: 'Apr', revenue: 75000, orders: 22 },
-      { month: 'May', revenue: 89000, orders: 28 },
-      { month: 'Jun', revenue: 104000, orders: 35 },
-      { month: 'Jul', revenue: 124500, orders: 42 }
-    ],
+    revenueTrend: [],
     agentPerformance: [],
     pincodeCoverage: []
   };
@@ -2218,26 +2193,33 @@ function App() {
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
                   <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Category Wise Revenue</h3>
                   <div className="h-72 min-h-[288px] w-full min-w-0">
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 288 }}>
-                      <PieChart>
-                        <Pie
-                          data={stats?.charts?.categoryWiseRevenue || []}
-                          cx="50%"
-                          cy="55%"
-                          innerRadius={60}
-                          outerRadius={80}
-                          paddingAngle={5}
-                          dataKey="value"
-                          nameKey="category"
-                        >
-                          {(stats?.charts?.categoryWiseRevenue || []).map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={['#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981'][index % 5]} />
-                          ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={11} />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    {stats?.charts?.categoryWiseRevenue && stats.charts.categoryWiseRevenue.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} initialDimension={{ width: 300, height: 288 }}>
+                        <PieChart>
+                          <Pie
+                            data={stats.charts.categoryWiseRevenue}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={80}
+                            paddingAngle={5}
+                            dataKey="value"
+                            nameKey="category"
+                          >
+                            {stats.charts.categoryWiseRevenue.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e'][index % 8]} />
+                            ))}
+                          </Pie>
+                          <Tooltip formatter={(value) => [`₹${Number(value).toLocaleString()}`, 'Revenue']} />
+                          <Legend verticalAlign="bottom" height={36} iconSize={10} fontSize={11} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs gap-1.5 py-12">
+                        <Layers className="w-8 h-8 stroke-1 text-slate-300 dark:text-slate-600" />
+                        <span className="font-medium">No category revenue available.</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
