@@ -433,6 +433,58 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
     return Object.values(statesMap).sort((a, b) => a.name.localeCompare(b.name));
   }, [admins]);
 
+  const getSubHierarchyCounts = (node, type = 'state') => {
+    if (!node) return { districts: 0, divisions: 0, pincodes: 0, totalUsers: 0 };
+    if (type === 'state') {
+      const districts = Object.keys(node.districts || {}).length;
+      let divisions = 0;
+      let pincodes = 0;
+      let totalUsers = node.stateAdmins?.length || 0;
+
+      Object.values(node.districts || {}).forEach(d => {
+        divisions += Object.keys(d.divisions || {}).length;
+        totalUsers += d.districtAdmins?.length || 0;
+        Object.values(d.divisions || {}).forEach(v => {
+          pincodes += Object.keys(v.pincodes || {}).length;
+          totalUsers += v.divisionAdmins?.length || 0;
+          Object.values(v.pincodes || {}).forEach(p => {
+            totalUsers += p.pincodeAdmins?.length || 0;
+          });
+        });
+      });
+      return { districts, divisions, pincodes, totalUsers };
+    }
+    if (type === 'district') {
+      const divisions = Object.keys(node.divisions || {}).length;
+      let pincodes = 0;
+      let totalUsers = node.districtAdmins?.length || 0;
+
+      Object.values(node.divisions || {}).forEach(v => {
+        pincodes += Object.keys(v.pincodes || {}).length;
+        totalUsers += v.divisionAdmins?.length || 0;
+        Object.values(v.pincodes || {}).forEach(p => {
+          totalUsers += p.pincodeAdmins?.length || 0;
+        });
+      });
+      return { divisions, pincodes, totalUsers };
+    }
+    if (type === 'division') {
+      const pincodes = Object.keys(node.pincodes || {}).length;
+      let totalUsers = node.divisionAdmins?.length || 0;
+
+      Object.values(node.pincodes || {}).forEach(p => {
+        totalUsers += p.pincodeAdmins?.length || 0;
+      });
+      return { pincodes, totalUsers };
+    }
+    if (type === 'pincode') {
+      return { totalUsers: node.pincodeAdmins?.length || 0 };
+    }
+    return { districts: 0, divisions: 0, pincodes: 0, totalUsers: 0 };
+  };
+
+
+
 
   // Filtered Hierarchy for UI Search & Breadcrumbs
   const filteredTree = useMemo(() => {
@@ -765,292 +817,532 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
             </div>
           ) : (
             /* ======================================================== */
-            /* TERRITORY TREE VIEW                                      */
             /* ======================================================== */
-            <div className="space-y-4">
-              {filteredTree.map((stateNode) => {
-                const stateKey = `state_${stateNode.name}`;
-                const isStateExpanded = !!expandedNodes[stateKey];
-                const totalDistCount = Object.keys(stateNode.districts).length;
-
-                return (
-                  <div key={stateKey} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden transition-all">
-                    {/* LEVEL 1: STATE HEADER NODE */}
-                    <div 
-                      onClick={() => toggleNode(stateKey)}
-                      className="p-4 sm:p-5 bg-slate-50 hover:bg-slate-100/90 dark:bg-slate-850 dark:hover:bg-slate-800 cursor-pointer transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200/60 dark:border-slate-800"
-                    >
-                      <div className="flex items-center gap-3.5">
-                        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-black text-lg border border-emerald-500/20 shrink-0">
-                          🏛️
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                              STATE
-                            </span>
-                            <h3 className="text-base font-black text-slate-900 dark:text-white tracking-tight">
-                              {stateNode.name}
-                            </h3>
-                          </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                            {stateNode.stateAdmins.length > 0 ? (
-                              <>State Admin: <strong className="text-slate-800 dark:text-slate-200 font-bold">{stateNode.stateAdmins.map(a => a.name).join(', ')}</strong></>
-                            ) : (
-                              <span className="text-amber-600 dark:text-amber-400 font-semibold">No State Admin Assigned</span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Right State Node Meta & Actions */}
-                      <div className="flex items-center gap-2.5 shrink-0" onClick={e => e.stopPropagation()}>
-                        <span className="bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs font-semibold text-slate-600 dark:text-slate-300 shadow-xs">
-                          Districts: <strong className="text-slate-900 dark:text-white">{totalDistCount}</strong>
-                        </span>
-
-                        {/* State Action: Add District Admin */}
-                        {(isMainAdmin || currentUserTier === 'state') && (
-                          <button
-                            onClick={() => openAddAdminModal('district', { state: stateNode.name })}
-                            className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                            title="Add District Admin under this State"
-                          >
-                            <Plus className="w-3.5 h-3.5" /> District Admin
-                          </button>
-                        )}
-
-                        {/* State Action: Delete State */}
-                        {(isMainAdmin || currentUserTier === 'main') && (
-                          <button
-                            onClick={() => setDeleteConfirmState(stateNode)}
-                            className="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white dark:bg-rose-950/40 dark:hover:bg-rose-600 dark:text-rose-400 dark:hover:text-white border border-rose-200 dark:border-rose-900/40 font-bold text-xs px-3.5 py-1.5 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
-                            title={`Delete State: ${stateNode.name}`}
-                          >
-                            <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                            <span>Delete</span>
-                          </button>
-                        )}
-
-                        <button 
-                          onClick={() => toggleNode(stateKey)}
-                          className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
-                        >
-                          {isStateExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                        </button>
-                      </div>
+            /* DRILL-DOWN CARD NAVIGATION (MANDATORY PATTERN)           */
+            /* ======================================================== */
+            <div className="space-y-5">
+              {/* SCREEN 1: STATES (when no state is selected) */}
+              {!breadcrumbState && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-800 dark:text-slate-100 uppercase tracking-wider">States Overview</h3>
+                      <p className="text-xs text-slate-400">Click any state card to drill down into assigned districts.</p>
                     </div>
+                    <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                      {filteredTree.length} Active {filteredTree.length === 1 ? 'State' : 'States'}
+                    </span>
+                  </div>
 
-                    {/* STATE ADMIN CARDS & EXPANDED DISTRICTS */}
-                    {isStateExpanded && (
-                      <div className="p-4 sm:p-5 space-y-6 bg-slate-50/60 dark:bg-slate-950/60">
-                        {/* State Admin Profile Cards */}
-                        {stateNode.stateAdmins.length > 0 && (
-                          <div className="space-y-2">
-                            <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400">State Leadership:</span>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                              {stateNode.stateAdmins.map(admin => (
-                                <div 
-                                  key={admin._id}
-                                  onClick={() => setSelectedAdmin(admin)}
-                                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs hover:border-emerald-500/50 hover:shadow-md transition-all cursor-pointer space-y-2"
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                                      STATE ADMIN
-                                    </span>
-                                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${admin.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-500/10 text-slate-500'}`}>
-                                      {admin.status}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <h4 className="font-extrabold text-slate-850 dark:text-slate-100 text-sm">{admin.name}</h4>
-                                    <p className="text-xs text-slate-400 font-medium">{admin.email}</p>
-                                  </div>
-                                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs text-slate-500">
-                                    <span>Phone: <strong>{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : '—')}</strong></span>
-                                    <span className="text-[11px] text-primary-600 font-bold flex items-center gap-1">Details <ArrowRight className="w-3 h-3" /></span>
-                                  </div>
-                                </div>
-                              ))}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredTree.map(st => {
+                      const counts = getSubHierarchyCounts(st, 'state');
+                      return (
+                        <div
+                          key={st.name}
+                          onClick={() => { setBreadcrumbState(st.name); setBreadcrumbDistrict(''); setBreadcrumbDivision(''); setBreadcrumbPincode(''); }}
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                                STATE
+                              </span>
+                              <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-emerald-600 transition-colors">
+                                View Districts <ArrowRight className="w-3.5 h-3.5" />
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-black text-lg border border-emerald-500/20 shrink-0">
+                                🏛️
+                              </div>
+                              <div>
+                                <h3 className="text-base font-black text-slate-900 dark:text-white">{st.name}</h3>
+                                <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                  {st.stateAdmins.length > 0 ? (
+                                    <>State Admin: <strong className="text-slate-700 dark:text-slate-300 font-bold">{st.stateAdmins.map(a => a.name).join(', ')}</strong></>
+                                  ) : 'No State Admin Assigned'}
+                                </p>
+                              </div>
                             </div>
                           </div>
-                        )}
 
-                        {/* LEVEL 2: DISTRICTS ACCORDION */}
-                        <div className="space-y-4 pl-0 md:pl-4 border-l-2 border-slate-200 dark:border-slate-800">
-                          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                            Districts in {stateNode.name} ({totalDistCount}):
-                          </span>
+                          <div className="grid grid-cols-4 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                            <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                              <span className="text-[10px] text-slate-400 block font-semibold">Districts</span>
+                              <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{counts.districts}</strong>
+                            </div>
+                            <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                              <span className="text-[10px] text-slate-400 block font-semibold">Divisions</span>
+                              <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{counts.divisions}</strong>
+                            </div>
+                            <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                              <span className="text-[10px] text-slate-400 block font-semibold">Pincodes</span>
+                              <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{counts.pincodes}</strong>
+                            </div>
+                            <div className="p-2 bg-emerald-500/10 rounded-xl">
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-semibold">Admins</span>
+                              <strong className="text-xs font-black text-emerald-600 dark:text-emerald-400">{counts.totalUsers}</strong>
+                            </div>
+                          </div>
 
-                          {Object.values(stateNode.districts).map(distNode => {
-                            const distKey = `dist_${stateNode.name}_${distNode.name}`;
-                            const isDistExpanded = !!expandedNodes[distKey];
-                            const totalDivCount = Object.keys(distNode.divisions).length;
+                          <div className="flex items-center justify-between pt-1" onClick={e => e.stopPropagation()}>
+                            {(isMainAdmin || currentUserTier === 'state') && (
+                              <button
+                                onClick={() => openAddAdminModal('district', { state: st.name })}
+                                className="text-[11px] font-bold text-blue-600 hover:text-blue-500 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" /> Add District Admin
+                              </button>
+                            )}
+                            {(isMainAdmin || currentUserTier === 'main') && (
+                              <button
+                                onClick={() => setDeleteConfirmState(st)}
+                                className="text-[11px] font-bold text-rose-500 hover:text-rose-600 flex items-center gap-1 cursor-pointer ml-auto"
+                              >
+                                <Trash2 className="w-3 h-3" /> Delete State
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
-                            return (
-                              <div key={distKey} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
-                                {/* DISTRICT HEADER */}
-                                <div 
-                                  onClick={() => toggleNode(distKey)}
-                                  className="p-3.5 sm:p-4 bg-slate-50 hover:bg-slate-100/90 dark:bg-slate-850 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 transition-colors"
-                                >
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs border border-blue-500/20">
-                                      🏙️
-                                    </div>
-                                    <div>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                                          DISTRICT
-                                        </span>
-                                        <h4 className="font-extrabold text-slate-900 dark:text-white text-sm">
-                                          {distNode.name}
-                                        </h4>
-                                      </div>
-                                      <p className="text-[11px] text-slate-400 mt-0.5">
-                                        Admins: {distNode.districtAdmins.length} • Divisions: {totalDivCount}
-                                      </p>
-                                    </div>
+              {/* SCREEN 2: DISTRICTS (when state is selected, but no district) */}
+              {breadcrumbState && !breadcrumbDistrict && (() => {
+                const st = filteredTree.find(s => s.name.toLowerCase() === breadcrumbState.toLowerCase());
+                if (!st) return <div className="text-center py-8 text-slate-400">State not found.</div>;
+                const districtList = Object.values(st.districts || {});
+
+                return (
+                  <div className="space-y-5">
+                    {/* Header with Back button */}
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { setBreadcrumbState(''); setBreadcrumbDistrict(''); setBreadcrumbDivision(''); setBreadcrumbPincode(''); }}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                          ← All States
+                        </button>
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 dark:text-white">Districts in {st.name}</h3>
+                          <p className="text-xs text-slate-400">Showing only districts with assigned personnel.</p>
+                        </div>
+                      </div>
+                      {(isMainAdmin || currentUserTier === 'state') && (
+                        <button
+                          onClick={() => openAddAdminModal('district', { state: st.name })}
+                          className="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add District Admin
+                        </button>
+                      )}
+                    </div>
+
+                    {/* State Leadership (if assigned) */}
+                    {st.stateAdmins.length > 0 && (
+                      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-4 space-y-2">
+                        <span className="text-[11px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">
+                          🏛️ State Leadership ({st.name}):
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {st.stateAdmins.map(admin => (
+                            <div
+                              key={admin._id}
+                              onClick={() => setSelectedAdmin(admin)}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl cursor-pointer hover:border-emerald-500/50 shadow-xs flex items-center justify-between"
+                            >
+                              <div>
+                                <span className="text-[9px] font-black text-emerald-600 uppercase">STATE ADMIN</span>
+                                <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
+                                <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
+                              </div>
+                              <span className="text-[11px] text-primary-600 font-bold flex items-center gap-1">Details <ChevronRight className="w-3 h-3" /></span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Districts Grid */}
+                    {loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-3">
+                        <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Loading districts in {st.name}...</p>
+                      </div>
+                    ) : error ? (
+                      <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-2xl p-8 text-center space-y-3">
+                        <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                        <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{error}</p>
+                        <button onClick={loadAllData} className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl cursor-pointer">
+                          Retry
+                        </button>
+                      </div>
+                    ) : districtList.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
+                        <Building className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned districts found in {st.name}.</p>
+                        <p className="text-xs text-slate-400">Districts will appear here once an administrator is onboarded to a district in {st.name}.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {districtList.map(d => {
+                          const counts = getSubHierarchyCounts(d, 'district');
+                          return (
+                            <div
+                              key={d.name}
+                              onClick={() => { setBreadcrumbDistrict(d.name); setBreadcrumbDivision(''); setBreadcrumbPincode(''); }}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                            >
+                              <div>
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 border border-blue-500/20">
+                                    DISTRICT
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-blue-600 transition-colors">
+                                    View Divisions <ArrowRight className="w-3.5 h-3.5" />
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center font-black text-lg border border-blue-500/20 shrink-0">
+                                    🏙️
                                   </div>
-
-                                  <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                                    {/* District Action: Add Division Admin */}
-                                    {(isMainAdmin || currentUserTier === 'state' || currentUserTier === 'district') && (
-                                      <button
-                                        onClick={() => openAddAdminModal('division', { state: stateNode.name, district: distNode.name })}
-                                        className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer active:scale-95 shadow-xs"
-                                      >
-                                        <Plus className="w-3 h-3" /> Division Admin
-                                      </button>
-                                    )}
-
-                                    <button 
-                                      onClick={() => toggleNode(distKey)}
-                                      className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-750 text-slate-400 transition-colors cursor-pointer"
-                                    >
-                                      {isDistExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                    </button>
+                                  <div>
+                                    <h3 className="text-base font-black text-slate-900 dark:text-white">{d.name}</h3>
+                                    <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                      {d.districtAdmins.length > 0 ? (
+                                        <>Admins: <strong className="text-slate-700 dark:text-slate-300 font-bold">{d.districtAdmins.map(a => a.name).join(', ')}</strong></>
+                                      ) : 'No District Admin Assigned'}
+                                    </p>
                                   </div>
                                 </div>
+                              </div>
 
-                                {/* DISTRICT CONTENT: ADMINS & DIVISIONS */}
-                                {isDistExpanded && (
-                                  <div className="p-4 bg-slate-50/50 dark:bg-slate-950/60 space-y-4">
-                                    {/* District Admins */}
-                                    {distNode.districtAdmins.length > 0 && (
-                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                                        {distNode.districtAdmins.map(admin => (
-                                          <div
-                                            key={admin._id}
-                                            onClick={() => setSelectedAdmin(admin)}
-                                            className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl cursor-pointer hover:border-blue-500/50 flex items-center justify-between shadow-xs transition-all"
-                                          >
-                                            <div>
-                                              <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">DISTRICT ADMIN</span>
-                                              <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
-                                              <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
-                                            </div>
-                                            <span className="text-[10px] text-primary-600 font-bold flex items-center gap-0.5">Details <ChevronRight className="w-3 h-3" /></span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
+                              <div className="grid grid-cols-3 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                  <span className="text-[10px] text-slate-400 block font-semibold">Divisions</span>
+                                  <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{counts.divisions}</strong>
+                                </div>
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                  <span className="text-[10px] text-slate-400 block font-semibold">Pincodes</span>
+                                  <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{counts.pincodes}</strong>
+                                </div>
+                                <div className="p-2 bg-blue-500/10 rounded-xl">
+                                  <span className="text-[10px] text-blue-600 dark:text-blue-400 block font-semibold">Admins</span>
+                                  <strong className="text-xs font-black text-blue-600 dark:text-blue-400">{counts.totalUsers}</strong>
+                                </div>
+                              </div>
 
-                                    {/* LEVEL 3: DIVISIONS */}
-                                    <div className="space-y-3 pl-3 border-l-2 border-slate-200 dark:border-slate-800">
-                                      {Object.values(distNode.divisions).map(divNode => {
-                                        const divKey = `div_${stateNode.name}_${distNode.name}_${divNode.name}`;
-                                        const isDivExpanded = !!expandedNodes[divKey];
-                                        const totalPinCount = Object.keys(divNode.pincodes).length;
-
-                                        return (
-                                          <div key={divKey} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs">
-                                            <div
-                                              onClick={() => toggleNode(divKey)}
-                                              className="p-3 bg-slate-50/60 hover:bg-slate-100/90 dark:bg-slate-850 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between gap-2 transition-colors"
-                                            >
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                                                  DIVISION
-                                                </span>
-                                                <span className="text-xs font-extrabold text-slate-900 dark:text-white">{divNode.name}</span>
-                                                <span className="text-[10px] text-slate-400">({divNode.divisionAdmins.length} Admins)</span>
-                                              </div>
-
-                                              <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                                                {(isMainAdmin || currentUserTier === 'state' || currentUserTier === 'district' || currentUserTier === 'division') && (
-                                                  <button
-                                                    onClick={() => openAddAdminModal('pincode', { state: stateNode.name, district: distNode.name, division: divNode.name })}
-                                                    className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-[9px] px-2 py-0.5 rounded flex items-center gap-1 cursor-pointer active:scale-95"
-                                                  >
-                                                    <Plus className="w-2.5 h-2.5" /> Pincode Admin
-                                                  </button>
-                                                )}
-                                                <button onClick={() => toggleNode(divKey)} className="text-slate-400 hover:text-slate-200 transition-colors">
-                                                  {isDivExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                                                </button>
-                                              </div>
-                                            </div>
-
-                                            {/* LEVEL 4: PINCODES */}
-                                            {isDivExpanded && (
-                                              <div className="p-3 bg-slate-50/70 dark:bg-slate-950/70 border-t border-slate-100 dark:border-slate-800 space-y-2">
-                                                {divNode.divisionAdmins.map(admin => (
-                                                  <div
-                                                    key={admin._id}
-                                                    onClick={() => setSelectedAdmin(admin)}
-                                                    className="p-2.5 bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center justify-between cursor-pointer hover:border-purple-500/50 shadow-xs transition-all"
-                                                  >
-                                                    <div>
-                                                      <span className="text-[8px] font-bold text-purple-600 dark:text-purple-400">DIVISION ADMIN</span>
-                                                      <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
-                                                      <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
-                                                    </div>
-                                                    <span className="text-[10px] text-primary-500 font-semibold">View</span>
-                                                  </div>
-                                                ))}
-
-                                                {Object.values(divNode.pincodes).map(pinNode => (
-                                                  <div key={pinNode.code} className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between shadow-xs">
-                                                    <div>
-                                                      <span className="text-[8px] font-black uppercase text-amber-600 dark:text-amber-400">PINCODE {pinNode.code}</span>
-                                                      <p className="text-xs font-bold text-slate-900 dark:text-white">
-                                                        {pinNode.pincodeAdmins.map(a => a.name).join(', ') || 'No Pincode Admin'}
-                                                      </p>
-                                                      {pinNode.pincodeAdmins[0] && (
-                                                        <p className="text-[10px] text-slate-400">
-                                                          {(pinNode.pincodeAdmins[0].phone && pinNode.pincodeAdmins[0].phone !== '—') ? pinNode.pincodeAdmins[0].phone : (pinNode.pincodeAdmins[0].mobile && pinNode.pincodeAdmins[0].mobile !== '—' ? pinNode.pincodeAdmins[0].mobile : pinNode.pincodeAdmins[0].email)}
-                                                        </p>
-                                                      )}
-                                                    </div>
-                                                    {pinNode.pincodeAdmins[0] && (
-                                                      <button
-                                                        onClick={() => setSelectedAdmin(pinNode.pincodeAdmins[0])}
-                                                        className="text-[10px] text-primary-600 dark:text-primary-400 font-bold hover:underline cursor-pointer"
-                                                      >
-                                                        Details
-                                                      </button>
-                                                    )}
-                                                  </div>
-                                                ))}
-                                              </div>
-                                            )}
-                                          </div>
-                                        );
-                                      })}
-                                    </div>
-                                  </div>
+                              <div className="flex items-center justify-between pt-1" onClick={e => e.stopPropagation()}>
+                                {(isMainAdmin || currentUserTier === 'state' || currentUserTier === 'district') && (
+                                  <button
+                                    onClick={() => openAddAdminModal('division', { state: st.name, district: d.name })}
+                                    className="text-[11px] font-bold text-purple-600 hover:text-purple-500 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Plus className="w-3 h-3" /> Add Division Admin
+                                  </button>
                                 )}
                               </div>
-                            );
-                          })}
-                        </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 );
-              })}
+              })()}
+
+              {/* SCREEN 3: DIVISIONS (when state and district are selected, but no division) */}
+              {breadcrumbState && breadcrumbDistrict && !breadcrumbDivision && (() => {
+                const st = filteredTree.find(s => s.name.toLowerCase() === breadcrumbState.toLowerCase());
+                const d = st?.districts?.[breadcrumbDistrict];
+                if (!d) return <div className="text-center py-8 text-slate-400">District not found.</div>;
+                const divisionList = Object.values(d.divisions || {});
+
+                return (
+                  <div className="space-y-5">
+                    {/* Header with Back button */}
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { setBreadcrumbDistrict(''); setBreadcrumbDivision(''); setBreadcrumbPincode(''); }}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                          ← {st.name} Districts
+                        </button>
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 dark:text-white">Divisions in {d.name}</h3>
+                          <p className="text-xs text-slate-400">{st.name} &gt; {d.name} Hubs</p>
+                        </div>
+                      </div>
+                      {(isMainAdmin || currentUserTier === 'state' || currentUserTier === 'district') && (
+                        <button
+                          onClick={() => openAddAdminModal('division', { state: st.name, district: d.name })}
+                          className="bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Division Admin
+                        </button>
+                      )}
+                    </div>
+
+                    {/* District Leadership */}
+                    {d.districtAdmins.length > 0 && (
+                      <div className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-4 space-y-2">
+                        <span className="text-[11px] font-black uppercase text-blue-700 dark:text-blue-400 tracking-wider">
+                          🏙️ District Leadership ({d.name}):
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {d.districtAdmins.map(admin => (
+                            <div
+                              key={admin._id}
+                              onClick={() => setSelectedAdmin(admin)}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl cursor-pointer hover:border-blue-500/50 shadow-xs flex items-center justify-between"
+                            >
+                              <div>
+                                <span className="text-[9px] font-black text-blue-600 uppercase">DISTRICT ADMIN</span>
+                                <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
+                                <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
+                              </div>
+                              <span className="text-[11px] text-primary-600 font-bold flex items-center gap-1">Details <ChevronRight className="w-3 h-3" /></span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Divisions Grid */}
+                    {loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-3">
+                        <RefreshCw className="w-8 h-8 text-purple-500 animate-spin mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Loading divisions in {d.name}...</p>
+                      </div>
+                    ) : error ? (
+                      <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-2xl p-8 text-center space-y-3">
+                        <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                        <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{error}</p>
+                        <button onClick={loadAllData} className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl cursor-pointer">
+                          Retry
+                        </button>
+                      </div>
+                    ) : divisionList.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
+                        <Building2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned divisions found in {d.name}.</p>
+                        <p className="text-xs text-slate-400">Divisions will appear here once an administrator is assigned.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {divisionList.map(v => {
+                          const counts = getSubHierarchyCounts(v, 'division');
+                          return (
+                            <div
+                              key={v.name}
+                              onClick={() => { setBreadcrumbDivision(v.name); setBreadcrumbPincode(''); }}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-purple-500/50 p-5 rounded-3xl shadow-xs hover:shadow-md transition-all cursor-pointer flex flex-col justify-between gap-4 group"
+                            >
+                              <div>
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-600 border border-purple-500/20">
+                                    DIVISION
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-400 flex items-center gap-1 group-hover:text-purple-600 transition-colors">
+                                    View Pincodes <ArrowRight className="w-3.5 h-3.5" />
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center font-black text-lg border border-purple-500/20 shrink-0">
+                                    🏢
+                                  </div>
+                                  <div>
+                                    <h3 className="text-base font-black text-slate-900 dark:text-white">{v.name}</h3>
+                                    <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[200px]">
+                                      {v.divisionAdmins.length > 0 ? (
+                                        <>Admins: <strong className="text-slate-700 dark:text-slate-300 font-bold">{v.divisionAdmins.map(a => a.name).join(', ')}</strong></>
+                                      ) : 'No Division Admin Assigned'}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-2 pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+                                <div className="p-2 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                                  <span className="text-[10px] text-slate-400 block font-semibold">Pincodes</span>
+                                  <strong className="text-xs font-black text-slate-800 dark:text-slate-200">{counts.pincodes}</strong>
+                                </div>
+                                <div className="p-2 bg-purple-500/10 rounded-xl">
+                                  <span className="text-[10px] text-purple-600 dark:text-purple-400 block font-semibold">Admins</span>
+                                  <strong className="text-xs font-black text-purple-600 dark:text-purple-400">{counts.totalUsers}</strong>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between pt-1" onClick={e => e.stopPropagation()}>
+                                {(isMainAdmin || currentUserTier === 'state' || currentUserTier === 'district' || currentUserTier === 'division') && (
+                                  <button
+                                    onClick={() => openAddAdminModal('pincode', { state: st.name, district: d.name, division: v.name })}
+                                    className="text-[11px] font-bold text-amber-600 hover:text-amber-500 flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Plus className="w-3 h-3" /> Add Pincode Admin
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* SCREEN 4: PINCODES (when state, district, and division are selected) */}
+              {breadcrumbState && breadcrumbDistrict && breadcrumbDivision && (() => {
+                const st = filteredTree.find(s => s.name.toLowerCase() === breadcrumbState.toLowerCase());
+                const d = st?.districts?.[breadcrumbDistrict];
+                const v = d?.divisions?.[breadcrumbDivision];
+                if (!v) return <div className="text-center py-8 text-slate-400">Division not found.</div>;
+                const pincodeList = Object.values(v.pincodes || {});
+
+                return (
+                  <div className="space-y-5">
+                    {/* Header with Back button */}
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => { setBreadcrumbDivision(''); setBreadcrumbPincode(''); }}
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+                        >
+                          ← {d.name} Divisions
+                        </button>
+                        <div>
+                          <h3 className="text-base font-black text-slate-900 dark:text-white">Pincodes in {v.name}</h3>
+                          <p className="text-xs text-slate-400">{st.name} &gt; {d.name} &gt; {v.name}</p>
+                        </div>
+                      </div>
+                      {(isMainAdmin || currentUserTier === 'state' || currentUserTier === 'district' || currentUserTier === 'division') && (
+                        <button
+                          onClick={() => openAddAdminModal('pincode', { state: st.name, district: d.name, division: v.name })}
+                          className="bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add Pincode Admin
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Division Leadership */}
+                    {v.divisionAdmins.length > 0 && (
+                      <div className="bg-purple-500/5 border border-purple-500/20 rounded-2xl p-4 space-y-2">
+                        <span className="text-[11px] font-black uppercase text-purple-700 dark:text-purple-400 tracking-wider">
+                          🏢 Division Leadership ({v.name}):
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {v.divisionAdmins.map(admin => (
+                            <div
+                              key={admin._id}
+                              onClick={() => setSelectedAdmin(admin)}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl cursor-pointer hover:border-purple-500/50 shadow-xs flex items-center justify-between"
+                            >
+                              <div>
+                                <span className="text-[9px] font-black text-purple-600 uppercase">DIVISION ADMIN</span>
+                                <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
+                                <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
+                              </div>
+                              <span className="text-[11px] text-primary-600 font-bold flex items-center gap-1">Details <ChevronRight className="w-3 h-3" /></span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pincodes Grid */}
+                    {loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-3">
+                        <RefreshCw className="w-8 h-8 text-amber-500 animate-spin mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Loading pincodes in {v.name}...</p>
+                      </div>
+                    ) : error ? (
+                      <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-2xl p-8 text-center space-y-3">
+                        <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                        <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{error}</p>
+                        <button onClick={loadAllData} className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl cursor-pointer">
+                          Retry
+                        </button>
+                      </div>
+                    ) : pincodeList.length === 0 ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
+                        <MapPin className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned pincodes found in {v.name}.</p>
+                        <p className="text-xs text-slate-400">Pincodes will appear here once an administrator is assigned.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {pincodeList.map(p => {
+                          return (
+                            <div
+                              key={p.code}
+                              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-3xl shadow-xs space-y-4"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-black text-sm border border-amber-500/20">
+                                    📍
+                                  </div>
+                                  <div>
+                                    <span className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-400">PINCODE</span>
+                                    <h4 className="text-base font-black text-slate-900 dark:text-white">{p.code}</h4>
+                                  </div>
+                                </div>
+                                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  Total Assigned Users: <strong className="text-primary-600 dark:text-primary-400">{p.pincodeAdmins.length}</strong>
+                                </span>
+                              </div>
+
+                              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">List of Users:</span>
+                                {p.pincodeAdmins.length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No administrators currently assigned to pincode {p.code}.</p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {p.pincodeAdmins.map(admin => (
+                                      <div
+                                        key={admin._id}
+                                        onClick={() => setSelectedAdmin(admin)}
+                                        className="p-3 bg-slate-50 dark:bg-slate-850/60 border border-slate-200/80 dark:border-slate-700/60 rounded-2xl flex items-center justify-between gap-3 hover:border-primary-500/50 cursor-pointer transition-all"
+                                      >
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-xs font-extrabold text-slate-900 dark:text-white">{admin.name}</span>
+                                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                              {admin.adminRole || 'Pincode Admin'}
+                                            </span>
+                                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${admin.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-500/10 text-slate-500'}`}>
+                                              {admin.status}
+                                            </span>
+                                          </div>
+                                          <div className="text-[11px] text-slate-400 flex items-center gap-3 mt-1">
+                                            <span>Phone: <strong className="text-slate-700 dark:text-slate-300">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile || '—')}</strong></span>
+                                            <span>Email: <strong className="text-slate-700 dark:text-slate-300">{admin.email}</strong></span>
+                                          </div>
+                                        </div>
+                                        <span className="text-xs font-bold text-primary-600 dark:text-primary-400 flex items-center gap-0.5 shrink-0">
+                                          Details <ChevronRight className="w-3.5 h-3.5" />
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>
