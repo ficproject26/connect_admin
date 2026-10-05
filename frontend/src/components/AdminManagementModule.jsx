@@ -350,20 +350,24 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
     admins.forEach(admin => {
       // Exclude Super Admin and accounts without a valid state assignment
       if (admin.role === 'super-admin' || admin.adminRole === 'super-admin' || admin.email === 'admin@example.com') return;
-      const stateName = (admin.assignedState || '').trim();
+      const stateName = (admin.assignedState || admin.state || '').trim();
       if (!stateName || stateName.toLowerCase() === 'general state' || stateName.toLowerCase() === 'state') return;
 
-      const distName = (admin.assignedDistrict || '').trim();
-      const divName = (admin.assignedDivision || '').trim();
-      const pinCode = (admin.assignedPincode ? String(admin.assignedPincode) : '').trim();
+      const distName = (admin.assignedDistrict || admin.district || '').trim();
+      const divName = (admin.assignedDivision || admin.division || '').trim();
+      const pinCode = (admin.assignedPincode ? String(admin.assignedPincode) : (admin.pincode ? String(admin.pincode) : '')).trim();
       const rawLvl = admin.adminLevel || admin.level || '';
-      const level = String(
-        rawLvl === 1 || rawLvl === '1' ? 'state' :
-        rawLvl === 2 || rawLvl === '2' ? 'district' :
-        rawLvl === 3 || rawLvl === '3' ? 'division' :
-        rawLvl === 4 || rawLvl === '4' ? 'pincode' :
-        rawLvl
-      ).toLowerCase();
+      const rawRole = (admin.role || admin.adminRole || '').toLowerCase();
+      let level = 'pincode';
+      if (rawLvl === 1 || rawLvl === '1' || rawLvl === 'state' || rawRole.includes('state')) {
+        level = 'state';
+      } else if (rawLvl === 2 || rawLvl === '2' || rawLvl === 'district' || rawRole.includes('district') || rawRole.includes('branch')) {
+        level = 'district';
+      } else if (rawLvl === 3 || rawLvl === '3' || rawLvl === 'division' || rawRole.includes('division')) {
+        level = 'division';
+      } else if (rawLvl === 4 || rawLvl === '4' || rawLvl === 'pincode' || rawRole.includes('pincode')) {
+        level = 'pincode';
+      }
 
       if (!statesMap[stateName]) {
         statesMap[stateName] = {
@@ -406,6 +410,22 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
             }
             statesMap[stateName].districts[distName].divisions[divName].pincodes[pinCode].pincodeAdmins.push(admin);
           }
+        } else if (pinCode) {
+          const fallbackDiv = 'District Direct Pincodes';
+          if (!statesMap[stateName].districts[distName].divisions[fallbackDiv]) {
+            statesMap[stateName].districts[distName].divisions[fallbackDiv] = {
+              name: fallbackDiv,
+              divisionAdmins: [],
+              pincodes: {}
+            };
+          }
+          if (!statesMap[stateName].districts[distName].divisions[fallbackDiv].pincodes[pinCode]) {
+            statesMap[stateName].districts[distName].divisions[fallbackDiv].pincodes[pinCode] = {
+              code: pinCode,
+              pincodeAdmins: []
+            };
+          }
+          statesMap[stateName].districts[distName].divisions[fallbackDiv].pincodes[pinCode].pincodeAdmins.push(admin);
         }
       }
     });
@@ -473,27 +493,38 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
       const q = searchQuery.toLowerCase().trim();
       const matchesState = st.name.toLowerCase().includes(q);
-      const matchesAdmin = st.stateAdmins.some(a => a.name?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.phone?.includes(q));
-      const matchesDist = Object.values(st.districts).some(d =>
+      const matchesAdmin = st.stateAdmins.some(a => a.name?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.phone?.includes(q) || a.mobile?.includes(q));
+      const matchesDist = Object.values(st.districts || {}).some(d =>
         d.name.toLowerCase().includes(q) ||
-        d.districtAdmins.some(a => a.name?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q))
+        d.districtAdmins.some(a => a.name?.toLowerCase().includes(q) || a.email?.toLowerCase().includes(q) || a.phone?.includes(q) || a.mobile?.includes(q))
       );
       return matchesState || matchesAdmin || matchesDist;
     });
   }, [hierarchyTree, searchQuery, stateFilter, breadcrumbState]);
 
+  // Normalize admin level for aggregate KPI cards
+  const getAdminNormalizedLevel = (a) => {
+    const rawLvl = a.adminLevel || a.level;
+    const rawRole = (a.role || a.adminRole || '').toLowerCase();
+    if (rawLvl === 1 || rawLvl === '1' || rawLvl === 'state' || rawRole.includes('state')) return 'state';
+    if (rawLvl === 2 || rawLvl === '2' || rawLvl === 'district' || rawRole.includes('district') || rawRole.includes('branch')) return 'district';
+    if (rawLvl === 3 || rawLvl === '3' || rawLvl === 'division' || rawRole.includes('division')) return 'division';
+    if (rawLvl === 4 || rawLvl === '4' || rawLvl === 'pincode' || rawRole.includes('pincode')) return 'pincode';
+    return '';
+  };
+
   // Aggregate Counts for Summary Cards (Section 15)
-  const totalStateAdmins = admins.filter(a => (a.adminLevel || a.level) === 'state').length;
-  const totalDistrictAdmins = admins.filter(a => (a.adminLevel || a.level) === 'district').length;
-  const totalDivisionAdmins = admins.filter(a => (a.adminLevel || a.level) === 'division').length;
-  const totalPincodeAdmins = admins.filter(a => (a.adminLevel || a.level) === 'pincode').length;
-  const pendingRequestsCount = requests.filter(r => r.status === 'Pending').length;
+  const totalStateAdmins = admins.filter(a => getAdminNormalizedLevel(a) === 'state').length;
+  const totalDistrictAdmins = admins.filter(a => getAdminNormalizedLevel(a) === 'district').length;
+  const totalDivisionAdmins = admins.filter(a => getAdminNormalizedLevel(a) === 'division').length;
+  const totalPincodeAdmins = admins.filter(a => getAdminNormalizedLevel(a) === 'pincode').length;
+  const pendingRequestsCount = requests.filter(r => (r.status || '').toLowerCase() === 'pending').length;
 
   // State Coverage Statistics (Section 15)
   const stateCoverageStats = useMemo(() => {
     const map = {};
     admins.forEach(a => {
-      const st = (a.assignedState || '').trim();
+      const st = (a.assignedState || a.state || '').trim();
       if (!st || st.toLowerCase() === 'general state' || st.toLowerCase() === 'state') return;
       if (a.role === 'super-admin' || a.email === 'admin@example.com') return;
       map[st] = (map[st] || 0) + 1;
@@ -1101,7 +1132,20 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                     )}
 
                     {/* Districts Grid */}
-                    {districtList.length === 0 ? (
+                    {loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-3">
+                        <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Loading districts in {st.name}...</p>
+                      </div>
+                    ) : error ? (
+                      <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-2xl p-8 text-center space-y-3">
+                        <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                        <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{error}</p>
+                        <button onClick={loadAllData} className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl cursor-pointer">
+                          Retry
+                        </button>
+                      </div>
+                    ) : districtList.length === 0 ? (
                       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
                         <Building className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
                         <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned districts found in {st.name}.</p>
@@ -1234,7 +1278,20 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                     )}
 
                     {/* Divisions Grid */}
-                    {divisionList.length === 0 ? (
+                    {loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-3">
+                        <RefreshCw className="w-8 h-8 text-purple-500 animate-spin mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Loading divisions in {d.name}...</p>
+                      </div>
+                    ) : error ? (
+                      <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-2xl p-8 text-center space-y-3">
+                        <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                        <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{error}</p>
+                        <button onClick={loadAllData} className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl cursor-pointer">
+                          Retry
+                        </button>
+                      </div>
+                    ) : divisionList.length === 0 ? (
                       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
                         <Building2 className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
                         <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned divisions found in {d.name}.</p>
@@ -1364,7 +1421,20 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                     )}
 
                     {/* Pincodes Grid */}
-                    {pincodeList.length === 0 ? (
+                    {loading ? (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-3">
+                        <RefreshCw className="w-8 h-8 text-amber-500 animate-spin mx-auto" />
+                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Loading pincodes in {v.name}...</p>
+                      </div>
+                    ) : error ? (
+                      <div className="bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/40 rounded-2xl p-8 text-center space-y-3">
+                        <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
+                        <p className="text-sm font-bold text-rose-700 dark:text-rose-400">{error}</p>
+                        <button onClick={loadAllData} className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl cursor-pointer">
+                          Retry
+                        </button>
+                      </div>
+                    ) : pincodeList.length === 0 ? (
                       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 text-center space-y-2">
                         <MapPin className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto" />
                         <p className="text-sm font-bold text-slate-700 dark:text-slate-300">No assigned pincodes found in {v.name}.</p>

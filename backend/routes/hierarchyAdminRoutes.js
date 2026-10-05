@@ -52,9 +52,22 @@ const getTierRank = (tier) => {
 };
 
 // Helper: Normalize Admin document for client consumption
+// Helper: Normalize Admin document for client consumption
 const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap = {}) => {
-    const adminObj = { ...adminDoc };
-    const level = adminDoc.adminLevel || adminDoc.level || (adminDoc.adminRole === 'super-admin' ? 'main' : 'pincode');
+    const rawLvl = adminDoc.adminLevel || adminDoc.level;
+    const rawRole = (adminDoc.role || adminDoc.adminRole || '').toLowerCase();
+    let level = 'pincode';
+    if (rawLvl === 1 || rawLvl === '1' || rawLvl === 'state' || rawRole.includes('state')) {
+        level = 'state';
+    } else if (rawLvl === 2 || rawLvl === '2' || rawLvl === 'district' || rawRole.includes('district') || rawRole.includes('branch')) {
+        level = 'district';
+    } else if (rawLvl === 3 || rawLvl === '3' || rawLvl === 'division' || rawRole.includes('division')) {
+        level = 'division';
+    } else if (rawLvl === 4 || rawLvl === '4' || rawLvl === 'pincode' || rawRole.includes('pincode')) {
+        level = 'pincode';
+    } else if (rawRole.includes('super') || rawRole.includes('main')) {
+        level = 'main';
+    }
     
     // Resolve Parent Admin Name & Role
     let parentInfo = null;
@@ -75,36 +88,55 @@ const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap
     const childAdminCount = countsMap.adminChildren?.[adminIdStr] || 0;
     const managerCount = countsMap.managersUnder?.[adminIdStr] || 0;
 
+    const assignedState = adminDoc.assignedState || adminDoc.state || '—';
+    const assignedDistrict = adminDoc.assignedDistrict || adminDoc.district || '—';
+    const assignedDivision = adminDoc.assignedDivision || adminDoc.division || '—';
+    const assignedPincode = adminDoc.assignedPincode ? String(adminDoc.assignedPincode) : (adminDoc.pincode ? String(adminDoc.pincode) : '—');
+
     return {
         _id: adminDoc._id,
+        id: adminDoc._id,
         name: adminDoc.name,
         email: adminDoc.email,
-        phone: adminDoc.phone || '—',
+        phone: adminDoc.phone || adminDoc.mobile || '—',
+        mobile: adminDoc.mobile || adminDoc.phone || '—',
         altPhone: adminDoc.altPhone || '',
         role: adminDoc.role || 'admin',
-        adminRole: adminDoc.adminRole || 'staff',
+        adminRole: adminDoc.adminRole || `${level}-admin`,
         adminLevel: level,
-        status: adminDoc.status === 'Active' || adminDoc.status === 'approved' || adminDoc.isActive ? 'Active' : (adminDoc.status || 'Inactive'),
+        level: level,
+        status: (adminDoc.status || 'Active').toLowerCase() === 'active' || adminDoc.status === 'approved' || adminDoc.isActive ? 'Active' : (adminDoc.status || 'Inactive'),
         isActive: adminDoc.isActive !== false,
-        assignedState: adminDoc.assignedState || adminDoc.state || '—',
-        assignedDistrict: adminDoc.assignedDistrict || adminDoc.district || '—',
-        assignedDivision: adminDoc.assignedDivision || adminDoc.division || '—',
-        assignedPincode: adminDoc.assignedPincode ? String(adminDoc.assignedPincode) : (adminDoc.pincode || '—'),
+        assignedState,
+        assignedDistrict,
+        assignedDivision,
+        assignedPincode,
+        state: adminDoc.state || assignedState,
+        district: adminDoc.district || assignedDistrict,
+        division: adminDoc.division || assignedDivision,
+        pincode: adminDoc.pincode ? String(adminDoc.pincode) : assignedPincode,
+        stateId: adminDoc.stateId || '',
+        districtId: adminDoc.districtId || '',
+        divisionId: adminDoc.divisionId || '',
+        pincodeId: adminDoc.pincodeId || '',
         postOffice: adminDoc.postOffice || '—',
-        address: adminDoc.fullAddress || adminDoc.address || '',
-        fullAddress: adminDoc.fullAddress || adminDoc.address || '',
+        address: adminDoc.fullAddress || adminDoc.address || adminDoc.city || '',
+        fullAddress: adminDoc.fullAddress || adminDoc.address || adminDoc.city || '',
+        city: adminDoc.city || '',
         dob: adminDoc.dob || adminDoc.dateOfBirth || null,
         dateOfBirth: adminDoc.dateOfBirth || adminDoc.dob || null,
         gender: adminDoc.gender || null,
+        aadharNumber: adminDoc.aadharNumber || adminDoc.kyc?.aadhaarNumber || '',
+        panNumber: adminDoc.panNumber || adminDoc.kyc?.panNumber || '',
         kyc: adminDoc.kyc || {},
         kycDocs: adminDoc.kycDocs || {},
-        registrationId: adminDoc.registrationId || `ADM-${String(adminDoc._id).slice(-6).toUpperCase()}`,
+        registrationId: adminDoc.registrationId || (typeof adminDoc._id === 'string' && adminDoc._id.startsWith('ADM-') ? adminDoc._id : `ADM-${String(adminDoc._id).slice(-6).toUpperCase()}`),
         parentAdmin: parentInfo,
         parentAdminId: adminDoc.parentAdminId,
         childAdminCount,
         managerCount,
         lastLogin: adminDoc.lastLogin || null,
-        createdAt: adminDoc.createdAt
+        createdAt: adminDoc.createdAt || adminDoc.updatedAt || new Date()
     };
 };
 
@@ -116,18 +148,28 @@ const getHierarchyAdminsHandler = async (req, res) => {
         const { search, role, status } = req.query;
         const territoryFilter = req.territoryFilter || {};
 
-        // Base query: fetch users with admin privileges
+        const adminRoles = [
+            'admin', 'super-admin', 'superadmin', 'main-admin',
+            'State Admin', 'District Admin', 'Division Admin', 'Pincode Admin',
+            'state-admin', 'district-admin', 'division-admin', 'pincode-admin',
+            'branch-admin', 'state_admin', 'district_admin', 'division_admin', 'pincode_admin'
+        ];
+
+        // Base query: fetch users with admin privileges (supporting all level & role variants)
         const query = {
             $or: [
-                { role: { $in: ['admin', 'super-admin'] } },
-                { adminRole: { $in: ['super-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin'] } }
-            ]
+                { role: { $in: adminRoles } },
+                { adminRole: { $in: adminRoles } },
+                { adminLevel: { $in: ['main', 'state', 'district', 'division', 'pincode'] } },
+                { level: { $in: ['state', 'district', 'division', 'pincode', 1, 2, 3, 4, '1', '2', '3', '4'] } }
+            ],
+            // Exclude purely non-admin accounts
+            role: { $nin: ['Vendor', 'vendor', 'Member', 'member', 'customer', 'Customer', 'agent', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager'] }
         };
 
         // Apply territory isolation filter if not super admin
         if (!req.adminUser.isMainAdmin) {
             Object.assign(query, territoryFilter);
-            // Hide Main Admin records from lower tier admins
             query.adminRole = { $ne: 'super-admin' };
             query.role = { $ne: 'super-admin' };
             query.email = { $ne: 'admin@example.com' };
@@ -136,7 +178,7 @@ const getHierarchyAdminsHandler = async (req, res) => {
         if (status && status !== 'All') {
             if (status === 'Active') {
                 query.$and = (query.$and || []).concat([{
-                    $or: [{ status: 'Active' }, { status: 'approved' }, { isActive: true }]
+                    $or: [{ status: 'Active' }, { status: 'active' }, { status: 'approved' }, { isActive: true }]
                 }]);
             } else {
                 query.status = status;
@@ -146,12 +188,12 @@ const getHierarchyAdminsHandler = async (req, res) => {
         if (role && role !== 'All') {
             const roleRegex = new RegExp(`^${role}$`, 'i');
             query.$and = (query.$and || []).concat([{
-                $or: [{ adminRole: roleRegex }, { adminLevel: roleRegex }, { level: roleRegex }]
+                $or: [{ adminRole: roleRegex }, { role: roleRegex }, { adminLevel: roleRegex }, { level: roleRegex }]
             }]);
         }
 
         let adminDocs = await User.find(query)
-            .select('name email phone altPhone role adminRole adminLevel level assignedState assignedDistrict assignedDivision assignedPincode postOffice fullAddress address status isActive parentAdminId registrationId lastLogin createdAt')
+            .select('name email phone mobile altPhone role adminRole adminLevel level assignedState state stateId assignedDistrict district districtId assignedDivision division divisionId assignedPincode pincode pincodeId postOffice fullAddress address city dob dateOfBirth gender aadharNumber panNumber kyc kycDocs status isActive parentAdminId createdBy onboardedBy assignedBy registrationId id lastLogin createdAt updatedAt')
             .sort({ createdAt: -1 })
             .lean();
 
@@ -162,18 +204,23 @@ const getHierarchyAdminsHandler = async (req, res) => {
                 (a.name && a.name.toLowerCase().includes(q)) ||
                 (a.email && a.email.toLowerCase().includes(q)) ||
                 (a.phone && a.phone.includes(q)) ||
+                (a.mobile && a.mobile.includes(q)) ||
                 (a.assignedState && a.assignedState.toLowerCase().includes(q)) ||
+                (a.state && a.state.toLowerCase().includes(q)) ||
                 (a.assignedDistrict && a.assignedDistrict.toLowerCase().includes(q)) ||
+                (a.district && a.district.toLowerCase().includes(q)) ||
                 (a.assignedDivision && a.assignedDivision.toLowerCase().includes(q)) ||
-                (String(a.assignedPincode || '').includes(q))
+                (a.division && a.division.toLowerCase().includes(q)) ||
+                (String(a.assignedPincode || a.pincode || '').includes(q))
             );
         }
 
-        // Filter out Super Admin admin@example.com and records without assignedState
+        // Filter out Super Admin admin@example.com and records without a valid assigned/state
         adminDocs = adminDocs.filter(a => {
             if (a.email === 'admin@example.com') return false;
-            if (a.role === 'super-admin' && (!a.assignedState || a.assignedState === 'General State')) return false;
-            const st = (a.assignedState || '').trim();
+            const roleLow = String(a.role || '').toLowerCase();
+            if (roleLow === 'super-admin' && (!a.assignedState && !a.state)) return false;
+            const st = (a.assignedState || a.state || '').trim();
             if (!st || st.toLowerCase() === 'general state' || st.toLowerCase() === 'state') return false;
             return true;
         });
@@ -186,7 +233,7 @@ const getHierarchyAdminsHandler = async (req, res) => {
 
         // Preload managers for count calculations
         const managerFilter = !req.adminUser.isMainAdmin ? territoryFilter : {};
-        const managers = await Manager.find(managerFilter).select('level assignedState assignedDistrict assignedDivision assignedPincode parentAdminId status').lean();
+        const managers = await Manager.find(managerFilter).select('level assignedState state assignedDistrict district assignedDivision division assignedPincode pincode parentAdminId status').lean();
 
         // Calculate counts map
         const countsMap = {
@@ -194,11 +241,53 @@ const getHierarchyAdminsHandler = async (req, res) => {
             managersUnder: {}
         };
 
-        // Group child admins by parentAdminId and by territory
+        // Group child admins by parentAdminId and by territory hierarchy
         adminDocs.forEach(a => {
             if (a.parentAdminId) {
                 const pId = String(a.parentAdminId);
                 countsMap.adminChildren[pId] = (countsMap.adminChildren[pId] || 0) + 1;
+            }
+
+            const aRawLvl = a.adminLevel || a.level;
+            const aRawRole = (a.role || a.adminRole || '').toLowerCase();
+            let aLvl = 'pincode';
+            if (aRawLvl === 1 || aRawLvl === '1' || aRawLvl === 'state' || aRawRole.includes('state')) aLvl = 'state';
+            else if (aRawLvl === 2 || aRawLvl === '2' || aRawLvl === 'district' || aRawRole.includes('district') || aRawRole.includes('branch')) aLvl = 'district';
+            else if (aRawLvl === 3 || aRawLvl === '3' || aRawLvl === 'division' || aRawRole.includes('division')) aLvl = 'division';
+            else if (aRawLvl === 4 || aRawLvl === '4' || aRawLvl === 'pincode' || aRawRole.includes('pincode')) aLvl = 'pincode';
+
+            const aState = (a.assignedState || a.state || '').toLowerCase();
+            const aDist = (a.assignedDistrict || a.district || '').toLowerCase();
+            const aDiv = (a.assignedDivision || a.division || '').toLowerCase();
+
+            // Link children to their parent admins in hierarchy tree when direct parentAdminId isn't stored
+            if (!a.parentAdminId) {
+                adminDocs.forEach(parent => {
+                    const pRawLvl = parent.adminLevel || parent.level;
+                    const pRawRole = (parent.role || parent.adminRole || '').toLowerCase();
+                    let pLvl = 'main';
+                    if (pRawLvl === 1 || pRawLvl === '1' || pRawLvl === 'state' || pRawRole.includes('state')) pLvl = 'state';
+                    else if (pRawLvl === 2 || pRawLvl === '2' || pRawLvl === 'district' || pRawRole.includes('district') || pRawRole.includes('branch')) pLvl = 'district';
+                    else if (pRawLvl === 3 || pRawLvl === '3' || pRawLvl === 'division' || pRawRole.includes('division')) pLvl = 'division';
+
+                    const pState = (parent.assignedState || parent.state || '').toLowerCase();
+                    const pDist = (parent.assignedDistrict || parent.district || '').toLowerCase();
+                    const pDiv = (parent.assignedDivision || parent.division || '').toLowerCase();
+
+                    if (pLvl === 'state' && aLvl === 'district') {
+                        if ((parent.stateId && a.stateId && String(parent.stateId) === String(a.stateId)) || (pState && aState && pState === aState)) {
+                            countsMap.adminChildren[String(parent._id)] = (countsMap.adminChildren[String(parent._id)] || 0) + 1;
+                        }
+                    } else if (pLvl === 'district' && aLvl === 'division') {
+                        if ((parent.districtId && a.districtId && String(parent.districtId) === String(a.districtId)) || (pDist && aDist && pDist === aDist)) {
+                            countsMap.adminChildren[String(parent._id)] = (countsMap.adminChildren[String(parent._id)] || 0) + 1;
+                        }
+                    } else if (pLvl === 'division' && aLvl === 'pincode') {
+                        if ((parent.divisionId && a.divisionId && String(parent.divisionId) === String(a.divisionId)) || (pDiv && aDiv && pDiv === aDiv)) {
+                            countsMap.adminChildren[String(parent._id)] = (countsMap.adminChildren[String(parent._id)] || 0) + 1;
+                        }
+                    }
+                });
             }
         });
 
@@ -210,16 +299,22 @@ const getHierarchyAdminsHandler = async (req, res) => {
             }
             // Also attribute managers by territory to the corresponding admin
             adminDocs.forEach(a => {
-                const aLevel = (a.adminLevel || a.level || '').toLowerCase();
-                const aState = (a.assignedState || '').toLowerCase();
-                const aDist = (a.assignedDistrict || '').toLowerCase();
-                const aDiv = (a.assignedDivision || '').toLowerCase();
-                const aPin = String(a.assignedPincode || '');
+                const aRawLvl = a.adminLevel || a.level;
+                const aRawRole = (a.role || a.adminRole || '').toLowerCase();
+                let aLevel = 'pincode';
+                if (aRawLvl === 1 || aRawLvl === '1' || aRawLvl === 'state' || aRawRole.includes('state')) aLevel = 'state';
+                else if (aRawLvl === 2 || aRawLvl === '2' || aRawLvl === 'district' || aRawRole.includes('district') || aRawRole.includes('branch')) aLevel = 'district';
+                else if (aRawLvl === 3 || aRawLvl === '3' || aRawLvl === 'division' || aRawRole.includes('division')) aLevel = 'division';
 
-                const mState = (m.assignedState || '').toLowerCase();
-                const mDist = (m.assignedDistrict || '').toLowerCase();
-                const mDiv = (m.assignedDivision || '').toLowerCase();
-                const mPin = String(m.assignedPincode || '');
+                const aState = (a.assignedState || a.state || '').toLowerCase();
+                const aDist = (a.assignedDistrict || a.district || '').toLowerCase();
+                const aDiv = (a.assignedDivision || a.division || '').toLowerCase();
+                const aPin = String(a.assignedPincode || a.pincode || '');
+
+                const mState = (m.assignedState || m.state || '').toLowerCase();
+                const mDist = (m.assignedDistrict || m.district || '').toLowerCase();
+                const mDiv = (m.assignedDivision || m.division || '').toLowerCase();
+                const mPin = String(m.assignedPincode || m.pincode || '');
 
                 if (aLevel === 'state' && aState && aState === mState) {
                     countsMap.managersUnder[String(a._id)] = (countsMap.managersUnder[String(a._id)] || 0) + 1;
@@ -484,8 +579,8 @@ const getSingleAdminHandler = async (req, res, next) => {
         }
 
         const query = mongoose.Types.ObjectId.isValid(adminId) 
-            ? { _id: new mongoose.Types.ObjectId(adminId) }
-            : { _id: adminId };
+            ? { $or: [{ _id: new mongoose.Types.ObjectId(adminId) }, { _id: adminId }, { id: adminId }, { registrationId: adminId }] }
+            : { $or: [{ _id: adminId }, { id: adminId }, { registrationId: adminId }] };
 
         const adminDoc = await User.findOne(query)
             .select('-password -passwordHash')
@@ -539,59 +634,158 @@ router.post('/admins/requests/:id/reject', [auth, territoryScope], rejectAdminRe
 router.put('/admins/requests/:id/reject', [auth, territoryScope], rejectAdminRequestHandler);
 
 // ============================================================
-// 1D. GET CHILD ADMINS ONBOARDED BY A SPECIFIC ADMIN (by parentAdminId)
-// MUST be declared BEFORE /admins/:id to avoid routing conflicts
+// 1D. HIERARCHICAL CHILD ADMIN RESOLVER
+// Resolves actual child admins based on direct parentAdminId OR 
+// database territory hierarchy (State -> District -> Division -> Pincode)
 // ============================================================
+const getChildAdminsForParent = async (parentId) => {
+    let parent = null;
+    if (mongoose.Types.ObjectId.isValid(parentId)) {
+        parent = await User.findById(parentId).lean();
+    }
+    if (!parent) {
+        parent = await User.findOne({ $or: [{ _id: parentId }, { id: parentId }, { email: parentId }, { registrationId: parentId }] }).lean();
+    }
+    if (!parent) return [];
+
+    const pRawLvl = parent.adminLevel || parent.level;
+    const pRawRole = (parent.role || parent.adminRole || '').toLowerCase();
+    let pLevel = 'main';
+    if (pRawLvl === 1 || pRawLvl === '1' || pRawLvl === 'state' || pRawRole.includes('state')) pLevel = 'state';
+    else if (pRawLvl === 2 || pRawLvl === '2' || pRawLvl === 'district' || pRawRole.includes('district') || pRawRole.includes('branch')) pLevel = 'district';
+    else if (pRawLvl === 3 || pRawLvl === '3' || pRawLvl === 'division' || pRawRole.includes('division')) pLevel = 'division';
+    else if (pRawLvl === 4 || pRawLvl === '4' || pRawLvl === 'pincode' || pRawRole.includes('pincode')) pLevel = 'pincode';
+
+    const pState = (parent.assignedState || parent.state || '').trim().toLowerCase();
+    const pDist = (parent.assignedDistrict || parent.district || '').trim().toLowerCase();
+    const pDiv = (parent.assignedDivision || parent.division || '').trim().toLowerCase();
+
+    let targetLevel = null;
+    let targetLevelValues = [];
+    if (pLevel === 'state') {
+        targetLevel = 'district';
+        targetLevelValues = [2, '2', 'district', 'District Admin', 'district-admin', 'district_admin'];
+    } else if (pLevel === 'district') {
+        targetLevel = 'division';
+        targetLevelValues = [3, '3', 'division', 'Division Admin', 'division-admin', 'division_admin'];
+    } else if (pLevel === 'division') {
+        targetLevel = 'pincode';
+        targetLevelValues = [4, '4', 'pincode', 'Pincode Admin', 'pincode-admin', 'pincode_admin'];
+    }
+
+    if (!targetLevel) return [];
+
+    const candidates = await User.find({
+        $or: [
+            { parentAdminId: { $in: [parent._id, String(parent._id), parent.id].filter(Boolean) } },
+            { createdBy: { $in: [parent._id, String(parent._id), parent.id].filter(Boolean) } },
+            { role: { $in: targetLevelValues } },
+            { adminRole: { $in: targetLevelValues } },
+            { adminLevel: { $in: targetLevelValues } },
+            { level: { $in: targetLevelValues } }
+        ],
+        role: { $nin: ['Vendor', 'vendor', 'Member', 'member', 'customer', 'Customer', 'agent', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager'] }
+    })
+    .select('name email phone mobile altPhone role adminRole adminLevel level assignedState state stateId assignedDistrict district districtId assignedDivision division divisionId assignedPincode pincode pincodeId postOffice fullAddress address city dob dateOfBirth gender aadharNumber panNumber kyc kycDocs status isActive parentAdminId createdBy onboardedBy assignedBy registrationId id lastLogin createdAt updatedAt')
+    .sort({ createdAt: 1 })
+    .lean();
+
+    const children = candidates.filter(c => {
+        if (String(c._id) === String(parent._id)) return false;
+
+        const cRawLvl = c.adminLevel || c.level;
+        const cRawRole = (c.role || c.adminRole || '').toLowerCase();
+        let cLevel = 'pincode';
+        if (cRawLvl === 1 || cRawLvl === '1' || cRawLvl === 'state' || cRawRole.includes('state')) cLevel = 'state';
+        else if (cRawLvl === 2 || cRawLvl === '2' || cRawLvl === 'district' || cRawRole.includes('district') || cRawRole.includes('branch')) cLevel = 'district';
+        else if (cRawLvl === 3 || cRawLvl === '3' || cRawLvl === 'division' || cRawRole.includes('division')) cLevel = 'division';
+        else if (cRawLvl === 4 || cRawLvl === '4' || cRawLvl === 'pincode' || cRawRole.includes('pincode')) cLevel = 'pincode';
+
+        if (cLevel !== targetLevel) return false;
+
+        // Check direct parent link first
+        const isDirectChild = (
+            (c.parentAdminId && [String(parent._id), String(parent.id)].includes(String(c.parentAdminId))) ||
+            (c.createdBy && [String(parent._id), String(parent.id)].includes(String(c.createdBy)))
+        );
+        if (isDirectChild) return true;
+
+        const cState = (c.assignedState || c.state || '').trim().toLowerCase();
+        const cDist = (c.assignedDistrict || c.district || '').trim().toLowerCase();
+        const cDiv = (c.assignedDivision || c.division || '').trim().toLowerCase();
+
+        if (targetLevel === 'district') {
+            return (c.stateId && parent.stateId && String(c.stateId) === String(parent.stateId)) ||
+                   (cState && pState && cState === pState);
+        }
+        if (targetLevel === 'division') {
+            const distMatch = (c.districtId && parent.districtId && String(c.districtId) === String(parent.districtId)) ||
+                              (cDist && pDist && cDist === pDist);
+            const stateMatch = (c.stateId && parent.stateId && String(c.stateId) === String(parent.stateId)) ||
+                               (cState && pState && cState === pState) || !cState;
+            return distMatch && stateMatch;
+        }
+        if (targetLevel === 'pincode') {
+            const divMatch = (c.divisionId && parent.divisionId && String(c.divisionId) === String(parent.divisionId)) ||
+                             (cDiv && pDiv && cDiv === pDiv);
+            const distMatch = (c.districtId && parent.districtId && String(c.districtId) === String(parent.districtId)) ||
+                              (cDist && pDist && cDist === pDist) || !cDist;
+            return divMatch && distMatch;
+        }
+        return false;
+    });
+
+    return children.map(child => {
+        const assignedState = child.assignedState || child.state || '—';
+        const assignedDistrict = child.assignedDistrict || child.district || '—';
+        const assignedDivision = child.assignedDivision || child.division || '—';
+        const assignedPincode = child.assignedPincode ? String(child.assignedPincode) : (child.pincode ? String(child.pincode) : '—');
+
+        return {
+            _id: child._id,
+            id: child._id,
+            name: child.name,
+            email: child.email,
+            phone: child.phone || child.mobile || '—',
+            mobile: child.mobile || child.phone || '—',
+            role: child.role || `${targetLevel}-admin`,
+            adminRole: child.adminRole || `${targetLevel}-admin`,
+            adminLevel: targetLevel,
+            level: targetLevel,
+            status: (child.status || 'Active').toLowerCase() === 'active' || child.status === 'approved' || child.isActive ? 'Active' : (child.status || 'Inactive'),
+            isActive: child.isActive !== false,
+            assignedState,
+            assignedDistrict,
+            assignedDivision,
+            assignedPincode,
+            state: child.state || assignedState,
+            district: child.district || assignedDistrict,
+            division: child.division || assignedDivision,
+            pincode: child.pincode ? String(child.pincode) : assignedPincode,
+            stateId: child.stateId || '',
+            districtId: child.districtId || '',
+            divisionId: child.divisionId || '',
+            pincodeId: child.pincodeId || '',
+            postOffice: child.postOffice || '—',
+            address: child.fullAddress || child.address || child.city || '',
+            city: child.city || '',
+            dob: child.dob || child.dateOfBirth || null,
+            registrationId: child.registrationId || (typeof child._id === 'string' && child._id.startsWith('ADM-') ? child._id : `ADM-${String(child._id).slice(-6).toUpperCase()}`),
+            parentAdminId: child.parentAdminId || parent._id,
+            createdAt: child.createdAt || child.updatedAt || new Date(),
+            lastLogin: child.lastLogin || null
+        };
+    });
+};
+
 router.get('/admins/:id/children', [auth, territoryScope], async (req, res) => {
     try {
         const parentId = req.params.id;
-        // Validate it's a real ID and not a keyword
         if (['requests', 'activity', 'stats', 'export', 'dashboard'].includes(parentId)) {
             return res.status(404).json({ success: false, msg: 'Endpoint not found' });
         }
-
-        // Build parentAdminId query that handles both string and ObjectId formats
-        let parentQuery;
-        if (mongoose.Types.ObjectId.isValid(parentId)) {
-            parentQuery = { $in: [parentId, new mongoose.Types.ObjectId(parentId)] };
-        } else {
-            parentQuery = parentId;
-        }
-
-        // Fetch only admin-role users whose parentAdminId matches
-        const children = await User.find({
-            parentAdminId: parentQuery,
-            $or: [
-                { role: { $in: ['admin', 'super-admin'] } },
-                { adminRole: { $in: ['state-admin', 'district-admin', 'division-admin', 'pincode-admin'] } }
-            ]
-        })
-        .select('name email phone altPhone role adminRole adminLevel level assignedState assignedDistrict assignedDivision assignedPincode postOffice status isActive parentAdminId registrationId lastLogin createdAt')
-        .sort({ createdAt: 1 })
-        .lean();
-
-        const formatted = children.map(child => ({
-            _id: child._id,
-            name: child.name,
-            email: child.email,
-            phone: child.phone || '—',
-            role: child.role || 'admin',
-            adminRole: child.adminRole || 'staff',
-            adminLevel: child.adminLevel || child.level || 'pincode',
-            status: child.status === 'Active' || child.status === 'approved' || child.isActive ? 'Active' : (child.status || 'Inactive'),
-            isActive: child.isActive !== false,
-            assignedState: child.assignedState || child.state || '—',
-            assignedDistrict: child.assignedDistrict || child.district || '—',
-            assignedDivision: child.assignedDivision || child.division || '—',
-            assignedPincode: child.assignedPincode ? String(child.assignedPincode) : (child.pincode || '—'),
-            postOffice: child.postOffice || '—',
-            registrationId: child.registrationId || `ADM-${String(child._id).slice(-6).toUpperCase()}`,
-            parentAdminId: child.parentAdminId,
-            createdAt: child.createdAt,
-            lastLogin: child.lastLogin || null
-        }));
-
-        res.json({ success: true, children: formatted, total: formatted.length });
+        const children = await getChildAdminsForParent(parentId);
+        res.json({ success: true, children, total: children.length });
     } catch (err) {
         console.error('Get child admins error:', err);
         res.status(500).json({ success: false, msg: 'Server error retrieving child administrators', error: err.message });
@@ -599,49 +793,13 @@ router.get('/admins/:id/children', [auth, territoryScope], async (req, res) => {
 });
 
 router.get('/hierarchy-admins/:id/children', [auth, territoryScope], async (req, res) => {
-    // Direct alias — same logic as /admins/:id/children
     try {
         const parentId = req.params.id;
         if (['requests', 'activity', 'stats', 'export', 'dashboard'].includes(parentId)) {
             return res.status(404).json({ success: false, msg: 'Endpoint not found' });
         }
-        let parentQuery;
-        if (mongoose.Types.ObjectId.isValid(parentId)) {
-            parentQuery = { $in: [parentId, new mongoose.Types.ObjectId(parentId)] };
-        } else {
-            parentQuery = parentId;
-        }
-        const children = await User.find({
-            parentAdminId: parentQuery,
-            $or: [
-                { role: { $in: ['admin', 'super-admin'] } },
-                { adminRole: { $in: ['state-admin', 'district-admin', 'division-admin', 'pincode-admin'] } }
-            ]
-        })
-        .select('name email phone altPhone role adminRole adminLevel level assignedState assignedDistrict assignedDivision assignedPincode postOffice status isActive parentAdminId registrationId lastLogin createdAt')
-        .sort({ createdAt: 1 })
-        .lean();
-        const formatted = children.map(child => ({
-            _id: child._id,
-            name: child.name,
-            email: child.email,
-            phone: child.phone || '—',
-            role: child.role || 'admin',
-            adminRole: child.adminRole || 'staff',
-            adminLevel: child.adminLevel || child.level || 'pincode',
-            status: child.status === 'Active' || child.status === 'approved' || child.isActive ? 'Active' : (child.status || 'Inactive'),
-            isActive: child.isActive !== false,
-            assignedState: child.assignedState || child.state || '—',
-            assignedDistrict: child.assignedDistrict || child.district || '—',
-            assignedDivision: child.assignedDivision || child.division || '—',
-            assignedPincode: child.assignedPincode ? String(child.assignedPincode) : (child.pincode || '—'),
-            postOffice: child.postOffice || '—',
-            registrationId: child.registrationId || `ADM-${String(child._id).slice(-6).toUpperCase()}`,
-            parentAdminId: child.parentAdminId,
-            createdAt: child.createdAt,
-            lastLogin: child.lastLogin || null
-        }));
-        res.json({ success: true, children: formatted, total: formatted.length });
+        const children = await getChildAdminsForParent(parentId);
+        res.json({ success: true, children, total: children.length });
     } catch (err) {
         console.error('Get child admins (hierarchy) error:', err);
         res.status(500).json({ success: false, msg: 'Server error retrieving child administrators', error: err.message });

@@ -16,11 +16,31 @@ class TerritoryAssignmentService {
      * Fetch all active assigned users based on entity type and scope
      */
     static async getRawAssignedEntities(entityType = 'all', scope = {}) {
+        const adminRoles = [
+            'admin', 'super-admin', 'superadmin', 'main-admin',
+            'State Admin', 'District Admin', 'Division Admin', 'Pincode Admin',
+            'state-admin', 'district-admin', 'division-admin', 'pincode-admin',
+            'branch-admin', 'state_admin', 'district_admin', 'division_admin', 'pincode_admin'
+        ];
+
         const adminQuery = {
-            role: { $in: ['admin', 'super-admin'] },
+            $or: [
+                { role: { $in: adminRoles } },
+                { adminRole: { $in: adminRoles } },
+                { adminLevel: { $in: ['main', 'state', 'district', 'division', 'pincode'] } },
+                { level: { $in: ['state', 'district', 'division', 'pincode', 1, 2, 3, 4, '1', '2', '3', '4'] } }
+            ],
+            role: { $nin: ['Vendor', 'vendor', 'Member', 'member', 'customer', 'Customer', 'agent', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager'] },
             status: { $in: ['approved', 'Active', 'active'] },
             isActive: { $ne: false },
-            assignedState: { $exists: true, $ne: '', $ne: null, $nin: ['General State', 'General', 'State'] }
+            $and: [
+                {
+                    $or: [
+                        { assignedState: { $exists: true, $ne: '', $ne: null, $nin: ['General State', 'General', 'State'] } },
+                        { state: { $exists: true, $ne: '', $ne: null, $nin: ['General State', 'General', 'State'] } }
+                    ]
+                }
+            ]
         };
 
         const managerQuery = {
@@ -41,34 +61,40 @@ class TerritoryAssignmentService {
         // Apply territory scoping if not Super Admin
         if (scope && !scope.isSuperAdmin) {
             if (scope.assignedState) {
-                adminQuery.assignedState = new RegExp(`^${scope.assignedState.trim()}$`, 'i');
-                managerQuery.assignedState = new RegExp(`^${scope.assignedState.trim()}$`, 'i');
-                agentQuery.$and = [
-                    { $or: [
-                        { assignedState: new RegExp(`^${scope.assignedState.trim()}$`, 'i') },
-                        { state: new RegExp(`^${scope.assignedState.trim()}$`, 'i') }
-                    ]}
-                ];
+                const stateRegex = new RegExp(`^${scope.assignedState.trim()}$`, 'i');
+                adminQuery.$and = (adminQuery.$and || []).concat([{
+                    $or: [{ assignedState: stateRegex }, { state: stateRegex }]
+                }]);
+                managerQuery.assignedState = stateRegex;
+                agentQuery.$and = (agentQuery.$and || []).concat([{
+                    $or: [{ assignedState: stateRegex }, { state: stateRegex }]
+                }]);
             }
             if (scope.assignedDistrict) {
-                adminQuery.assignedDistrict = new RegExp(`^${scope.assignedDistrict.trim()}$`, 'i');
-                managerQuery.assignedDistrict = new RegExp(`^${scope.assignedDistrict.trim()}$`, 'i');
                 const distRegex = new RegExp(`^${scope.assignedDistrict.trim()}$`, 'i');
+                adminQuery.$and = (adminQuery.$and || []).concat([{
+                    $or: [{ assignedDistrict: distRegex }, { district: distRegex }]
+                }]);
+                managerQuery.assignedDistrict = distRegex;
                 agentQuery.$and = (agentQuery.$and || []).concat([{
                     $or: [{ assignedDistrict: distRegex }, { district: distRegex }]
                 }]);
             }
             if (scope.assignedDivision) {
-                adminQuery.assignedDivision = new RegExp(`^${scope.assignedDivision.trim()}$`, 'i');
-                managerQuery.assignedDivision = new RegExp(`^${scope.assignedDivision.trim()}$`, 'i');
                 const divRegex = new RegExp(`^${scope.assignedDivision.trim()}$`, 'i');
+                adminQuery.$and = (adminQuery.$and || []).concat([{
+                    $or: [{ assignedDivision: divRegex }, { division: divRegex }]
+                }]);
+                managerQuery.assignedDivision = divRegex;
                 agentQuery.$and = (agentQuery.$and || []).concat([{
                     $or: [{ assignedDivision: divRegex }, { division: divRegex }]
                 }]);
             }
             if (scope.assignedPincode) {
                 const pinStr = String(scope.assignedPincode).trim();
-                adminQuery.assignedPincode = pinStr;
+                adminQuery.$and = (adminQuery.$and || []).concat([{
+                    $or: [{ assignedPincode: pinStr }, { pincode: pinStr }]
+                }]);
                 managerQuery.assignedPincode = pinStr;
                 agentQuery.$and = (agentQuery.$and || []).concat([{
                     $or: [{ assignedPincode: pinStr }, { pincode: pinStr }]
@@ -85,7 +111,7 @@ class TerritoryAssignmentService {
         if (entityType === 'all' || entityType === 'admins') {
             queries.push(
                 User.find(adminQuery)
-                    .select('_id name email phone altPhone role adminRole adminLevel level assignedState assignedDistrict assignedDivision assignedPincode postOffice fullAddress status isActive registrationId createdAt')
+                    .select('_id name email phone mobile altPhone role adminRole adminLevel level assignedState state stateId assignedDistrict district districtId assignedDivision division divisionId assignedPincode pincode pincodeId postOffice fullAddress status isActive registrationId createdAt')
                     .lean()
                     .then(res => { admins = res; })
             );
@@ -128,20 +154,22 @@ class TerritoryAssignmentService {
 
         // 1. Admins
         admins.forEach(a => {
-            const state = (a.assignedState || '').trim();
-            const district = (a.assignedDistrict || '').trim();
-            const division = (a.assignedDivision || '').trim();
-            const pincode = a.assignedPincode ? String(a.assignedPincode).trim() : '';
+            const state = (a.assignedState || a.state || '').trim();
+            const district = (a.assignedDistrict || a.district || '').trim();
+            const division = (a.assignedDivision || a.division || '').trim();
+            const pincode = a.assignedPincode ? String(a.assignedPincode).trim() : (a.pincode ? String(a.pincode).trim() : '');
 
             // Ignore Super Admin or unassigned accounts
             if (!state || norm(state) === 'general state' || norm(state) === 'state') return;
-            if (a.role === 'super-admin' && !a.assignedDistrict && !a.assignedDivision && a.email === 'admin@example.com') return;
+            if (a.role === 'super-admin' && !district && !division && a.email === 'admin@example.com') return;
 
-            const lvl = norm(a.adminLevel || a.level || '');
+            const rawLvl = a.adminLevel || a.level;
+            const rawRole = (a.role || a.adminRole || '').toLowerCase();
             let level = 'pincode';
-            if (lvl === 'state' || (!district && !division && !pincode)) level = 'state';
-            else if (lvl === 'district' || (!division && !pincode)) level = 'district';
-            else if (lvl === 'division' || !pincode) level = 'division';
+            if (rawLvl === 1 || rawLvl === '1' || rawLvl === 'state' || rawRole.includes('state')) level = 'state';
+            else if (rawLvl === 2 || rawLvl === '2' || rawLvl === 'district' || rawRole.includes('district') || rawRole.includes('branch')) level = 'district';
+            else if (rawLvl === 3 || rawLvl === '3' || rawLvl === 'division' || rawRole.includes('division')) level = 'division';
+            else if (rawLvl === 4 || rawLvl === '4' || rawLvl === 'pincode' || rawRole.includes('pincode')) level = 'pincode';
 
             entities.push({
                 _id: a._id,
@@ -150,7 +178,7 @@ class TerritoryAssignmentService {
                 role: a.adminRole || `${level}-admin`,
                 name: a.name,
                 email: a.email,
-                phone: a.phone || '',
+                phone: a.phone || a.mobile || '',
                 altPhone: a.altPhone || '',
                 state,
                 district: district || '',
