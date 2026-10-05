@@ -40,6 +40,11 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     technicians: []
   });
 
+  const [isSilentSyncing, setIsSilentSyncing] = useState(false);
+  const [lastSyncedTime, setLastSyncedTime] = useState(new Date());
+  const isFetchingRef = useRef(false);
+  const hasDataRef = useRef(false);
+
   // Filters & Search
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL'); // 'ALL' | 'PENDING' | 'HOLD' | 'PAID' | 'CANCELLED'
@@ -120,9 +125,21 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     else console.log(`[${type.toUpperCase()}] ${msg}`);
   }, [onToast]);
 
+  useEffect(() => {
+    hasDataRef.current = (recipients.agents.length > 0 || recipients.vendors.length > 0 || recipients.deliveryPartners.length > 0 || recipients.technicians.length > 0);
+  }, [recipients]);
+
   // Fetch Payout Dashboard Data
   const fetchDashboardData = useCallback(async (isSilent = false) => {
-    if (!isSilent) setLoading(true);
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    if (!isSilent && !hasDataRef.current) {
+      setLoading(true);
+    } else {
+      setIsSilentSyncing(true);
+    }
+
     try {
       const res = await fetch(`${API_BASE}/admin/enterprise/payments/dashboard`, {
         headers: {
@@ -134,19 +151,35 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         const data = await res.json();
         if (data.kpis) setKpis(data.kpis);
         if (data.recipients) {
+          const newAgents = Array.isArray(data.recipients.agents) ? data.recipients.agents : [];
+          const newVendors = Array.isArray(data.recipients.vendors) ? data.recipients.vendors : [];
+          const newDelivery = Array.isArray(data.recipients.deliveryPartners) ? data.recipients.deliveryPartners : [];
+          const newTechs = Array.isArray(data.recipients.technicians) ? data.recipients.technicians : [];
+
           setRecipients({
-            agents: Array.isArray(data.recipients.agents) ? data.recipients.agents : [],
-            vendors: Array.isArray(data.recipients.vendors) ? data.recipients.vendors : [],
-            deliveryPartners: Array.isArray(data.recipients.deliveryPartners) ? data.recipients.deliveryPartners : [],
-            technicians: Array.isArray(data.recipients.technicians) ? data.recipients.technicians : []
+            agents: newAgents,
+            vendors: newVendors,
+            deliveryPartners: newDelivery,
+            technicians: newTechs
+          });
+
+          // Smoothly reconcile open modal details without resetting
+          setSelectedPayable(prev => {
+            if (!prev) return null;
+            const allItems = [...newAgents, ...newVendors, ...newDelivery, ...newTechs];
+            const found = allItems.find(i => (i.paymentId && i.paymentId === prev.paymentId) || String(i._id) === String(prev._id));
+            return found || prev;
           });
         }
+        setLastSyncedTime(new Date());
       }
     } catch (err) {
       console.error('Fetch payout dashboard error:', err);
       if (!isSilent) toast('Failed to load payout dashboard data', 'error');
     } finally {
+      isFetchingRef.current = false;
       if (!isSilent) setLoading(false);
+      setIsSilentSyncing(false);
     }
   }, [API_BASE, token, toast]);
 
@@ -172,6 +205,38 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     fetchDashboardData();
     checkPinStatus();
   }, [fetchDashboardData, checkPinStatus]);
+
+  // Background Auto-Refresh Engine (Every 6s, tab-visibility aware, prevents duplicate requests)
+  useEffect(() => {
+    if (!token) return;
+
+    let lastFetchTime = Date.now();
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
+        lastFetchTime = Date.now();
+        fetchDashboardData(true);
+      }
+    }, 6000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && (typeof navigator === 'undefined' || navigator.onLine)) {
+        if (Date.now() - lastFetchTime >= 5000) {
+          lastFetchTime = Date.now();
+          fetchDashboardData(true);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
+  }, [token, fetchDashboardData]);
 
   // Socket.IO Real-Time Synchronization Listener
   useEffect(() => {
@@ -202,6 +267,10 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
 
       socket.on('payment_updated', onRealtimeUpdate);
       socket.on('payment:updated', onRealtimeUpdate);
+      socket.on('payment:processed', onRealtimeUpdate);
+      socket.on('payment:held', onRealtimeUpdate);
+      socket.on('payment:released', onRealtimeUpdate);
+      socket.on('payment:cancelled', onRealtimeUpdate);
       socket.on('pincode_updated', onRealtimeUpdate);
       socket.on('territory_updated', onRealtimeUpdate);
     } catch (e) {
@@ -1035,6 +1104,15 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Subtle Live Sync Status */}
+          <div className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <span className={`w-2 h-2 rounded-full bg-emerald-500 ${isSilentSyncing ? 'animate-ping' : 'animate-pulse'}`} />
+            <span>Live Synced</span>
+            <span className="text-[10px] text-slate-400 font-mono">
+              ({lastSyncedTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })})
+            </span>
+          </div>
+
           {/* Refresh Button (Position 1) */}
           <button
             type="button"
@@ -1043,7 +1121,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
             className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition shadow-xs cursor-pointer disabled:opacity-50 text-xs font-bold"
             title="Refresh dashboard records from database"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 ${loading || isSilentSyncing ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
           </button>
 
@@ -1306,7 +1384,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         </div>
 
         {/* ── 4. RECIPIENT TABLES ── */}
-        {loading ? (
+        {loading && currentList.length === 0 && !hasDataRef.current ? (
           <div className="py-20 text-center space-y-3">
             <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin mx-auto" />
             <p className="text-xs text-slate-500 font-medium">Fetching real database payout records...</p>
