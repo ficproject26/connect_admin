@@ -53,7 +53,7 @@ const getTierRank = (tier) => {
 
 // Helper: Normalize Admin document for client consumption
 // Helper: Normalize Admin document for client consumption
-const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap = {}) => {
+const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap = {}, hierarchyParents = null) => {
     const rawLvl = adminDoc.adminLevel || adminDoc.level;
     const rawRole = (adminDoc.role || adminDoc.adminRole || '').toLowerCase();
     let level = 'pincode';
@@ -72,7 +72,7 @@ const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap
     // Resolve Parent Admin Name & Role
     let parentInfo = null;
     if (adminDoc.parentAdminId) {
-        const pKey = String(adminDoc.parentAdminId);
+        const pKey = String(adminDoc.parentAdminId._id || adminDoc.parentAdminId);
         if (parentMap.has(pKey)) {
             const p = parentMap.get(pKey);
             parentInfo = {
@@ -82,6 +82,45 @@ const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap
                 role: p.adminRole || p.role
             };
         }
+    }
+    if (!parentInfo && parentMap.has(String(adminDoc._id))) {
+        const p = parentMap.get(String(adminDoc._id));
+        parentInfo = {
+            id: p._id,
+            name: p.name,
+            email: p.email,
+            role: p.adminRole || p.role
+        };
+    }
+    if (!parentInfo && hierarchyParents) {
+        const st = (adminDoc.assignedState || adminDoc.state || '').trim().toLowerCase();
+        const dist = (adminDoc.assignedDistrict || adminDoc.district || '').trim().toLowerCase();
+        const div = (adminDoc.assignedDivision || adminDoc.division || '').trim().toLowerCase();
+
+        if (level === 'pincode') {
+            const p = hierarchyParents.divAdminsByDiv?.get(`${st}::${dist}::${div}`) ||
+                      hierarchyParents.distAdminsByDist?.get(`${st}::${dist}`) ||
+                      hierarchyParents.stateAdminsByState?.get(st);
+            if (p && String(p._id) !== String(adminDoc._id)) {
+                parentInfo = { id: p._id, name: p.name, email: p.email, role: p.adminRole || p.role || 'Division Admin' };
+            }
+        } else if (level === 'division') {
+            const p = hierarchyParents.distAdminsByDist?.get(`${st}::${dist}`) ||
+                      hierarchyParents.stateAdminsByState?.get(st);
+            if (p && String(p._id) !== String(adminDoc._id)) {
+                parentInfo = { id: p._id, name: p.name, email: p.email, role: p.adminRole || p.role || 'District Admin' };
+            }
+        } else if (level === 'district') {
+            const p = hierarchyParents.stateAdminsByState?.get(st);
+            if (p && String(p._id) !== String(adminDoc._id)) {
+                parentInfo = { id: p._id, name: p.name, email: p.email, role: p.adminRole || p.role || 'State Admin' };
+            }
+        } else if (level === 'state') {
+            parentInfo = { id: 'main', name: 'Main Admin', email: 'admin@example.com', role: 'Super Admin' };
+        }
+    }
+    if (!parentInfo && level === 'state') {
+        parentInfo = { id: 'main', name: 'Main Admin', email: 'admin@example.com', role: 'Super Admin' };
     }
 
     const adminIdStr = String(adminDoc._id);
@@ -93,6 +132,16 @@ const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap
     const assignedDivision = adminDoc.assignedDivision || adminDoc.division || '—';
     const assignedPincode = adminDoc.assignedPincode ? String(adminDoc.assignedPincode) : (adminDoc.pincode ? String(adminDoc.pincode) : '—');
 
+    const addressLine1 = adminDoc.addressLine1 || adminDoc.kycDocs?.addressLine1 || adminDoc.address || '';
+    const addressLine2 = adminDoc.addressLine2 || adminDoc.kycDocs?.addressLine2 || '';
+    const locality = adminDoc.locality || adminDoc.taluk || adminDoc.kycDocs?.locality || adminDoc.kycDocs?.taluk || adminDoc.division || '';
+    const city = adminDoc.city || adminDoc.kycDocs?.city || adminDoc.division || '';
+    const fullAddress = adminDoc.fullAddress || [addressLine1, locality, city, assignedDistrict !== '—' ? assignedDistrict : '', assignedState !== '—' ? assignedState : '', assignedPincode !== '—' ? assignedPincode : ''].filter(Boolean).join(', ') || adminDoc.address || '';
+
+    const createdByName = parentInfo?.name 
+        ? `${parentInfo.name} (${parentInfo.role || 'Admin'})` 
+        : (level === 'state' ? 'Main Admin' : (level === 'district' ? 'State Admin' : (level === 'division' ? 'District Admin' : 'Division Admin')));
+
     return {
         _id: adminDoc._id,
         id: adminDoc._id,
@@ -100,7 +149,7 @@ const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap
         email: adminDoc.email,
         phone: adminDoc.phone || adminDoc.mobile || '—',
         mobile: adminDoc.mobile || adminDoc.phone || '—',
-        altPhone: adminDoc.altPhone || '',
+        altPhone: adminDoc.altPhone || adminDoc.alternatePhone || adminDoc.alternateMobile || adminDoc.altMobile || '',
         role: adminDoc.role || 'admin',
         adminRole: adminDoc.adminRole || `${level}-admin`,
         adminLevel: level,
@@ -120,19 +169,33 @@ const formatAdminForResponse = async (adminDoc, parentMap = new Map(), countsMap
         divisionId: adminDoc.divisionId || '',
         pincodeId: adminDoc.pincodeId || '',
         postOffice: adminDoc.postOffice || '—',
-        address: adminDoc.fullAddress || adminDoc.address || adminDoc.city || '',
-        fullAddress: adminDoc.fullAddress || adminDoc.address || adminDoc.city || '',
-        city: adminDoc.city || '',
+        address: addressLine1 || fullAddress,
+        fullAddress,
+        addressLine1,
+        addressLine2,
+        locality,
+        taluk: adminDoc.taluk || locality,
+        city,
         dob: adminDoc.dob || adminDoc.dateOfBirth || null,
         dateOfBirth: adminDoc.dateOfBirth || adminDoc.dob || null,
-        gender: adminDoc.gender || null,
-        aadharNumber: adminDoc.aadharNumber || adminDoc.kyc?.aadhaarNumber || '',
+        gender: adminDoc.gender || adminDoc.kycDocs?.gender || adminDoc.kyc?.gender || null,
+        fatherName: adminDoc.fatherName || adminDoc.kycDocs?.fatherName || adminDoc.spouseName || adminDoc.guardianName || '',
+        bloodGroup: adminDoc.bloodGroup || adminDoc.kycDocs?.bloodGroup || adminDoc.kyc?.bloodGroup || '',
+        nationality: adminDoc.nationality || adminDoc.kycDocs?.nationality || 'Indian',
+        bankName: adminDoc.bankName || adminDoc.bankDetails?.bankName || '',
+        accountNumber: adminDoc.accountNumber || adminDoc.bankDetails?.accountNumber || '',
+        accountHolderName: adminDoc.accountHolderName || adminDoc.bankDetails?.accountHolderName || adminDoc.name || '',
+        ifscCode: adminDoc.ifscCode || adminDoc.bankDetails?.ifscCode || '',
+        branchName: adminDoc.branchName || adminDoc.bankDetails?.branchName || '',
+        aadharNumber: adminDoc.aadharNumber || adminDoc.aadhaarNumber || adminDoc.kyc?.aadhaarNumber || adminDoc.kyc?.aadharNumber || '',
+        aadhaarNumber: adminDoc.aadhaarNumber || adminDoc.aadharNumber || adminDoc.kyc?.aadhaarNumber || adminDoc.kyc?.aadharNumber || '',
         panNumber: adminDoc.panNumber || adminDoc.kyc?.panNumber || '',
         kyc: adminDoc.kyc || {},
         kycDocs: adminDoc.kycDocs || {},
         registrationId: adminDoc.registrationId || (typeof adminDoc._id === 'string' && adminDoc._id.startsWith('ADM-') ? adminDoc._id : `ADM-${String(adminDoc._id).slice(-6).toUpperCase()}`),
         parentAdmin: parentInfo,
-        parentAdminId: adminDoc.parentAdminId,
+        parentAdminId: adminDoc.parentAdminId || parentInfo?.id,
+        createdByName,
         childAdminCount,
         managerCount,
         lastLogin: adminDoc.lastLogin || null,
@@ -193,7 +256,7 @@ const getHierarchyAdminsHandler = async (req, res) => {
         }
 
         let adminDocs = await User.find(query)
-            .select('name email phone mobile altPhone role adminRole adminLevel level assignedState state stateId assignedDistrict district districtId assignedDivision division divisionId assignedPincode pincode pincodeId postOffice fullAddress address city dob dateOfBirth gender aadharNumber panNumber kyc kycDocs status isActive parentAdminId createdBy onboardedBy assignedBy registrationId id lastLogin createdAt updatedAt')
+            .select('name email phone mobile altPhone alternatePhone alternateMobile altMobile role adminRole adminLevel level assignedState state stateId assignedDistrict district districtId assignedDivision division divisionId assignedPincode pincode pincodeId postOffice fullAddress address city dob dateOfBirth gender fatherName bloodGroup nationality bankName accountNumber accountHolderName ifscCode branchName addressLine1 addressLine2 locality taluk aadharNumber aadhaarNumber panNumber kyc kycDocs status isActive parentAdminId createdBy onboardedBy assignedBy registrationId id lastLogin createdAt updatedAt')
             .sort({ createdAt: -1 })
             .lean();
 
@@ -230,6 +293,29 @@ const getHierarchyAdminsHandler = async (req, res) => {
         const parents = parentIds.length > 0 ? await User.find({ _id: { $in: parentIds } }).select('name email adminRole role').lean() : [];
         const parentMap = new Map();
         parents.forEach(p => parentMap.set(String(p._id), p));
+
+        // Index admins by territory level so parent hierarchy can be resolved accurately without N+1 queries
+        const stateAdminsByState = new Map();
+        const distAdminsByDist = new Map();
+        const divAdminsByDiv = new Map();
+
+        adminDocs.forEach(a => {
+            const rawLvl = a.adminLevel || a.level;
+            const rawRole = (a.role || a.adminRole || '').toLowerCase();
+            const st = (a.assignedState || a.state || '').trim().toLowerCase();
+            const dist = (a.assignedDistrict || a.district || '').trim().toLowerCase();
+            const div = (a.assignedDivision || a.division || '').trim().toLowerCase();
+
+            if (rawLvl === 1 || rawLvl === '1' || rawLvl === 'state' || rawRole.includes('state')) {
+                if (st) stateAdminsByState.set(st, a);
+            } else if (rawLvl === 2 || rawLvl === '2' || rawLvl === 'district' || rawRole.includes('district') || rawRole.includes('branch')) {
+                if (st && dist) distAdminsByDist.set(`${st}::${dist}`, a);
+            } else if (rawLvl === 3 || rawLvl === '3' || rawLvl === 'division' || rawRole.includes('division')) {
+                if (st && dist && div) divAdminsByDiv.set(`${st}::${dist}::${div}`, a);
+            }
+        });
+
+        const hierarchyParents = { stateAdminsByState, distAdminsByDist, divAdminsByDiv };
 
         // Preload managers for count calculations
         const managerFilter = !req.adminUser.isMainAdmin ? territoryFilter : {};
@@ -329,7 +415,7 @@ const getHierarchyAdminsHandler = async (req, res) => {
         });
 
         const formattedAdmins = await Promise.all(
-            adminDocs.map(a => formatAdminForResponse(a, parentMap, countsMap))
+            adminDocs.map(a => formatAdminForResponse(a, parentMap, countsMap, hierarchyParents))
         );
 
         // Fetch strict assigned hierarchy tree (only locations with real assigned admins)
@@ -604,12 +690,55 @@ const getSingleAdminHandler = async (req, res, next) => {
         const parentMap = new Map();
         if (adminDoc.parentAdminId) {
             parentMap.set(String(adminDoc.parentAdminId._id || adminDoc.parentAdminId), adminDoc.parentAdminId);
+        } else {
+            // Hierarchically resolve parent
+            const rawLvl = adminDoc.adminLevel || adminDoc.level;
+            const rawRole = (adminDoc.role || adminDoc.adminRole || '').toLowerCase();
+            let lvl = 'pincode';
+            if (rawLvl === 1 || rawLvl === '1' || rawLvl === 'state' || rawRole.includes('state')) lvl = 'state';
+            else if (rawLvl === 2 || rawLvl === '2' || rawLvl === 'district' || rawRole.includes('district') || rawRole.includes('branch')) lvl = 'district';
+            else if (rawLvl === 3 || rawLvl === '3' || rawLvl === 'division' || rawRole.includes('division')) lvl = 'division';
+
+            const st = adminDoc.assignedState || adminDoc.state;
+            const dist = adminDoc.assignedDistrict || adminDoc.district;
+            const div = adminDoc.assignedDivision || adminDoc.division;
+
+            try {
+                if (lvl === 'pincode') {
+                    const parent = await User.findOne({
+                        $or: [
+                            { role: { $in: ['Division Admin', 'division-admin', 'division_admin', 3, '3'] }, division: div, district: dist },
+                            { role: { $in: ['District Admin', 'district-admin', 'district_admin', 2, '2'] }, district: dist },
+                            { role: { $in: ['State Admin', 'state-admin', 'state_admin', 1, '1'] }, state: st }
+                        ]
+                    }).select('name email role adminRole').lean();
+                    if (parent) parentMap.set(String(adminDoc._id), parent);
+                } else if (lvl === 'division') {
+                    const parent = await User.findOne({
+                        $or: [
+                            { role: { $in: ['District Admin', 'district-admin', 'district_admin', 2, '2'] }, district: dist },
+                            { role: { $in: ['State Admin', 'state-admin', 'state_admin', 1, '1'] }, state: st }
+                        ]
+                    }).select('name email role adminRole').lean();
+                    if (parent) parentMap.set(String(adminDoc._id), parent);
+                } else if (lvl === 'district') {
+                    const parent = await User.findOne({
+                        $or: [
+                            { role: { $in: ['State Admin', 'state-admin', 'state_admin', 1, '1'] }, state: st },
+                            { assignedState: st }
+                        ]
+                    }).select('name email role adminRole').lean();
+                    if (parent) parentMap.set(String(adminDoc._id), parent);
+                }
+            } catch (pErr) {
+                console.warn('Could not resolve hierarchical parent:', pErr.message);
+            }
         }
 
         const formatted = await formatAdminForResponse(adminDoc, parentMap, {});
         const completeRecord = {
-            ...formatted,
             ...adminDoc,
+            ...formatted,
             password: undefined,
             passwordHash: undefined
         };
@@ -686,7 +815,7 @@ const getChildAdminsForParent = async (parentId) => {
         ],
         role: { $nin: ['Vendor', 'vendor', 'Member', 'member', 'customer', 'Customer', 'agent', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager'] }
     })
-    .select('name email phone mobile altPhone role adminRole adminLevel level assignedState state stateId assignedDistrict district districtId assignedDivision division divisionId assignedPincode pincode pincodeId postOffice fullAddress address city dob dateOfBirth gender aadharNumber panNumber kyc kycDocs status isActive parentAdminId createdBy onboardedBy assignedBy registrationId id lastLogin createdAt updatedAt')
+    .select('name email phone mobile altPhone role adminRole adminLevel level assignedState state stateId assignedDistrict district districtId assignedDivision division divisionId assignedPincode pincode pincodeId postOffice fullAddress address addressLine1 addressLine2 locality taluk city dob dateOfBirth gender fatherName bloodGroup nationality aadharNumber aadhaarNumber panNumber bankName accountNumber accountHolderName ifscCode branchName bankDetails kyc kycDocs status isActive parentAdminId createdBy onboardedBy assignedBy registrationId id lastLogin createdAt updatedAt')
     .sort({ createdAt: 1 })
     .lean();
 
@@ -748,6 +877,7 @@ const getChildAdminsForParent = async (parentId) => {
             email: child.email,
             phone: child.phone || child.mobile || '—',
             mobile: child.mobile || child.phone || '—',
+            altPhone: child.altPhone || child.alternatePhone || child.alternateMobile || child.altMobile || '',
             role: child.role || `${targetLevel}-admin`,
             adminRole: child.adminRole || `${targetLevel}-admin`,
             adminLevel: targetLevel,
@@ -767,9 +897,25 @@ const getChildAdminsForParent = async (parentId) => {
             divisionId: child.divisionId || '',
             pincodeId: child.pincodeId || '',
             postOffice: child.postOffice || '—',
-            address: child.fullAddress || child.address || child.city || '',
-            city: child.city || '',
+            address: child.addressLine1 || child.address || child.fullAddress || '',
+            fullAddress: child.fullAddress || [child.addressLine1 || child.address, child.city, assignedDistrict !== '—' ? assignedDistrict : '', assignedState !== '—' ? assignedState : '', assignedPincode !== '—' ? assignedPincode : ''].filter(Boolean).join(', '),
+            addressLine1: child.addressLine1 || child.address || '',
+            addressLine2: child.addressLine2 || '',
+            city: child.city || child.division || '',
             dob: child.dob || child.dateOfBirth || null,
+            dateOfBirth: child.dateOfBirth || child.dob || null,
+            gender: child.gender || child.kycDocs?.gender || child.kyc?.gender || null,
+            fatherName: child.fatherName || child.kycDocs?.fatherName || '',
+            bloodGroup: child.bloodGroup || child.kycDocs?.bloodGroup || '',
+            nationality: child.nationality || child.kycDocs?.nationality || 'Indian',
+            bankName: child.bankName || child.bankDetails?.bankName || '',
+            accountNumber: child.accountNumber || child.bankDetails?.accountNumber || '',
+            accountHolderName: child.accountHolderName || child.bankDetails?.accountHolderName || child.name || '',
+            ifscCode: child.ifscCode || child.bankDetails?.ifscCode || '',
+            branchName: child.branchName || child.bankDetails?.branchName || '',
+            aadharNumber: child.aadharNumber || child.aadhaarNumber || child.kyc?.aadhaarNumber || child.kyc?.aadharNumber || '',
+            aadhaarNumber: child.aadhaarNumber || child.aadharNumber || child.kyc?.aadhaarNumber || child.kyc?.aadharNumber || '',
+            panNumber: child.panNumber || child.kyc?.panNumber || '',
             registrationId: child.registrationId || (typeof child._id === 'string' && child._id.startsWith('ADM-') ? child._id : `ADM-${String(child._id).slice(-6).toUpperCase()}`),
             parentAdminId: child.parentAdminId || parent._id,
             createdAt: child.createdAt || child.updatedAt || new Date(),

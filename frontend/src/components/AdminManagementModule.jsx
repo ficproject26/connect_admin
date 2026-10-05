@@ -4,7 +4,7 @@ import {
   Filter, RefreshCw, X, User, Phone, Mail, MapPin, Building, Building2, Store,
   CheckCircle, XCircle, Clock, AlertTriangle, ArrowRight, Eye, Edit2, Lock,
   ChevronUp, UserCheck, Briefcase, FileText, Download, Layers, History, Check,
-  AlertCircle, Trash2, LayoutGrid, ListTree
+  AlertCircle, Trash2, LayoutGrid, ListTree, CreditCard
 } from 'lucide-react';
 import StateAdminOnboardingWizard from './StateAdminOnboardingWizard';
 
@@ -1122,7 +1122,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                               <div>
                                 <span className="text-[9px] font-black text-emerald-600 uppercase">STATE ADMIN</span>
                                 <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
-                                <p className="text-[10px] text-slate-400">{admin.phone || admin.email}</p>
+                                <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
                               </div>
                               <span className="text-[11px] text-primary-600 font-bold flex items-center gap-1">Details <ChevronRight className="w-3 h-3" /></span>
                             </div>
@@ -1268,7 +1268,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                               <div>
                                 <span className="text-[9px] font-black text-blue-600 uppercase">DISTRICT ADMIN</span>
                                 <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
-                                <p className="text-[10px] text-slate-400">{admin.phone || admin.email}</p>
+                                <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
                               </div>
                               <span className="text-[11px] text-primary-600 font-bold flex items-center gap-1">Details <ChevronRight className="w-3 h-3" /></span>
                             </div>
@@ -1411,7 +1411,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                               <div>
                                 <span className="text-[9px] font-black text-purple-600 uppercase">DIVISION ADMIN</span>
                                 <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
-                                <p className="text-[10px] text-slate-400">{admin.phone || admin.email}</p>
+                                <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
                               </div>
                               <span className="text-[11px] text-primary-600 font-bold flex items-center gap-1">Details <ChevronRight className="w-3 h-3" /></span>
                             </div>
@@ -1486,7 +1486,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                             </span>
                                           </div>
                                           <div className="text-[11px] text-slate-400 flex items-center gap-3 mt-1">
-                                            <span>Phone: <strong className="text-slate-700 dark:text-slate-300">{admin.phone || '—'}</strong></span>
+                                            <span>Phone: <strong className="text-slate-700 dark:text-slate-300">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile || '—')}</strong></span>
                                             <span>Email: <strong className="text-slate-700 dark:text-slate-300">{admin.email}</strong></span>
                                           </div>
                                         </div>
@@ -1612,7 +1612,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                     <p className="text-xs text-slate-400 font-medium">{admin.email}</p>
                                   </div>
                                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs text-slate-500">
-                                    <span>Phone: <strong>{admin.phone}</strong></span>
+                                    <span>Phone: <strong>{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : '—')}</strong></span>
                                     <span className="text-[11px] text-primary-600 font-bold flex items-center gap-1">Details <ArrowRight className="w-3 h-3" /></span>
                                   </div>
                                 </div>
@@ -1693,7 +1693,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                             <div>
                                               <span className="text-[9px] font-black text-blue-600 dark:text-blue-400 uppercase">DISTRICT ADMIN</span>
                                               <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
-                                              <p className="text-[10px] text-slate-400">{admin.phone}</p>
+                                              <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
                                             </div>
                                             <span className="text-[10px] text-primary-600 font-bold flex items-center gap-0.5">Details <ChevronRight className="w-3 h-3" /></span>
                                           </div>
@@ -1749,6 +1749,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                                     <div>
                                                       <span className="text-[8px] font-bold text-purple-600 dark:text-purple-400">DIVISION ADMIN</span>
                                                       <p className="text-xs font-bold text-slate-900 dark:text-white">{admin.name}</p>
+                                                      <p className="text-[10px] text-slate-400">{(admin.phone && admin.phone !== '—') ? admin.phone : (admin.mobile && admin.mobile !== '—' ? admin.mobile : admin.email)}</p>
                                                     </div>
                                                     <span className="text-[10px] text-primary-500 font-semibold">View</span>
                                                   </div>
@@ -1761,6 +1762,11 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                                       <p className="text-xs font-bold text-slate-900 dark:text-white">
                                                         {pinNode.pincodeAdmins.map(a => a.name).join(', ') || 'No Pincode Admin'}
                                                       </p>
+                                                      {pinNode.pincodeAdmins[0] && (
+                                                        <p className="text-[10px] text-slate-400">
+                                                          {(pinNode.pincodeAdmins[0].phone && pinNode.pincodeAdmins[0].phone !== '—') ? pinNode.pincodeAdmins[0].phone : (pinNode.pincodeAdmins[0].mobile && pinNode.pincodeAdmins[0].mobile !== '—' ? pinNode.pincodeAdmins[0].mobile : pinNode.pincodeAdmins[0].email)}
+                                                        </p>
+                                                      )}
                                                     </div>
                                                     {pinNode.pincodeAdmins[0] && (
                                                       <button
@@ -1842,7 +1848,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                       </td>
                       <td className="py-3 px-3">
                         <strong className="text-slate-800 dark:text-slate-100 block">{reqItem.name}</strong>
-                        <span className="text-[10px] text-slate-400">{reqItem.phone} • {reqItem.email}</span>
+                        <span className="text-[10px] text-slate-400">{(reqItem.phone && reqItem.phone !== '—') ? reqItem.phone : (reqItem.mobile && reqItem.mobile !== '—' ? reqItem.mobile : '—')} • {reqItem.email || '—'}</span>
                       </td>
                       <td className="py-3 px-3">
                         <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${getRoleBadge(reqItem.requestedRole || reqItem.role)}`}>
@@ -1850,10 +1856,10 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                         </span>
                       </td>
                       <td className="py-3 px-3 text-slate-600 dark:text-slate-400">
-                        <strong>{reqItem.state || reqItem.assignedState}</strong>
-                        {reqItem.district && <span className="block text-[10px]">Dist: {reqItem.district}</span>}
-                        {reqItem.division && <span className="block text-[10px]">Div: {reqItem.division}</span>}
-                        {reqItem.pincode && <span className="block text-[10px] font-mono">Pin: {reqItem.pincode}</span>}
+                        <strong>{reqItem.state || reqItem.assignedState || '—'}</strong>
+                        {(reqItem.district || reqItem.assignedDistrict) && <span className="block text-[10px]">Dist: {reqItem.district || reqItem.assignedDistrict}</span>}
+                        {(reqItem.division || reqItem.assignedDivision) && <span className="block text-[10px]">Div: {reqItem.division || reqItem.assignedDivision}</span>}
+                        {(reqItem.pincode || reqItem.assignedPincode) && <span className="block text-[10px] font-mono">Pin: {reqItem.pincode || reqItem.assignedPincode}</span>}
                       </td>
                       <td className="py-3 px-3 text-slate-400 text-[11px]">
                         {new Date(reqItem.createdAt || Date.now()).toLocaleDateString()}
@@ -1961,7 +1967,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
           : '—';
 
         // Safe masked Aadhaar: never display raw 12 digits, format as XXXX XXXX 1234
-        const rawAadhaar = adminView.kyc?.aadhaarNumber || adminView.aadhaarNumber;
+        const rawAadhaar = adminView.aadhaarNumber || adminView.aadharNumber || adminView.kyc?.aadhaarNumber || adminView.kyc?.aadharNumber;
         let maskedAadhaar = 'Not Provided';
         if (rawAadhaar) {
           const s = String(rawAadhaar).trim();
@@ -1973,7 +1979,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
           }
         }
 
-        const panVal = adminView.kyc?.panNumber || adminView.panNumber;
+        const panVal = adminView.panNumber || adminView.kyc?.panNumber;
         const formattedPan = panVal ? String(panVal).trim().toUpperCase() : 'Not Provided';
 
         const kycDocs = adminView.kycDocs || {};
@@ -2023,9 +2029,9 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                 <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-md ${adminView.status === 'Active' || adminView.status === 'approved' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-500/10 text-slate-500'}`}>
                   {adminView.status === 'approved' ? 'Approved' : adminView.status}
                 </span>
-                {adminView.registrationId && (
+                {(adminView.registrationId || adminView._id) && (
                   <span className="text-[10px] font-mono text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
-                    {adminView.registrationId}
+                    {adminView.registrationId || (typeof adminView._id === 'string' && adminView._id.startsWith('ADM-') ? adminView._id : `ADM-${String(adminView._id).slice(-6).toUpperCase()}`)}
                   </span>
                 )}
               </div>
@@ -2038,12 +2044,12 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                 <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
                   <div><span className="text-slate-400 block text-[10px]">Full Name:</span><strong>{adminView.name || '—'}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">Date of Birth (Age):</span><strong>{formattedDob}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Gender:</span><strong>{adminView.gender || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Primary Mobile:</span><strong>{adminView.phone || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Alternate Mobile:</span><strong>{adminView.altPhone || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Father / Spouse Name:</span><strong>{kycDocs.fatherName || adminView.fatherName || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Blood Group:</span><strong>{kycDocs.bloodGroup || adminView.bloodGroup || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Nationality:</span><strong>{kycDocs.nationality || adminView.nationality || 'Indian'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Gender:</span><strong>{adminView.gender || kycDocs.gender || adminView.kyc?.gender || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Primary Mobile:</span><strong>{adminView.phone || adminView.mobile || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Alternate Mobile:</span><strong>{adminView.altPhone || adminView.alternatePhone || adminView.alternateMobile || adminView.altMobile || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Father / Spouse Name:</span><strong>{adminView.fatherName || kycDocs.fatherName || adminView.spouseName || adminView.guardianName || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Blood Group:</span><strong>{adminView.bloodGroup || kycDocs.bloodGroup || adminView.kyc?.bloodGroup || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Nationality:</span><strong>{adminView.nationality || kycDocs.nationality || 'Indian'}</strong></div>
                 </div>
               </div>
 
@@ -2053,11 +2059,11 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                   <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" /> Account Information
                 </h5>
                 <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
-                  <div><span className="text-slate-400 block text-[10px]">Admin ID:</span><strong className="font-mono">{adminView.registrationId || `ADM-${String(adminView._id || '').slice(-6).toUpperCase()}`}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Admin ID:</span><strong className="font-mono">{adminView.registrationId || (typeof adminView._id === 'string' && adminView._id.startsWith('ADM-') ? adminView._id : `ADM-${String(adminView._id || '').slice(-6).toUpperCase()}`)}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">Admin Tier:</span><strong>{(adminView.adminLevel || adminView.level || 'Admin').toUpperCase()}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">Login Email:</span><strong>{adminView.email || '—'}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">Account Status:</span><strong className="text-emerald-600">{adminView.status}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Created By:</span><strong>{adminView.createdByName || adminView.parentAdmin?.name || 'Main Admin'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Created By:</span><strong>{adminView.createdByName || (adminView.parentAdmin?.name ? `${adminView.parentAdmin.name} (${adminView.parentAdmin.role || 'Admin'})` : (adminView.adminLevel === 'state' ? 'Main Admin' : (adminView.adminLevel === 'district' ? 'State Admin' : (adminView.adminLevel === 'division' ? 'District Admin' : 'Division Admin'))))}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">Creation Date:</span><strong>{new Date(adminView.createdAt || Date.now()).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">Last Login:</span><strong>{adminView.lastLogin ? new Date(adminView.lastLogin).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</strong></div>
                 </div>
@@ -2069,11 +2075,19 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                   <MapPin className="w-3.5 h-3.5 text-emerald-500" /> Territory Assignment
                 </h5>
                 <div className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-emerald-600">{adminView.assignedState || 'India'}</span>
-                  {adminView.assignedDistrict && adminView.assignedDistrict !== '—' && <><span>→</span><span className="text-blue-600">{adminView.assignedDistrict}</span></>}
-                  {adminView.assignedDivision && adminView.assignedDivision !== '—' && <><span>→</span><span className="text-purple-600">{adminView.assignedDivision}</span></>}
-                  {adminView.assignedPincode && adminView.assignedPincode !== '—' && <><span>→</span><span className="text-amber-600 font-mono">{adminView.assignedPincode}</span></>}
-                  {adminView.postOffice && adminView.postOffice !== '—' && <span className="text-slate-400 text-[11px] font-normal">({adminView.postOffice})</span>}
+                  <span className="text-emerald-600">{adminView.assignedState || adminView.state || 'India'}</span>
+                  {Boolean((adminView.assignedDistrict && adminView.assignedDistrict !== '—') || (adminView.district && adminView.district !== '—')) && (
+                    <><span>→</span><span className="text-blue-600">{adminView.assignedDistrict && adminView.assignedDistrict !== '—' ? adminView.assignedDistrict : adminView.district}</span></>
+                  )}
+                  {Boolean((adminView.assignedDivision && adminView.assignedDivision !== '—') || (adminView.division && adminView.division !== '—')) && (
+                    <><span>→</span><span className="text-purple-600">{adminView.assignedDivision && adminView.assignedDivision !== '—' ? adminView.assignedDivision : adminView.division}</span></>
+                  )}
+                  {Boolean((adminView.assignedPincode && adminView.assignedPincode !== '—') || (adminView.pincode && adminView.pincode !== '—')) && (
+                    <><span>→</span><span className="text-amber-600 font-mono">{adminView.assignedPincode && adminView.assignedPincode !== '—' ? adminView.assignedPincode : adminView.pincode}</span></>
+                  )}
+                  {Boolean(adminView.postOffice && adminView.postOffice !== '—') && (
+                    <span className="text-slate-400 text-[11px] font-normal">({adminView.postOffice})</span>
+                  )}
                 </div>
               </div>
 
@@ -2083,13 +2097,13 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                   <Building className="w-3.5 h-3.5 text-blue-500" /> Address Details
                 </h5>
                 <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
-                  <div><span className="text-slate-400 block text-[10px]">Address Line 1:</span><strong>{kycDocs.addressLine1 || adminView.addressLine1 || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Address Line 2:</span><strong>{kycDocs.addressLine2 || adminView.addressLine2 || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Locality / Taluk:</span><strong>{kycDocs.locality || kycDocs.taluk || adminView.locality || adminView.taluk || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">City / Town:</span><strong>{kycDocs.city || adminView.city || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">District:</span><strong>{kycDocs.residentialDistrict || adminView.assignedDistrict || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">State:</span><strong>{kycDocs.residentialState || adminView.assignedState || '—'}</strong></div>
-                  <div><span className="text-slate-400 block text-[10px]">Pincode:</span><strong className="font-mono">{kycDocs.residentialPincode || adminView.assignedPincode || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Address Line 1:</span><strong>{adminView.addressLine1 || kycDocs.addressLine1 || adminView.address || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Address Line 2:</span><strong>{adminView.addressLine2 || kycDocs.addressLine2 || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Locality / Taluk:</span><strong>{adminView.locality || adminView.taluk || kycDocs.locality || kycDocs.taluk || adminView.city || adminView.division || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">City / Town:</span><strong>{adminView.city || kycDocs.city || adminView.division || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">District:</span><strong>{adminView.assignedDistrict || adminView.district || kycDocs.residentialDistrict || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">State:</span><strong>{adminView.assignedState || adminView.state || kycDocs.residentialState || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Pincode:</span><strong className="font-mono">{adminView.assignedPincode || adminView.pincode || kycDocs.residentialPincode || '—'}</strong></div>
                 </div>
                 {(adminView.fullAddress || adminView.address || adminView.permanentAddress) && (
                   <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
@@ -2101,7 +2115,23 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                 )}
               </div>
 
-              {/* 5. KYC & IDENTIFICATION */}
+              {/* 5. BANKING INFORMATION */}
+              {(adminView.bankName || adminView.accountNumber) && (
+                <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2.5 text-xs">
+                  <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5 text-emerald-500" /> Banking Information
+                  </h5>
+                  <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
+                    <div><span className="text-slate-400 block text-[10px]">Bank Name:</span><strong>{adminView.bankName || '—'}</strong></div>
+                    <div><span className="text-slate-400 block text-[10px]">Account Holder:</span><strong>{adminView.accountHolderName || adminView.name || '—'}</strong></div>
+                    <div><span className="text-slate-400 block text-[10px]">Account Number:</span><strong className="font-mono">{adminView.accountNumber ? `•••• ${String(adminView.accountNumber).slice(-4)}` : '—'}</strong></div>
+                    <div><span className="text-slate-400 block text-[10px]">IFSC Code:</span><strong className="font-mono">{adminView.ifscCode || '—'}</strong></div>
+                    <div><span className="text-slate-400 block text-[10px]">Branch:</span><strong>{adminView.branchName || '—'}</strong></div>
+                  </div>
+                </div>
+              )}
+
+              {/* 6. KYC & IDENTIFICATION */}
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-2.5 text-xs">
                 <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
                   <FileText className="w-3.5 h-3.5 text-emerald-500" /> KYC & Identification
@@ -2159,7 +2189,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                 </div>
               </div>
 
-              {/* 6. ONBOARDED CHILD ADMINS SECTION */}
+              {/* 7. ONBOARDED CHILD ADMINS SECTION */}
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-3 text-xs">
                 <div className="flex items-center justify-between">
                   <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
@@ -2203,12 +2233,14 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                         : 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
 
                       const territory = childLvl === 'district'
-                        ? child.assignedDistrict
+                        ? (child.assignedDistrict || child.district)
                         : childLvl === 'division'
-                        ? child.assignedDivision
+                        ? (child.assignedDivision || child.division)
                         : childLvl === 'pincode'
-                        ? `PIN ${child.assignedPincode}`
-                        : child.assignedState;
+                        ? `PIN ${child.assignedPincode || child.pincode}`
+                        : (child.assignedState || child.state);
+
+                      const contact = (child.phone && child.phone !== '—') ? child.phone : (child.mobile && child.mobile !== '—' ? child.mobile : child.email);
 
                       return (
                         <div
@@ -2233,7 +2265,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                                   <MapPin className="w-2.5 h-2.5" />{territory}
                                 </span>
                               )}
-                              <span className="text-[10px] text-slate-400">{child.phone !== '—' ? child.phone : child.email}</span>
+                              <span className="text-[10px] text-slate-400">{contact}</span>
                             </div>
                           </div>
                           <button
