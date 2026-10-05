@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Shield, ShieldCheck, Award, Users, ChevronDown, ChevronRight, Plus, Search,
+  Shield, ShieldCheck, Award, Users, ChevronDown, ChevronRight, ChevronLeft, Plus, Search,
   Filter, RefreshCw, X, User, Phone, Mail, MapPin, Building, Building2, Store,
   CheckCircle, XCircle, Clock, AlertTriangle, ArrowRight, Eye, Edit2, Lock,
   ChevronUp, UserCheck, Briefcase, FileText, Download, Layers, History, Check,
@@ -96,9 +96,18 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   const [fullAdminDetails, setFullAdminDetails] = useState(null);
   const [loadingAdminDetails, setLoadingAdminDetails] = useState(false);
 
+  // Child admins onboarded BY the selected admin
+  const [childAdmins, setChildAdmins] = useState([]);
+  const [loadingChildren, setLoadingChildren] = useState(false);
+
+  // Navigation stack for drilling into child admins from within the drawer
+  const [adminViewStack, setAdminViewStack] = useState([]); // stack of previously viewed admins
+
   useEffect(() => {
     if (!selectedAdmin) {
       setFullAdminDetails(null);
+      setChildAdmins([]);
+      setAdminViewStack([]);
       return;
     }
     const adminId = selectedAdmin._id || selectedAdmin.id;
@@ -106,24 +115,34 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
     let isMounted = true;
     setLoadingAdminDetails(true);
+    setLoadingChildren(true);
+    setChildAdmins([]);
     const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-    fetch(`${API_BASE}/admin/admins/${adminId}`, {
-      headers: {
-        'x-auth-token': activeToken || '',
-        'Authorization': activeToken ? `Bearer ${activeToken}` : '',
-        'Content-Type': 'application/json'
+    const headers = {
+      'x-auth-token': activeToken || '',
+      'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+      'Content-Type': 'application/json'
+    };
+
+    // Fetch full profile + child admins in parallel for performance
+    Promise.allSettled([
+      fetch(`${API_BASE}/admin/admins/${adminId}`, { headers }).then(r => r.ok ? r.json() : null),
+      fetch(`${API_BASE}/admin/admins/${adminId}/children`, { headers }).then(r => r.ok ? r.json() : null)
+    ]).then(([profileResult, childrenResult]) => {
+      if (!isMounted) return;
+      if (profileResult.status === 'fulfilled' && profileResult.value?.admin) {
+        setFullAdminDetails(profileResult.value.admin);
       }
-    })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (isMounted && data && data.admin) {
-          setFullAdminDetails(data.admin);
-        }
-      })
-      .catch(err => console.warn('Could not fetch full admin record:', err))
-      .finally(() => {
-        if (isMounted) setLoadingAdminDetails(false);
-      });
+      if (childrenResult.status === 'fulfilled' && childrenResult.value?.children) {
+        setChildAdmins(childrenResult.value.children);
+      }
+    }).catch(err => console.warn('Could not fetch admin details:', err))
+    .finally(() => {
+      if (isMounted) {
+        setLoadingAdminDetails(false);
+        setLoadingChildren(false);
+      }
+    });
 
     return () => { isMounted = false; };
   }, [selectedAdmin]);
@@ -906,7 +925,14 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
             </div>
           </div>
 
-          {filteredTree.length === 0 ? (
+          {loading ? (
+            /* LOADING STATE — never show empty state while fetching */
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center space-y-3">
+              <RefreshCw className="w-10 h-10 text-primary-400 mx-auto animate-spin" />
+              <h4 className="text-sm font-bold text-slate-600 dark:text-slate-400">Loading Admin Hierarchy…</h4>
+              <p className="text-xs text-slate-400">Fetching all onboarded administrators across the territory.</p>
+            </div>
+          ) : filteredTree.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center space-y-3">
               <Shield className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
               <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Administrators Found</h4>
@@ -2063,11 +2089,121 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                 </div>
               </div>
 
+              {/* 6. ONBOARDED CHILD ADMINS SECTION */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <h5 className="font-extrabold uppercase tracking-wider text-slate-400 text-[10px] flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-primary-500" />
+                    Onboarded {(() => {
+                      const lvl = (adminView.adminLevel || adminView.level || '').toLowerCase();
+                      if (lvl === 'state') return 'District Admins';
+                      if (lvl === 'district') return 'Division Admins';
+                      if (lvl === 'division') return 'Pincode Admins';
+                      return 'Child Admins';
+                    })()}
+                  </h5>
+                  {loadingChildren
+                    ? <RefreshCw className="w-3 h-3 animate-spin text-primary-400" />
+                    : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-600 dark:text-primary-400">{childAdmins.length} found</span>
+                  }
+                </div>
+
+                {loadingChildren ? (
+                  <div className="space-y-2">
+                    {[1, 2].map(i => (
+                      <div key={i} className="h-14 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl animate-pulse" />
+                    ))}
+                  </div>
+                ) : childAdmins.length === 0 ? (
+                  <div className="py-4 text-center">
+                    <p className="text-xs text-slate-400 font-medium">
+                      No admins have been onboarded by this administrator yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {childAdmins.map(child => {
+                      const childLvl = (child.adminLevel || child.level || '').toLowerCase();
+                      const lvlColor = childLvl === 'district'
+                        ? 'text-blue-600 dark:text-blue-400 bg-blue-500/10 border-blue-500/20'
+                        : childLvl === 'division'
+                        ? 'text-purple-600 dark:text-purple-400 bg-purple-500/10 border-purple-500/20'
+                        : childLvl === 'pincode'
+                        ? 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20'
+                        : 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+
+                      const territory = childLvl === 'district'
+                        ? child.assignedDistrict
+                        : childLvl === 'division'
+                        ? child.assignedDivision
+                        : childLvl === 'pincode'
+                        ? `PIN ${child.assignedPincode}`
+                        : child.assignedState;
+
+                      return (
+                        <div
+                          key={String(child._id)}
+                          className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between gap-3 hover:shadow-sm transition-all"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${lvlColor}`}>
+                                {childLvl.toUpperCase()} ADMIN
+                              </span>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                child.status === 'Active' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-slate-200/70 text-slate-500'
+                              }`}>
+                                {child.status}
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-slate-900 dark:text-white mt-0.5 truncate">{child.name}</p>
+                            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                              {territory && territory !== '—' && (
+                                <span className="text-[10px] text-slate-500 font-semibold flex items-center gap-1">
+                                  <MapPin className="w-2.5 h-2.5" />{territory}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-400">{child.phone !== '—' ? child.phone : child.email}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setAdminViewStack(prev => [...prev, selectedAdmin]);
+                              setSelectedAdmin(child);
+                            }}
+                            className="shrink-0 flex items-center gap-1 text-[11px] font-bold text-primary-600 dark:text-primary-400 hover:underline cursor-pointer"
+                          >
+                            View <ChevronRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Back navigation when drilled into a child admin */}
+              {adminViewStack.length > 0 && (
+                <div className="pt-1">
+                  <button
+                    onClick={() => {
+                      const prev = adminViewStack[adminViewStack.length - 1];
+                      setAdminViewStack(stack => stack.slice(0, -1));
+                      setSelectedAdmin(prev);
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors cursor-pointer"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    ← Back to {adminViewStack[adminViewStack.length - 1]?.name || 'Parent Admin'}
+                  </button>
+                </div>
+              )}
+
               {/* Actions */}
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setSelectedAdmin(null)}
+                  onClick={() => { setSelectedAdmin(null); setAdminViewStack([]); }}
                   className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl cursor-pointer"
                 >
                   Close
@@ -2077,6 +2213,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
           </div>
         );
       })()}
+
 
       {/* ========================================================= */}
       {/* 6. MODALS: ADD ADMINISTRATOR WIZARD / SIMPLE MODAL */}

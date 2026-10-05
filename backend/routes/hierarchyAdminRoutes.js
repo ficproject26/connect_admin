@@ -538,6 +538,116 @@ router.put('/admins/requests/:id/approve', [auth, territoryScope], approveAdminR
 router.post('/admins/requests/:id/reject', [auth, territoryScope], rejectAdminRequestHandler);
 router.put('/admins/requests/:id/reject', [auth, territoryScope], rejectAdminRequestHandler);
 
+// ============================================================
+// 1D. GET CHILD ADMINS ONBOARDED BY A SPECIFIC ADMIN (by parentAdminId)
+// MUST be declared BEFORE /admins/:id to avoid routing conflicts
+// ============================================================
+router.get('/admins/:id/children', [auth, territoryScope], async (req, res) => {
+    try {
+        const parentId = req.params.id;
+        // Validate it's a real ID and not a keyword
+        if (['requests', 'activity', 'stats', 'export', 'dashboard'].includes(parentId)) {
+            return res.status(404).json({ success: false, msg: 'Endpoint not found' });
+        }
+
+        // Build parentAdminId query that handles both string and ObjectId formats
+        let parentQuery;
+        if (mongoose.Types.ObjectId.isValid(parentId)) {
+            parentQuery = { $in: [parentId, new mongoose.Types.ObjectId(parentId)] };
+        } else {
+            parentQuery = parentId;
+        }
+
+        // Fetch only admin-role users whose parentAdminId matches
+        const children = await User.find({
+            parentAdminId: parentQuery,
+            $or: [
+                { role: { $in: ['admin', 'super-admin'] } },
+                { adminRole: { $in: ['state-admin', 'district-admin', 'division-admin', 'pincode-admin'] } }
+            ]
+        })
+        .select('name email phone altPhone role adminRole adminLevel level assignedState assignedDistrict assignedDivision assignedPincode postOffice status isActive parentAdminId registrationId lastLogin createdAt')
+        .sort({ createdAt: 1 })
+        .lean();
+
+        const formatted = children.map(child => ({
+            _id: child._id,
+            name: child.name,
+            email: child.email,
+            phone: child.phone || '—',
+            role: child.role || 'admin',
+            adminRole: child.adminRole || 'staff',
+            adminLevel: child.adminLevel || child.level || 'pincode',
+            status: child.status === 'Active' || child.status === 'approved' || child.isActive ? 'Active' : (child.status || 'Inactive'),
+            isActive: child.isActive !== false,
+            assignedState: child.assignedState || child.state || '—',
+            assignedDistrict: child.assignedDistrict || child.district || '—',
+            assignedDivision: child.assignedDivision || child.division || '—',
+            assignedPincode: child.assignedPincode ? String(child.assignedPincode) : (child.pincode || '—'),
+            postOffice: child.postOffice || '—',
+            registrationId: child.registrationId || `ADM-${String(child._id).slice(-6).toUpperCase()}`,
+            parentAdminId: child.parentAdminId,
+            createdAt: child.createdAt,
+            lastLogin: child.lastLogin || null
+        }));
+
+        res.json({ success: true, children: formatted, total: formatted.length });
+    } catch (err) {
+        console.error('Get child admins error:', err);
+        res.status(500).json({ success: false, msg: 'Server error retrieving child administrators', error: err.message });
+    }
+});
+
+router.get('/hierarchy-admins/:id/children', [auth, territoryScope], async (req, res) => {
+    // Direct alias — same logic as /admins/:id/children
+    try {
+        const parentId = req.params.id;
+        if (['requests', 'activity', 'stats', 'export', 'dashboard'].includes(parentId)) {
+            return res.status(404).json({ success: false, msg: 'Endpoint not found' });
+        }
+        let parentQuery;
+        if (mongoose.Types.ObjectId.isValid(parentId)) {
+            parentQuery = { $in: [parentId, new mongoose.Types.ObjectId(parentId)] };
+        } else {
+            parentQuery = parentId;
+        }
+        const children = await User.find({
+            parentAdminId: parentQuery,
+            $or: [
+                { role: { $in: ['admin', 'super-admin'] } },
+                { adminRole: { $in: ['state-admin', 'district-admin', 'division-admin', 'pincode-admin'] } }
+            ]
+        })
+        .select('name email phone altPhone role adminRole adminLevel level assignedState assignedDistrict assignedDivision assignedPincode postOffice status isActive parentAdminId registrationId lastLogin createdAt')
+        .sort({ createdAt: 1 })
+        .lean();
+        const formatted = children.map(child => ({
+            _id: child._id,
+            name: child.name,
+            email: child.email,
+            phone: child.phone || '—',
+            role: child.role || 'admin',
+            adminRole: child.adminRole || 'staff',
+            adminLevel: child.adminLevel || child.level || 'pincode',
+            status: child.status === 'Active' || child.status === 'approved' || child.isActive ? 'Active' : (child.status || 'Inactive'),
+            isActive: child.isActive !== false,
+            assignedState: child.assignedState || child.state || '—',
+            assignedDistrict: child.assignedDistrict || child.district || '—',
+            assignedDivision: child.assignedDivision || child.division || '—',
+            assignedPincode: child.assignedPincode ? String(child.assignedPincode) : (child.pincode || '—'),
+            postOffice: child.postOffice || '—',
+            registrationId: child.registrationId || `ADM-${String(child._id).slice(-6).toUpperCase()}`,
+            parentAdminId: child.parentAdminId,
+            createdAt: child.createdAt,
+            lastLogin: child.lastLogin || null
+        }));
+        res.json({ success: true, children: formatted, total: formatted.length });
+    } catch (err) {
+        console.error('Get child admins (hierarchy) error:', err);
+        res.status(500).json({ success: false, msg: 'Server error retrieving child administrators', error: err.message });
+    }
+});
+
 router.get('/hierarchy-admins/:id', [auth, territoryScope], getSingleAdminHandler);
 router.get('/admins/:id', [auth, territoryScope], getSingleAdminHandler);
 
