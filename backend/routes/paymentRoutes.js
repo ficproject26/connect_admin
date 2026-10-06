@@ -47,6 +47,13 @@ const inferPaymentCategory = (type) => {
     return 'vendor_payment';
 };
 
+// Helper: Verify Administrative Authorization for Payment State Changes
+const isAuthorizedPaymentAdmin = (req) => {
+    const uRole = (req.user?.role || '').toLowerCase();
+    const uAdminRole = (req.user?.adminRole || '').toLowerCase();
+    return uRole === 'admin' || uRole === 'superadmin' || uAdminRole === 'super-admin' || uAdminRole === 'admin';
+};
+
 // Helper: Extract Client IP
 const getClientIp = (req) => {
     return req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || '127.0.0.1';
@@ -2104,6 +2111,9 @@ router.post('/cancel', auth, async (req, res) => {
 // =========================================================================
 router.post('/update-status', auth, async (req, res) => {
     try {
+        if (!isAuthorizedPaymentAdmin(req)) {
+            return res.status(403).json({ success: false, msg: 'Access denied. Administrative authorization required.' });
+        }
         const { paymentId, status, reason, recipientId, recipientType, recipientName, amount, payableAmount, paymentPurpose, sourceReference, sourceId, sourceModel } = req.body;
         if (!paymentId || !status) {
             return res.status(400).json({ success: false, msg: 'Payment ID and target status are required.' });

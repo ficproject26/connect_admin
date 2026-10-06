@@ -14,16 +14,14 @@ module.exports = async function(req, res, next) {
         return res.status(401).json({ msg: 'No token, authorization denied' });
     }
 
-    // Verify token
+    // Verify token strictly with environment managed secret
     try {
-        const secret = process.env.JWT_SECRET || 'connect_secret_key_prod_2026';
-        let decoded;
-        try {
-            decoded = jwt.verify(token, secret);
-        } catch (jwtErr) {
-            // Dual-secret fallback for legacy tokens signed with secretKey123
-            decoded = jwt.verify(token, 'secretKey123');
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            console.error('FATAL: JWT_SECRET environment variable is missing.');
+            return res.status(500).json({ msg: 'Server configuration error' });
         }
+        const decoded = jwt.verify(token, secret);
         req.user = decoded.user || { id: decoded.agentId, role: 'agent' };
 
         // Suspension Access Control Check for Agents & Vendors

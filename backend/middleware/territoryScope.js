@@ -1,4 +1,4 @@
-﻿const mongoose = require('mongoose');
+const mongoose = require('mongoose');
 const User = require('../models/User');
 
 /**
@@ -60,20 +60,18 @@ const territoryScope = async (req, res, next) => {
             else if (user.level === 4) adminLevelLower = 'pincode';
         }
 
-        // 1. MAIN ADMIN (Global unrestricted access)
+        // 1. MAIN ADMIN (Global unrestricted access based on verified super/main admin role)
         const isMainAdmin = 
             roleNormalized === 'super-admin' || 
             roleNormalized === 'superadmin' || 
             roleNormalized === 'main-admin' ||
-            roleNormalized === 'admin' ||
             adminRoleNormalized === 'super-admin' || 
-            adminRoleNormalized === 'superadmin' ||
+            adminRoleNormalized === 'superadmin' || 
             adminRoleNormalized === 'main-admin' ||
-            adminLevelLower === 'main' ||
-            adminLevelLower === 'super' ||
-            adminLevelLower === 'super-admin' ||
-            user.email === 'admin@example.com' ||
-            user.email === 'north@example.com';
+            adminRoleNormalized === 'main' ||
+            adminLevelLower === 'main' || 
+            adminLevelLower === 'super' || 
+            adminLevelLower === 'super-admin';
 
         if (isMainAdmin) {
             req.adminUser = {
@@ -128,10 +126,10 @@ const territoryScope = async (req, res, next) => {
         const filter = {};
 
         // Request target territory from query, body, or params
-        const reqState = (req.query.state || req.query.assignedState || req.body?.state || req.body?.assignedState || '').trim();
-        const reqDistrict = (req.query.district || req.query.assignedDistrict || req.body?.district || req.body?.assignedDistrict || '').trim();
-        const reqDivision = (req.query.division || req.query.assignedDivision || req.body?.division || req.body?.assignedDivision || '').trim();
-        const reqPincode = (req.query.pincode || req.query.assignedPincode || req.body?.pincode || req.body?.assignedPincode || '').trim();
+        const reqState = (req.query?.state || req.query?.assignedState || req.body?.state || req.body?.assignedState || '').trim();
+        const reqDistrict = (req.query?.district || req.query?.assignedDistrict || req.body?.district || req.body?.assignedDistrict || '').trim();
+        const reqDivision = (req.query?.division || req.query?.assignedDivision || req.body?.division || req.body?.assignedDivision || '').trim();
+        const reqPincode = (req.query?.pincode || req.query?.assignedPincode || req.body?.pincode || req.body?.assignedPincode || '').trim();
 
         // 2. STATE ADMIN RESTRICTIONS
         if (adminTier === 'state') {

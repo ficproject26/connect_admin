@@ -1,5 +1,15 @@
 require('dotenv').config();
+
+// Production Pre-flight Security Verification
+if (!process.env.JWT_SECRET) {
+    console.error('FATAL SECURITY ERROR: JWT_SECRET environment variable is missing.');
+    if (process.env.NODE_ENV === 'production') {
+        process.exit(1);
+    }
+}
+
 const express = require('express');
+const helmet = require('helmet');
 const mongoose = require('mongoose');
 const connectDB = require('./config/db');
 const cors = require('cors');
@@ -9,6 +19,26 @@ const { Server } = require('socket.io');
 
 const app = express();
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
+// Enterprise Helmet Security Headers
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+            imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com"],
+            connectSrc: ["'self'", "https://api.ficapp.in", "https://ficapp.in", "wss://api.ficapp.in", "ws://localhost:*", "http://localhost:*", "http://127.0.0.1:*"],
+            frameAncestors: ["'none'"]
+        }
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: { policy: "same-origin" },
+    frameguard: { action: "deny" },
+    hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
+}));
 
 const allowedOrigins = [
     'https://connect-admin-roan.vercel.app',
@@ -37,18 +67,7 @@ if (process.env.ALLOWED_ORIGINS) {
 const isOriginAllowed = (origin) => {
     if (!origin) return true;
     const cleanOrigin = origin.replace(/\/$/, '');
-    if (allowedOrigins.includes(cleanOrigin)) return true;
-    if (
-        cleanOrigin.endsWith('.vercel.app') || 
-        cleanOrigin.endsWith('.onrender.com') || 
-        cleanOrigin.endsWith('.ficapp.in') ||
-        cleanOrigin === 'https://ficapp.in' ||
-        cleanOrigin.startsWith('http://localhost') ||
-        cleanOrigin.startsWith('http://127.0.0.1')
-    ) {
-        return true;
-    }
-    return false;
+    return allowedOrigins.includes(cleanOrigin);
 };
 
 const corsOptions = {
@@ -85,18 +104,21 @@ const corsOptions = {
 // 1. Centralized CORS Middleware & Dynamic Response Headers
 app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin) {
+    if (origin && isOriginAllowed(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
         res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+        const requestedHeaders = req.headers['access-control-request-headers'];
+        const defaultHeaders = 'x-auth-token, Authorization, Content-Type, Cache-Control, Pragma, Expires, expires, x-requested-with, Accept, Origin';
+        res.setHeader('Access-Control-Allow-Headers', requestedHeaders ? `${requestedHeaders}, ${defaultHeaders}` : defaultHeaders);
+        res.setHeader('Access-Control-Expose-Headers', 'x-auth-token, Authorization, Content-Type');
+        res.setHeader('Access-Control-Max-Age', '86400');
     }
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    const requestedHeaders = req.headers['access-control-request-headers'];
-    const defaultHeaders = 'x-auth-token, Authorization, Content-Type, Cache-Control, Pragma, Expires, expires, x-requested-with, Accept, Origin, Access-Control-Allow-Origin, Access-Control-Allow-Headers, Access-Control-Allow-Methods';
-    res.setHeader('Access-Control-Allow-Headers', requestedHeaders ? `${requestedHeaders}, ${defaultHeaders}` : defaultHeaders);
-    res.setHeader('Access-Control-Expose-Headers', 'x-auth-token, Authorization, Content-Type');
-    res.setHeader('Access-Control-Max-Age', '86400');
 
     if (req.method === 'OPTIONS') {
+        if (origin && !isOriginAllowed(origin)) {
+            return res.status(403).json({ error: 'CORS origin not allowed' });
+        }
         return res.status(200).end();
     }
     next();
@@ -112,9 +134,9 @@ app.use((req, res, next) => {
     next();
 });
 
-// 2. Express Body Parsers (Parse JSON & URL-encoded request bodies up to 50MB)
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// 2. Express Body Parsers (Small production body limits to prevent DoS)
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // 3. Security Middleware
 const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./middleware/security');
@@ -126,8 +148,19 @@ const uploadsDir = path.join(__dirname, 'uploads');
 const resumesDir = path.join(__dirname, 'uploads', 'resumes');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(resumesDir)) fs.mkdirSync(resumesDir, { recursive: true });
-app.use('/uploads/resumes', express.static(resumesDir));
-app.use('/uploads', express.static(uploadsDir));
+
+const staticUploadOptions = {
+    setHeaders: (res, filePath) => {
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Security-Policy', "default-src 'none'");
+        if (filePath.endsWith('.html') || filePath.endsWith('.htm') || filePath.endsWith('.svg')) {
+            res.setHeader('Content-Type', 'text/plain');
+            res.setHeader('Content-Disposition', 'attachment');
+        }
+    }
+};
+app.use('/uploads/resumes', express.static(resumesDir, staticUploadOptions));
+app.use('/uploads', express.static(uploadsDir, staticUploadOptions));
 
 // Health Check Endpoints
 const getHealthStatus = () => {
@@ -180,19 +213,53 @@ const io = new Server(server, {
 // Make io accessible in routes via req.app.get('io')
 app.set('io', io);
 
-// Socket.IO connection handling
-io.on('connection', (socket) => {
-    console.log(`[Socket.IO] Client connected: ${socket.id}`);
+// Socket.IO Connection & Authentication Security
+const jwt = require('jsonwebtoken');
 
+io.use((socket, next) => {
+    try {
+        const token = socket.handshake.auth?.token || 
+                      socket.handshake.headers?.['x-auth-token'] || 
+                      socket.handshake.query?.token;
+        if (!token) {
+            socket.user = null;
+            return next();
+        }
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return next(new Error('Server configuration error'));
+        const decoded = jwt.verify(token, secret);
+        socket.user = decoded.user || decoded;
+        next();
+    } catch (err) {
+        socket.user = null;
+        next();
+    }
+});
+
+io.on('connection', (socket) => {
     socket.on('register', (data) => {
-        if (data && data.role) {
-            socket.join(data.role);
-            console.log(`[Socket.IO] ${socket.id} joined room: ${data.role}`);
+        if (!socket.user) {
+            // Unauthenticated sockets cannot join privileged rooms
+            return;
+        }
+        const userRole = (socket.user.role || '').toLowerCase();
+        const adminRole = (socket.user.adminRole || '').toLowerCase();
+        const requestedRole = (data?.role || '').toLowerCase();
+
+        const isAuthorizedRoom = 
+            requestedRole === userRole || 
+            requestedRole === adminRole ||
+            (requestedRole === 'admin' && (userRole === 'admin' || userRole === 'superadmin' || adminRole === 'super-admin')) ||
+            (requestedRole === 'super-admin' && (userRole === 'superadmin' || adminRole === 'super-admin')) ||
+            requestedRole === String(socket.user.id || socket.user._id);
+
+        if (isAuthorizedRoom) {
+            socket.join(requestedRole);
         }
     });
 
     socket.on('disconnect', (reason) => {
-        console.log(`[Socket.IO] Client disconnected (${socket.id}): ${reason}`);
+        // Disconnected
     });
 });
 
@@ -415,62 +482,14 @@ app.use(['/api', '/admin-api', '/admin'], (req, res) => {
     });
 });
 
-// Global Error Handler
+// Global Error Handler (never leaks internal stack traces to clients)
 app.use((err, req, res, next) => {
     console.error('Global Error Handler:', err);
     res.status(err.status || 500).json({
         success: false,
-        message: err.message || 'Internal Server Error',
-        error: process.env.NODE_ENV === 'production' ? 'Server Error' : err.stack
+        message: 'Internal Server Error'
     });
 });
-
-// Auto-seed admin user if it doesn't exist
-const seedAdminUser = async () => {
-    try {
-        const User = require('./models/User');
-        const admin = await User.findOne({ email: 'admin@example.com' });
-        if (!admin) {
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('admin123', salt);
-            const newAdmin = new User({
-                name: 'Super Admin',
-                email: 'admin@example.com',
-                password: hashedPassword,
-                role: 'admin',
-                adminRole: 'super-admin',
-                level: 'state',
-                status: 'approved',
-                isActive: true
-            });
-            await newAdmin.save();
-            console.log('✅ Auto-seeded Super Admin (admin@example.com / admin123)');
-        } else {
-            console.log('✅ Super Admin exists in database');
-        }
-
-        const districtAdmin = await User.findOne({ email: 'north@example.com' });
-        if (!districtAdmin) {
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('admin123', salt);
-            const newDistAdmin = new User({
-                name: 'North District Admin',
-                email: 'north@example.com',
-                password: hashedPassword,
-                role: 'admin',
-                adminRole: 'district-admin',
-                adminLevel: 'district',
-                level: 'district',
-                status: 'approved',
-                isActive: true
-            });
-            await newDistAdmin.save();
-            console.log('✅ Auto-seeded District Admin (north@example.com / admin123)');
-        }
-    } catch (err) {
-        console.error('Admin seed check failed:', err.message);
-    }
-};
 
 // Auto-seed main categories if they don't exist
 const seedMainCategoriesIfNeeded = async () => {
@@ -609,12 +628,11 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 8004;
 
-// Connect Database, verify SMTP mailer, seed admin, then start server
+// Connect Database, verify SMTP mailer, then start server
 const startServer = async () => {
     server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
     try {
         await connectDB();
-        await seedAdminUser();
         await seedMainCategoriesIfNeeded();
         await syncSuspendedVendorProductsOnBoot();
         const { verifyTransporter } = require('./config/mailer');

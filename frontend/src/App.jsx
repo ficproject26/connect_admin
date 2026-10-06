@@ -1592,26 +1592,11 @@ function App() {
             </button>
           </form>
 
-          {/* Quick Login Assist Info */}
+          {/* Security Notice */}
           <div className="mt-8 pt-6 border-t border-slate-700/40 text-center">
-            <p className="text-xs text-slate-400 mb-2 font-medium">Demo Credentials</p>
-            <div className="grid grid-cols-3 gap-1.5 text-[9px]">
-              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-700/20">
-                <span className="block text-primary-400 font-bold font-semibold">Super Admin</span>
-                <span className="block break-all">admin@example.com</span>
-                <span className="block text-slate-400 font-mono">admin123</span>
-              </div>
-              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-700/20">
-                <span className="block text-purple-400 font-bold font-semibold">District Admin</span>
-                <span className="block break-all">north@example.com</span>
-                <span className="block text-slate-400 font-mono">admin123</span>
-              </div>
-              <div className="bg-slate-900/40 p-1.5 rounded-lg border border-slate-700/20">
-                <span className="block text-emerald-400 font-bold font-semibold">Agent App</span>
-                <span className="block break-all">amit@example.com</span>
-                <span className="block text-slate-400 font-mono">password123</span>
-              </div>
-            </div>
+            <p className="text-[11px] text-slate-500 font-medium tracking-wide">
+              🔒 Forge India Connect Enterprise Security Gate • Authorized Personnel Only
+            </p>
           </div>
         </div>
       </div>

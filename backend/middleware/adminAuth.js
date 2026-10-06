@@ -14,15 +14,14 @@ module.exports = async function(req, res, next) {
             return res.status(401).json({ msg: 'User not found' });
         }
 
-        // Allow admin, superadmin, super-admin, or any adminRole
+        // Allow strictly admin, superadmin, super-admin, or adminRole admin/superadmin
         const r = (activeUser.role || '').toLowerCase().replace(/[-_]/g, '');
         const ar = (activeUser.adminRole || '').toLowerCase().replace(/[-_]/g, '');
         const isAdmin = 
             r === 'admin' || 
             r === 'superadmin' || 
             ar === 'superadmin' || 
-            ar === 'admin' ||
-            ar === 'manager';
+            ar === 'admin';
 
         if (!isAdmin) {
             return res.status(403).json({ msg: 'Access denied. Admin privileges required.' });
@@ -35,3 +34,17 @@ module.exports = async function(req, res, next) {
         res.status(500).json({ msg: 'Server error' });
     }
 };
+
+const superAdminOnly = (req, res, next) => {
+    const active = req.adminUser || req.user;
+    if (!active) return res.status(401).json({ msg: 'Authorization denied' });
+    const r = (active.role || '').toLowerCase().replace(/[-_]/g, '');
+    const ar = (active.adminRole || '').toLowerCase().replace(/[-_]/g, '');
+    if (r === 'superadmin' || ar === 'superadmin') {
+        return next();
+    }
+    return res.status(403).json({ msg: 'Access denied. Super Admin privileges required.' });
+};
+
+module.exports.adminAuth = module.exports;
+module.exports.superAdminOnly = superAdminOnly;

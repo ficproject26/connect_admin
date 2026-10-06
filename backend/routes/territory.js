@@ -20,18 +20,11 @@ const optionalAuth = async (req, res, next) => {
             token = authHeader.split(' ')[1];
         }
         if (token) {
-            const secrets = [
-                process.env.JWT_SECRET,
-                'connect_secret_key_prod_2026',
-                'secretKey123',
-                'your-super-secret-jwt-key-change-in-production'
-            ].filter(Boolean);
-
+            const secret = process.env.JWT_SECRET;
             let decoded = null;
-            for (const s of secrets) {
+            if (secret) {
                 try {
-                    decoded = jwt.verify(token, s);
-                    if (decoded) break;
+                    decoded = jwt.verify(token, secret);
                 } catch (e) {}
             }
 

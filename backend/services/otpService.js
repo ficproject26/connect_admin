@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 
-const PEPPER_SECRET = process.env.JWT_SECRET || 'connect_secret_key_prod_2026';
+const PEPPER_SECRET = process.env.OTP_PEPPER_SECRET || process.env.JWT_SECRET;
 const OTP_EXPIRES_MINUTES = parseInt(process.env.OTP_EXPIRES_MINUTES, 10) || 2;
 
 /**

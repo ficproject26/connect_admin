@@ -29,8 +29,32 @@ const validatePasswordPolicy = (password) => {
     return { isValid: true };
 };
 
-// In-Memory OTP Store
-const otpStore = new Map();
+const cacheService = require('../utils/cacheService');
+
+// Redis-backed OTP Store with TTL & multi-instance synchronization
+const saveLoginOtp = async (identifier, otpCode) => {
+    const data = { otp: otpCode, attempts: 0, createdAt: Date.now() };
+    await cacheService.set(`otp:login:${identifier}`, JSON.stringify(data), 300); // 5 mins
+};
+
+const getLoginOtp = async (identifier) => {
+    const raw = await cacheService.get(`otp:login:${identifier}`);
+    if (!raw) return null;
+    try {
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (e) {
+        return null;
+    }
+};
+
+const incrementLoginOtpAttempts = async (identifier, currentData) => {
+    currentData.attempts = (currentData.attempts || 0) + 1;
+    await cacheService.set(`otp:login:${identifier}`, JSON.stringify(currentData), 300);
+};
+
+const deleteLoginOtp = async (identifier) => {
+    await cacheService.del(`otp:login:${identifier}`);
+};
 
 // Helper to create and track Security Session
 const createSecuritySession = async (userId, token, req) => {
@@ -342,8 +366,9 @@ router.post('/register-customer', async (req, res) => {
 
         await newUser.save();
 
-        const payload = { user: { id: newUser.id, role: 'customer' } };
-        const token = jwt.sign(payload, process.env.JWT_SECRET || 'connect_secret_key_prod_2026', { expiresIn: '30d' });
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return res.status(500).json({ msg: 'Server configuration error' });
+        const token = jwt.sign(payload, secret, { expiresIn: '30d' });
 
         return res.status(201).json({
             status: 'success',
@@ -403,11 +428,10 @@ router.post('/login', async (req, res) => {
                 status: 'failed',
                 details: 'Login attempt failed - Account not found'
             }).catch(() => {});
-            return res.status(404).json({
+            return res.status(400).json({
                 status: 'error',
-                notRegistered: true,
-                message: 'Account not found. Please register to continue.',
-                msg: 'Account not found. Please register to continue.'
+                message: 'Invalid email or password',
+                msg: 'Invalid email or password'
             });
         }
 
@@ -442,12 +466,7 @@ router.post('/login', async (req, res) => {
         }
 
         // 3. Match Password
-        let isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch && (user.email === 'admin@example.com' || user.email === 'north@example.com')) {
-            if (password === 'admin123' || password === 'AdminPassword123!' || password === 'admin') {
-                isMatch = true;
-            }
-        }
+        const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
 
@@ -610,8 +629,11 @@ router.post('/login', async (req, res) => {
         user.requireCaptcha = false;
         await user.save();
 
-        const payload = { user: { id: user.id, role: user.role } };
-        const secret = process.env.JWT_SECRET || 'connect_secret_key_prod_2026';
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+            console.error('FATAL: JWT_SECRET environment variable is missing.');
+            return res.status(500).json({ msg: 'Server configuration error' });
+        }
         const token = jwt.sign(payload, secret, { expiresIn: '7d' });
 
         // Record Multi-Device Session & Audit Log
@@ -697,33 +719,26 @@ router.post('/send-otp', async (req, res) => {
             });
         }
 
-        const existingOtp = otpStore.get(identifier);
-        if (existingOtp && (Date.now() - existingOtp.lastSentAt) < 30000) {
-            return res.status(429).json({ status: 'error', message: 'Please wait 30 seconds before requesting another OTP.', msg: 'Please wait 30 seconds before requesting another OTP.' });
+        const existingOtp = await getLoginOtp(identifier);
+        if (existingOtp && (Date.now() - existingOtp.createdAt) < 30000) {
+            return res.status(429).json({ status: 'error', message: 'Please wait 30 seconds before requesting another OTP.' });
         }
 
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
-        otpStore.set(identifier, {
-            otp: otpCode,
-            expiresAt: Date.now() + 5 * 60 * 1000, // 5 mins
-            attempts: 0,
-            lastSentAt: Date.now()
-        });
+        await saveLoginOtp(identifier, otpCode);
 
         await AuditLog.create({
             userEmail: identifier,
             action: 'otp_sent',
             ipAddress: req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1',
             status: 'success',
-            details: `OTP generated for ${identifier}`
+            details: `OTP dispatched to registered contact for ${identifier}`
         }).catch(() => {});
 
         res.json({
             success: true,
             status: 'success',
-            devOtpPreview: otpCode,
-            otp: otpCode,
-            msg: `6-digit OTP (${otpCode}) sent successfully. Valid for 5 minutes.`
+            message: 'OTP sent successfully. Valid for 5 minutes.'
         });
     } catch (err) {
         console.error('Send OTP error:', err);
@@ -739,54 +754,39 @@ router.post('/verify-otp', async (req, res) => {
         const identifier = (req.body.phone || req.body.mobileNumber || req.body.mobileOrEmail || req.body.email || '').toString().toLowerCase().trim();
         const otp = (req.body.otp || '').toString().trim();
 
-        if (!identifier || !otp) return res.status(400).json({ status: 'error', message: 'Mobile/Email and OTP are required', msg: 'Mobile/Email and OTP are required' });
+        if (!identifier || !otp) return res.status(400).json({ status: 'error', message: 'Mobile/Email and OTP are required' });
 
         const cleanDigits = identifier.replace(/\D/g, '');
-        const stored = otpStore.get(identifier) || (cleanDigits ? otpStore.get(cleanDigits) : null);
-
-        // Fallback demo check: accept 123456 or 1234
-        if (!stored && (otp === '123456' || otp === '1234')) {
-            let user = await User.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
-            if (!user) {
-                user = await User.findOne({});
-            }
-            if (user) {
-                const payload = { user: { id: user.id, role: user.role } };
-                const token = jwt.sign(payload, process.env.JWT_SECRET || 'connect_secret_key_prod_2026', { expiresIn: '7d' });
-                return res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role, phone: user.phone } });
-            }
-        }
+        const stored = await getLoginOtp(identifier) || (cleanDigits ? await getLoginOtp(cleanDigits) : null);
 
         if (!stored) {
-            return res.status(400).json({ msg: 'No OTP requested for this mobile/email or OTP expired. Demo code: 123456' });
-        }
-
-        if (Date.now() > stored.expiresAt) {
-            otpStore.delete(identifier);
-            return res.status(400).json({ msg: 'OTP has expired. Please request a new OTP.' });
+            return res.status(400).json({ msg: 'No active OTP request found or OTP has expired. Please request a new OTP.' });
         }
 
         if (stored.attempts >= 3) {
-            otpStore.delete(identifier);
+            await deleteLoginOtp(identifier);
+            if (cleanDigits) await deleteLoginOtp(cleanDigits);
             return res.status(400).json({ msg: 'Maximum OTP verification attempts exceeded. Please request a new OTP.' });
         }
 
-        if (stored.otp !== otp && otp !== '123456') {
-            stored.attempts += 1;
-            return res.status(400).json({ msg: `Invalid OTP. Attempts left: ${3 - stored.attempts}` });
+        if (stored.otp !== otp) {
+            await incrementLoginOtpAttempts(identifier, stored);
+            if (cleanDigits) await incrementLoginOtpAttempts(cleanDigits, stored);
+            return res.status(400).json({ msg: `Invalid OTP. Attempts left: ${Math.max(0, 2 - (stored.attempts || 0))}` });
         }
 
-        otpStore.delete(identifier);
+        // OTP verified successfully - invalidate immediately (one-time use)
+        await deleteLoginOtp(identifier);
+        if (cleanDigits) await deleteLoginOtp(cleanDigits);
 
-        let user = await User.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
-        if (!user) {
-            user = await User.findOne({});
-        }
-
+        const user = await User.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
         if (!user) return res.status(404).json({ msg: 'User profile not found' });
 
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return res.status(500).json({ msg: 'Server configuration error' });
+
         const payload = { user: { id: user.id, role: user.role } };
-        const token = jwt.sign(payload, process.env.JWT_SECRET || 'connect_secret_key_prod_2026', { expiresIn: '7d' });
+        const token = jwt.sign(payload, secret, { expiresIn: '7d' });
 
         await createSecuritySession(user._id, token, req);
         await AuditLog.create({
@@ -816,7 +816,9 @@ router.get('/sessions', async (req, res) => {
         if (!token && authHeader && authHeader.startsWith('Bearer ')) token = authHeader.split(' ')[1];
         if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'connect_secret_key_prod_2026');
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return res.status(500).json({ msg: 'Server configuration error' });
+        const decoded = jwt.verify(token, secret);
         const userId = decoded.user?.id || decoded.agentId;
 
         const sessions = await SecuritySession.find({ userId, isActive: true }).sort({ lastActive: -1 });
@@ -837,7 +839,9 @@ router.post('/sessions/logout-all', async (req, res) => {
         if (!token && authHeader && authHeader.startsWith('Bearer ')) token = authHeader.split(' ')[1];
         if (!token) return res.status(401).json({ msg: 'No token, authorization denied' });
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'connect_secret_key_prod_2026');
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return res.status(500).json({ msg: 'Server configuration error' });
+        const decoded = jwt.verify(token, secret);
         const userId = decoded.user?.id || decoded.agentId;
 
         await SecuritySession.updateMany({ userId, isActive: true }, { isActive: false });
@@ -869,7 +873,9 @@ router.get('/me', async (req, res) => {
         }
         if (!token) return res.status(401).json({ message: 'No token, authorization denied' });
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'connect_secret_key_prod_2026');
+        const secret = process.env.JWT_SECRET;
+        if (!secret) return res.status(500).json({ message: 'Server configuration error' });
+        const decoded = jwt.verify(token, secret);
         const userId = decoded.user?.id || decoded.agentId;
         if (!userId) return res.status(401).json({ message: 'Invalid token payload' });
 
