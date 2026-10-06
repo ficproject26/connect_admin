@@ -870,6 +870,16 @@ function App() {
     setUser(null);
   }, []);
 
+  useEffect(() => {
+    const onAuthExpired = () => {
+      handleLogout();
+    };
+    if (typeof window !== 'undefined') {
+      window.addEventListener('auth:expired', onAuthExpired);
+      return () => window.removeEventListener('auth:expired', onAuthExpired);
+    }
+  }, [handleLogout]);
+
   // Component-scoped safeFetch helper with In-Flight Request Deduplication
   const safeFetch = useCallback(async (url, setter, retries = 2) => {
     if (!token) return null;

@@ -70,6 +70,12 @@ if (typeof window !== 'undefined' && window.fetch) {
 
     try {
       const response = await _origFetch.call(this, primaryInput, init);
+      if (response && response.status === 401 && typeof url === 'string') {
+        const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/send-otp') || url.includes('/auth/verify-otp');
+        if (!isAuthEndpoint && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:expired'));
+        }
+      }
       if (response && response.status === 404 && typeof url === 'string') {
         const fallbackUrl = url.includes('api.ficapp.in/admin-api/') && !url.includes('api.ficapp.in/admin-api/admin-api/')
           ? url.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/')

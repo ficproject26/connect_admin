@@ -368,6 +368,7 @@ router.post('/register-customer', async (req, res) => {
 
         const secret = process.env.JWT_SECRET;
         if (!secret) return res.status(500).json({ msg: 'Server configuration error' });
+        const payload = { user: { id: newUser.id, role: 'customer' } };
         const token = jwt.sign(payload, secret, { expiresIn: '30d' });
 
         return res.status(201).json({
@@ -404,8 +405,16 @@ router.post('/login', async (req, res) => {
     const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
     const userAgent = req.headers['user-agent'] || '';
 
+    const lowerEmail = (email || '').toLowerCase().trim();
+    if (!lowerEmail || !password) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Email or Mobile and password are required',
+            msg: 'Email or Mobile and password are required'
+        });
+    }
+
     try {
-        const lowerEmail = (email || '').toLowerCase().trim();
         const cleanDigits = lowerEmail.replace(/\D/g, '');
         let user = await User.findOne({
             $or: [
@@ -634,6 +643,7 @@ router.post('/login', async (req, res) => {
             console.error('FATAL: JWT_SECRET environment variable is missing.');
             return res.status(500).json({ msg: 'Server configuration error' });
         }
+        const payload = { user: { id: user.id, role: user.role, adminRole: user.adminRole } };
         const token = jwt.sign(payload, secret, { expiresIn: '7d' });
 
         // Record Multi-Device Session & Audit Log

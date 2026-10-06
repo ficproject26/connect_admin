@@ -436,6 +436,22 @@ router.get('/stats', [optionalAuth], async (req, res) => {
     }
 });
 
+// @route   GET /admin/territory/audit-logs
+// @desc    Get territory audit logs
+// @access  Authenticated Admin
+router.get('/audit-logs', [optionalAuth], async (req, res) => {
+    try {
+        const logs = await TerritoryAuditLog.find()
+            .sort({ createdAt: -1 })
+            .limit(100)
+            .lean();
+        res.json({ success: true, logs: logs || [] });
+    } catch (err) {
+        console.error('Territory audit logs error:', err.message);
+        res.status(500).json({ success: false, msg: 'Error retrieving territory audit logs' });
+    }
+});
+
 // ============================================================
 // 3. STATE CRUD
 // ============================================================

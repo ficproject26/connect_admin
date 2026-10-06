@@ -112,6 +112,9 @@ class DataSyncManager {
         clearTimeout(timeoutId);
 
         if (res.status === 401 || res.status === 403) {
+          if (res.status === 401 && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth:expired'));
+          }
           this.notifySubscribers(key, null, new Error('Unauthorized'));
           return null;
         }
