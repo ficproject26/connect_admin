@@ -553,6 +553,20 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         setProcessedResult(processData.payment);
         setPayStep(4);
         toast(processData.msg || 'Payment disbursed successfully');
+        setRecipients(prev => {
+          const updateList = (list) => list.map(item => {
+            if ((item.paymentId && item.paymentId === selectedPayable.paymentId) || String(item._id) === String(selectedPayable._id)) {
+              return { ...item, status: 'PAID' };
+            }
+            return item;
+          });
+          return {
+            agents: updateList(prev.agents),
+            vendors: updateList(prev.vendors),
+            deliveryPartners: updateList(prev.deliveryPartners),
+            technicians: updateList(prev.technicians)
+          };
+        });
         fetchDashboardData(true);
       } else {
         setPayError(processData.msg || 'Payment processing failed');
@@ -595,13 +609,29 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
           recipientName: holdTarget.recipientName,
           payableAmount: holdTarget.payableAmount,
           paymentPurpose: holdTarget.paymentPurpose,
-          sourceReference: holdTarget.sourceReference
+          sourceReference: holdTarget.sourceReference,
+          sourceId: holdTarget.sourceId,
+          sourceModel: holdTarget.sourceModel
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         toast(`Payment ${holdTarget.paymentId} placed on hold`);
         setHoldModalOpen(false);
+        setRecipients(prev => {
+          const updateList = (list) => list.map(item => {
+            if ((item.paymentId && item.paymentId === holdTarget.paymentId) || String(item._id) === String(holdTarget._id)) {
+              return { ...item, status: 'HOLD', holdReason: holdReason.trim() };
+            }
+            return item;
+          });
+          return {
+            agents: updateList(prev.agents),
+            vendors: updateList(prev.vendors),
+            deliveryPartners: updateList(prev.deliveryPartners),
+            technicians: updateList(prev.technicians)
+          };
+        });
         fetchDashboardData(true);
       } else {
         toast(data.msg || 'Failed to place payment on hold', 'error');
@@ -622,11 +652,29 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ paymentId: item.paymentId })
+        body: JSON.stringify({
+          paymentId: item.paymentId,
+          sourceReference: item.sourceReference,
+          sourceId: item.sourceId
+        })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         toast(`Payment ${item.paymentId} released back to PENDING`);
+        setRecipients(prev => {
+          const updateList = (list) => list.map(it => {
+            if ((it.paymentId && it.paymentId === item.paymentId) || String(it._id) === String(item._id)) {
+              return { ...it, status: 'PENDING', holdReason: '' };
+            }
+            return it;
+          });
+          return {
+            agents: updateList(prev.agents),
+            vendors: updateList(prev.vendors),
+            deliveryPartners: updateList(prev.deliveryPartners),
+            technicians: updateList(prev.technicians)
+          };
+        });
         fetchDashboardData(true);
       } else {
         toast(data.msg || 'Failed to release hold', 'error');
@@ -668,13 +716,29 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
           recipientName: cancelTarget.recipientName,
           payableAmount: cancelTarget.payableAmount,
           paymentPurpose: cancelTarget.paymentPurpose,
-          sourceReference: cancelTarget.sourceReference
+          sourceReference: cancelTarget.sourceReference,
+          sourceId: cancelTarget.sourceId,
+          sourceModel: cancelTarget.sourceModel
         })
       });
       const data = await res.json();
       if (res.ok && data.success) {
         toast(`Payment ${cancelTarget.paymentId} cancelled successfully`);
         setCancelModalOpen(false);
+        setRecipients(prev => {
+          const updateList = (list) => list.map(item => {
+            if ((item.paymentId && item.paymentId === cancelTarget.paymentId) || String(item._id) === String(cancelTarget._id)) {
+              return { ...item, status: 'CANCELLED', cancellationReason: cancelReason.trim() };
+            }
+            return item;
+          });
+          return {
+            agents: updateList(prev.agents),
+            vendors: updateList(prev.vendors),
+            deliveryPartners: updateList(prev.deliveryPartners),
+            technicians: updateList(prev.technicians)
+          };
+        });
         fetchDashboardData(true);
       } else {
         toast(data.msg || 'Failed to cancel payment', 'error');
@@ -959,6 +1023,21 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         setBulkResults(processData.results || []);
         setBulkStep(4);
         toast(processData.msg || 'Bulk payment processed successfully');
+        const paidSet = new Set(paymentIds);
+        setRecipients(prev => {
+          const updateList = (list) => list.map(item => {
+            if (paidSet.has(item.paymentId) || paidSet.has(item._id)) {
+              return { ...item, status: 'PAID' };
+            }
+            return item;
+          });
+          return {
+            agents: updateList(prev.agents),
+            vendors: updateList(prev.vendors),
+            deliveryPartners: updateList(prev.deliveryPartners),
+            technicians: updateList(prev.technicians)
+          };
+        });
         setSelectedPaymentIds(new Set());
         fetchDashboardData(true);
       } else {

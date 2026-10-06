@@ -170,17 +170,67 @@ const computeRecipientPayables = async (filterScope = {}) => {
             .lean()
     ]);
 
-    // Build Maps for instant O(1) in-memory lookups
-    const paymentMapByRecipient = new Map();
-    const paymentMapBySourceId = new Map();
-    const paymentMapByPaymentId = new Map();
+    // Build Comprehensive Normalized Map for instant O(1) in-memory lookups
+    const paymentMap = new Map();
+    const registerPaymentKey = (key, p) => {
+        if (!key) return;
+        const clean = String(key).trim().toLowerCase();
+        if (!clean) return;
+        if (paymentMap.has(clean)) {
+            const existing = paymentMap.get(clean);
+            const rank = { 'PAID': 4, 'HOLD': 3, 'CANCELLED': 2, 'PROCESSING': 1, 'PENDING': 0 };
+            const exRank = rank[existing?.status] || 0;
+            const newRank = rank[p?.status] || 0;
+            if (newRank >= exRank) {
+                paymentMap.set(clean, p);
+            }
+        } else {
+            paymentMap.set(clean, p);
+        }
+    };
+
     for (const p of existingPayments) {
-        if (p.recipientId) paymentMapByRecipient.set(String(p.recipientId), p);
-        if (p.sourceId) paymentMapBySourceId.set(String(p.sourceId), p);
-        if (p.sourceReference) paymentMapBySourceId.set(String(p.sourceReference), p);
-        if (p.paymentId) paymentMapByPaymentId.set(String(p.paymentId), p);
-        if (p._id) paymentMapByPaymentId.set(String(p._id), p);
+        registerPaymentKey(p._id, p);
+        registerPaymentKey(p.paymentId, p);
+        registerPaymentKey(p.sourceId, p);
+        registerPaymentKey(p.sourceReference, p);
+        registerPaymentKey(p.recipientId, p);
+        registerPaymentKey(p.transactionReference, p);
+        if (p.paymentId) {
+            const cleanPId = String(p.paymentId).trim();
+            const suffix = cleanPId.replace(/^PAY-(?:VND-|ORD-VND-|ORD-|AGT-|DEL-|TEC-)?/i, '').toLowerCase();
+            if (suffix.length >= 4) {
+                registerPaymentKey(suffix, p);
+                registerPaymentKey(`pay-vnd-${suffix}`, p);
+                registerPaymentKey(`pay-ord-vnd-${suffix}`, p);
+                registerPaymentKey(`pay-agt-${suffix}`, p);
+                registerPaymentKey(`pay-del-${suffix}`, p);
+                registerPaymentKey(`pay-tec-${suffix}`, p);
+                registerPaymentKey(`settl-${suffix}`, p);
+                registerPaymentKey(`ord-${suffix}`, p);
+            }
+        }
+        if (p.sourceReference) {
+            const cleanRef = String(p.sourceReference).trim();
+            const refSuffix = cleanRef.replace(/^(?:SETTL-|ORD-)/i, '').toLowerCase();
+            if (refSuffix.length >= 4) {
+                registerPaymentKey(refSuffix, p);
+                registerPaymentKey(`settl-${refSuffix}`, p);
+                registerPaymentKey(`ord-${refSuffix}`, p);
+            }
+        }
     }
+
+    const lookupPayment = (...keys) => {
+        for (const k of keys) {
+            if (!k) continue;
+            const clean = String(k).trim().toLowerCase();
+            if (clean && paymentMap.has(clean)) {
+                return paymentMap.get(clean);
+            }
+        }
+        return null;
+    };
 
     const vendorById = new Map();
     for (const v of allVendors) {
@@ -191,7 +241,16 @@ const computeRecipientPayables = async (filterScope = {}) => {
     const agentsList = [];
     for (const agent of realAgents) {
         const aIdStr = String(agent._id);
-        const existingP = paymentMapByRecipient.get(aIdStr);
+        const aSuffix = aIdStr.slice(-6).toLowerCase();
+        const refId = agent.registrationId || `AGT-${aSuffix.toUpperCase()}`;
+        const candidatePaymentId = `PAY-AGT-${aSuffix.toUpperCase()}`;
+        const existingP = lookupPayment(
+            aIdStr,
+            candidatePaymentId,
+            refId,
+            agent.registrationId,
+            aSuffix
+        );
 
         // Count onboarded vendors in memory
         const onboardedVendorsCount = allVendors.filter(v => 
@@ -242,12 +301,14 @@ const computeRecipientPayables = async (filterScope = {}) => {
             const pincode = agent.assignedPincode?.code || agent.pincode || agent.territory?.pincode || '';
 
             const purpose = `Agent commission for ${eligibleWork || 'Territory Operations'} in ${district}`;
-            const refId = agent.registrationId || `AGT-${aIdStr.slice(-6).toUpperCase()}`;
-            const paymentId = existingP ? existingP.paymentId : `PAY-AGT-${aIdStr.slice(-6).toUpperCase()}`;
+            const paymentId = existingP ? existingP.paymentId : candidatePaymentId;
 
             agentsList.push({
                 _id: existingP ? existingP._id : agent._id,
                 paymentId,
+                sourceModel: 'User',
+                sourceId: aIdStr,
+                sourceReference: refId,
                 recipientName: agent.name || 'Territory Agent',
                 recipientId: refId,
                 recipientEmail: agent.email || '—',
@@ -263,7 +324,6 @@ const computeRecipientPayables = async (filterScope = {}) => {
                 grossAmount: payableAmount,
                 payableAmount,
                 paymentPurpose: purpose,
-                sourceReference: refId,
                 status,
                 holdReason: existingP?.holdReason || '',
                 cancellationReason: existingP?.cancellationReason || '',
@@ -284,12 +344,18 @@ const computeRecipientPayables = async (filterScope = {}) => {
     // 1. Settlements
     for (const s of settlements) {
         const sIdStr = String(s._id);
-        const refId = `SETTL-${sIdStr.slice(-6).toUpperCase()}`;
-        const candidatePaymentId = `PAY-VND-${sIdStr.slice(-6).toUpperCase()}`;
-        const existingP = paymentMapBySourceId.get(sIdStr) ||
-                          paymentMapByPaymentId.get(candidatePaymentId) ||
-                          paymentMapBySourceId.get(refId) ||
-                          (s.paymentId ? paymentMapByPaymentId.get(String(s.paymentId)) : null);
+        const sSuffix = sIdStr.slice(-6).toLowerCase();
+        const refId = `SETTL-${sSuffix.toUpperCase()}`;
+        const candidatePaymentId = `PAY-VND-${sSuffix.toUpperCase()}`;
+        const existingP = lookupPayment(
+            sIdStr,
+            candidatePaymentId,
+            refId,
+            s.paymentId,
+            s.referenceNumber,
+            s.settlementReference,
+            sSuffix
+        );
         const vendor = s.vendorId ? vendorById.get(String(s.vendorId)) : null;
 
         const grossAmount = Number(s.grossAmount || 0);
@@ -324,7 +390,6 @@ const computeRecipientPayables = async (filterScope = {}) => {
             recipientEmail: vendor?.email || '—',
             recipientPhone: vendor?.phone || '—',
             recipientType: 'Vendor',
-            orderReference: refId,
             eligibleOrder: `Settlement Run (${new Date(s.settlementDate || s.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})`,
             grossAmount,
             commissionBasis: 'Direct Merchant Settlement Agreement',
@@ -347,7 +412,17 @@ const computeRecipientPayables = async (filterScope = {}) => {
     // 2. Orders
     for (const ord of eligibleOrders) {
         const ordIdStr = String(ord._id);
-        const existingP = paymentMapBySourceId.get(ordIdStr);
+        const ordSuffix = ordIdStr.slice(-6).toLowerCase();
+        const candidatePaymentId = `PAY-ORD-VND-${ordSuffix.toUpperCase()}`;
+        const refId = ord.order_number || ord.id || `ORD-${ordSuffix.toUpperCase()}`;
+        const existingP = lookupPayment(
+            ordIdStr,
+            candidatePaymentId,
+            refId,
+            ord.order_number,
+            ord.id,
+            ordSuffix
+        );
         const vId = ord.vendorId || ord.vendor_id;
         const vendor = vId ? vendorById.get(String(vId)) : null;
 
@@ -355,14 +430,23 @@ const computeRecipientPayables = async (filterScope = {}) => {
         if (grossAmount <= 0) continue;
 
         const vendorPayableAmount = Math.round(grossAmount * 0.95);
-        const refId = ord.order_number || ord.id || `ORD-${ordIdStr.slice(-6).toUpperCase()}`;
         const purpose = `Vendor net share (95%) for Order #${refId} (${vendor?.businessName || ord.product_details || 'Goods'})`;
-        const status = existingP ? existingP.status : 'PENDING';
-        const paymentId = existingP ? existingP.paymentId : `PAY-ORD-VND-${ordIdStr.slice(-6).toUpperCase()}`;
+        let status = 'PENDING';
+        if (existingP && existingP.status) {
+            status = existingP.status;
+        } else if (ord.vendorPaymentStatus) {
+            status = ord.vendorPaymentStatus.toUpperCase();
+        }
+
+        const paymentId = existingP ? existingP.paymentId : candidatePaymentId;
 
         vendorsList.push({
             _id: existingP ? existingP._id : ord._id,
             paymentId,
+            sourceModel: 'Order',
+            sourceId: ordIdStr,
+            sourceReference: refId,
+            orderReference: refId,
             recipientName: vendor?.businessName || vendor?.name || 'Store Merchant',
             recipientId: vendor?._id ? `VND-${String(vendor._id).slice(-6).toUpperCase()}` : refId,
             businessName: vendor?.businessName || 'Merchant Outlet',
@@ -370,17 +454,15 @@ const computeRecipientPayables = async (filterScope = {}) => {
             recipientEmail: vendor?.email || '—',
             recipientPhone: vendor?.phone || '—',
             recipientType: 'Vendor',
-            orderReference: refId,
             eligibleOrder: `Order #${refId}: ${ord.product_details || 'Items'} (Qty: ${(ord.items || []).length || 1})`,
             grossAmount,
             commissionBasis: 'Platform Fee (5% Deduction)',
             commissionRate: '5%',
             payableAmount: vendorPayableAmount,
             paymentPurpose: purpose,
-            sourceReference: refId,
             status,
-            holdReason: existingP?.holdReason || '',
-            cancellationReason: existingP?.cancellationReason || '',
+            holdReason: existingP?.holdReason || ord.vendorHoldReason || '',
+            cancellationReason: existingP?.cancellationReason || ord.vendorCancellationReason || '',
             bankDetails: {
                 accountHolder: vendor?.bankDetails?.accountHolder || vendor?.businessName || 'Business Bank Account',
                 accountNumber: vendor?.bankDetails?.accountNumber ? maskAccountNumber(vendor.bankDetails.accountNumber) : 'Not Provided',
@@ -396,19 +478,29 @@ const computeRecipientPayables = async (filterScope = {}) => {
     const deliveryTasks = completedTasks.filter(t => /delivery/i.test(t.category || ''));
     for (const dp of realDeliveryPartners) {
         const dpIdStr = String(dp._id);
-        const existingP = paymentMapByRecipient.get(dpIdStr);
+        const dpSuffix = dpIdStr.slice(-6).toLowerCase();
+        const candidatePaymentId = `PAY-DEL-${dpSuffix.toUpperCase()}`;
         const partnerTasks = deliveryTasks.filter(t => String(t.assignedTo) === dpIdStr);
+        const taskRef = partnerTasks[0]?.taskNumber || `DEL-${dpSuffix.toUpperCase()}`;
+        const existingP = lookupPayment(
+            dpIdStr,
+            candidatePaymentId,
+            taskRef,
+            dpSuffix
+        );
 
         if (partnerTasks.length > 0 || existingP) {
             const payableAmount = existingP ? existingP.amount : partnerTasks.length * 80;
-            const taskRef = partnerTasks[0]?.taskNumber || `DEL-${dpIdStr.slice(-6).toUpperCase()}`;
             const purpose = `Delivery compensation for ${partnerTasks.length || 1} completed order delivery task(s)`;
 
             deliveryList.push({
                 _id: existingP ? existingP._id : dp._id,
-                paymentId: existingP ? existingP.paymentId : `PAY-DEL-${dpIdStr.slice(-6).toUpperCase()}`,
+                paymentId: existingP ? existingP.paymentId : candidatePaymentId,
+                sourceModel: 'DeliveryPartner',
+                sourceId: dpIdStr,
+                sourceReference: taskRef,
                 recipientName: dp.name || 'Logistics Partner',
-                recipientId: `DEL-${dpIdStr.slice(-6).toUpperCase()}`,
+                recipientId: `DEL-${dpSuffix.toUpperCase()}`,
                 recipientEmail: dp.email || '—',
                 recipientPhone: dp.phone || '—',
                 recipientType: 'Delivery Partner',
@@ -419,7 +511,6 @@ const computeRecipientPayables = async (filterScope = {}) => {
                 grossAmount: payableAmount,
                 payableAmount,
                 paymentPurpose: purpose,
-                sourceReference: taskRef,
                 status: existingP ? existingP.status : 'PENDING',
                 holdReason: existingP?.holdReason || '',
                 cancellationReason: existingP?.cancellationReason || '',
@@ -439,19 +530,29 @@ const computeRecipientPayables = async (filterScope = {}) => {
     const qcTasks = completedTasks.filter(t => /audit|qc|verification/i.test(t.category || ''));
     for (const tech of techUsers) {
         const tIdStr = String(tech._id);
-        const existingP = paymentMapByRecipient.get(tIdStr);
+        const tSuffix = tIdStr.slice(-6).toLowerCase();
+        const candidatePaymentId = `PAY-TEC-${tSuffix.toUpperCase()}`;
         const techTasks = qcTasks.filter(t => String(t.assignedTo) === tIdStr);
+        const taskRef = techTasks[0]?.taskNumber || `TEC-${tSuffix.toUpperCase()}`;
+        const existingP = lookupPayment(
+            tIdStr,
+            candidatePaymentId,
+            taskRef,
+            tSuffix
+        );
 
         if (techTasks.length > 0 || existingP) {
             const payableAmount = existingP ? existingP.amount : techTasks.length * 350;
-            const taskRef = techTasks[0]?.taskNumber || `TEC-${tIdStr.slice(-6).toUpperCase()}`;
             const purpose = `Field service compensation for ${techTasks.length || 1} completed QC inspection(s)`;
 
             technicianList.push({
                 _id: existingP ? existingP._id : tech._id,
-                paymentId: existingP ? existingP.paymentId : `PAY-TEC-${tIdStr.slice(-6).toUpperCase()}`,
+                paymentId: existingP ? existingP.paymentId : candidatePaymentId,
+                sourceModel: 'User',
+                sourceId: tIdStr,
+                sourceReference: taskRef,
                 recipientName: tech.name || 'Field Technician',
-                recipientId: `TEC-${tIdStr.slice(-6).toUpperCase()}`,
+                recipientId: `TEC-${tSuffix.toUpperCase()}`,
                 recipientEmail: tech.email || '—',
                 recipientPhone: tech.phone || '—',
                 recipientType: 'Technician',
@@ -462,7 +563,6 @@ const computeRecipientPayables = async (filterScope = {}) => {
                 grossAmount: payableAmount,
                 payableAmount,
                 paymentPurpose: purpose,
-                sourceReference: taskRef,
                 status: existingP ? existingP.status : 'PENDING',
                 holdReason: existingP?.holdReason || '',
                 cancellationReason: existingP?.cancellationReason || '',
@@ -1058,6 +1158,46 @@ async function syncPaymentSourceModel(payment, action, extra = {}) {
                     await payment.save();
                 }
             }
+        }
+
+        // Sync orders collection if this payment is associated with an order
+        const orderOrQueries = [];
+        if (payment.sourceModel === 'Order' || /ORD/i.test(pId) || /ORD/i.test(sRef)) {
+            if (sId) {
+                orderOrQueries.push({ _id: sId });
+                if (mongoose.isValidObjectId(sId)) {
+                    orderOrQueries.push({ _id: new mongoose.Types.ObjectId(sId) });
+                }
+            }
+            if (sRef) {
+                orderOrQueries.push({ order_number: sRef }, { id: sRef });
+            }
+            if (pIdSuffix && pIdSuffix.length >= 4) {
+                if (mongoose.isValidObjectId(pIdSuffix)) {
+                    orderOrQueries.push({ _id: new mongoose.Types.ObjectId(pIdSuffix) });
+                }
+                orderOrQueries.push({ order_number: new RegExp(pIdSuffix + '$', 'i') });
+                orderOrQueries.push({ id: new RegExp(pIdSuffix + '$', 'i') });
+            }
+        }
+        if (orderOrQueries.length > 0) {
+            let orderUpdate = { updatedAt: new Date() };
+            if (action === 'PAID') {
+                orderUpdate.vendorPaymentStatus = 'PAID';
+            } else if (action === 'HOLD') {
+                orderUpdate.vendorPaymentStatus = 'HOLD';
+                orderUpdate.vendorHoldReason = extra.reason || payment.holdReason || '';
+            } else if (action === 'RELEASE_HOLD') {
+                orderUpdate.vendorPaymentStatus = 'PENDING';
+                orderUpdate.vendorHoldReason = '';
+            } else if (action === 'CANCEL') {
+                orderUpdate.vendorPaymentStatus = 'CANCELLED';
+                orderUpdate.vendorCancellationReason = extra.reason || payment.cancellationReason || '';
+            }
+            await db.collection('orders').updateMany(
+                { $or: orderOrQueries },
+                { $set: orderUpdate }
+            ).catch(() => {});
         }
     } catch (syncErr) {
         console.error('Error synchronizing payment with source model:', syncErr);
@@ -1711,7 +1851,7 @@ router.get('/breakdown/:paymentId', auth, async (req, res) => {
 // =========================================================================
 router.post('/hold', auth, async (req, res) => {
     try {
-        const { paymentId, reason, recipientId, recipientType, recipientName, amount, payableAmount, paymentPurpose, sourceReference } = req.body;
+        const { paymentId, reason, recipientId, recipientType, recipientName, amount, payableAmount, paymentPurpose, sourceReference, sourceId, sourceModel } = req.body;
 
         if (!paymentId) {
             return res.status(400).json({ success: false, msg: 'Payment ID is required.' });
@@ -1720,22 +1860,30 @@ router.post('/hold', auth, async (req, res) => {
             return res.status(400).json({ success: false, msg: 'A reason for placing payment on hold is mandatory.' });
         }
 
-        const idFilter = [{ paymentId }];
-        if (mongoose.isValidObjectId(paymentId)) idFilter.push({ _id: paymentId });
+        const cleanPId = String(paymentId).trim();
+        const idFilter = [{ paymentId: cleanPId }];
+        if (mongoose.isValidObjectId(cleanPId)) idFilter.push({ _id: cleanPId });
+        if (sourceReference) idFilter.push({ sourceReference: String(sourceReference).trim() });
+        if (sourceId) idFilter.push({ sourceId: String(sourceId).trim() });
+        const pSuffix = cleanPId.replace(/^PAY-(?:VND-|ORD-VND-|ORD-|AGT-|DEL-|TEC-)?/i, '').toLowerCase();
+        if (pSuffix.length >= 4) idFilter.push({ paymentId: new RegExp(pSuffix + '$', 'i') });
+
         let payment = await Payment.findOne({ $or: idFilter });
 
         if (!payment) {
             // Auto-persist operational payable if not yet in database
             payment = new Payment({
-                paymentId,
+                paymentId: cleanPId,
                 paymentType: 'paid',
                 paymentCategory: inferPaymentCategory(recipientType),
                 recipientName: recipientName || 'Payable Recipient',
                 recipientType: recipientType || 'Vendor',
-                recipientId: recipientId || paymentId,
+                recipientId: recipientId || cleanPId,
                 amount: amount || payableAmount || 0,
                 paymentPurpose: paymentPurpose || 'Operational Disbursement',
-                sourceReference: sourceReference || paymentId,
+                sourceReference: sourceReference || cleanPId,
+                sourceId: sourceId ? String(sourceId) : undefined,
+                sourceModel: sourceModel || (recipientType === 'Vendor' ? 'Settlement' : undefined),
                 status: 'PENDING'
             });
         }
@@ -1753,6 +1901,10 @@ router.post('/hold', auth, async (req, res) => {
         payment.heldBy = req.user.name || 'Administrator';
         payment.heldById = req.user.id || req.user._id;
         payment.heldAt = new Date();
+        if (sourceId && !payment.sourceId) payment.sourceId = String(sourceId);
+        if (sourceModel && !payment.sourceModel) payment.sourceModel = sourceModel;
+        if (sourceReference && !payment.sourceReference) payment.sourceReference = sourceReference;
+
         payment.previousHistory = payment.previousHistory || [];
         payment.previousHistory.push({
             action: 'HOLD',
@@ -1767,7 +1919,7 @@ router.post('/hold', auth, async (req, res) => {
         // Sync with source model (Settlement / Order) in database
         await syncPaymentSourceModel(payment, 'HOLD', { reason: reason.trim(), actorName: payment.heldBy });
 
-        await logPaymentAudit(req, 'payment_held', paymentId, `Payment ${paymentId} placed on HOLD: ${reason.trim()}`, {
+        await logPaymentAudit(req, 'payment_held', payment.paymentId, `Payment ${payment.paymentId} placed on HOLD: ${reason.trim()}`, {
             reason: reason.trim(),
             heldBy: payment.heldBy,
             previousStatus
@@ -1777,7 +1929,7 @@ router.post('/hold', auth, async (req, res) => {
 
         res.json({
             success: true,
-            msg: `Payment ${paymentId} placed on hold.`,
+            msg: `Payment ${payment.paymentId} placed on hold.`,
             payment: {
                 _id: payment._id,
                 paymentId: payment.paymentId,
@@ -1796,11 +1948,17 @@ router.post('/hold', auth, async (req, res) => {
 
 router.post('/release-hold', auth, async (req, res) => {
     try {
-        const { paymentId, reason } = req.body;
+        const { paymentId, reason, sourceReference, sourceId } = req.body;
         if (!paymentId) return res.status(400).json({ success: false, msg: 'Payment ID is required.' });
 
-        const idFilter = [{ paymentId }];
-        if (mongoose.isValidObjectId(paymentId)) idFilter.push({ _id: paymentId });
+        const cleanPId = String(paymentId).trim();
+        const idFilter = [{ paymentId: cleanPId }];
+        if (mongoose.isValidObjectId(cleanPId)) idFilter.push({ _id: cleanPId });
+        if (sourceReference) idFilter.push({ sourceReference: String(sourceReference).trim() });
+        if (sourceId) idFilter.push({ sourceId: String(sourceId).trim() });
+        const pSuffix = cleanPId.replace(/^PAY-(?:VND-|ORD-VND-|ORD-|AGT-|DEL-|TEC-)?/i, '').toLowerCase();
+        if (pSuffix.length >= 4) idFilter.push({ paymentId: new RegExp(pSuffix + '$', 'i') });
+
         const payment = await Payment.findOne({ $or: idFilter });
         if (!payment) return res.status(404).json({ success: false, msg: 'Payment record not found.' });
 
@@ -1824,13 +1982,13 @@ router.post('/release-hold', auth, async (req, res) => {
         // Sync with source model (Settlement / Order) in database
         await syncPaymentSourceModel(payment, 'RELEASE_HOLD', { reason });
 
-        await logPaymentAudit(req, 'payment_released_hold', paymentId, `Payment ${paymentId} released from HOLD to PENDING`);
+        await logPaymentAudit(req, 'payment_released_hold', payment.paymentId, `Payment ${payment.paymentId} released from HOLD to PENDING`);
 
         emitPaymentRealtime(req, 'released', payment.toObject());
 
         res.json({
             success: true,
-            msg: `Payment ${paymentId} released back to PENDING.`,
+            msg: `Payment ${payment.paymentId} released back to PENDING.`,
             payment: {
                 _id: payment._id,
                 paymentId: payment.paymentId,
@@ -1848,7 +2006,7 @@ router.post('/release-hold', auth, async (req, res) => {
 // =========================================================================
 router.post('/cancel', auth, async (req, res) => {
     try {
-        const { paymentId, cancellationReason, reason, recipientId, recipientType, recipientName, amount, payableAmount, paymentPurpose, sourceReference } = req.body;
+        const { paymentId, cancellationReason, reason, recipientId, recipientType, recipientName, amount, payableAmount, paymentPurpose, sourceReference, sourceId, sourceModel } = req.body;
         const validReason = (cancellationReason || reason || '').trim();
 
         if (!paymentId) {
@@ -1858,21 +2016,29 @@ router.post('/cancel', auth, async (req, res) => {
             return res.status(400).json({ success: false, msg: 'Cancellation reason is mandatory.' });
         }
 
-        const idFilter = [{ paymentId }];
-        if (mongoose.isValidObjectId(paymentId)) idFilter.push({ _id: paymentId });
+        const cleanPId = String(paymentId).trim();
+        const idFilter = [{ paymentId: cleanPId }];
+        if (mongoose.isValidObjectId(cleanPId)) idFilter.push({ _id: cleanPId });
+        if (sourceReference) idFilter.push({ sourceReference: String(sourceReference).trim() });
+        if (sourceId) idFilter.push({ sourceId: String(sourceId).trim() });
+        const pSuffix = cleanPId.replace(/^PAY-(?:VND-|ORD-VND-|ORD-|AGT-|DEL-|TEC-)?/i, '').toLowerCase();
+        if (pSuffix.length >= 4) idFilter.push({ paymentId: new RegExp(pSuffix + '$', 'i') });
+
         let payment = await Payment.findOne({ $or: idFilter });
 
         if (!payment) {
             payment = new Payment({
-                paymentId,
+                paymentId: cleanPId,
                 paymentType: 'paid',
                 paymentCategory: inferPaymentCategory(recipientType),
                 recipientName: recipientName || 'Payable Recipient',
                 recipientType: recipientType || 'Vendor',
-                recipientId: recipientId || paymentId,
+                recipientId: recipientId || cleanPId,
                 amount: amount || payableAmount || 0,
                 paymentPurpose: paymentPurpose || 'Operational Disbursement',
-                sourceReference: sourceReference || paymentId,
+                sourceReference: sourceReference || cleanPId,
+                sourceId: sourceId ? String(sourceId) : undefined,
+                sourceModel: sourceModel || (recipientType === 'Vendor' ? 'Settlement' : undefined),
                 status: 'PENDING'
             });
         }
@@ -1890,6 +2056,10 @@ router.post('/cancel', auth, async (req, res) => {
         payment.cancelledBy = req.user.name || 'Administrator';
         payment.cancelledById = req.user.id || req.user._id;
         payment.cancelledAt = new Date();
+        if (sourceId && !payment.sourceId) payment.sourceId = String(sourceId);
+        if (sourceModel && !payment.sourceModel) payment.sourceModel = sourceModel;
+        if (sourceReference && !payment.sourceReference) payment.sourceReference = sourceReference;
+
         payment.previousHistory = payment.previousHistory || [];
         payment.previousHistory.push({
             action: 'CANCEL',
@@ -1904,8 +2074,8 @@ router.post('/cancel', auth, async (req, res) => {
         // Sync with source model (Settlement / Order) in database
         await syncPaymentSourceModel(payment, 'CANCEL', { reason: validReason, actorName: payment.cancelledBy });
 
-        await logPaymentAudit(req, 'payment_cancelled', paymentId, `Payment ${paymentId} cancelled: ${cancellationReason.trim()}`, {
-            reason: cancellationReason.trim(),
+        await logPaymentAudit(req, 'payment_cancelled', payment.paymentId, `Payment ${payment.paymentId} cancelled: ${validReason}`, {
+            reason: validReason,
             cancelledBy: payment.cancelledBy,
             previousStatus
         });
@@ -1914,7 +2084,7 @@ router.post('/cancel', auth, async (req, res) => {
 
         res.json({
             success: true,
-            msg: `Payment ${paymentId} has been cancelled successfully.`,
+            msg: `Payment ${payment.paymentId} has been cancelled successfully.`,
             payment: {
                 paymentId: payment.paymentId,
                 status: 'CANCELLED',
@@ -1926,6 +2096,101 @@ router.post('/cancel', auth, async (req, res) => {
     } catch (err) {
         console.error('Error cancelling payment:', err);
         res.status(500).json({ success: false, msg: 'Server error cancelling payment.' });
+    }
+});
+
+// =========================================================================
+// 7B. DIRECT STATUS UPDATE (SUPER ADMIN CONTROLLER)
+// =========================================================================
+router.post('/update-status', auth, async (req, res) => {
+    try {
+        const { paymentId, status, reason, recipientId, recipientType, recipientName, amount, payableAmount, paymentPurpose, sourceReference, sourceId, sourceModel } = req.body;
+        if (!paymentId || !status) {
+            return res.status(400).json({ success: false, msg: 'Payment ID and target status are required.' });
+        }
+        const targetStatus = String(status).trim().toUpperCase();
+        if (!['PAID', 'HOLD', 'PENDING', 'CANCELLED'].includes(targetStatus)) {
+            return res.status(400).json({ success: false, msg: 'Invalid target status. Must be PAID, HOLD, PENDING, or CANCELLED.' });
+        }
+
+        const cleanPId = String(paymentId).trim();
+        const idFilter = [{ paymentId: cleanPId }];
+        if (mongoose.isValidObjectId(cleanPId)) idFilter.push({ _id: cleanPId });
+        if (sourceReference) idFilter.push({ sourceReference: String(sourceReference).trim() });
+        if (sourceId) idFilter.push({ sourceId: String(sourceId).trim() });
+        const pSuffix = cleanPId.replace(/^PAY-(?:VND-|ORD-VND-|ORD-|AGT-|DEL-|TEC-)?/i, '').toLowerCase();
+        if (pSuffix.length >= 4) idFilter.push({ paymentId: new RegExp(pSuffix + '$', 'i') });
+
+        let payment = await Payment.findOne({ $or: idFilter });
+        if (!payment) {
+            payment = new Payment({
+                paymentId: cleanPId,
+                paymentType: 'paid',
+                paymentCategory: inferPaymentCategory(recipientType),
+                recipientName: recipientName || 'Payable Recipient',
+                recipientType: recipientType || 'Vendor',
+                recipientId: recipientId || cleanPId,
+                amount: amount || payableAmount || 0,
+                paymentPurpose: paymentPurpose || 'Operational Disbursement',
+                sourceReference: sourceReference || cleanPId,
+                sourceId: sourceId ? String(sourceId) : undefined,
+                sourceModel: sourceModel || (recipientType === 'Vendor' ? 'Settlement' : undefined),
+                status: 'PENDING'
+            });
+        }
+
+        const previousStatus = payment.status;
+        payment.status = targetStatus;
+        if (targetStatus === 'HOLD') {
+            payment.holdReason = (reason || 'Placed on Hold by Admin').trim();
+            payment.heldBy = req.user.name || 'Administrator';
+            payment.heldAt = new Date();
+        } else if (targetStatus === 'CANCELLED') {
+            payment.cancellationReason = (reason || 'Cancelled by Admin').trim();
+            payment.cancelledBy = req.user.name || 'Administrator';
+            payment.cancelledAt = new Date();
+        } else if (targetStatus === 'PAID') {
+            payment.paymentDate = payment.paymentDate || new Date();
+            payment.processedBy = req.user.name || 'Administrator';
+            if (!payment.transactionReference) {
+                payment.transactionReference = `TXN-FIC-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+            }
+        } else if (targetStatus === 'PENDING') {
+            payment.holdReason = '';
+        }
+
+        if (sourceId && !payment.sourceId) payment.sourceId = String(sourceId);
+        if (sourceModel && !payment.sourceModel) payment.sourceModel = sourceModel;
+        if (sourceReference && !payment.sourceReference) payment.sourceReference = sourceReference;
+
+        payment.previousHistory = payment.previousHistory || [];
+        payment.previousHistory.push({
+            action: targetStatus,
+            by: req.user.name || 'Administrator',
+            date: new Date(),
+            reason: (reason || '').trim(),
+            previousStatus
+        });
+
+        await payment.save();
+        await syncPaymentSourceModel(payment, targetStatus === 'PENDING' ? 'RELEASE_HOLD' : targetStatus, { reason, actorName: req.user.name });
+        emitPaymentRealtime(req, 'updated', payment.toObject());
+
+        res.json({
+            success: true,
+            msg: `Payment status updated to ${targetStatus} successfully.`,
+            payment: {
+                _id: payment._id,
+                paymentId: payment.paymentId,
+                status: payment.status,
+                holdReason: payment.holdReason,
+                cancellationReason: payment.cancellationReason,
+                transactionReference: payment.transactionReference
+            }
+        });
+    } catch (err) {
+        console.error('Error updating payment status:', err);
+        res.status(500).json({ success: false, msg: 'Server error updating payment status' });
     }
 });
 
