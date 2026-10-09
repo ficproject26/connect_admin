@@ -49,9 +49,13 @@ const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
-    'http://127.0.0.1:5173'
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:5174',
+    'http://127.0.0.1:5175'
 ];
 
 if (process.env.ADMIN_FRONTEND_URL) {
@@ -200,14 +204,14 @@ const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
         origin: (origin, callback) => {
-            if (isOriginAllowed(origin)) callback(null, true);
+            if (!origin || isOriginAllowed(origin)) callback(null, true);
             else callback(new Error('Not allowed by CORS'));
         },
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
         allowedHeaders: ['x-auth-token', 'Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'Expires', 'expires', 'x-requested-with', 'Accept', 'Origin'],
         credentials: true
     },
-    transports: ['websocket', 'polling'],
+    transports: ['polling', 'websocket'],
     allowUpgrades: true,
     pingTimeout: 60000,
     pingInterval: 25000

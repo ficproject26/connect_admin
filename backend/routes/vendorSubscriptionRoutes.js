@@ -47,35 +47,41 @@ async function syncSubscriptionsToPaymentHistory() {
                 const payDate = sub.paymentDate || sub.lastPaymentDate || sub.startDate || sub.createdAt || new Date();
                 const payAmount = Number(sub.monthlyFee || sub.amount || 1000);
 
-                await Payment.create({
-                    paymentId: sub.paymentId || `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
-                    paymentType: 'received',
-                    paymentCategory: 'vendor_subscription',
-                    recipientType: 'Vendor',
-                    recipientId: sub.vendorId,
-                    recipientName: sub.vendorName ? `${sub.vendorName} (${sub.businessName || 'Business'})` : (sub.businessName || 'Vendor Business'),
-                    recipientEmail: sub.vendorEmail || '',
-                    recipientPhone: sub.vendorPhone || '',
-                    amount: payAmount,
-                    currency: sub.currency || 'INR',
-                    direction: 'CREDIT',
-                    paymentMethod: sub.paymentMethod || 'Online',
-                    status: 'PAID',
-                    paymentPurpose: 'INCOME -> VENDOR SUBSCRIPTION',
-                    sourceReference: String(sub.businessId || sub._id),
-                    sourceModel: 'VendorSubscription',
-                    sourceId: sub.subscriptionId,
-                    paymentDate: payDate,
-                    territory: {
-                        state: sub.state || '',
-                        district: sub.district || '',
-                        division: sub.division || '',
-                        pincode: sub.pincode || ''
-                    },
-                    transactionReference: txRef,
-                    notes: `Business: ${sub.businessName} (${sub.businessType || 'General'}) | Plan: ${sub.planName || 'Monthly Subscription'} | Validity: ${sub.startDate ? new Date(sub.startDate).toLocaleDateString() : ''} to ${sub.validUntil || sub.endDate ? new Date(sub.validUntil || sub.endDate).toLocaleDateString() : ''}`,
-                    createdBy: sub.approvedByName || sub.approvedBy || 'System'
-                });
+                try {
+                    await Payment.create({
+                        paymentId: sub.paymentId || `PAY-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+                        paymentType: 'received',
+                        paymentCategory: 'vendor_subscription',
+                        recipientType: 'Vendor',
+                        recipientId: sub.vendorId,
+                        recipientName: sub.vendorName ? `${sub.vendorName} (${sub.businessName || 'Business'})` : (sub.businessName || 'Vendor Business'),
+                        recipientEmail: sub.vendorEmail || '',
+                        recipientPhone: sub.vendorPhone || '',
+                        amount: payAmount,
+                        currency: sub.currency || 'INR',
+                        direction: 'CREDIT',
+                        paymentMethod: sub.paymentMethod || 'Online',
+                        status: 'PAID',
+                        paymentPurpose: 'INCOME -> VENDOR SUBSCRIPTION',
+                        sourceReference: String(sub.businessId || sub._id),
+                        sourceModel: 'VendorSubscription',
+                        sourceId: sub.subscriptionId,
+                        paymentDate: payDate,
+                        territory: {
+                            state: sub.state || '',
+                            district: sub.district || '',
+                            division: sub.division || '',
+                            pincode: sub.pincode || ''
+                        },
+                        transactionReference: txRef,
+                        notes: `Business: ${sub.businessName} (${sub.businessType || 'General'}) | Plan: ${sub.planName || 'Monthly Subscription'} | Validity: ${sub.startDate ? new Date(sub.startDate).toLocaleDateString() : ''} to ${sub.validUntil || sub.endDate ? new Date(sub.validUntil || sub.endDate).toLocaleDateString() : ''}`,
+                        createdBy: sub.approvedByName || sub.approvedBy || 'System'
+                    });
+                } catch (createErr) {
+                    if (createErr.code !== 11000) {
+                        console.warn('[VendorSubscription] Payment create warning:', createErr.message);
+                    }
+                }
             }
         }
     } catch (syncErr) {

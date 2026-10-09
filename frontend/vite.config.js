@@ -30,6 +30,12 @@ export default defineConfig({
         target: 'http://localhost:8004',
         changeOrigin: true,
         secure: false
+      },
+      '/socket.io': {
+        target: 'http://localhost:8004',
+        ws: true,
+        changeOrigin: true,
+        secure: false
       }
     }
   }

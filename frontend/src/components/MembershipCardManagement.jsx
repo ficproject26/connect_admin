@@ -70,25 +70,25 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
         if (hn.endsWith('.vercel.app')) {
           serverUrl = 'https://api.ficapp.in';
         } else if (hn === 'localhost' || hn === '127.0.0.1') {
-          serverUrl = 'http://localhost:8004';
+          serverUrl = window.location.origin;
         }
       }
       if (!serverUrl && API_BASE && (API_BASE.startsWith('http://') || API_BASE.startsWith('https://'))) {
         try {
           const parsed = new URL(API_BASE);
-          serverUrl = parsed.hostname.endsWith('.vercel.app') ? 'https://api.ficapp.in' : parsed.origin;
+          serverUrl = parsed.hostname.endsWith('.vercel.app') ? 'https://api.ficapp.in' : (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' ? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8004') : parsed.origin);
         } catch {
           serverUrl = API_BASE.replace(/\/admin-api\/?$/, '').replace(/\/api\/?$/, '');
         }
       }
-      if (!serverUrl) serverUrl = 'https://api.ficapp.in';
+      if (!serverUrl) serverUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? window.location.origin : 'https://api.ficapp.in';
 
       const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('admin_token') || '') : '');
 
       socket = io(serverUrl, {
         auth: { token: activeToken },
         query: { token: activeToken },
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
         reconnectionAttempts: 10,
         reconnectionDelay: 1500
       });

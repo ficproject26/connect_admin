@@ -150,7 +150,17 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
       });
       if (res.ok) {
         const data = await res.json();
-        setPayrolls(data.payrolls || []);
+        const raw = data.payrolls || [];
+        const seen = new Set();
+        const unique = [];
+        raw.forEach((p, idx) => {
+          const k = String(p._id || p.id || (p.employeeCode ? `${p.employeeCode}-${p.month}` : idx));
+          if (!seen.has(k)) {
+            seen.add(k);
+            unique.push(p);
+          }
+        });
+        setPayrolls(unique);
         if (data.kpi) setKpi(data.kpi);
       }
     } catch (err) {
@@ -700,8 +710,8 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
             className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-xs px-3 py-2 font-semibold focus:outline-none"
           >
             <option value="all">All Pincodes</option>
-            {availablePincodes.map(p => (
-              <option key={p._id} value={p.code}>{p.code}</option>
+            {availablePincodes.map((p, pIdx) => (
+              <option key={p._id ? `pin-${p._id}` : `pin-${p.code || pIdx}`} value={p.code}>{p.code}</option>
             ))}
           </select>
         </div>
@@ -747,8 +757,8 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
-            {payrolls.map((p) => (
-              <tr key={p._id} className="hover:bg-slate-50/70 dark:hover:bg-slate-850/40 transition-colors">
+            {payrolls.map((p, idx) => (
+              <tr key={p._id ? `pay-${p._id}-${idx}` : `pay-${idx}`} className="hover:bg-slate-50/70 dark:hover:bg-slate-850/40 transition-colors">
                 
                 {/* Employee Name */}
                 <td className="py-3.5 px-3">

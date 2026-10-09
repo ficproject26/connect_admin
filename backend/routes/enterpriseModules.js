@@ -37,11 +37,21 @@ const sanitizeVendorAddressObj = (vObj) => {
         return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty', '—', '-', '--'].includes(clean) || /^(.)\1+$/.test(clean);
     };
 
-    let street = (vObj.businessAddress || vObj.street || vObj.address || vObj.streetAddress || '').trim();
-    let city = (vObj.city || vObj.district || vObj.addressCity || '').trim();
-    let state = (vObj.state || vObj.addressState || '').trim();
-    let pin = (vObj.postalCode || vObj.pincode || vObj.zipCode || '').trim();
-    let area = (vObj.assignedArea || '').trim();
+    const toStr = (val) => {
+        if (!val) return '';
+        if (typeof val === 'string') return val.trim();
+        if (typeof val === 'number') return String(val).trim();
+        if (typeof val === 'object') {
+            return (val.street || val.address || val.line1 || val.full || val.formatted || '').trim();
+        }
+        return String(val).trim();
+    };
+
+    let street = toStr(vObj.businessAddress || vObj.street || vObj.address || vObj.streetAddress);
+    let city = toStr(vObj.city || vObj.district || vObj.addressCity);
+    let state = toStr(vObj.state || vObj.addressState);
+    let pin = toStr(vObj.postalCode || vObj.pincode || vObj.zipCode);
+    let area = toStr(vObj.assignedArea);
 
     if (isPlaceholder(street)) street = '';
     if (isPlaceholder(city)) city = '';
@@ -2025,6 +2035,15 @@ router.get('/payroll', auth, async (req, res) => {
                 (p.role || '').toLowerCase().includes(s)
             );
         }
+
+        // Deduplicate records by canonical string ID
+        const seenPayrollIds = new Set();
+        payrolls = payrolls.filter(p => {
+            const idKey = String(p._id || p.id || (p.employeeCode ? `${p.employeeCode}-${p.month}` : ''));
+            if (!idKey || seenPayrollIds.has(idKey)) return false;
+            seenPayrollIds.add(idKey);
+            return true;
+        });
 
         // Calculate KPI summaries dynamically
         const totalSalary = payrolls.reduce((acc, p) => acc + (p.salary || 0), 0);
