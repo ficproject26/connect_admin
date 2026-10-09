@@ -4,7 +4,7 @@ const createTransporter = (overridePort = null) => {
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const defaultPort = Number(process.env.SMTP_PORT) || 465;
   const port = overridePort || defaultPort;
-  const secure = port === 465;
+  const secure = port === 465 ? true : (port === 587 ? false : (process.env.SMTP_SECURE === 'true'));
   const user = ((process.env.SMTP_USER && process.env.SMTP_USER.trim()) || 'ficonnectblr@gmail.com').trim();
   const rawPass = ((process.env.SMTP_PASS && process.env.SMTP_PASS.trim()) || 'kgfy ptpa lifh xrzz').trim();
   // Strip spaces from Gmail 16-character App Password (e.g. "kgfy ptpa lifh xrzz" -> "kgfyptpalifhxrzz")

@@ -83,10 +83,10 @@ const resolveSanitizedApiBase = () => {
 
   let envUrl = '';
   if (typeof import.meta !== 'undefined' && import.meta.env) {
-    envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || '';
+    envUrl = import.meta.env.VITE_API_URL || import.meta.env.ADMIN_API_URL || import.meta.env.VITE_ADMIN_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || '';
   }
   if (!envUrl && typeof process !== 'undefined' && process.env) {
-    envUrl = process.env.VITE_API_URL || process.env.VITE_API_BASE || '';
+    envUrl = process.env.VITE_API_URL || process.env.ADMIN_API_URL || process.env.VITE_ADMIN_API_URL || process.env.VITE_API_BASE || '';
   }
   if (!envUrl) envUrl = 'https://api.ficapp.in/admin-api';
   envUrl = envUrl.trim().replace(/\/+$/, '');
@@ -4132,7 +4132,7 @@ function App() {
                     <div className="space-y-3">
                       <div>
                         <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Key ID</label>
-                        <input type="text" defaultValue="rzp_test_placeholder" className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl px-4 py-2.5 text-sm" />
+                        <input type="text" defaultValue={(typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_RAZORPAY_KEY_ID) || "rzp_test_placeholder"} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl px-4 py-2.5 text-sm" />
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Key Secret</label>
