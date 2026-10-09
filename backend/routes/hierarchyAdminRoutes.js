@@ -501,9 +501,21 @@ const getAdminRequestsHandler = async (req, res) => {
         const formatted = [];
 
         for (const r of (managerRequests || [])) {
+            const rawLvl = r.level ?? 'Admin';
+            const lvlUpper = (rawLvl === 1 || rawLvl === '1') ? 'STATE'
+                : (rawLvl === 2 || rawLvl === '2') ? 'DISTRICT'
+                : (rawLvl === 3 || rawLvl === '3') ? 'DIVISION'
+                : (rawLvl === 4 || rawLvl === '4') ? 'PINCODE'
+                : String(rawLvl).toUpperCase();
+            const lvlRoleStr = (rawLvl === 1 || rawLvl === '1') ? 'State'
+                : (rawLvl === 2 || rawLvl === '2') ? 'District'
+                : (rawLvl === 3 || rawLvl === '3') ? 'Division'
+                : (rawLvl === 4 || rawLvl === '4') ? 'Pincode'
+                : (typeof rawLvl === 'string' && rawLvl.trim()) ? (rawLvl.charAt(0).toUpperCase() + rawLvl.slice(1))
+                : 'Territory';
             formatted.push({
                 _id: String(r._id || r.requestId),
-                requestType: `${(r.level || 'Admin').toUpperCase()} Onboarding`,
+                requestType: `${lvlUpper} Onboarding`,
                 requestedBy: {
                     name: r.requestedBy?.name || 'Territory Admin',
                     role: r.requestedBy?.role || 'Admin'
@@ -511,13 +523,13 @@ const getAdminRequestsHandler = async (req, res) => {
                 name: r.name || 'Candidate',
                 phone: r.phone || '',
                 email: r.email || '',
-                requestedRole: `${r.level ? r.level.charAt(0).toUpperCase() + r.level.slice(1) : 'Territory'} Admin`,
-                role: `${r.level ? r.level.charAt(0).toUpperCase() + r.level.slice(1) : 'Territory'} Admin`,
+                requestedRole: `${lvlRoleStr} Admin`,
+                role: `${lvlRoleStr} Admin`,
                 state: r.assignedState || '',
                 district: r.assignedDistrict || '',
                 division: r.assignedDivision || '',
                 pincode: r.assignedPincode || '',
-                status: (r.status || 'Pending').charAt(0).toUpperCase() + (r.status || 'Pending').slice(1).toLowerCase(),
+                status: String(r.status || 'Pending').charAt(0).toUpperCase() + String(r.status || 'Pending').slice(1).toLowerCase(),
                 createdAt: r.createdAt || new Date()
             });
         }
@@ -1690,7 +1702,13 @@ router.put('/managers/requests/:id/approve', [auth, territoryScope], async (req,
 
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const randDigits = Math.floor(1000 + Math.random() * 9000);
-        const managerId = `MGR-${mReq.level.slice(0, 3).toUpperCase()}-${dateStr}-${randDigits}`;
+        const rawReqLvl = mReq.level ?? 'GEN';
+        const lvlCode = (rawReqLvl === 1 || rawReqLvl === '1') ? 'STM'
+            : (rawReqLvl === 2 || rawReqLvl === '2') ? 'DTM'
+            : (rawReqLvl === 3 || rawReqLvl === '3') ? 'DIV'
+            : (rawReqLvl === 4 || rawReqLvl === '4') ? 'PIN'
+            : String(rawReqLvl).slice(0, 3).toUpperCase();
+        const managerId = `MGR-${lvlCode}-${dateStr}-${randDigits}`;
 
         // Create Manager in Manager Collection
         const newManager = new Manager({

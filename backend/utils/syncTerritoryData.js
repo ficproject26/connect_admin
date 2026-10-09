@@ -26,7 +26,7 @@ async function syncTerritoryData(options = { force: false }) {
     console.log(`Current territory counts: States: ${stateCount}, Districts: ${districtCount}, Divisions: ${divisionCount}, Pincodes: ${pincodeCount}`);
 
     // If counts are already complete and not force mode, nothing to do
-    if (!options.force && districtCount >= 50 && divisionCount >= 300 && pincodeCount >= 600) {
+    if (!options.force && stateCount >= 3 && districtCount >= 50 && divisionCount >= 300 && pincodeCount >= 600) {
         console.log('✅ Territory data already populated and intact.');
         return { success: true, message: 'Data already intact', counts: { stateCount, districtCount, divisionCount, pincodeCount } };
     }

@@ -734,20 +734,32 @@ router.get('/admins/requests', auth, async (req, res) => {
 
         const formatted = [];
         for (const r of (managerRequests || [])) {
+            const rawLvl = r.level ?? 'Admin';
+            const lvlUpper = (rawLvl === 1 || rawLvl === '1') ? 'STATE'
+                : (rawLvl === 2 || rawLvl === '2') ? 'DISTRICT'
+                : (rawLvl === 3 || rawLvl === '3') ? 'DIVISION'
+                : (rawLvl === 4 || rawLvl === '4') ? 'PINCODE'
+                : String(rawLvl).toUpperCase();
+            const lvlRoleStr = (rawLvl === 1 || rawLvl === '1') ? 'State'
+                : (rawLvl === 2 || rawLvl === '2') ? 'District'
+                : (rawLvl === 3 || rawLvl === '3') ? 'Division'
+                : (rawLvl === 4 || rawLvl === '4') ? 'Pincode'
+                : (typeof rawLvl === 'string' && rawLvl.trim()) ? (rawLvl.charAt(0).toUpperCase() + rawLvl.slice(1))
+                : 'Territory';
             formatted.push({
                 _id: String(r._id || r.requestId),
-                requestType: `${(r.level || 'Admin').toUpperCase()} Onboarding`,
+                requestType: `${lvlUpper} Onboarding`,
                 requestedBy: { name: r.requestedBy?.name || 'Territory Admin', role: r.requestedBy?.role || 'Admin' },
                 name: r.name || 'Candidate',
                 phone: r.phone || '',
                 email: r.email || '',
-                requestedRole: `${r.level ? r.level.charAt(0).toUpperCase() + r.level.slice(1) : 'Territory'} Admin`,
-                role: `${r.level ? r.level.charAt(0).toUpperCase() + r.level.slice(1) : 'Territory'} Admin`,
+                requestedRole: `${lvlRoleStr} Admin`,
+                role: `${lvlRoleStr} Admin`,
                 state: r.assignedState || '',
                 district: r.assignedDistrict || '',
                 division: r.assignedDivision || '',
                 pincode: r.assignedPincode || '',
-                status: (r.status || 'Pending').charAt(0).toUpperCase() + (r.status || 'Pending').slice(1).toLowerCase(),
+                status: String(r.status || 'Pending').charAt(0).toUpperCase() + String(r.status || 'Pending').slice(1).toLowerCase(),
                 createdAt: r.createdAt || new Date()
             });
         }

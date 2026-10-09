@@ -272,9 +272,23 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
             }
         }
 
+        const rawAgentLvl = agentDoc?.level ?? agentDoc?.role ?? 'PIN';
+        let agentLvlCode = 'PIN';
+        if (rawAgentLvl === 1 || rawAgentLvl === '1' || String(rawAgentLvl).toLowerCase().includes('state')) {
+            agentLvlCode = 'STA';
+        } else if (rawAgentLvl === 2 || rawAgentLvl === '2' || String(rawAgentLvl).toLowerCase().includes('dist')) {
+            agentLvlCode = 'DIS';
+        } else if (rawAgentLvl === 3 || rawAgentLvl === '3' || String(rawAgentLvl).toLowerCase().includes('div')) {
+            agentLvlCode = 'DIV';
+        } else if (rawAgentLvl === 4 || rawAgentLvl === '4' || String(rawAgentLvl).toLowerCase().includes('pin')) {
+            agentLvlCode = 'PIN';
+        } else if (typeof rawAgentLvl === 'string' && rawAgentLvl.trim()) {
+            agentLvlCode = rawAgentLvl.trim().slice(0, 4).toUpperCase();
+        }
+
         const agentName = agentDoc?.name || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.name : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.name : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.name : null) || (typeof vObj.referredBy === 'object' ? vObj.referredBy?.name : null) || (typeof vObj.onboardedBy === 'string' ? vObj.onboardedBy : null) || vObj.agentName || 'Field Agent';
 
-        const regId = agentDoc?.registrationId || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.registrationId : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.registrationId : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.registrationId : null) || `AG-${(agentDoc?.level || agentDoc?.role || 'PIN').slice(0,4).toUpperCase()}-${String(agentDoc?._id || '1001').slice(-4)}`;
+        const regId = agentDoc?.registrationId || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.registrationId : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.registrationId : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.registrationId : null) || `AG-${agentLvlCode}-${String(agentDoc?._id || '1001').slice(-4)}`;
 
         const pinCode = agentDoc?.pincode || (agentDoc?.territory && typeof agentDoc.territory === 'object' ? agentDoc.territory.pincode : null) || '—';
 
@@ -321,7 +335,18 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
                             }
                         });
                         if (!managerDoc) {
-                            managerDoc = await User.findById(possibleManagerId).select('name registrationId phone email level role').lean();
+                            if (mongoose.Types.ObjectId.isValid(possibleManagerId)) {
+                                managerDoc = await User.findById(possibleManagerId).select('name registrationId phone email level role').lean();
+                            } else {
+                                managerDoc = await User.findOne({
+                                    $or: [
+                                        { _id: possibleManagerId },
+                                        { managerId: possibleManagerId },
+                                        { registrationId: possibleManagerId },
+                                        { email: possibleManagerId }
+                                    ]
+                                }).select('name registrationId phone email level role').lean();
+                            }
                         }
                     } catch (e) {}
                 }
@@ -329,7 +354,37 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
 
             const managerName = managerDoc?.name || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.name : null) || (typeof vObj.onboardedByManager === 'object' ? vObj.onboardedByManager?.name : null) || vObj.managerName || (vObj.addedBy && vObj.addedBy.name) || 'Territory Manager';
 
-            const regId = managerDoc?.managerId || managerDoc?.registrationId || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.registrationId : null) || (vObj.managerId) || `MGR-${(managerDoc?.level || 'GEN').slice(0,3).toUpperCase()}-${String(managerDoc?._id || '1001').slice(-4)}`;
+            const rawMgrLvl = managerDoc?.level ?? 'GEN';
+            let mgrLvlCode = 'GEN';
+            if (rawMgrLvl === 1 || rawMgrLvl === '1' || String(rawMgrLvl).toLowerCase().includes('state')) {
+                mgrLvlCode = 'STM';
+            } else if (rawMgrLvl === 2 || rawMgrLvl === '2' || String(rawMgrLvl).toLowerCase().includes('dist')) {
+                mgrLvlCode = 'DTM';
+            } else if (rawMgrLvl === 3 || rawMgrLvl === '3' || String(rawMgrLvl).toLowerCase().includes('div')) {
+                mgrLvlCode = 'DIV';
+            } else if (rawMgrLvl === 4 || rawMgrLvl === '4' || String(rawMgrLvl).toLowerCase().includes('pin')) {
+                mgrLvlCode = 'PIN';
+            } else if (typeof rawMgrLvl === 'string' && rawMgrLvl.trim()) {
+                mgrLvlCode = rawMgrLvl.trim().slice(0, 3).toUpperCase();
+            }
+
+            const formatManagerLevel = (lvl) => {
+                if (lvl === 1 || lvl === '1') return 'State Manager';
+                if (lvl === 2 || lvl === '2') return 'District Manager';
+                if (lvl === 3 || lvl === '3') return 'Division Manager';
+                if (lvl === 4 || lvl === '4') return 'Pincode Manager';
+                if (typeof lvl === 'string' && lvl.trim()) {
+                    const s = lvl.trim().toLowerCase();
+                    if (s === 'state' || s === 'state_manager') return 'State Manager';
+                    if (s === 'district' || s === 'district_manager') return 'District Manager';
+                    if (s === 'division' || s === 'division_manager') return 'Division Manager';
+                    if (s === 'pincode' || s === 'pincode_manager') return 'Pincode Manager';
+                    return lvl.charAt(0).toUpperCase() + lvl.slice(1);
+                }
+                return 'Manager';
+            };
+
+            const regId = managerDoc?.managerId || managerDoc?.registrationId || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.registrationId : null) || (vObj.managerId) || `MGR-${mgrLvlCode}-${String(managerDoc?._id || '1001').slice(-4)}`;
 
             const pinCode = managerDoc?.assignedPincode || managerDoc?.pincode || '—';
 
@@ -337,7 +392,7 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
                 name: managerName,
                 registrationId: regId,
                 pincode: pinCode,
-                level: managerDoc?.level || 'Manager'
+                level: formatManagerLevel(managerDoc?.level)
             };
         } else {
             vObj.joiningType = vObj.joiningType || 'direct';
@@ -861,7 +916,17 @@ router.post('/vendors/agent-onboard', async (req, res) => {
             agentId: targetAgentId,
             onboardedByAgentId: targetAgentId,
             agentName: agentDoc?.name || 'Field Agent',
-            agentRegistrationId: agentDoc?.registrationId || `AG-${(agentDoc?.level || 'PIN').slice(0, 4).toUpperCase()}-1001`,
+            agentRegistrationId: (() => {
+                if (agentDoc?.registrationId) return agentDoc.registrationId;
+                const rawAgentLvl = agentDoc?.level ?? 'PIN';
+                let agentLvlCode = 'PIN';
+                if (rawAgentLvl === 1 || rawAgentLvl === '1' || String(rawAgentLvl).toLowerCase().includes('state')) agentLvlCode = 'STA';
+                else if (rawAgentLvl === 2 || rawAgentLvl === '2' || String(rawAgentLvl).toLowerCase().includes('dist')) agentLvlCode = 'DIS';
+                else if (rawAgentLvl === 3 || rawAgentLvl === '3' || String(rawAgentLvl).toLowerCase().includes('div')) agentLvlCode = 'DIV';
+                else if (rawAgentLvl === 4 || rawAgentLvl === '4' || String(rawAgentLvl).toLowerCase().includes('pin')) agentLvlCode = 'PIN';
+                else if (typeof rawAgentLvl === 'string' && rawAgentLvl.trim()) agentLvlCode = rawAgentLvl.trim().slice(0, 4).toUpperCase();
+                return `AG-${agentLvlCode}-1001`;
+            })(),
             assignedArea: territoryStr,
             assignedState: assignedState || agentDoc?.state || agentDoc?.assignedState || '',
             assignedDistrict: assignedDistrict || agentDoc?.district || agentDoc?.assignedDistrict || '',
