@@ -67,6 +67,9 @@ if (process.env.ALLOWED_ORIGINS) {
 const isOriginAllowed = (origin) => {
     if (!origin) return true;
     const cleanOrigin = origin.replace(/\/$/, '');
+    if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin)) {
+        return true;
+    }
     return allowedOrigins.includes(cleanOrigin);
 };
 

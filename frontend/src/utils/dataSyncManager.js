@@ -61,7 +61,13 @@ class DataSyncManager {
    * Safe fetch with request deduplication
    */
   async fetchQuery(key, url, options = {}) {
-    let base = this.apiBase || 'https://api.ficapp.in/admin-api';
+    let base = this.apiBase;
+    if (!base && typeof window !== 'undefined' && window.location) {
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        base = `${window.location.origin}/admin-api`;
+      }
+    }
+    if (!base) base = 'https://api.ficapp.in/admin-api';
     const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
     if (isHttps && (base.startsWith('http://3.110.88.42') || base.startsWith('http://api.ficapp.in') || base.startsWith('http://'))) {
       base = 'https://api.ficapp.in/admin-api';

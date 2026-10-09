@@ -79,6 +79,18 @@ const resolveSanitizedApiBase = () => {
     if (hostname.endsWith('.vercel.app')) {
       return `${window.location.origin}/admin-api`;
     }
+    // On Localhost dev, use same-origin /admin-api (proxied seamlessly via vite.config.js to port 8004) or explicit localhost URL
+    // This eliminates CORS preflight blocks from remote production server
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      let envUrl = '';
+      if (typeof import.meta !== 'undefined' && import.meta.env) {
+        envUrl = import.meta.env.VITE_API_URL || import.meta.env.ADMIN_API_URL || import.meta.env.VITE_ADMIN_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || '';
+      }
+      if (envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1') || envUrl.startsWith('/'))) {
+        return envUrl.trim().replace(/\/+$/, '');
+      }
+      return `${window.location.origin}/admin-api`;
+    }
   }
 
   let envUrl = '';
@@ -1317,7 +1329,10 @@ function App() {
     try {
       const targets = [
         `${API_BASE}/auth/login`,
-        '/api/auth/login'
+        '/admin-api/auth/login',
+        '/api/auth/login',
+        'http://localhost:8004/admin-api/auth/login',
+        'http://localhost:8004/api/auth/login'
       ].filter(Boolean);
       const uniqueTargets = [...new Set(targets)];
 
