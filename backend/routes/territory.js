@@ -156,14 +156,19 @@ const logAudit = async (req, action, territoryType, territoryId, territoryName, 
     }
 };
 
-// In-memory caching for hierarchy to eliminate heavy database scans and reduce latency to <5ms
+// In-memory caching for hierarchy and summary to eliminate heavy database scans and reduce latency to <5ms
 let cachedHierarchyResponse = null;
 let cachedHierarchyTimestamp = 0;
-const HIERARCHY_CACHE_TTL = 30 * 1000; // 30 seconds
+let cachedSummaryResponse = null;
+let cachedSummaryTimestamp = 0;
+const HIERARCHY_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const SUMMARY_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
 
 const invalidateHierarchyCache = () => {
     cachedHierarchyResponse = null;
     cachedHierarchyTimestamp = 0;
+    cachedSummaryResponse = null;
+    cachedSummaryTimestamp = 0;
 };
 
 // Helper: Auto-sync existing Pincodes in database in background with throttle
@@ -306,26 +311,290 @@ const autoSyncExistingPincodes = async (force = false) => {
 // ============================================================
 router.get('/hierarchy', [optionalAuth], async (req, res) => {
     try {
-        // Run auto-sync non-blocking in background so HTTP response is instant
-        autoSyncExistingPincodes().catch(e => console.warn('Background autoSync note:', e.message));
+        if (req.query.sync === 'true') {
+            autoSyncExistingPincodes(true).catch(e => console.warn('Background autoSync note:', e.message));
+        }
 
         const scope = getTerritoryScope(req.user);
         const onlyActive = req.query.status ? req.query.status.toLowerCase() !== 'all' : true;
         const isUnscoped = !scope || scope.isSuperAdmin;
+        const isSummaryMode = req.query.mode === 'summary' || req.query.summary === 'true';
+        const targetStateParam = (req.query.stateId || req.query.state || '').trim();
 
-        // Fast in-memory cache check for unscoped requests
+        // ── A. FAST SUMMARY MODE (Aggregates 3 states + totals in <150ms) ──
+        if (isSummaryMode) {
+            if (isUnscoped && cachedSummaryResponse && (Date.now() - cachedSummaryTimestamp < SUMMARY_CACHE_TTL) && cachedSummaryResponse.onlyActive === onlyActive) {
+                return res.json(cachedSummaryResponse.payload);
+            }
+
+            const stateMatch = onlyActive ? { status: { $regex: /^active$/i } } : {};
+            const childMatch = onlyActive ? { status: { $regex: /^active$/i } } : {};
+
+            const [states, districtCounts, divisionCounts, pincodeCounts, agents, managers] = await Promise.all([
+                State.find(stateMatch).sort({ name: 1 }).lean(),
+                District.aggregate([
+                    { $match: childMatch },
+                    {
+                        $group: {
+                            _id: { $toString: '$stateId' },
+                            count: { $sum: 1 },
+                            activeCount: {
+                                $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'active'] }, 1, 0] }
+                            }
+                        }
+                    }
+                ]),
+                Division.aggregate([
+                    { $match: childMatch },
+                    {
+                        $group: {
+                            _id: { $toString: '$stateId' },
+                            count: { $sum: 1 },
+                            activeCount: {
+                                $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'active'] }, 1, 0] }
+                            }
+                        }
+                    }
+                ]),
+                Pincode.aggregate([
+                    { $match: childMatch },
+                    {
+                        $group: {
+                            _id: { $toString: '$stateId' },
+                            count: { $sum: 1 },
+                            activeCount: {
+                                $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'active'] }, 1, 0] }
+                            },
+                            assignedCount: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $or: [
+                                                { $ne: ['$activeAgentId', null] },
+                                                { $eq: ['$isAssigned', true] }
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                ]),
+                User.find({ role: 'agent', isActive: { $ne: false } }).select('name email phone level assignedState assignedDistrict assignedArea assignedPincode').lean(),
+                Manager.find({ status: { $ne: 'Inactive' } }).select('name email phone level assignedState assignedDistrict assignedDivision assignedPincode stateId districtId divisionId pincodeId role').lean()
+            ]);
+
+            let totalDistricts = 0;
+            let totalDivisions = 0;
+            let totalPincodes = 0;
+            let totalActivePins = 0;
+            let totalAssignedPins = 0;
+
+            const statesWithTotals = states.map(st => {
+                const stIdStr = String(st._id);
+                const dAgg = districtCounts.find(d => d._id === stIdStr);
+                const vAgg = divisionCounts.find(v => v._id === stIdStr);
+                const pAgg = pincodeCounts.find(p => p._id === stIdStr);
+
+                const dCount = dAgg?.count || 0;
+                const vCount = vAgg?.count || 0;
+                const pCount = pAgg?.count || 0;
+                const activePCount = pAgg?.activeCount || 0;
+                const assignedPCount = pAgg?.assignedCount || 0;
+
+                totalDistricts += dCount;
+                totalDivisions += vCount;
+                totalPincodes += pCount;
+                totalActivePins += activePCount;
+                totalAssignedPins += assignedPCount;
+
+                return {
+                    ...st,
+                    districts: [],
+                    totalDistricts: dCount,
+                    totalDivisions: vCount,
+                    totalPincodes: pCount,
+                    activePincodes: activePCount,
+                    assignedPincodes: assignedPCount,
+                    managers: [
+                        ...agents.filter(a => (a.level || '').toLowerCase() === 'state' && (a.assignedState === st.name || a.assignedState === st.code)),
+                        ...managers.filter(m => (m.level === 'state' || m.role === 'state_manager') && (m.assignedState === st.name || m.assignedState === st.code || String(m.stateId) === stIdStr))
+                    ]
+                };
+            });
+
+            const hierarchyStats = {
+                totalStates: states.length,
+                totalDistricts,
+                totalDivisions,
+                totalPincodes,
+                activePincodes: totalActivePins,
+                assignedPincodes: totalAssignedPins,
+                availablePincodes: Math.max(0, totalPincodes - totalAssignedPins),
+                activeManagers: agents.length + managers.length
+            };
+
+            const responsePayload = {
+                success: true,
+                isSummary: true,
+                states: statesWithTotals,
+                hierarchy: statesWithTotals,
+                rawDistricts: [],
+                rawDivisions: [],
+                rawPincodes: [],
+                totalStates: states.length,
+                totalDistricts,
+                totalDivisions,
+                totalPincodes,
+                totalAgents: agents.length,
+                stats: hierarchyStats
+            };
+
+            if (isUnscoped) {
+                cachedSummaryResponse = {
+                    onlyActive,
+                    payload: responsePayload
+                };
+                cachedSummaryTimestamp = Date.now();
+            }
+
+            return res.json(responsePayload);
+        }
+
+        // ── B. STATE-SCOPED DRILLDOWN MODE (Queries only that specific state) ──
+        if (targetStateParam) {
+            let targetState = await State.findOne({
+                $or: [
+                    mongoose.Types.ObjectId.isValid(targetStateParam) ? { _id: targetStateParam } : null,
+                    { _id: targetStateParam },
+                    { stateId: targetStateParam.toUpperCase() },
+                    { code: targetStateParam.toUpperCase() },
+                    { name: new RegExp(`^${targetStateParam}$`, 'i') }
+                ].filter(Boolean)
+            }).lean();
+
+            if (!targetState) {
+                return res.status(404).json({ success: false, msg: 'State not found' });
+            }
+
+            const stIdStr = String(targetState._id);
+            const stateIdFilter = {
+                $or: [
+                    { stateId: targetState._id },
+                    { stateId: stIdStr },
+                    mongoose.Types.ObjectId.isValid(stIdStr) ? { stateId: new mongoose.Types.ObjectId(stIdStr) } : null
+                ].filter(Boolean)
+            };
+
+            const statusClause = onlyActive ? { status: { $regex: /^active$/i } } : {};
+            const childFilter = { ...stateIdFilter, ...statusClause };
+
+            const [districts, divisions, pincodes, agents, managers] = await Promise.all([
+                District.find(childFilter).sort({ name: 1 }).lean(),
+                Division.find(childFilter).sort({ name: 1 }).lean(),
+                Pincode.find(childFilter)
+                    .select('code name district state division status stateId districtId divisionId activeAgentId isBlocked isAssigned joiningFee taluk deliveryStatus')
+                    .sort({ code: 1 })
+                    .lean(),
+                User.find({ role: 'agent', isActive: { $ne: false } }).select('name email phone level assignedState assignedDistrict assignedArea assignedPincode').lean(),
+                Manager.find({ status: { $ne: 'Inactive' } }).select('name email phone level assignedState assignedDistrict assignedDivision assignedPincode stateId districtId divisionId pincodeId role').lean()
+            ]);
+
+            const stateEntry = {
+                ...targetState,
+                districts: [],
+                totalDistricts: districts.length,
+                totalDivisions: divisions.length,
+                totalPincodes: pincodes.length,
+                activePincodes: pincodes.filter(p => (p.status || '').toLowerCase() === 'active').length,
+                managers: [
+                    ...agents.filter(a => (a.level || '').toLowerCase() === 'state' && (a.assignedState === targetState.name || a.assignedState === targetState.code)),
+                    ...managers.filter(m => (m.level === 'state' || m.role === 'state_manager') && (m.assignedState === targetState.name || m.assignedState === targetState.code || String(m.stateId) === stIdStr))
+                ]
+            };
+
+            const districtMap = {};
+            districts.forEach(dst => {
+                const idStr = String(dst._id);
+                districtMap[idStr] = {
+                    ...dst,
+                    divisions: [],
+                    totalDivisions: 0,
+                    totalPincodes: 0,
+                    activePincodes: 0,
+                    managers: [
+                        ...agents.filter(a => (a.level || '').toLowerCase() === 'district' && (a.assignedDistrict === dst.name || a.assignedDistrict === dst.code)),
+                        ...managers.filter(m => (m.level === 'district' || m.role === 'district_manager') && (m.assignedDistrict === dst.name || m.assignedDistrict === dst.code || String(m.districtId) === idStr))
+                    ]
+                };
+            });
+
+            const divisionMap = {};
+            divisions.forEach(div => {
+                const idStr = String(div._id);
+                divisionMap[idStr] = {
+                    ...div,
+                    pincodes: [],
+                    totalPincodes: 0,
+                    activePincodes: 0,
+                    managers: [
+                        ...agents.filter(a => (a.level || '').toLowerCase() === 'division' && ((a.assignedArea || '').includes(div.name) || (a.assignedDistrict === div.name))),
+                        ...managers.filter(m => (m.level === 'division' || m.role === 'division_manager') && ((m.assignedDivision || '').includes(div.name) || (m.assignedDistrict === div.name) || String(m.divisionId) === idStr))
+                    ]
+                };
+            });
+
+            pincodes.forEach(pin => {
+                const divIdStr = pin.divisionId ? String(pin.divisionId) : null;
+                if (divIdStr && divisionMap[divIdStr]) {
+                    divisionMap[divIdStr].pincodes.push(pin);
+                    divisionMap[divIdStr].totalPincodes += 1;
+                    if ((pin.status || '').toLowerCase() === 'active') divisionMap[divIdStr].activePincodes += 1;
+                }
+            });
+
+            Object.values(divisionMap).forEach(div => {
+                const distIdStr = div.districtId ? String(div.districtId) : null;
+                if (distIdStr && districtMap[distIdStr]) {
+                    districtMap[distIdStr].divisions.push(div);
+                    districtMap[distIdStr].totalDivisions += 1;
+                    districtMap[distIdStr].totalPincodes += div.totalPincodes;
+                    districtMap[distIdStr].activePincodes += div.activePincodes;
+                }
+            });
+
+            Object.values(districtMap).forEach(dst => {
+                stateEntry.districts.push(dst);
+            });
+
+            return res.json({
+                success: true,
+                state: stateEntry,
+                hierarchy: [stateEntry],
+                states: [stateEntry],
+                rawDistricts: districts,
+                rawDivisions: divisions,
+                rawPincodes: pincodes
+            });
+        }
+
+        // ── C. FULL HIERARCHY / TREE VIEW MODE ──
         if (isUnscoped && cachedHierarchyResponse && (Date.now() - cachedHierarchyTimestamp < HIERARCHY_CACHE_TTL) && cachedHierarchyResponse.onlyActive === onlyActive) {
             return res.json(cachedHierarchyResponse.payload);
         }
 
         const statusFilter = onlyActive ? { status: { $regex: /^active$/i } } : {};
 
-        // Fetch all states, districts, divisions, pincodes, agents, managers in parallel
         let [states, districts, divisions, pincodes, agents, managers] = await Promise.all([
             State.find(statusFilter).sort({ name: 1 }).lean(),
             District.find(statusFilter).sort({ name: 1 }).lean(),
             Division.find(statusFilter).sort({ name: 1 }).lean(),
-            Pincode.find(statusFilter).sort({ code: 1 }).lean(),
+            Pincode.find(statusFilter)
+                .select('code name district state division status stateId districtId divisionId activeAgentId isBlocked isAssigned joiningFee taluk deliveryStatus')
+                .sort({ code: 1 })
+                .lean(),
             User.find({ role: 'agent', isActive: { $ne: false } }).select('name email phone level assignedState assignedDistrict assignedArea assignedPincode').lean(),
             Manager.find({ status: { $ne: 'Inactive' } }).select('name email phone level assignedState assignedDistrict assignedDivision assignedPincode stateId districtId divisionId pincodeId role').lean()
         ]);
@@ -512,6 +781,12 @@ router.get('/stats', [optionalAuth], async (req, res) => {
             return res.json({
                 success: true,
                 stats: cachedHierarchyResponse.payload.stats
+            });
+        }
+        if (cachedSummaryResponse && cachedSummaryResponse.payload?.stats && (Date.now() - cachedSummaryTimestamp < SUMMARY_CACHE_TTL)) {
+            return res.json({
+                success: true,
+                stats: cachedSummaryResponse.payload.stats
             });
         }
 

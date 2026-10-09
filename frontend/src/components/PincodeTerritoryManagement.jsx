@@ -13,6 +13,9 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
   const [rawDivisions, setRawDivisions] = useState([]);
   const [rawPincodes, setRawPincodes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [stateDrilldownLoading, setStateDrilldownLoading] = useState(false);
+  const [treeLoading, setTreeLoading] = useState(false);
   const [auditLogs, setAuditLogs] = useState([]);
   const [stats, setStats] = useState({
     totalStates: 0,
@@ -110,7 +113,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Selected territory refs to prevent unnecessary re-creation of fetchHierarchy
+  // Selected territory refs to prevent unnecessary re-creation of fetchers
   const selectedStateRef = React.useRef(selectedState);
   selectedStateRef.current = selectedState;
   const selectedDistrictRef = React.useRef(selectedDistrict);
@@ -118,70 +121,153 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
   const selectedDivisionRef = React.useRef(selectedDivision);
   selectedDivisionRef.current = selectedDivision;
 
+  // In-memory client caching & request deduplication layer
+  const statesSummaryCacheRef = React.useRef(null);
+  const stateDetailsCacheRef = React.useRef(new Map());
+  const fullTreeCacheRef = React.useRef(null);
+  const inFlightSummaryPromiseRef = React.useRef(null);
+
   // --- API Fetchers ---
-  const fetchHierarchy = useCallback(async () => {
+  // Fast Summary Mode Fetcher (Loads the States Directory in <150ms)
+  const fetchSummaryData = useCallback(async (force = false) => {
+    if (!force && statesSummaryCacheRef.current) {
+      setHierarchyData(statesSummaryCacheRef.current.states);
+      if (statesSummaryCacheRef.current.stats) {
+        setStats(prev => ({ ...prev, ...statesSummaryCacheRef.current.stats }));
+      }
+      setLoading(false);
+      setLoadError(null);
+      return;
+    }
+
+    if (!force && inFlightSummaryPromiseRef.current) {
+      return await inFlightSummaryPromiseRef.current;
+    }
+
+    const task = (async () => {
+      try {
+        setLoading(true);
+        setLoadError(null);
+        const res = await fetch(`${API_BASE}/admin/territory/hierarchy?summary=true`, {
+          headers: { 'x-auth-token': token }
+        });
+        const data = await res.json();
+        if (data.success) {
+          const statesList = data.states || data.hierarchy || [];
+          statesSummaryCacheRef.current = {
+            states: statesList,
+            stats: data.stats || {}
+          };
+          setHierarchyData(statesList);
+          if (data.stats) {
+            setStats(prev => ({ ...prev, ...data.stats }));
+          }
+          setLoadError(null);
+
+          // Synchronize currently selected state if active
+          const currentSelected = selectedStateRef.current;
+          if (currentSelected) {
+            const updatedSt = statesList.find(s => s._id === currentSelected._id);
+            if (updatedSt) setSelectedState(prev => ({ ...prev, ...updatedSt }));
+          }
+        } else {
+          throw new Error(data.msg || 'Failed to retrieve state records');
+        }
+      } catch (err) {
+        console.error('Fetch states summary error:', err);
+        setLoadError(err.message || 'Unable to connect to territory service. Please retry.');
+        showToast('Failed to load states directory', 'error');
+      } finally {
+        setLoading(false);
+        inFlightSummaryPromiseRef.current = null;
+      }
+    })();
+
+    inFlightSummaryPromiseRef.current = task;
+    await task;
+  }, [API_BASE, token]);
+
+  // State-Scoped Drilldown Fetcher (Queries ONLY that state's districts, divisions, pincodes)
+  const fetchStateHierarchy = useCallback(async (targetState, force = false) => {
+    if (!targetState || !targetState._id) return;
+
+    if (!force && targetState.districts && targetState.districts.length > 0) {
+      setSelectedState(targetState);
+      return;
+    }
+
+    if (!force && stateDetailsCacheRef.current.has(targetState._id)) {
+      const cached = stateDetailsCacheRef.current.get(targetState._id);
+      setSelectedState(cached);
+      return;
+    }
+
     try {
-      setLoading(true);
+      setStateDrilldownLoading(true);
+      const res = await fetch(`${API_BASE}/admin/territory/hierarchy?stateId=${encodeURIComponent(targetState._id)}`, {
+        headers: { 'x-auth-token': token }
+      });
+      const data = await res.json();
+      if (data.success && data.state) {
+        stateDetailsCacheRef.current.set(targetState._id, data.state);
+        setSelectedState(data.state);
+        setRawDistricts(data.rawDistricts || []);
+        setRawDivisions(data.rawDivisions || []);
+        setRawPincodes(data.rawPincodes || []);
+
+        setHierarchyData(prev => prev.map(s => s._id === targetState._id ? data.state : s));
+      }
+    } catch (err) {
+      console.error('Fetch state drilldown error:', err);
+      showToast('Failed to load state hierarchy', 'error');
+    } finally {
+      setStateDrilldownLoading(false);
+    }
+  }, [API_BASE, token]);
+
+  // Full Hierarchy Fetcher (For Tree View)
+  const fetchFullHierarchy = useCallback(async (force = false) => {
+    if (!force && fullTreeCacheRef.current) {
+      setHierarchyData(fullTreeCacheRef.current);
+      return;
+    }
+
+    try {
+      setTreeLoading(true);
       const res = await fetch(`${API_BASE}/admin/territory/hierarchy`, {
         headers: { 'x-auth-token': token }
       });
       const data = await res.json();
       if (data.success) {
-        const statesList = data.states || data.hierarchy || [];
-        setHierarchyData(statesList);
+        const fullList = data.hierarchy || data.states || [];
+        fullTreeCacheRef.current = fullList;
+        setHierarchyData(fullList);
         setRawDistricts(data.rawDistricts || []);
         setRawDivisions(data.rawDivisions || []);
         setRawPincodes(data.rawPincodes || []);
-
-        // Derive authoritative aggregate totals directly from the returned state hierarchy
-        const derivedStates = statesList.length;
-        const derivedDistricts = statesList.reduce((acc, s) => acc + (s.totalDistricts || (s.districts ? s.districts.length : 0)), 0) || (data.rawDistricts || []).length;
-        const derivedDivisions = statesList.reduce((acc, s) => acc + (s.totalDivisions || 0), 0) || (data.rawDivisions || []).length;
-        const derivedPincodes = statesList.reduce((acc, s) => acc + (s.totalPincodes || 0), 0) || (data.rawPincodes || []).length;
-        const derivedActivePins = statesList.reduce((acc, s) => acc + (s.activePincodes || 0), 0) || (data.rawPincodes || []).filter(p => (p.status || '').toLowerCase() === 'active').length;
-
-        // Immediately synchronize KPI stats from backend stats or derived hierarchy
-        const backendStats = data.stats || {};
-        setStats(prev => ({
-          ...prev,
-          totalStates: data.totalStates || derivedStates || prev.totalStates,
-          totalDistricts: data.totalDistricts || derivedDistricts || prev.totalDistricts,
-          totalDivisions: data.totalDivisions || derivedDivisions || prev.totalDivisions,
-          totalPincodes: data.totalPincodes || derivedPincodes || prev.totalPincodes,
-          activePincodes: backendStats.activePincodes ?? (derivedActivePins || prev.activePincodes),
-          assignedPincodes: backendStats.assignedPincodes ?? prev.assignedPincodes,
-          availablePincodes: backendStats.availablePincodes ?? Math.max(0, (data.totalPincodes || derivedPincodes) - (backendStats.assignedPincodes || prev.assignedPincodes || 0)),
-          activeManagers: backendStats.activeManagers ?? prev.activeManagers
-        }));
-
-        // If a state was currently selected, synchronize its updated data
-        const currentSelectedState = selectedStateRef.current;
-        if (currentSelectedState) {
-          const updatedSt = statesList.find(s => s._id === currentSelectedState._id);
-          if (updatedSt) {
-            setSelectedState(updatedSt);
-            const currentSelectedDist = selectedDistrictRef.current;
-            if (currentSelectedDist) {
-              const updatedDst = (updatedSt.districts || []).find(d => d._id === currentSelectedDist._id);
-              if (updatedDst) {
-                setSelectedDistrict(updatedDst);
-                const currentSelectedDiv = selectedDivisionRef.current;
-                if (currentSelectedDiv) {
-                  const updatedDiv = (updatedDst.divisions || []).find(v => v._id === currentSelectedDiv._id);
-                  if (updatedDiv) setSelectedDivision(updatedDiv);
-                }
-              }
-            }
-          }
+        if (data.stats) {
+          setStats(prev => ({ ...prev, ...data.stats }));
         }
       }
     } catch (err) {
-      console.error('Fetch hierarchy error:', err);
-      showToast('Failed to load territory hierarchy', 'error');
+      console.error('Fetch full hierarchy error:', err);
     } finally {
-      setLoading(false);
+      setTreeLoading(false);
     }
   }, [API_BASE, token]);
+
+  // Unified fetchHierarchy for mutations, refreshes, and form submissions
+  const fetchHierarchy = useCallback(async (force = false) => {
+    if (force) {
+      statesSummaryCacheRef.current = null;
+      stateDetailsCacheRef.current.clear();
+      fullTreeCacheRef.current = null;
+    }
+    await fetchSummaryData(force);
+    if (selectedStateRef.current) {
+      await fetchStateHierarchy(selectedStateRef.current, force);
+    }
+  }, [fetchSummaryData, fetchStateHierarchy]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -225,8 +311,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     let isMounted = true;
     const loadAll = async () => {
       try {
-        setLoading(true);
-        await Promise.allSettled([fetchHierarchy(), fetchStats(), fetchAuditLogs()]);
+        await Promise.allSettled([fetchSummaryData(), fetchStats(), fetchAuditLogs()]);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -235,7 +320,24 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     return () => {
       isMounted = false;
     };
-  }, [fetchHierarchy, fetchStats, fetchAuditLogs]);
+  }, [fetchSummaryData, fetchStats, fetchAuditLogs]);
+
+  // Automatically trigger drilldown fetch if a state is selected without children loaded
+  useEffect(() => {
+    if (selectedState && (!selectedState.districts || selectedState.districts.length === 0)) {
+      fetchStateHierarchy(selectedState);
+    }
+  }, [selectedState, fetchStateHierarchy]);
+
+  // Automatically trigger full hierarchy fetch when switching to Tree View if not cached
+  useEffect(() => {
+    if (viewMode === 'tree') {
+      const hasFullTree = hierarchyData.some(s => s.districts && s.districts.length > 0);
+      if (!hasFullTree && !fullTreeCacheRef.current) {
+        fetchFullHierarchy();
+      }
+    }
+  }, [viewMode, hierarchyData, fetchFullHierarchy]);
 
   // Restore selected state from URL search params on initial load
   const initialRestoredRef = React.useRef(false);
@@ -916,7 +1018,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
             <div>
               <h3 className="text-base font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
                 <Globe className="w-4 h-4 text-primary-500" />
-                States Directory ({filteredStates.length})
+                States Directory ({loading ? '...' : filteredStates.length})
               </h3>
               <p className="text-xs text-slate-400">
                 Select a state below to view and manage its districts, divisions, and pin codes.
@@ -930,7 +1032,42 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
             </button>
           </div>
 
-          {filteredStates.length === 0 ? (
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+              {[1, 2, 3, 4].map((idx) => (
+                <div
+                  key={idx}
+                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 shadow-sm animate-pulse space-y-4"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800" />
+                    <div className="space-y-2 flex-1">
+                      <div className="h-4 bg-slate-200 dark:bg-slate-800 rounded w-24" />
+                      <div className="h-2.5 bg-slate-100 dark:bg-slate-850 rounded w-16" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 py-3 px-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-100 dark:border-slate-800/80">
+                    <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded" />
+                    <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded" />
+                    <div className="h-6 bg-slate-200 dark:bg-slate-800 rounded" />
+                  </div>
+                  <div className="h-8 bg-slate-100 dark:bg-slate-850 rounded-xl" />
+                </div>
+              ))}
+            </div>
+          ) : loadError ? (
+            <div className="bg-white dark:bg-slate-900 border border-rose-200 dark:border-rose-900/50 rounded-3xl p-12 text-center space-y-3">
+              <AlertTriangle className="w-10 h-10 text-rose-500 mx-auto" />
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Failed to Load States Directory</h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">{loadError}</p>
+              <button
+                onClick={() => fetchSummaryData(true)}
+                className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> Retry
+              </button>
+            </div>
+          ) : filteredStates.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center space-y-3">
               <MapPin className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
               <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No States Found</h4>
@@ -1130,7 +1267,12 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                 </button>
               </div>
 
-              {stateDistricts.length === 0 ? (
+              {stateDrilldownLoading ? (
+                <div className="text-center py-10 space-y-2">
+                  <RefreshCw className="w-5 h-5 text-indigo-500 animate-spin mx-auto" />
+                  <p className="text-xs text-slate-400">Loading {selectedState.name} districts...</p>
+                </div>
+              ) : stateDistricts.length === 0 ? (
                 <div className="text-center py-8 space-y-2">
                   <Building2 className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
                   <p className="text-xs text-slate-400">No districts added yet under {selectedState.name}.</p>
@@ -1260,7 +1402,12 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                 </div>
               )}
 
-              {currentDivisions.length === 0 ? (
+              {stateDrilldownLoading ? (
+                <div className="text-center py-10 space-y-2">
+                  <RefreshCw className="w-5 h-5 text-purple-500 animate-spin mx-auto" />
+                  <p className="text-xs text-slate-400">Loading divisions...</p>
+                </div>
+              ) : currentDivisions.length === 0 ? (
                 <div className="text-center py-8 space-y-2">
                   <Layers className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
                   <p className="text-xs text-slate-400">
@@ -1403,7 +1550,12 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                 </div>
               )}
 
-              {currentPincodes.length === 0 ? (
+              {stateDrilldownLoading ? (
+                <div className="text-center py-10 space-y-2">
+                  <RefreshCw className="w-5 h-5 text-amber-500 animate-spin mx-auto" />
+                  <p className="text-xs text-slate-400">Loading pincodes...</p>
+                </div>
+              ) : currentPincodes.length === 0 ? (
                 <div className="text-center py-8 space-y-2">
                   <Hash className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto" />
                   <p className="text-xs text-slate-400">
@@ -1533,111 +1685,119 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
             </button>
           </div>
 
-          <div className="space-y-3">
-            {hierarchyData.map(st => (
-              <div key={st._id} className="border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden">
-                <div
-                  className="p-3.5 bg-slate-50/80 dark:bg-slate-950/60 flex items-center justify-between cursor-pointer"
-                  onClick={() => toggleNode(st._id)}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-slate-400">
-                      {expandedNodes[st._id] ? <ChevronRight className="w-4 h-4 rotate-90 transition-transform" /> : <ChevronRight className="w-4 h-4 transition-transform" />}
-                    </span>
-                    <MapPin className="w-4 h-4 text-primary-500" />
-                    <span className="font-extrabold text-sm text-slate-900 dark:text-white">{st.name}</span>
-                    <span className="text-xs font-mono font-bold text-slate-400">({st.code})</span>
-                    <span className="text-[10px] text-slate-400">
-                      • {st.districts?.length || 0} Districts • {st.totalPincodes || 0} Pins
-                    </span>
+          {treeLoading ? (
+            <div className="py-16 text-center space-y-3">
+              <RefreshCw className="w-8 h-8 text-primary-500 animate-spin mx-auto" />
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Loading Territory Hierarchy Tree...</h4>
+              <p className="text-xs text-slate-400">Loading complete state, district, division, and pin code hierarchy</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {hierarchyData.map(st => (
+                <div key={st._id} className="border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden">
+                  <div
+                    className="p-3.5 bg-slate-50/80 dark:bg-slate-950/60 flex items-center justify-between cursor-pointer"
+                    onClick={() => toggleNode(st._id)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-slate-400">
+                        {expandedNodes[st._id] ? <ChevronRight className="w-4 h-4 rotate-90 transition-transform" /> : <ChevronRight className="w-4 h-4 transition-transform" />}
+                      </span>
+                      <MapPin className="w-4 h-4 text-primary-500" />
+                      <span className="font-extrabold text-sm text-slate-900 dark:text-white">{st.name}</span>
+                      <span className="text-xs font-mono font-bold text-slate-400">({st.code})</span>
+                      <span className="text-[10px] text-slate-400">
+                        • {st.districts?.length || 0} Districts • {st.totalPincodes || 0} Pins
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => {
+                          setSelectedState(st);
+                          setViewMode('hierarchy');
+                        }}
+                        className="px-2.5 py-1 bg-primary-50 dark:bg-primary-950/40 text-primary-600 rounded-lg text-xs font-bold"
+                      >
+                        View in Hierarchy
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      onClick={() => {
-                        setSelectedState(st);
-                        setViewMode('hierarchy');
-                      }}
-                      className="px-2.5 py-1 bg-primary-50 dark:bg-primary-950/40 text-primary-600 rounded-lg text-xs font-bold"
-                    >
-                      View in Hierarchy
-                    </button>
-                  </div>
-                </div>
-
-                {expandedNodes[st._id] && (
-                  <div className="p-3 space-y-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
-                    {(st.districts || []).length === 0 ? (
-                      <p className="text-xs text-slate-400 italic pl-6">No districts under {st.name}</p>
-                    ) : (
-                      st.districts.map(dst => (
-                        <div key={dst._id} className="pl-6 border-l-2 border-indigo-500/20 space-y-2">
-                          <div
-                            className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-850 px-2 rounded-lg"
-                            onClick={() => toggleNode(dst._id)}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-slate-400">
-                                {expandedNodes[dst._id] ? <ChevronRight className="w-3.5 h-3.5 rotate-90 transition-transform" /> : <ChevronRight className="w-3.5 h-3.5 transition-transform" />}
-                              </span>
-                              <Building2 className="w-3.5 h-3.5 text-indigo-500" />
-                              <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{dst.name}</span>
-                              <span className="text-[10px] font-mono text-slate-400">({dst.code})</span>
+                  {expandedNodes[st._id] && (
+                    <div className="p-3 space-y-2 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+                      {(st.districts || []).length === 0 ? (
+                        <p className="text-xs text-slate-400 italic pl-6">No districts under {st.name}</p>
+                      ) : (
+                        st.districts.map(dst => (
+                          <div key={dst._id} className="pl-6 border-l-2 border-indigo-500/20 space-y-2">
+                            <div
+                              className="flex items-center justify-between py-1.5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-850 px-2 rounded-lg"
+                              onClick={() => toggleNode(dst._id)}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-400">
+                                  {expandedNodes[dst._id] ? <ChevronRight className="w-3.5 h-3.5 rotate-90 transition-transform" /> : <ChevronRight className="w-3.5 h-3.5 transition-transform" />}
+                                </span>
+                                <Building2 className="w-3.5 h-3.5 text-indigo-500" />
+                                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">{dst.name}</span>
+                                <span className="text-[10px] font-mono text-slate-400">({dst.code})</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400">{dst.divisions?.length || 0} Divisions</span>
                             </div>
-                            <span className="text-[10px] text-slate-400">{dst.divisions?.length || 0} Divisions</span>
-                          </div>
 
-                          {expandedNodes[dst._id] && (
-                            <div className="pl-6 border-l-2 border-purple-500/20 space-y-2">
-                              {(dst.divisions || []).length === 0 ? (
-                                <p className="text-xs text-slate-400 italic">No divisions under {dst.name}</p>
-                              ) : (
-                                dst.divisions.map(div => (
-                                  <div key={div._id} className="space-y-1.5">
-                                    <div
-                                      className="flex items-center justify-between py-1 px-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-850 cursor-pointer"
-                                      onClick={() => toggleNode(div._id)}
-                                    >
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-slate-400">
-                                          {expandedNodes[div._id] ? <ChevronRight className="w-3 h-3 rotate-90 transition-transform" /> : <ChevronRight className="w-3 h-3 transition-transform" />}
-                                        </span>
-                                        <Layers className="w-3.5 h-3.5 text-purple-500" />
-                                        <span className="font-semibold text-xs text-slate-700 dark:text-slate-300">{div.name}</span>
-                                        <span className="text-[10px] font-mono text-slate-400">({div.code})</span>
+                            {expandedNodes[dst._id] && (
+                              <div className="pl-6 border-l-2 border-purple-500/20 space-y-2">
+                                {(dst.divisions || []).length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No divisions under {dst.name}</p>
+                                ) : (
+                                  dst.divisions.map(div => (
+                                    <div key={div._id} className="space-y-1.5">
+                                      <div
+                                        className="flex items-center justify-between py-1 px-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-850 cursor-pointer"
+                                        onClick={() => toggleNode(div._id)}
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-slate-400">
+                                            {expandedNodes[div._id] ? <ChevronRight className="w-3 h-3 rotate-90 transition-transform" /> : <ChevronRight className="w-3 h-3 transition-transform" />}
+                                          </span>
+                                          <Layers className="w-3.5 h-3.5 text-purple-500" />
+                                          <span className="font-semibold text-xs text-slate-700 dark:text-slate-300">{div.name}</span>
+                                          <span className="text-[10px] font-mono text-slate-400">({div.code})</span>
+                                        </div>
+                                        <span className="text-[10px] text-slate-400">{div.pincodes?.length || 0} Pincodes</span>
                                       </div>
-                                      <span className="text-[10px] text-slate-400">{div.pincodes?.length || 0} Pincodes</span>
+
+                                      {expandedNodes[div._id] && (
+                                        <div className="pl-6 flex flex-wrap gap-1.5 pb-2">
+                                          {(div.pincodes || []).length === 0 ? (
+                                            <p className="text-[11px] text-slate-400 italic">No pincodes</p>
+                                          ) : (
+                                            div.pincodes.map(pin => (
+                                              <span
+                                                key={pin._id}
+                                                className="px-2 py-0.5 rounded-md font-mono text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                                              >
+                                                {pin.code}
+                                              </span>
+                                            ))
+                                          )}
+                                        </div>
+                                      )}
                                     </div>
-
-                                    {expandedNodes[div._id] && (
-                                      <div className="pl-6 flex flex-wrap gap-1.5 pb-2">
-                                        {(div.pincodes || []).length === 0 ? (
-                                          <p className="text-[11px] text-slate-400 italic">No pincodes</p>
-                                        ) : (
-                                          div.pincodes.map(pin => (
-                                            <span
-                                              key={pin._id}
-                                              className="px-2 py-0.5 rounded-md font-mono text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                                            >
-                                              {pin.code}
-                                            </span>
-                                          ))
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
