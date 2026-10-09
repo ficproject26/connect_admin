@@ -455,10 +455,237 @@ const getDocFallbackSvg = (title = 'Document', docNumber = '') => {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
 
+// Super Admin exclusive tabs
+const SUPER_ADMIN_TABS = new Set([
+  'branches',
+  'admins',
+  'commissions',
+  'memberships',
+  'banners'
+]);
+
+// Canonical path mapping for all supported tabs
+const TAB_PATH_MAP = {
+  'dashboard': '/dashboard',
+  'pincodes': '/pincodes',
+  'orders': '/orders',
+  'categories': '/categories',
+  'vendor-directory-enterprise': '/vendor-directory-enterprise',
+  'vendor-subscription': '/vendor-subscription',
+  'agents': '/agents',
+  'agent-performance': '/agent-performance',
+  'agent-payment': '/agent-payment',
+  'customers': '/customers',
+  'branches': '/branches',
+  'admins': '/admins',
+  'admin-management': '/admin-management',
+  'admin-tasks': '/admin-tasks',
+  'admin-reports': '/admin-reports',
+  'manager-directory': '/manager-directory',
+  'manager-reports': '/manager-reports',
+  'payroll-enterprise': '/payroll-enterprise',
+  'payment-enterprise': '/payment-enterprise',
+  'payment-history': '/payment-history',
+  'kyc': '/kyc',
+  'support-team-enterprise': '/support-team-enterprise',
+  'reports': '/reports',
+  'bookings': '/bookings',
+  'jobs': '/jobs',
+  'card-holders': '/card-holders',
+  'delivery-partners': '/delivery-partners',
+  'technicians': '/technicians',
+  'executives': '/executives',
+  'security': '/security',
+  'commissions': '/commissions',
+  'memberships': '/memberships',
+  'membership-cards-enterprise': '/membership-cards-enterprise',
+  'banners': '/banners',
+  'queries': '/queries',
+  'tickets': '/tickets',
+  'announcements': '/announcements',
+  'settings': '/settings',
+  'tieups': '/tieups',
+  'tasks': '/tasks',
+  'wallet': '/wallet'
+};
+
+// Bidirectional route-to-tab mappings including clean paths and aliases
+const ROUTE_TAB_MAP = {
+  '': 'dashboard',
+  '/': 'dashboard',
+  '/dashboard': 'dashboard',
+  '/overview': 'dashboard',
+  '/pincodes': 'pincodes',
+  '/pincode-management': 'pincodes',
+  '/territory': 'pincodes',
+  '/orders': 'orders',
+  '/all-orders': 'orders',
+  '/categories': 'categories',
+  '/category-management': 'categories',
+  '/vendor-directory-enterprise': 'vendor-directory-enterprise',
+  '/vendors': 'vendor-directory-enterprise',
+  '/vendor-directory': 'vendor-directory-enterprise',
+  '/vendor-subscription': 'vendor-subscription',
+  '/agents': 'agents',
+  '/agent-directory': 'agents',
+  '/agent-performance': 'agent-performance',
+  '/agent-performance-monitoring': 'agent-performance',
+  '/agent-payment': 'agent-payment',
+  '/agent-payments': 'agent-payment',
+  '/customers': 'customers',
+  '/customer-directory': 'customers',
+  '/branches': 'branches',
+  '/branch-management': 'branches',
+  '/admins': 'admins',
+  '/admin-list': 'admins',
+  '/admin-management': 'admin-management',
+  '/admin-tasks': 'admin-tasks',
+  '/admin-reports': 'admin-reports',
+  '/manager-directory': 'manager-directory',
+  '/managers': 'manager-directory',
+  '/manager-reports': 'manager-reports',
+  '/payroll': 'payroll-enterprise',
+  '/payroll-enterprise': 'payroll-enterprise',
+  '/payroll-management': 'payroll-enterprise',
+  '/payments': 'payment-enterprise',
+  '/payment-enterprise': 'payment-enterprise',
+  '/enterprise-payments': 'payment-enterprise',
+  '/payment-history': 'payment-history',
+  '/kyc': 'kyc',
+  '/kyc-verification': 'kyc',
+  '/support-team': 'support-team-enterprise',
+  '/support-team-enterprise': 'support-team-enterprise',
+  '/reports': 'reports',
+  '/business-reports': 'reports',
+  '/bookings': 'bookings',
+  '/all-bookings': 'bookings',
+  '/jobs': 'jobs',
+  '/job-applied': 'jobs',
+  '/card-holders': 'card-holders',
+  '/cardholders': 'card-holders',
+  '/delivery-partners': 'delivery-partners',
+  '/technicians': 'technicians',
+  '/executives': 'executives',
+  '/security': 'security',
+  '/cyber-security': 'security',
+  '/admin-security': 'security',
+  '/commissions': 'commissions',
+  '/commissions-config': 'commissions',
+  '/memberships': 'memberships',
+  '/membership-plans': 'memberships',
+  '/membership-cards-enterprise': 'membership-cards-enterprise',
+  '/membership-cards': 'membership-cards-enterprise',
+  '/banners': 'banners',
+  '/banner-management': 'banners',
+  '/queries': 'queries',
+  '/tickets': 'tickets',
+  '/support-tickets': 'tickets',
+  '/announcements': 'announcements',
+  '/settings': 'settings',
+  '/system-settings': 'settings',
+  '/tieups': 'tieups',
+  '/tasks': 'tasks',
+  '/wallet': 'wallet'
+};
+
+// Robust route parser for pathname, search parameters, and hash
+const parseCurrentRoute = (overrideUrl = null) => {
+  if (typeof window === 'undefined') {
+    return { tab: 'dashboard', modal: null, action: null, subRoute: null, searchParams: new URLSearchParams() };
+  }
+
+  let pathname = window.location.pathname;
+  let search = window.location.search;
+  let hash = window.location.hash;
+
+  if (overrideUrl) {
+    try {
+      const parsed = new URL(overrideUrl, window.location.origin);
+      pathname = parsed.pathname;
+      search = parsed.search;
+      hash = parsed.hash;
+    } catch (e) {
+      const parts = String(overrideUrl).split('?');
+      pathname = parts[0] || '/';
+      const searchAndHash = parts[1] || '';
+      const [s, h] = searchAndHash.split('#');
+      search = s ? `?${s}` : '';
+      hash = h ? `#${h}` : '';
+    }
+  }
+
+  const searchParams = new URLSearchParams(search);
+  const cleanPath = (pathname || '/').replace(/\/+$/, '') || '/';
+  const cleanPathLower = cleanPath.toLowerCase();
+
+  // 1. Direct query parameter check: ?tab=pincodes or ?page=orders
+  const queryTab = (searchParams.get('tab') || searchParams.get('page') || '').toLowerCase().trim();
+  if (queryTab && (ROUTE_TAB_MAP[`/${queryTab}`] || TAB_PATH_MAP[queryTab])) {
+    return {
+      tab: ROUTE_TAB_MAP[`/${queryTab}`] || queryTab,
+      modal: searchParams.get('modal') || searchParams.get('action') || null,
+      action: searchParams.get('action') || null,
+      subRoute: null,
+      searchParams
+    };
+  }
+
+  // 2. Direct hash check: #pincodes or #/pincodes
+  if (hash) {
+    const cleanHash = hash.replace(/^#\/?/, '').toLowerCase().trim();
+    if (cleanHash && (ROUTE_TAB_MAP[`/${cleanHash}`] || TAB_PATH_MAP[cleanHash])) {
+      return {
+        tab: ROUTE_TAB_MAP[`/${cleanHash}`] || cleanHash,
+        modal: searchParams.get('modal') || searchParams.get('action') || null,
+        action: searchParams.get('action') || null,
+        subRoute: null,
+        searchParams
+      };
+    }
+  }
+
+  // 3. Exact pathname match: e.g. /pincodes, /orders, /categories
+  if (ROUTE_TAB_MAP[cleanPathLower]) {
+    return {
+      tab: ROUTE_TAB_MAP[cleanPathLower],
+      modal: searchParams.get('modal') || searchParams.get('action') || null,
+      action: searchParams.get('action') || null,
+      subRoute: null,
+      searchParams
+    };
+  }
+
+  // 4. Nested pathname match: e.g. /pincodes/add-state, /orders/123
+  const segments = cleanPathLower.split('/').filter(Boolean);
+  if (segments.length >= 1) {
+    const rootSegment = `/${segments[0]}`;
+    if (ROUTE_TAB_MAP[rootSegment]) {
+      const sub = segments.slice(1).join('/');
+      return {
+        tab: ROUTE_TAB_MAP[rootSegment],
+        modal: searchParams.get('modal') || searchParams.get('action') || (sub.startsWith('add-') || sub.startsWith('edit-') ? sub : null),
+        action: searchParams.get('action') || sub || null,
+        subRoute: sub || null,
+        searchParams
+      };
+    }
+  }
+
+  // 5. Default fallback for genuinely new visit to root route
+  return {
+    tab: 'dashboard',
+    modal: searchParams.get('modal') || null,
+    action: searchParams.get('action') || null,
+    subRoute: null,
+    searchParams
+  };
+};
+
 function App() {
   // Authentication & Session with safe initializers
   const [token, setToken] = useState(() => getSafeLocalStorageItem('token', ''));
   const [user, setUser] = useState(() => getSafeParsedLocalStorageItem('user', null));
+  const isSuperAdmin = Boolean(user && (user.adminRole === 'super-admin' || user.role === 'super-admin'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
@@ -567,17 +794,107 @@ function App() {
     }
   });
 
-  // Navigation
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Navigation & Route-State Restoration
+  const [activeTab, setActiveTab] = useState(() => {
+    const route = parseCurrentRoute();
+    const initialUser = getSafeParsedLocalStorageItem('user', null);
+    const isSuperAdminUser = initialUser?.adminRole === 'super-admin' || initialUser?.role === 'super-admin';
+    if (SUPER_ADMIN_TABS.has(route.tab) && !isSuperAdminUser) {
+      return 'dashboard';
+    }
+    return route.tab || 'dashboard';
+  });
   const [agentLevelFilter, setAgentLevelFilter] = useState('all');
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window !== 'undefined' ? window.innerWidth >= 1024 : false);
 
+  const navigateTo = useCallback((tabKey, extraParams = {}, options = {}) => {
+    const { replace = false } = options;
+    const resolvedTab = ROUTE_TAB_MAP[`/${tabKey}`] || tabKey;
+
+    if (SUPER_ADMIN_TABS.has(resolvedTab) && !isSuperAdmin) {
+      if (typeof addToast === 'function') {
+        addToast('Access denied: Super Admin privileges required.', 'error');
+      }
+      return;
+    }
+
+    const canonicalPath = TAB_PATH_MAP[resolvedTab] || `/${resolvedTab}`;
+    const search = new URLSearchParams();
+    Object.entries(extraParams).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') {
+        search.set(k, String(v));
+      }
+    });
+    const searchStr = search.toString() ? `?${search.toString()}` : '';
+    const targetUrl = `${canonicalPath}${searchStr}`;
+
+    if (typeof window !== 'undefined') {
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl !== targetUrl) {
+        if (replace) {
+          window.history.replaceState({ tab: resolvedTab }, '', targetUrl);
+        } else {
+          window.history.pushState({ tab: resolvedTab }, '', targetUrl);
+        }
+      }
+    }
+
+    setActiveTab(resolvedTab);
+  }, [isSuperAdmin]);
+
   const handleTabSelect = (tabKey) => {
-    setActiveTab(tabKey);
+    navigateTo(tabKey);
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       setSidebarOpen(false);
     }
   };
+
+  // Popstate listener for browser Back and Forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = parseCurrentRoute();
+      if (route && route.tab) {
+        if (SUPER_ADMIN_TABS.has(route.tab) && !isSuperAdmin) {
+          navigateTo('dashboard', {}, { replace: true });
+          return;
+        }
+        setActiveTab(route.tab);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isSuperAdmin, navigateTo]);
+
+  // Synchronize URL with activeTab whenever activeTab is updated
+  useEffect(() => {
+    if (typeof window !== 'undefined' && activeTab) {
+      const canonicalPath = TAB_PATH_MAP[activeTab] || `/${activeTab}`;
+      const currentPath = window.location.pathname.toLowerCase().replace(/\/+$/, '') || '/';
+      const isSubRoute = currentPath.startsWith(canonicalPath.toLowerCase() + '/');
+      const isExact = currentPath === canonicalPath.toLowerCase() ||
+        (activeTab === 'dashboard' && (currentPath === '/' || currentPath === ''));
+
+      if (!isExact && !isSubRoute) {
+        const search = window.location.search;
+        window.history.replaceState({ tab: activeTab }, '', `${canonicalPath}${search}`);
+      }
+    }
+  }, [activeTab]);
+
+  // Preserve intended destination when unauthenticated user lands on a deep link
+  useEffect(() => {
+    if (!token && typeof window !== 'undefined') {
+      const currentPath = window.location.pathname;
+      const currentSearch = window.location.search;
+      const currentHash = window.location.hash;
+      if (currentPath && currentPath !== '/' && currentPath !== '/dashboard') {
+        try {
+          sessionStorage.setItem('intended_destination', currentPath + currentSearch + currentHash);
+        } catch (e) {}
+      }
+    }
+  }, [token]);
 
   // Initial empty dashboard state (Real database data loaded via API)
   const defaultDashboardStats = {
@@ -815,11 +1132,88 @@ function App() {
   // Notification Overlay State
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
 
-  // Total Orders Search & Filters
-  const [ordersSearchTerm, setOrdersSearchTerm] = useState('');
-  const [ordersDateFilter, setOrdersDateFilter] = useState('All');
-  const [ordersStatusFilter, setOrdersStatusFilter] = useState('All');
-  const [ordersProductFilter, setOrdersProductFilter] = useState('All');
+  // Total Orders Search & Filters with URL persistence
+  const [ordersSearchTerm, setOrdersSearchTerm] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get('ordersSearch') || sp.get('search') || '';
+    } catch (e) { return ''; }
+  });
+  const [ordersDateFilter, setOrdersDateFilter] = useState(() => {
+    if (typeof window === 'undefined') return 'All';
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get('ordersDate') || sp.get('date') || 'All';
+    } catch (e) { return 'All'; }
+  });
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState(() => {
+    if (typeof window === 'undefined') return 'All';
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get('ordersStatus') || sp.get('status') || 'All';
+    } catch (e) { return 'All'; }
+  });
+  const [ordersProductFilter, setOrdersProductFilter] = useState(() => {
+    if (typeof window === 'undefined') return 'All';
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get('ordersProduct') || sp.get('product') || 'All';
+    } catch (e) { return 'All'; }
+  });
+
+  // Synchronize active orders filters to URL search params when on orders tab
+  useEffect(() => {
+    if (typeof window === 'undefined' || activeTab !== 'orders') return;
+    try {
+      const url = new URL(window.location.href);
+      let changed = false;
+
+      if (ordersSearchTerm) {
+        if (url.searchParams.get('ordersSearch') !== ordersSearchTerm) {
+          url.searchParams.set('ordersSearch', ordersSearchTerm);
+          changed = true;
+        }
+      } else if (url.searchParams.has('ordersSearch')) {
+        url.searchParams.delete('ordersSearch');
+        changed = true;
+      }
+
+      if (ordersDateFilter && ordersDateFilter !== 'All') {
+        if (url.searchParams.get('ordersDate') !== ordersDateFilter) {
+          url.searchParams.set('ordersDate', ordersDateFilter);
+          changed = true;
+        }
+      } else if (url.searchParams.has('ordersDate')) {
+        url.searchParams.delete('ordersDate');
+        changed = true;
+      }
+
+      if (ordersStatusFilter && ordersStatusFilter !== 'All') {
+        if (url.searchParams.get('ordersStatus') !== ordersStatusFilter) {
+          url.searchParams.set('ordersStatus', ordersStatusFilter);
+          changed = true;
+        }
+      } else if (url.searchParams.has('ordersStatus')) {
+        url.searchParams.delete('ordersStatus');
+        changed = true;
+      }
+
+      if (ordersProductFilter && ordersProductFilter !== 'All') {
+        if (url.searchParams.get('ordersProduct') !== ordersProductFilter) {
+          url.searchParams.set('ordersProduct', ordersProductFilter);
+          changed = true;
+        }
+      } else if (url.searchParams.has('ordersProduct')) {
+        url.searchParams.delete('ordersProduct');
+        changed = true;
+      }
+
+      if (changed) {
+        window.history.replaceState({ tab: 'orders' }, '', `${url.pathname}${url.search}`);
+      }
+    } catch (e) {}
+  }, [activeTab, ordersSearchTerm, ordersDateFilter, ordersStatusFilter, ordersProductFilter]);
 
   // Customers Search & Filters
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
@@ -875,6 +1269,14 @@ function App() {
 
   const handleLogout = useCallback(() => {
     try {
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        const currentSearch = window.location.search;
+        const currentHash = window.location.hash;
+        if (currentPath && currentPath !== '/' && currentPath !== '/dashboard') {
+          sessionStorage.setItem('intended_destination', currentPath + currentSearch + currentHash);
+        }
+      }
       localStorage.removeItem('token');
       localStorage.removeItem('user');
     } catch (e) { }
@@ -939,8 +1341,12 @@ function App() {
           const r = await fetch(targetUrl, { headers, signal: controller.signal });
           clearTimeout(timeoutId);
 
-          if (r.status === 401 || r.status === 403) {
+          if (r.status === 401) {
             handleLogout();
+            return null;
+          }
+          if (r.status === 403) {
+            console.warn(`[safeFetch] Access forbidden (403) for: ${targetUrl}`);
             return null;
           }
           if (r.ok) {
@@ -1386,7 +1792,28 @@ function App() {
 
       setToken(data.token);
       setUser(data.user);
-      setActiveTab('dashboard');
+
+      // Restore intended deep-link destination if saved prior to authentication
+      let targetDestination = '/dashboard';
+      let targetTab = 'dashboard';
+      try {
+        const intended = typeof window !== 'undefined' ? sessionStorage.getItem('intended_destination') : null;
+        if (intended) {
+          sessionStorage.removeItem('intended_destination');
+          const parsed = parseCurrentRoute(intended);
+          const resolvedTab = parsed.tab;
+          const isRestricted = SUPER_ADMIN_TABS.has(resolvedTab);
+          if (!isRestricted || isSuperAdminUser) {
+            targetTab = resolvedTab;
+            targetDestination = intended;
+          }
+        }
+      } catch (e) {}
+
+      setActiveTab(targetTab);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({ tab: targetTab }, '', targetDestination);
+      }
     } catch (err) {
       console.error("API Login failed:", err.message);
       if (err.name === 'TypeError' && err.message.includes('fetch')) {
@@ -1628,8 +2055,7 @@ function App() {
     );
   }
 
-  // Super Admin vs Branch Admin menu filters
-  const isSuperAdmin = user.adminRole === 'super-admin';
+  // Super Admin vs Branch Admin menu filters (isSuperAdmin hoisted above for route authorization)
 
   return (
     <div className="min-h-screen flex bg-slate-100 dark:bg-slate-950 transition-colors duration-200">
@@ -1984,7 +2410,7 @@ function App() {
                           onClick={() => { 
                             setVendorDirInitialSection(section);
                             setVendorDirHighlightId(v._id || v.registrationId);
-                            setActiveTab('vendor-directory-enterprise');
+                            handleTabSelect('vendor-directory-enterprise');
                             setShowNotificationsPanel(false); 
                           }} 
                           className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl cursor-pointer transition-colors space-y-1"
@@ -2012,7 +2438,7 @@ function App() {
             {/* User Profile Widget */}
             <div className="flex items-center gap-1.5 sm:gap-3 pl-1.5 sm:pl-3 border-l border-slate-200 dark:border-slate-800 shrink-0">
               <button
-                onClick={() => setActiveTab('settings')}
+                onClick={() => handleTabSelect('settings')}
                 className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-primary-500 hover:bg-primary-600 flex items-center justify-center font-bold text-white text-xs sm:text-sm shadow-sm transition-colors cursor-pointer shrink-0"
                 title="View Profile"
               >
@@ -2275,7 +2701,7 @@ function App() {
                           <span className="text-xs text-slate-400">Agent KYC Pending • {getFormattedTerritory(pAgent)}</span>
                         </div>
                         <button
-                          onClick={() => { setActiveTab('kyc') }}
+                          onClick={() => { handleTabSelect('kyc') }}
                           className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
                         >
                           Verify KYC
@@ -2289,7 +2715,7 @@ function App() {
                           <span className="text-xs text-slate-400">New Vendor Tie-Up • {pVendor.category}</span>
                         </div>
                         <button
-                          onClick={() => { setActiveTab('vendors') }}
+                          onClick={() => { handleTabSelect('vendors') }}
                           className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
                         >
                           Approve
@@ -2350,7 +2776,7 @@ function App() {
                     <p className="text-xs text-slate-400">Real-time performance metrics, target completions, and multi-tier agent directory</p>
                   </div>
                   <button
-                    onClick={() => setActiveTab('agent-performance')}
+                    onClick={() => handleTabSelect('agent-performance')}
                     className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm cursor-pointer whitespace-nowrap"
                   >
                     Open Full Performance Portal →
@@ -2769,7 +3195,7 @@ function App() {
                   onClick={() => {
                     setVendorDirInitialSection('direct-requests');
                     setVendorDirHighlightId(null);
-                    setActiveTab('vendor-directory-enterprise');
+                    handleTabSelect('vendor-directory-enterprise');
                   }}
                   className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl transition-all shadow-sm active:scale-95 cursor-pointer whitespace-nowrap flex items-center gap-1.5"
                 >

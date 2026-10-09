@@ -25,6 +25,51 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     activeManagers: 0
   });
 
+  // --- Helpers for URL State Restoration ---
+  const getInitialModal = () => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const url = new URL(window.location.href);
+      const m = url.searchParams.get('modal') || url.searchParams.get('action');
+      if (m) return m;
+      const path = url.pathname.toLowerCase();
+      if (path.includes('add-state')) return 'add-state';
+      if (path.includes('edit-state')) return 'edit-state';
+      if (path.includes('add-district')) return 'add-district';
+      if (path.includes('edit-district')) return 'edit-district';
+      if (path.includes('add-division')) return 'add-division';
+      if (path.includes('edit-division')) return 'edit-division';
+      if (path.includes('add-pincode')) return 'add-pincode';
+      if (path.includes('edit-pincode')) return 'edit-pincode';
+    } catch (e) {}
+    return null;
+  };
+
+  const getInitialViewMode = () => {
+    if (typeof window === 'undefined') return 'hierarchy';
+    try {
+      const v = new URLSearchParams(window.location.search).get('view');
+      if (v && ['hierarchy', 'tree', 'audit'].includes(v)) return v;
+    } catch (e) {}
+    return 'hierarchy';
+  };
+
+  const getInitialSearchTerm = () => {
+    if (typeof window === 'undefined') return '';
+    try {
+      return new URLSearchParams(window.location.search).get('search') || '';
+    } catch (e) {}
+    return '';
+  };
+
+  const getInitialFilterStatus = () => {
+    if (typeof window === 'undefined') return 'All';
+    try {
+      return new URLSearchParams(window.location.search).get('status') || 'All';
+    } catch (e) {}
+    return 'All';
+  };
+
   // --- Active Hierarchy Selection ---
   // Initial page load starts with selectedState = null (showing ONLY States grid)
   const [selectedState, setSelectedState] = useState(null);
@@ -34,17 +79,17 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
 
   // --- View Mode ---
   // 'hierarchy' (default State-first drilldown), 'tree', 'audit'
-  const [viewMode, setViewMode] = useState('hierarchy');
+  const [viewMode, setViewMode] = useState(getInitialViewMode);
 
   // --- Tree View Expansion State ---
   const [expandedNodes, setExpandedNodes] = useState({});
 
   // --- Search & Filters ---
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('All'); // 'All' | 'Active' | 'Inactive'
+  const [searchTerm, setSearchTerm] = useState(getInitialSearchTerm);
+  const [filterStatus, setFilterStatus] = useState(getInitialFilterStatus); // 'All' | 'Active' | 'Inactive'
 
   // --- Modal States ---
-  const [activeModal, setActiveModal] = useState(null);
+  const [activeModal, setActiveModal] = useState(getInitialModal);
   // 'add-state' | 'edit-state' | 'add-district' | 'edit-district' | 'add-division' | 'edit-division' | 'add-pincode' | 'edit-pincode'
   const [modalData, setModalData] = useState(null);
   const [modalError, setModalError] = useState('');
@@ -191,6 +236,159 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
       isMounted = false;
     };
   }, [fetchHierarchy, fetchStats, fetchAuditLogs]);
+
+  // Restore selected state from URL search params on initial load
+  const initialRestoredRef = React.useRef(false);
+  useEffect(() => {
+    if (hierarchyData && hierarchyData.length > 0 && !initialRestoredRef.current) {
+      initialRestoredRef.current = true;
+      try {
+        const url = new URL(window.location.href);
+        const stateParam = url.searchParams.get('state') || url.searchParams.get('stateId');
+        if (stateParam) {
+          const found = hierarchyData.find(s =>
+            (s._id && s._id === stateParam) ||
+            (s.name && s.name.toLowerCase() === stateParam.toLowerCase()) ||
+            (s.code && s.code.toLowerCase() === stateParam.toLowerCase())
+          );
+          if (found) {
+            setSelectedState(found);
+            const distParam = url.searchParams.get('district') || url.searchParams.get('districtId');
+            if (distParam && found.districts) {
+              const foundDist = found.districts.find(d =>
+                (d._id && d._id === distParam) ||
+                (d.name && d.name.toLowerCase() === distParam.toLowerCase())
+              );
+              if (foundDist) {
+                setSelectedDistrict(foundDist);
+                const divParam = url.searchParams.get('division') || url.searchParams.get('divisionId');
+                if (divParam && foundDist.divisions) {
+                  const foundDiv = foundDist.divisions.find(v =>
+                    (v._id && v._id === divParam) ||
+                    (v.name && v.name.toLowerCase() === divParam.toLowerCase())
+                  );
+                  if (foundDiv) setSelectedDivision(foundDiv);
+                }
+              }
+            }
+          }
+        }
+      } catch (e) {}
+    }
+  }, [hierarchyData]);
+
+  // Synchronize Pincode view, modal, selections, and filters to URL search parameters
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      let changed = false;
+
+      // Active modal
+      if (activeModal) {
+        if (url.searchParams.get('modal') !== activeModal) {
+          url.searchParams.set('modal', activeModal);
+          changed = true;
+        }
+      } else if (url.searchParams.has('modal')) {
+        url.searchParams.delete('modal');
+        changed = true;
+      }
+
+      // View mode
+      if (viewMode && viewMode !== 'hierarchy') {
+        if (url.searchParams.get('view') !== viewMode) {
+          url.searchParams.set('view', viewMode);
+          changed = true;
+        }
+      } else if (url.searchParams.has('view')) {
+        url.searchParams.delete('view');
+        changed = true;
+      }
+
+      // Selected state
+      if (selectedState) {
+        const val = selectedState.name || selectedState._id;
+        if (url.searchParams.get('state') !== val) {
+          url.searchParams.set('state', val);
+          changed = true;
+        }
+      } else if (url.searchParams.has('state')) {
+        url.searchParams.delete('state');
+        changed = true;
+      }
+
+      // Selected district
+      if (selectedDistrict) {
+        const val = selectedDistrict.name || selectedDistrict._id;
+        if (url.searchParams.get('district') !== val) {
+          url.searchParams.set('district', val);
+          changed = true;
+        }
+      } else if (url.searchParams.has('district')) {
+        url.searchParams.delete('district');
+        changed = true;
+      }
+
+      // Selected division
+      if (selectedDivision) {
+        const val = selectedDivision.name || selectedDivision._id;
+        if (url.searchParams.get('division') !== val) {
+          url.searchParams.set('division', val);
+          changed = true;
+        }
+      } else if (url.searchParams.has('division')) {
+        url.searchParams.delete('division');
+        changed = true;
+      }
+
+      // Search term
+      if (searchTerm) {
+        if (url.searchParams.get('search') !== searchTerm) {
+          url.searchParams.set('search', searchTerm);
+          changed = true;
+        }
+      } else if (url.searchParams.has('search')) {
+        url.searchParams.delete('search');
+        changed = true;
+      }
+
+      // Filter status
+      if (filterStatus && filterStatus !== 'All') {
+        if (url.searchParams.get('status') !== filterStatus) {
+          url.searchParams.set('status', filterStatus);
+          changed = true;
+        }
+      } else if (url.searchParams.has('status')) {
+        url.searchParams.delete('status');
+        changed = true;
+      }
+
+      if (changed) {
+        window.history.replaceState({ tab: 'pincodes', modal: activeModal }, '', `${url.pathname}${url.search}`);
+      }
+    } catch (e) {}
+  }, [activeModal, viewMode, selectedState, selectedDistrict, selectedDivision, searchTerm, filterStatus]);
+
+  // Popstate listener to handle browser Back / Forward within Pin Code Management
+  useEffect(() => {
+    const handlePop = () => {
+      try {
+        const url = new URL(window.location.href);
+        const m = url.searchParams.get('modal');
+        setActiveModal(m || null);
+        const v = url.searchParams.get('view') || 'hierarchy';
+        setViewMode(v);
+        if (!url.searchParams.get('state')) {
+          setSelectedState(null);
+          setSelectedDistrict(null);
+          setSelectedDivision(null);
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
 
   // Toggle Node in Tree
   const toggleNode = (nodeId) => {
