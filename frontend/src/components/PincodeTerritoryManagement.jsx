@@ -65,6 +65,14 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     setTimeout(() => setToast(null), 3500);
   };
 
+  // Selected territory refs to prevent unnecessary re-creation of fetchHierarchy
+  const selectedStateRef = React.useRef(selectedState);
+  selectedStateRef.current = selectedState;
+  const selectedDistrictRef = React.useRef(selectedDistrict);
+  selectedDistrictRef.current = selectedDistrict;
+  const selectedDivisionRef = React.useRef(selectedDivision);
+  selectedDivisionRef.current = selectedDivision;
+
   // --- API Fetchers ---
   const fetchHierarchy = useCallback(async () => {
     try {
@@ -74,22 +82,47 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
       });
       const data = await res.json();
       if (data.success) {
-        setHierarchyData(data.states || []);
+        const statesList = data.states || data.hierarchy || [];
+        setHierarchyData(statesList);
         setRawDistricts(data.rawDistricts || []);
         setRawDivisions(data.rawDivisions || []);
         setRawPincodes(data.rawPincodes || []);
 
+        // Derive authoritative aggregate totals directly from the returned state hierarchy
+        const derivedStates = statesList.length;
+        const derivedDistricts = statesList.reduce((acc, s) => acc + (s.totalDistricts || (s.districts ? s.districts.length : 0)), 0) || (data.rawDistricts || []).length;
+        const derivedDivisions = statesList.reduce((acc, s) => acc + (s.totalDivisions || 0), 0) || (data.rawDivisions || []).length;
+        const derivedPincodes = statesList.reduce((acc, s) => acc + (s.totalPincodes || 0), 0) || (data.rawPincodes || []).length;
+        const derivedActivePins = statesList.reduce((acc, s) => acc + (s.activePincodes || 0), 0) || (data.rawPincodes || []).filter(p => (p.status || '').toLowerCase() === 'active').length;
+
+        // Immediately synchronize KPI stats from backend stats or derived hierarchy
+        const backendStats = data.stats || {};
+        setStats(prev => ({
+          ...prev,
+          totalStates: data.totalStates || derivedStates || prev.totalStates,
+          totalDistricts: data.totalDistricts || derivedDistricts || prev.totalDistricts,
+          totalDivisions: data.totalDivisions || derivedDivisions || prev.totalDivisions,
+          totalPincodes: data.totalPincodes || derivedPincodes || prev.totalPincodes,
+          activePincodes: backendStats.activePincodes ?? (derivedActivePins || prev.activePincodes),
+          assignedPincodes: backendStats.assignedPincodes ?? prev.assignedPincodes,
+          availablePincodes: backendStats.availablePincodes ?? Math.max(0, (data.totalPincodes || derivedPincodes) - (backendStats.assignedPincodes || prev.assignedPincodes || 0)),
+          activeManagers: backendStats.activeManagers ?? prev.activeManagers
+        }));
+
         // If a state was currently selected, synchronize its updated data
-        if (selectedState) {
-          const updatedSt = (data.states || []).find(s => s._id === selectedState._id);
+        const currentSelectedState = selectedStateRef.current;
+        if (currentSelectedState) {
+          const updatedSt = statesList.find(s => s._id === currentSelectedState._id);
           if (updatedSt) {
             setSelectedState(updatedSt);
-            if (selectedDistrict) {
-              const updatedDst = (updatedSt.districts || []).find(d => d._id === selectedDistrict._id);
+            const currentSelectedDist = selectedDistrictRef.current;
+            if (currentSelectedDist) {
+              const updatedDst = (updatedSt.districts || []).find(d => d._id === currentSelectedDist._id);
               if (updatedDst) {
                 setSelectedDistrict(updatedDst);
-                if (selectedDivision) {
-                  const updatedDiv = (updatedDst.divisions || []).find(v => v._id === selectedDivision._id);
+                const currentSelectedDiv = selectedDivisionRef.current;
+                if (currentSelectedDiv) {
+                  const updatedDiv = (updatedDst.divisions || []).find(v => v._id === currentSelectedDiv._id);
                   if (updatedDiv) setSelectedDivision(updatedDiv);
                 }
               }
@@ -103,7 +136,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, token, selectedState, selectedDistrict, selectedDivision]);
+  }, [API_BASE, token]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -112,7 +145,17 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
       });
       const data = await res.json();
       if (data.success && data.stats) {
-        setStats(data.stats);
+        setStats(prev => ({
+          ...prev,
+          totalStates: data.stats.totalStates || prev.totalStates,
+          totalDistricts: data.stats.totalDistricts || prev.totalDistricts,
+          totalDivisions: data.stats.totalDivisions || prev.totalDivisions,
+          totalPincodes: data.stats.totalPincodes || prev.totalPincodes,
+          activePincodes: data.stats.activePincodes ?? prev.activePincodes,
+          assignedPincodes: data.stats.assignedPincodes ?? prev.assignedPincodes,
+          availablePincodes: data.stats.availablePincodes ?? prev.availablePincodes,
+          activeManagers: data.stats.activeManagers ?? prev.activeManagers
+        }));
       }
     } catch (err) {
       console.error('Stats error:', err);
@@ -134,10 +177,20 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
   }, [API_BASE, token]);
 
   useEffect(() => {
-    fetchHierarchy();
-    fetchStats();
-    fetchAuditLogs();
-  }, [token]);
+    let isMounted = true;
+    const loadAll = async () => {
+      try {
+        setLoading(true);
+        await Promise.allSettled([fetchHierarchy(), fetchStats(), fetchAuditLogs()]);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    loadAll();
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchHierarchy, fetchStats, fetchAuditLogs]);
 
   // Toggle Node in Tree
   const toggleNode = (nodeId) => {

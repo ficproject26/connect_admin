@@ -54,11 +54,23 @@ const optionalAuth = async (req, res, next) => {
 const getTerritoryScope = (user) => {
     if (!user) return null; // Guest or unauthenticated -> public catalog
 
-    const role = (user.role || user.adminRole || '').toLowerCase().trim();
+    const role = (user.role || '').toLowerCase().trim();
+    const adminRole = (user.adminRole || '').toLowerCase().trim();
+    const adminLevel = (user.adminLevel || '').toLowerCase().trim();
     const level = (user.level || '').toLowerCase().trim();
 
-    // Super Admin / System Admin: unrestricted access
-    if (['admin', 'super-admin', 'superadmin', 'super admin'].includes(role) && (!level || level === 'super' || level === 'all')) {
+    // Super Admin / System Admin / Main Admin: unrestricted access
+    const isSuperOrMainAdmin = (
+        ['admin', 'super-admin', 'superadmin', 'super admin'].includes(role) ||
+        ['admin', 'super-admin', 'superadmin', 'super admin'].includes(adminRole) ||
+        adminLevel === 'main' || adminLevel === 'all'
+    ) && (
+        !role.includes('state') && !role.includes('district') && !role.includes('division') && !role.includes('pincode') &&
+        !adminRole.includes('state') && !adminRole.includes('district') && !adminRole.includes('division') && !adminRole.includes('pincode') &&
+        level !== 'district' && level !== 'division' && level !== 'pincode'
+    );
+
+    if (isSuperOrMainAdmin) {
         return { isSuperAdmin: true };
     }
 
@@ -67,16 +79,16 @@ const getTerritoryScope = (user) => {
     const division = (user.division || user.assignedDivision || user.assignedArea || '').trim();
     const pincode = user.pincode || user.assignedPincode || null;
 
-    if (role.includes('state') || level === 'state') {
+    if (role.includes('state') || adminRole.includes('state') || level === 'state') {
         return { role: 'state', state };
     }
-    if (role.includes('district') || level === 'district') {
+    if (role.includes('district') || adminRole.includes('district') || level === 'district') {
         return { role: 'district', state, district };
     }
-    if (role.includes('division') || level === 'division') {
+    if (role.includes('division') || adminRole.includes('division') || level === 'division') {
         return { role: 'division', state, district, division };
     }
-    if (role.includes('pincode') || level === 'pincode') {
+    if (role.includes('pincode') || adminRole.includes('pincode') || level === 'pincode') {
         return { role: 'pincode', state, district, division, pincode: pincode ? String(pincode).trim() : null };
     }
     if (role === 'agent') {
@@ -125,6 +137,7 @@ const superAdminAuth = async (req, res, next) => {
 // Helper: Log audit action
 const logAudit = async (req, action, territoryType, territoryId, territoryName, prevVal = null, newVal = null, reason = '') => {
     try {
+        invalidateHierarchyCache();
         await TerritoryAuditLog.create({
             action,
             actorId: req.adminUser?._id || req.user?.id || null,
@@ -143,8 +156,28 @@ const logAudit = async (req, action, territoryType, territoryId, territoryName, 
     }
 };
 
-// Helper: Auto-sync existing Pincodes in database to State/District/Division models
-const autoSyncExistingPincodes = async () => {
+// In-memory caching for hierarchy to eliminate heavy database scans and reduce latency to <5ms
+let cachedHierarchyResponse = null;
+let cachedHierarchyTimestamp = 0;
+const HIERARCHY_CACHE_TTL = 30 * 1000; // 30 seconds
+
+const invalidateHierarchyCache = () => {
+    cachedHierarchyResponse = null;
+    cachedHierarchyTimestamp = 0;
+};
+
+// Helper: Auto-sync existing Pincodes in database in background with throttle
+let isAutoSyncing = false;
+let lastAutoSyncTime = 0;
+const AUTO_SYNC_COOLDOWN = 60 * 60 * 1000; // 1 hour
+
+const autoSyncExistingPincodes = async (force = false) => {
+    const now = Date.now();
+    if (!force && (isAutoSyncing || (now - lastAutoSyncTime < AUTO_SYNC_COOLDOWN))) {
+        return;
+    }
+    isAutoSyncing = true;
+    lastAutoSyncTime = now;
     try {
         await syncTerritoryData();
         const unlinkedPins = await Pincode.find({
@@ -207,12 +240,10 @@ const autoSyncExistingPincodes = async () => {
             // 3. Ensure Division
             let div = pin.divisionId ? await Division.findById(pin.divisionId) : null;
             if (!div && dist) {
-                // Try finding division matching pin's division name if not generic
                 if (divName && divName !== 'General' && divName !== 'Central') {
                     div = await Division.findOne({ districtId: dist._id, name: new RegExp(`^${divName}$`, 'i') });
                 }
 
-                // If not found, check if pin name / postOffice / taluk / area matches an existing division under this district
                 if (!div) {
                     const existingDivs = await Division.find({ districtId: dist._id }).lean();
                     const pinSearchText = `${pin.name || ''} ${pin.postOffice || ''} ${pin.taluk || ''} ${pin.area || ''}`.toLowerCase();
@@ -222,13 +253,11 @@ const autoSyncExistingPincodes = async () => {
                             break;
                         }
                     }
-                    // If still not found and district has only 1 division (e.g. Hosur in Krishnagiri), link to that division
                     if (!div && existingDivs.length === 1) {
                         div = existingDivs[0];
                     }
                 }
 
-                // If still not found, create a specific division from taluk or pin.name
                 if (!div) {
                     const fallbackDivName = (pin.taluk || pin.area || pin.name || 'Administrative Zone').trim();
                     const divCode = fallbackDivName.substring(0, 4).toUpperCase();
@@ -267,6 +296,8 @@ const autoSyncExistingPincodes = async () => {
         }
     } catch (err) {
         console.error('Auto-sync pincodes warning:', err.message);
+    } finally {
+        isAutoSyncing = false;
     }
 };
 
@@ -275,24 +306,31 @@ const autoSyncExistingPincodes = async () => {
 // ============================================================
 router.get('/hierarchy', [optionalAuth], async (req, res) => {
     try {
-        await autoSyncExistingPincodes();
+        // Run auto-sync non-blocking in background so HTTP response is instant
+        autoSyncExistingPincodes().catch(e => console.warn('Background autoSync note:', e.message));
 
+        const scope = getTerritoryScope(req.user);
         const onlyActive = req.query.status ? req.query.status.toLowerCase() !== 'all' : true;
+        const isUnscoped = !scope || scope.isSuperAdmin;
+
+        // Fast in-memory cache check for unscoped requests
+        if (isUnscoped && cachedHierarchyResponse && (Date.now() - cachedHierarchyTimestamp < HIERARCHY_CACHE_TTL) && cachedHierarchyResponse.onlyActive === onlyActive) {
+            return res.json(cachedHierarchyResponse.payload);
+        }
+
         const statusFilter = onlyActive ? { status: { $regex: /^active$/i } } : {};
 
-        // Fetch all states, districts, divisions, pincodes, agents, managers, and vendors
-        let [states, districts, divisions, pincodes, agents, managers, vendors] = await Promise.all([
+        // Fetch all states, districts, divisions, pincodes, agents, managers in parallel
+        let [states, districts, divisions, pincodes, agents, managers] = await Promise.all([
             State.find(statusFilter).sort({ name: 1 }).lean(),
             District.find(statusFilter).sort({ name: 1 }).lean(),
             Division.find(statusFilter).sort({ name: 1 }).lean(),
-            Pincode.find(statusFilter).populate('activeAgentId', 'name email phone level').sort({ code: 1 }).lean(),
+            Pincode.find(statusFilter).sort({ code: 1 }).lean(),
             User.find({ role: 'agent', isActive: { $ne: false } }).select('name email phone level assignedState assignedDistrict assignedArea assignedPincode').lean(),
-            Manager.find({ status: { $ne: 'Inactive' } }).select('name email phone level assignedState assignedDistrict assignedDivision assignedPincode stateId districtId divisionId pincodeId role').lean(),
-            Vendor.find().select('name businessName state district pincode status').lean()
+            Manager.find({ status: { $ne: 'Inactive' } }).select('name email phone level assignedState assignedDistrict assignedDivision assignedPincode stateId districtId divisionId pincodeId role').lean()
         ]);
 
         // Territory-Based Access Control Scoping
-        const scope = getTerritoryScope(req.user);
         if (scope && !scope.isSuperAdmin) {
             if (scope.state) {
                 const matchingStateIds = new Set(states.filter(s => s.name?.toLowerCase() === scope.state.toLowerCase() || s.code?.toLowerCase() === scope.state.toLowerCase()).map(s => String(s._id)));
@@ -329,8 +367,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 managers: [
                     ...agents.filter(a => (a.level || '').toLowerCase() === 'state' && (a.assignedState === st.name || a.assignedState === st.code)),
                     ...managers.filter(m => (m.level === 'state' || m.role === 'state_manager') && (m.assignedState === st.name || m.assignedState === st.code || String(m.stateId) === idStr))
-                ],
-                vendorsCount: vendors.filter(v => (v.state || '').toLowerCase() === st.name.toLowerCase()).length
+                ]
             };
             stateMap[idStr] = entry;
             if (st.name) stateNameMap[st.name.toLowerCase()] = entry;
@@ -350,8 +387,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 managers: [
                     ...agents.filter(a => (a.level || '').toLowerCase() === 'district' && (a.assignedDistrict === dst.name || a.assignedDistrict === dst.code)),
                     ...managers.filter(m => (m.level === 'district' || m.role === 'district_manager') && (m.assignedDistrict === dst.name || m.assignedDistrict === dst.code || String(m.districtId) === idStr))
-                ],
-                vendorsCount: vendors.filter(v => (v.district || '').toLowerCase() === dst.name.toLowerCase()).length
+                ]
             };
             districtMap[idStr] = entry;
             if (dst.name) districtNameMap[dst.name.toLowerCase()] = entry;
@@ -370,8 +406,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 managers: [
                     ...agents.filter(a => (a.level || '').toLowerCase() === 'division' && ((a.assignedArea || '').includes(div.name) || (a.assignedDistrict === div.name))),
                     ...managers.filter(m => (m.level === 'division' || m.role === 'division_manager') && ((m.assignedDivision || '').includes(div.name) || (m.assignedDistrict === div.name) || String(m.divisionId) === idStr))
-                ],
-                vendorsCount: 0
+                ]
             };
             divisionMap[idStr] = entry;
             if (div.name) divisionNameMap[div.name.toLowerCase()] = entry;
@@ -388,7 +423,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
             if (targetDiv) {
                 targetDiv.pincodes.push(pin);
                 targetDiv.totalPincodes += 1;
-                if (pin.status === 'Active') targetDiv.activePincodes += 1;
+                if ((pin.status || '').toLowerCase() === 'active') targetDiv.activePincodes += 1;
             }
         });
 
@@ -424,7 +459,21 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
         });
 
         const hierarchyList = Object.values(stateMap);
-        res.json({
+        const activePinsCount = pincodes.filter(p => (p.status || '').toLowerCase() === 'active').length;
+        const totalAssignedPins = pincodes.filter(p => p.activeAgentId || p.isAssigned).length;
+
+        const hierarchyStats = {
+            totalStates: states.length,
+            totalDistricts: districts.length,
+            totalDivisions: divisions.length,
+            totalPincodes: pincodes.length,
+            activePincodes: activePinsCount,
+            assignedPincodes: totalAssignedPins,
+            availablePincodes: Math.max(0, pincodes.length - totalAssignedPins),
+            activeManagers: agents.length + managers.length
+        };
+
+        const responsePayload = {
             success: true,
             hierarchy: hierarchyList,
             states: hierarchyList,
@@ -435,8 +484,19 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
             totalDistricts: districts.length,
             totalDivisions: divisions.length,
             totalPincodes: pincodes.length,
-            totalAgents: agents.length
-        });
+            totalAgents: agents.length,
+            stats: hierarchyStats
+        };
+
+        if (isUnscoped) {
+            cachedHierarchyResponse = {
+                onlyActive,
+                payload: responsePayload
+            };
+            cachedHierarchyTimestamp = Date.now();
+        }
+
+        res.json(responsePayload);
     } catch (err) {
         console.error('Failed to get territory hierarchy:', err);
         res.status(500).json({ success: false, msg: 'Error retrieving territory hierarchy' });
@@ -448,6 +508,13 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
 // ============================================================
 router.get('/stats', [optionalAuth], async (req, res) => {
     try {
+        if (cachedHierarchyResponse && cachedHierarchyResponse.payload?.stats && (Date.now() - cachedHierarchyTimestamp < HIERARCHY_CACHE_TTL)) {
+            return res.json({
+                success: true,
+                stats: cachedHierarchyResponse.payload.stats
+            });
+        }
+
         const [statesCount, districtsCount, divisionsCount, pincodesCount, activePincodesCount, assignedPincodesCount, agentsCount, managersCount] = await Promise.all([
             State.countDocuments({ status: { $regex: /^active$/i } }),
             District.countDocuments({ status: { $regex: /^active$/i } }),

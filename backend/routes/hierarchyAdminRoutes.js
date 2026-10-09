@@ -894,6 +894,7 @@ const getChildAdminsForParent = async (parentId) => {
             adminRole: child.adminRole || `${targetLevel}-admin`,
             adminLevel: targetLevel,
             level: targetLevel,
+            state: finalState,
             status: (child.status || 'Active').toLowerCase() === 'active' || child.status === 'approved' || child.isActive ? 'Active' : (child.status || 'Inactive'),
             isActive: child.isActive !== false,
             assignedState,
@@ -1214,12 +1215,14 @@ const createHierarchyAdminHandler = async (req, res) => {
             ? `XXXX XXXX ${String(aadhaarNumber).replace(/\s/g, '').slice(-4)}`
             : undefined;
 
+        const isAccountActive = (!status || status === 'Active' || status === 'approved' || status === 'active');
         const newAdmin = new User({
             name: name.trim(),
             email: cleanEmail,
             phone: cleanPhone || undefined,
             altPhone: altPhone ? String(altPhone).replace(/\D/g, '') : '',
             password: hashedPassword,
+            passwordHash: hashedPassword,
             role: 'admin',
             adminRole: `${targetLevel}-admin`,
             adminLevel: targetLevel,
@@ -1260,8 +1263,8 @@ const createHierarchyAdminHandler = async (req, res) => {
                 panImage: panUrl || '',
                 selfie: photoUrl || ''
             },
-            status: status === 'Active' ? 'approved' : (status === 'Pending Verification' ? 'pending' : status),
-            isActive: status === 'Active',
+            status: isAccountActive ? 'approved' : (status === 'Pending Verification' ? 'pending' : status),
+            isActive: isAccountActive,
             parentAdminId: req.adminUser._id,
             registrationId,
             createdAt: new Date()
@@ -1327,7 +1330,9 @@ const updateHierarchyAdminHandler = async (req, res) => {
 
         if (password && password.length >= 6) {
             const salt = await bcrypt.genSalt(10);
-            targetAdmin.password = await bcrypt.hash(password, salt);
+            const updatedHashedPw = await bcrypt.hash(password, salt);
+            targetAdmin.password = updatedHashedPw;
+            targetAdmin.passwordHash = updatedHashedPw;
         }
 
         await targetAdmin.save();
