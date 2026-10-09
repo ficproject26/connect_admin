@@ -1,15 +1,14 @@
 const mongoose = require('mongoose');
 
 const DistrictSchema = new mongoose.Schema({
+    _id: { type: mongoose.Schema.Types.Mixed },
     districtId: { 
         type: String, 
-        required: true, 
-        unique: true, 
         trim: true,
         uppercase: true 
     },
     stateId: { 
-        type: mongoose.Schema.Types.ObjectId, 
+        type: mongoose.Schema.Types.Mixed, 
         ref: 'State', 
         required: true 
     },
@@ -20,7 +19,6 @@ const DistrictSchema = new mongoose.Schema({
     },
     code: { 
         type: String, 
-        required: true, 
         trim: true, 
         uppercase: true 
     },
@@ -32,8 +30,8 @@ const DistrictSchema = new mongoose.Schema({
         enum: ['Active', 'Inactive'], 
         default: 'Active' 
     },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    createdBy: { type: mongoose.Schema.Types.Mixed, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.Mixed, ref: 'User' }
 }, {
     timestamps: true
 });

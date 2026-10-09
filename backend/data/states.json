@@ -1,0 +1,38 @@
+[
+  {
+    "_id": "6aa10f70ca0932e6eaec1f5c",
+    "stateId": "ST-TAM-4607",
+    "name": "Tamil Nadu",
+    "code": "TN",
+    "status": "Active",
+    "description": "",
+    "logo": "",
+    "notes": "",
+    "createdAt": "2026-09-09T07:49:04.611Z",
+    "updatedAt": "2026-09-30T05:10:28.568Z",
+    "__v": 0,
+    "updatedBy": "6abc986678d7803cf6a444d9"
+  },
+  {
+    "_id": "state_ka",
+    "code": "KAR",
+    "name": "Karnataka",
+    "stateId": "ST-KAR-0001",
+    "status": "Active"
+  },
+  {
+    "_id": "6abb46c1305af8d5cc1abed8",
+    "stateId": "ST-PY",
+    "name": "Pondicherry",
+    "code": "PY",
+    "status": "Active",
+    "description": "",
+    "logo": "",
+    "notes": "",
+    "createdBy": "6a8d22c11bc647d92ae36337",
+    "updatedBy": "6a8d22c11bc647d92ae36337",
+    "createdAt": "2026-09-29T05:04:01.662Z",
+    "updatedAt": "2026-09-29T05:04:01.662Z",
+    "__v": 0
+  }
+]

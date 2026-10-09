@@ -1,20 +1,18 @@
 const mongoose = require('mongoose');
 
 const DivisionSchema = new mongoose.Schema({
+    _id: { type: mongoose.Schema.Types.Mixed },
     divisionId: { 
         type: String, 
-        required: true, 
-        unique: true, 
         trim: true,
         uppercase: true 
     },
     stateId: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'State', 
-        required: true 
+        type: mongoose.Schema.Types.Mixed, 
+        ref: 'State' 
     },
     districtId: { 
-        type: mongoose.Schema.Types.ObjectId, 
+        type: mongoose.Schema.Types.Mixed, 
         ref: 'District', 
         required: true 
     },
@@ -25,7 +23,6 @@ const DivisionSchema = new mongoose.Schema({
     },
     code: { 
         type: String, 
-        required: true, 
         trim: true, 
         uppercase: true 
     },
@@ -42,8 +39,8 @@ const DivisionSchema = new mongoose.Schema({
         enum: ['Active', 'Inactive'], 
         default: 'Active' 
     },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    createdBy: { type: mongoose.Schema.Types.Mixed, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.Mixed, ref: 'User' }
 }, {
     timestamps: true
 });

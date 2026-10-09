@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const PincodeSchema = new mongoose.Schema({
+    _id: { type: mongoose.Schema.Types.Mixed },
     code: { type: String, required: true, unique: true, trim: true },
     pincodeId: { type: String, trim: true },
     name: { type: String, required: true, trim: true },
@@ -20,12 +21,12 @@ const PincodeSchema = new mongoose.Schema({
     description: { type: String, default: '' },
     notes: { type: String, default: '' },
 
-    // Hierarchy Relational IDs
-    stateId: { type: mongoose.Schema.Types.ObjectId, ref: 'State', default: null },
-    districtId: { type: mongoose.Schema.Types.ObjectId, ref: 'District', default: null },
-    divisionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Division', default: null },
+    // Hierarchy Relational IDs (Mixed to support both ObjectId and custom String IDs like 'state_ka', 'dist_blr_u', etc.)
+    stateId: { type: mongoose.Schema.Types.Mixed, ref: 'State', default: null },
+    districtId: { type: mongoose.Schema.Types.Mixed, ref: 'District', default: null },
+    divisionId: { type: mongoose.Schema.Types.Mixed, ref: 'Division', default: null },
 
-    activeAgentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    activeAgentId: { type: mongoose.Schema.Types.Mixed, ref: 'User', default: null },
     joiningFee: { type: Number, default: 100000 },
     isBlocked: { type: Boolean, default: false }
 }, {

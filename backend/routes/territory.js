@@ -8,8 +8,11 @@ const District = require('../models/District');
 const Division = require('../models/Division');
 const Pincode = require('../models/Pincode');
 const User = require('../models/User');
+const Manager = require('../models/Manager');
+const PincodeAssignment = require('../models/PincodeAssignment');
 const Vendor = require('../models/Vendor');
 const TerritoryAuditLog = require('../models/TerritoryAuditLog');
+const syncTerritoryData = require('../utils/syncTerritoryData');
 
 // Optional authentication middleware: Populates req.user if a valid token is provided, but allows public read-only territory access
 const optionalAuth = async (req, res, next) => {
@@ -143,6 +146,7 @@ const logAudit = async (req, action, territoryType, territoryId, territoryName, 
 // Helper: Auto-sync existing Pincodes in database to State/District/Division models
 const autoSyncExistingPincodes = async () => {
     try {
+        await syncTerritoryData();
         const unlinkedPins = await Pincode.find({
             $or: [
                 { stateId: null },
@@ -274,15 +278,16 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
         await autoSyncExistingPincodes();
 
         const onlyActive = req.query.status ? req.query.status.toLowerCase() !== 'all' : true;
-        const statusFilter = onlyActive ? { status: 'Active' } : {};
+        const statusFilter = onlyActive ? { status: { $regex: /^active$/i } } : {};
 
-        // Fetch all states, districts, divisions, and pincodes
-        let [states, districts, divisions, pincodes, agents, vendors] = await Promise.all([
+        // Fetch all states, districts, divisions, pincodes, agents, managers, and vendors
+        let [states, districts, divisions, pincodes, agents, managers, vendors] = await Promise.all([
             State.find(statusFilter).sort({ name: 1 }).lean(),
             District.find(statusFilter).sort({ name: 1 }).lean(),
             Division.find(statusFilter).sort({ name: 1 }).lean(),
             Pincode.find(statusFilter).populate('activeAgentId', 'name email phone level').sort({ code: 1 }).lean(),
             User.find({ role: 'agent', isActive: { $ne: false } }).select('name email phone level assignedState assignedDistrict assignedArea assignedPincode').lean(),
+            Manager.find({ status: { $ne: 'Inactive' } }).select('name email phone level assignedState assignedDistrict assignedDivision assignedPincode stateId districtId divisionId pincodeId role').lean(),
             Vendor.find().select('name businessName state district pincode status').lean()
         ]);
 
@@ -290,95 +295,131 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
         const scope = getTerritoryScope(req.user);
         if (scope && !scope.isSuperAdmin) {
             if (scope.state) {
-                const matchingStateIds = new Set(states.filter(s => s.name?.toLowerCase() === scope.state.toLowerCase() || s.code?.toLowerCase() === scope.state.toLowerCase()).map(s => s._id.toString()));
-                states = states.filter(s => matchingStateIds.has(s._id.toString()));
-                districts = districts.filter(d => d.stateId && matchingStateIds.has(d.stateId.toString()));
+                const matchingStateIds = new Set(states.filter(s => s.name?.toLowerCase() === scope.state.toLowerCase() || s.code?.toLowerCase() === scope.state.toLowerCase()).map(s => String(s._id)));
+                states = states.filter(s => matchingStateIds.has(String(s._id)));
+                districts = districts.filter(d => d.stateId && matchingStateIds.has(String(d.stateId)));
             }
             if (scope.district) {
-                const matchingDistIds = new Set(districts.filter(d => d.name?.toLowerCase() === scope.district.toLowerCase() || d.code?.toLowerCase() === scope.district.toLowerCase()).map(d => d._id.toString()));
-                districts = districts.filter(d => matchingDistIds.has(d._id.toString()));
-                divisions = divisions.filter(div => div.districtId && matchingDistIds.has(div.districtId.toString()));
+                const matchingDistIds = new Set(districts.filter(d => d.name?.toLowerCase() === scope.district.toLowerCase() || d.code?.toLowerCase() === scope.district.toLowerCase()).map(d => String(d._id)));
+                districts = districts.filter(d => matchingDistIds.has(String(d._id)));
+                divisions = divisions.filter(div => div.districtId && matchingDistIds.has(String(div.districtId)));
             }
             if (scope.division) {
-                const matchingDivIds = new Set(divisions.filter(div => div.name?.toLowerCase() === scope.division.toLowerCase() || div.code?.toLowerCase() === scope.division.toLowerCase() || div.name?.toLowerCase().includes(scope.division.toLowerCase())).map(div => div._id.toString()));
-                divisions = divisions.filter(div => matchingDivIds.has(div._id.toString()));
-                pincodes = pincodes.filter(pin => pin.divisionId && matchingDivIds.has(pin.divisionId.toString()));
+                const matchingDivIds = new Set(divisions.filter(div => div.name?.toLowerCase() === scope.division.toLowerCase() || div.code?.toLowerCase() === scope.division.toLowerCase() || div.name?.toLowerCase().includes(scope.division.toLowerCase())).map(div => String(div._id)));
+                divisions = divisions.filter(div => matchingDivIds.has(String(div._id)));
+                pincodes = pincodes.filter(pin => pin.divisionId && matchingDivIds.has(String(pin.divisionId)));
             }
             if (scope.pincode) {
                 pincodes = pincodes.filter(pin => String(pin.code) === String(scope.pincode));
             }
         }
 
-        // Build index maps for fast tree assembly
+        // Build index maps for fast tree assembly with robust ID and Name lookup
         const stateMap = {};
+        const stateNameMap = {};
         states.forEach(st => {
-            stateMap[st._id.toString()] = {
+            const idStr = String(st._id);
+            const entry = {
                 ...st,
                 districts: [],
                 totalDistricts: 0,
                 totalDivisions: 0,
                 totalPincodes: 0,
                 activePincodes: 0,
-                managers: agents.filter(a => (a.level || '').toLowerCase() === 'state' && (a.assignedState === st.name || a.assignedState === st.code)),
+                managers: [
+                    ...agents.filter(a => (a.level || '').toLowerCase() === 'state' && (a.assignedState === st.name || a.assignedState === st.code)),
+                    ...managers.filter(m => (m.level === 'state' || m.role === 'state_manager') && (m.assignedState === st.name || m.assignedState === st.code || String(m.stateId) === idStr))
+                ],
                 vendorsCount: vendors.filter(v => (v.state || '').toLowerCase() === st.name.toLowerCase()).length
             };
+            stateMap[idStr] = entry;
+            if (st.name) stateNameMap[st.name.toLowerCase()] = entry;
+            if (st.code) stateNameMap[st.code.toLowerCase()] = entry;
         });
 
         const districtMap = {};
+        const districtNameMap = {};
         districts.forEach(dst => {
-            districtMap[dst._id.toString()] = {
+            const idStr = String(dst._id);
+            const entry = {
                 ...dst,
                 divisions: [],
                 totalDivisions: 0,
                 totalPincodes: 0,
                 activePincodes: 0,
-                managers: agents.filter(a => (a.level || '').toLowerCase() === 'district' && (a.assignedDistrict === dst.name || a.assignedDistrict === dst.code)),
+                managers: [
+                    ...agents.filter(a => (a.level || '').toLowerCase() === 'district' && (a.assignedDistrict === dst.name || a.assignedDistrict === dst.code)),
+                    ...managers.filter(m => (m.level === 'district' || m.role === 'district_manager') && (m.assignedDistrict === dst.name || m.assignedDistrict === dst.code || String(m.districtId) === idStr))
+                ],
                 vendorsCount: vendors.filter(v => (v.district || '').toLowerCase() === dst.name.toLowerCase()).length
             };
+            districtMap[idStr] = entry;
+            if (dst.name) districtNameMap[dst.name.toLowerCase()] = entry;
+            if (dst.code) districtNameMap[dst.code.toLowerCase()] = entry;
         });
 
         const divisionMap = {};
+        const divisionNameMap = {};
         divisions.forEach(div => {
-            divisionMap[div._id.toString()] = {
+            const idStr = String(div._id);
+            const entry = {
                 ...div,
                 pincodes: [],
                 totalPincodes: 0,
                 activePincodes: 0,
-                managers: agents.filter(a => (a.level || '').toLowerCase() === 'division' && ((a.assignedArea || '').includes(div.name) || (a.assignedDistrict === div.name))),
+                managers: [
+                    ...agents.filter(a => (a.level || '').toLowerCase() === 'division' && ((a.assignedArea || '').includes(div.name) || (a.assignedDistrict === div.name))),
+                    ...managers.filter(m => (m.level === 'division' || m.role === 'division_manager') && ((m.assignedDivision || '').includes(div.name) || (m.assignedDistrict === div.name) || String(m.divisionId) === idStr))
+                ],
                 vendorsCount: 0
             };
+            divisionMap[idStr] = entry;
+            if (div.name) divisionNameMap[div.name.toLowerCase()] = entry;
+            if (div.code) divisionNameMap[div.code.toLowerCase()] = entry;
         });
 
         // Nest Pincodes into Divisions
         pincodes.forEach(pin => {
-            const divIdStr = pin.divisionId ? pin.divisionId.toString() : null;
-            if (divIdStr && divisionMap[divIdStr]) {
-                divisionMap[divIdStr].pincodes.push(pin);
-                divisionMap[divIdStr].totalPincodes += 1;
-                if (pin.status === 'Active') divisionMap[divIdStr].activePincodes += 1;
+            const divIdStr = pin.divisionId ? String(pin.divisionId) : null;
+            let targetDiv = divIdStr && divisionMap[divIdStr] ? divisionMap[divIdStr] : null;
+            if (!targetDiv && pin.division) {
+                targetDiv = divisionNameMap[pin.division.toLowerCase()];
+            }
+            if (targetDiv) {
+                targetDiv.pincodes.push(pin);
+                targetDiv.totalPincodes += 1;
+                if (pin.status === 'Active') targetDiv.activePincodes += 1;
             }
         });
 
         // Nest Divisions into Districts
         Object.values(divisionMap).forEach(div => {
-            const distIdStr = div.districtId ? div.districtId.toString() : null;
-            if (distIdStr && districtMap[distIdStr]) {
-                districtMap[distIdStr].divisions.push(div);
-                districtMap[distIdStr].totalDivisions += 1;
-                districtMap[distIdStr].totalPincodes += div.totalPincodes;
-                districtMap[distIdStr].activePincodes += div.activePincodes;
+            const distIdStr = div.districtId ? String(div.districtId) : null;
+            let targetDst = distIdStr && districtMap[distIdStr] ? districtMap[distIdStr] : null;
+            if (!targetDst && div.district) {
+                targetDst = districtNameMap[div.district.toLowerCase()];
+            }
+            if (targetDst) {
+                targetDst.divisions.push(div);
+                targetDst.totalDivisions += 1;
+                targetDst.totalPincodes += div.totalPincodes;
+                targetDst.activePincodes += div.activePincodes;
             }
         });
 
         // Nest Districts into States
         Object.values(districtMap).forEach(dst => {
-            const stIdStr = dst.stateId ? dst.stateId.toString() : null;
-            if (stIdStr && stateMap[stIdStr]) {
-                stateMap[stIdStr].districts.push(dst);
-                stateMap[stIdStr].totalDistricts += 1;
-                stateMap[stIdStr].totalDivisions += dst.totalDivisions;
-                stateMap[stIdStr].totalPincodes += dst.totalPincodes;
-                stateMap[stIdStr].activePincodes += dst.activePincodes;
+            const stIdStr = dst.stateId ? String(dst.stateId) : null;
+            let targetSt = stIdStr && stateMap[stIdStr] ? stateMap[stIdStr] : null;
+            if (!targetSt && dst.state) {
+                targetSt = stateNameMap[dst.state.toLowerCase()];
+            }
+            if (targetSt) {
+                targetSt.districts.push(dst);
+                targetSt.totalDistricts += 1;
+                targetSt.totalDivisions += dst.totalDivisions;
+                targetSt.totalPincodes += dst.totalPincodes;
+                targetSt.activePincodes += dst.activePincodes;
             }
         });
 
@@ -407,15 +448,25 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
 // ============================================================
 router.get('/stats', [optionalAuth], async (req, res) => {
     try {
-        const [statesCount, districtsCount, divisionsCount, pincodesCount, activePincodesCount, assignedPincodesCount, agentsCount] = await Promise.all([
-            State.countDocuments({ status: 'Active' }),
-            District.countDocuments({ status: 'Active' }),
-            Division.countDocuments({ status: 'Active' }),
+        const [statesCount, districtsCount, divisionsCount, pincodesCount, activePincodesCount, assignedPincodesCount, agentsCount, managersCount] = await Promise.all([
+            State.countDocuments({ status: { $regex: /^active$/i } }),
+            District.countDocuments({ status: { $regex: /^active$/i } }),
+            Division.countDocuments({ status: { $regex: /^active$/i } }),
             Pincode.countDocuments(),
-            Pincode.countDocuments({ status: 'Active' }),
-            Pincode.countDocuments({ activeAgentId: { $ne: null } }),
-            User.countDocuments({ role: 'agent', isActive: { $ne: false } })
+            Pincode.countDocuments({ status: { $regex: /^active$/i } }),
+            Pincode.countDocuments({ $or: [{ activeAgentId: { $ne: null } }, { isAssigned: true }] }),
+            User.countDocuments({ role: 'agent', isActive: { $ne: false } }),
+            Manager.countDocuments({ status: { $ne: 'Inactive' } })
         ]);
+
+        let distinctAssignedPins = [];
+        try {
+            distinctAssignedPins = await PincodeAssignment.distinct('pincode', {
+                $or: [{ assignedAgentId: { $ne: null } }, { assignedManagerId: { $ne: null } }]
+            });
+        } catch (e) {}
+
+        const totalAssigned = Math.max(assignedPincodesCount, distinctAssignedPins.length);
 
         res.json({
             success: true,
@@ -425,9 +476,9 @@ router.get('/stats', [optionalAuth], async (req, res) => {
                 totalDivisions: divisionsCount,
                 totalPincodes: pincodesCount,
                 activePincodes: activePincodesCount,
-                assignedPincodes: assignedPincodesCount,
-                availablePincodes: Math.max(0, pincodesCount - assignedPincodesCount),
-                activeManagers: agentsCount
+                assignedPincodes: totalAssigned,
+                availablePincodes: Math.max(0, pincodesCount - totalAssigned),
+                activeManagers: agentsCount + managersCount
             }
         });
     } catch (err) {
@@ -639,7 +690,11 @@ router.get('/districts', [optionalAuth], async (req, res) => {
         }
 
         if (targetStateId) {
-            filter.stateId = targetStateId;
+            const stCond = [{ stateId: targetStateId }, { stateId: String(targetStateId) }];
+            if (mongoose.Types.ObjectId.isValid(targetStateId)) {
+                stCond.push({ stateId: new mongoose.Types.ObjectId(targetStateId) });
+            }
+            filter.$or = stCond;
         }
 
         const districts = await District.find(filter).populate('stateId', 'name code').sort({ name: 1 }).lean();
@@ -894,8 +949,25 @@ router.get('/divisions', [optionalAuth], async (req, res) => {
             }
         }
 
-        if (targetDistrictId) filter.districtId = targetDistrictId;
-        if (targetStateId) filter.stateId = targetStateId;
+        if (targetDistrictId) {
+            const dstCond = [{ districtId: targetDistrictId }, { districtId: String(targetDistrictId) }];
+            if (mongoose.Types.ObjectId.isValid(targetDistrictId)) {
+                dstCond.push({ districtId: new mongoose.Types.ObjectId(targetDistrictId) });
+            }
+            filter.$or = dstCond;
+        }
+        if (targetStateId) {
+            const stCond = [{ stateId: targetStateId }, { stateId: String(targetStateId) }];
+            if (mongoose.Types.ObjectId.isValid(targetStateId)) {
+                stCond.push({ stateId: new mongoose.Types.ObjectId(targetStateId) });
+            }
+            if (filter.$or) {
+                filter.$and = [{ $or: filter.$or }, { $or: stCond }];
+                delete filter.$or;
+            } else {
+                filter.$or = stCond;
+            }
+        }
 
         const divisions = await Division.find(filter)
             .populate('stateId', 'name code')
@@ -1165,11 +1237,17 @@ router.get('/pincodes', [optionalAuth], async (req, res) => {
         }
 
         if (targetDivisionId) {
-            filter.$or = [{ divisionId: targetDivisionId }, { division: req.query.division?.trim() }];
+            const divConditions = [{ divisionId: targetDivisionId }, { divisionId: String(targetDivisionId) }];
+            if (req.query.division && req.query.division.trim()) divConditions.push({ division: req.query.division.trim() });
+            filter.$or = divConditions;
         } else if (targetDistrictId) {
-            filter.$or = [{ districtId: targetDistrictId }, { district: req.query.district?.trim() }];
+            const dstConditions = [{ districtId: targetDistrictId }, { districtId: String(targetDistrictId) }];
+            if (req.query.district && req.query.district.trim()) dstConditions.push({ district: req.query.district.trim() });
+            filter.$or = dstConditions;
         } else if (targetStateId) {
-            filter.$or = [{ stateId: targetStateId }, { state: req.query.state?.trim() }];
+            const stConditions = [{ stateId: targetStateId }, { stateId: String(targetStateId) }];
+            if (req.query.state && req.query.state.trim()) stConditions.push({ state: req.query.state.trim() });
+            filter.$or = stConditions;
         }
 
         const pincodes = await Pincode.find(filter)

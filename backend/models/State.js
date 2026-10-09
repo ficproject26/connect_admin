@@ -1,10 +1,9 @@
 const mongoose = require('mongoose');
 
 const StateSchema = new mongoose.Schema({
+    _id: { type: mongoose.Schema.Types.Mixed },
     stateId: { 
         type: String, 
-        required: true, 
-        unique: true, 
         trim: true,
         uppercase: true 
     },
@@ -29,8 +28,8 @@ const StateSchema = new mongoose.Schema({
     description: { type: String, default: '' },
     logo: { type: String, default: '' },
     notes: { type: String, default: '' },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+    createdBy: { type: mongoose.Schema.Types.Mixed, ref: 'User' },
+    updatedBy: { type: mongoose.Schema.Types.Mixed, ref: 'User' }
 }, {
     timestamps: true
 });

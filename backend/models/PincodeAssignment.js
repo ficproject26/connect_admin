@@ -8,7 +8,7 @@ const PincodeAssignmentSchema = new mongoose.Schema({
         index: true
     },
     pincodeId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'Pincode',
         default: null,
         index: true
@@ -32,17 +32,17 @@ const PincodeAssignmentSchema = new mongoose.Schema({
         index: true
     },
     stateId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'State',
         default: null
     },
     districtId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'District',
         default: null
     },
     divisionId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'Division',
         default: null
     },

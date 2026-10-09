@@ -1,0 +1,43 @@
+[
+  {
+    "_id": "a7efcf56-e97f-4269-93ba-31b58e54ca49",
+    "userId": "user_admin",
+    "emailAlerts": true,
+    "kycAlerts": true,
+    "statusChangeAlerts": true,
+    "dailyDigest": true,
+    "theme": "light",
+    "autoAssignTasks": true,
+    "territoryAlertRadiusKm": 15,
+    "createdAt": "2026-09-25T13:45:23.298Z",
+    "updatedAt": "2026-09-25T13:45:23.298Z"
+  },
+  {
+    "_id": "a84ae084-58f9-4b83-a86f-a6dabd3a08b4",
+    "autoAssignTasks": true,
+    "createdAt": "2026-09-30T03:45:11.993Z",
+    "dailyDigest": true,
+    "emailAlerts": true,
+    "id": "a84ae084-58f9-4b83-a86f-a6dabd3a08b4",
+    "kycAlerts": true,
+    "statusChangeAlerts": true,
+    "territoryAlertRadiusKm": 15,
+    "theme": "light",
+    "updatedAt": "2026-09-30T03:45:11.993Z",
+    "userId": "usr_mgr_1790580930154_8uge"
+  },
+  {
+    "_id": "7667a70b-3e7e-4623-87ac-8d5a6eba66cb",
+    "autoAssignTasks": true,
+    "createdAt": "2026-10-05T07:57:02.566Z",
+    "dailyDigest": true,
+    "emailAlerts": true,
+    "id": "7667a70b-3e7e-4623-87ac-8d5a6eba66cb",
+    "kycAlerts": true,
+    "statusChangeAlerts": true,
+    "territoryAlertRadiusKm": 15,
+    "theme": "light",
+    "updatedAt": "2026-10-05T07:57:02.566Z",
+    "userId": "usr_mgr_1790592319962_fx3y"
+  }
+]
