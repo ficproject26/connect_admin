@@ -378,7 +378,12 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                                     $cond: [
                                         {
                                             $or: [
-                                                { $ne: ['$activeAgentId', null] },
+                                                {
+                                                    $and: [
+                                                        { $ne: [{ $ifNull: ['$activeAgentId', null] }, null] },
+                                                        { $ne: ['$activeAgentId', ''] }
+                                                    ]
+                                                },
                                                 { $eq: ['$isAssigned', true] }
                                             ]
                                         },
@@ -498,16 +503,21 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
 
             const activeStatusList = ['Active', 'active', 'ACTIVE'];
             const stIdStr = String(targetState._id);
+            const stateIdVariants = [
+                targetState._id,
+                stIdStr,
+                targetState.name,
+                targetState.code,
+                targetState.stateId,
+                ...(mongoose.Types.ObjectId.isValid(stIdStr) ? [new mongoose.Types.ObjectId(stIdStr)] : [])
+            ].filter(Boolean);
+
             const childFilter = {
-                stateId: {
-                    $in: [
-                        targetState._id,
-                        stIdStr,
-                        targetState.name,
-                        targetState.code,
-                        ...(mongoose.Types.ObjectId.isValid(stIdStr) ? [new mongoose.Types.ObjectId(stIdStr)] : [])
-                    ].filter(Boolean)
-                },
+                $or: [
+                    { stateId: { $in: stateIdVariants } },
+                    { state: new RegExp(`^${targetState.name}$`, 'i') },
+                    { state: targetState.code }
+                ],
                 ...(onlyActive ? { status: { $in: activeStatusList } } : {})
             };
 
@@ -594,10 +604,11 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
             };
 
             const districtMap = {};
+            const districtNameMap = {};
             districts.forEach(dst => {
                 const idStr = String(dst._id);
                 const nameLower = (dst.name || '').toLowerCase();
-                districtMap[idStr] = {
+                const entry = {
                     ...dst,
                     divisions: [],
                     totalDivisions: 0,
@@ -609,13 +620,17 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                         ...(managersByDistrict.get(idStr) || [])
                     ]
                 };
+                districtMap[idStr] = entry;
+                if (dst.name) districtNameMap[nameLower] = entry;
+                if (dst.code) districtNameMap[(dst.code || '').toLowerCase()] = entry;
             });
 
             const divisionMap = {};
+            const divisionNameMap = {};
             divisions.forEach(div => {
                 const idStr = String(div._id);
                 const nameLower = (div.name || '').toLowerCase();
-                divisionMap[idStr] = {
+                const entry = {
                     ...div,
                     pincodes: [],
                     totalPincodes: 0,
@@ -626,30 +641,54 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                         ...(managersByDivision.get(idStr) || [])
                     ]
                 };
+                divisionMap[idStr] = entry;
+                if (div.name) divisionNameMap[nameLower] = entry;
+                if (div.code) divisionNameMap[(div.code || '').toLowerCase()] = entry;
             });
 
             pincodes.forEach(pin => {
                 const divIdStr = pin.divisionId ? String(pin.divisionId) : null;
-                if (divIdStr && divisionMap[divIdStr]) {
-                    divisionMap[divIdStr].pincodes.push(pin);
-                    divisionMap[divIdStr].totalPincodes += 1;
-                    if (activeStatusList.includes(pin.status || 'Active')) divisionMap[divIdStr].activePincodes += 1;
+                let targetDiv = divIdStr && divisionMap[divIdStr] ? divisionMap[divIdStr] : null;
+                if (!targetDiv && pin.division) {
+                    targetDiv = divisionNameMap[pin.division.toLowerCase()];
+                }
+                if (targetDiv) {
+                    targetDiv.pincodes.push(pin);
+                    targetDiv.totalPincodes += 1;
+                    if (activeStatusList.includes(pin.status || 'Active')) targetDiv.activePincodes += 1;
                 }
             });
 
             Object.values(divisionMap).forEach(div => {
                 const distIdStr = div.districtId ? String(div.districtId) : null;
-                if (distIdStr && districtMap[distIdStr]) {
-                    districtMap[distIdStr].divisions.push(div);
-                    districtMap[distIdStr].totalDivisions += 1;
-                    districtMap[distIdStr].totalPincodes += div.totalPincodes;
-                    districtMap[distIdStr].activePincodes += div.activePincodes;
+                let targetDst = distIdStr && districtMap[distIdStr] ? districtMap[distIdStr] : null;
+                if (!targetDst && div.district) {
+                    targetDst = districtNameMap[div.district.toLowerCase()];
+                }
+                if (targetDst) {
+                    targetDst.divisions.push(div);
+                    targetDst.totalDivisions += 1;
+                    targetDst.totalPincodes += div.totalPincodes;
+                    targetDst.activePincodes += div.activePincodes;
                 }
             });
 
             Object.values(districtMap).forEach(dst => {
                 stateEntry.districts.push(dst);
             });
+
+            const activePinsInState = pincodes.filter(p => activeStatusList.includes(p.status || 'Active')).length;
+            const assignedPinsInState = pincodes.filter(p => (p.activeAgentId && p.activeAgentId !== '') || p.isAssigned === true).length;
+            const stateScopedStats = {
+                totalStates: 1,
+                totalDistricts: districts.length,
+                totalDivisions: divisions.length,
+                totalPincodes: pincodes.length,
+                activePincodes: activePinsInState,
+                assignedPincodes: assignedPinsInState,
+                availablePincodes: Math.max(0, pincodes.length - assignedPinsInState),
+                activeManagers: stateManagers.length
+            };
 
             const drilldownPayload = {
                 success: true,
@@ -658,10 +697,11 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 states: [stateEntry],
                 rawDistricts: districts,
                 rawDivisions: divisions,
-                rawPincodes: pincodes
+                rawPincodes: pincodes,
+                stats: stateScopedStats
             };
 
-            if (isUnscoped) {
+            if (isUnscoped && districts.length > 0) {
                 cachedDrilldownMap.set(cacheKey, {
                     timestamp: Date.now(),
                     payload: drilldownPayload
@@ -888,7 +928,7 @@ router.get('/stats', [optionalAuth], async (req, res) => {
             Division.countDocuments({ status: { $in: activeStatusList } }),
             Pincode.countDocuments(),
             Pincode.countDocuments({ status: { $in: activeStatusList } }),
-            Pincode.countDocuments({ $or: [{ activeAgentId: { $ne: null } }, { isAssigned: true }] }),
+            Pincode.countDocuments({ $or: [{ activeAgentId: { $ne: null, $nin: ['', null] } }, { isAssigned: true }] }),
             User.countDocuments({ role: 'agent', isActive: { $ne: false } }),
             Manager.countDocuments({ status: { $ne: 'Inactive' } })
         ]);
@@ -896,7 +936,10 @@ router.get('/stats', [optionalAuth], async (req, res) => {
         let distinctAssignedPins = [];
         try {
             distinctAssignedPins = await PincodeAssignment.distinct('pincode', {
-                $or: [{ assignedAgentId: { $ne: null } }, { assignedManagerId: { $ne: null } }]
+                $or: [
+                    { assignedAgentId: { $ne: null, $nin: ['', null] } },
+                    { assignedManagerId: { $ne: null, $nin: ['', null] } }
+                ]
             });
         } catch (e) {}
 

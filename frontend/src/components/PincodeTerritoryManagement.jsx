@@ -227,24 +227,30 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
 
     if (!force && stateDetailsCacheRef.current.has(targetState._id)) {
       const cached = stateDetailsCacheRef.current.get(targetState._id);
-      setSelectedState(cached);
-      return;
+      if (cached && cached.districts && cached.districts.length > 0) {
+        setSelectedState(cached);
+        return;
+      }
     }
 
     try {
       setStateDrilldownLoading(true);
-      const res = await fetch(`${API_BASE}/admin/territory/hierarchy?stateId=${encodeURIComponent(targetState._id)}`, {
+      const res = await fetch(`${API_BASE}/admin/territory/hierarchy?stateId=${encodeURIComponent(targetState._id)}${force ? '&force=true' : ''}`, {
         headers: { 'x-auth-token': token }
       });
       const data = await res.json();
       if (data.success && data.state) {
-        stateDetailsCacheRef.current.set(targetState._id, data.state);
+        if (data.state.districts && data.state.districts.length > 0) {
+          stateDetailsCacheRef.current.set(targetState._id, data.state);
+        }
         setSelectedState(data.state);
         setRawDistricts(data.rawDistricts || []);
         setRawDivisions(data.rawDivisions || []);
         setRawPincodes(data.rawPincodes || []);
 
-        setHierarchyData(prev => prev.map(s => s._id === targetState._id ? data.state : s));
+        setHierarchyData(prev => prev.map(s => s._id === targetState._id ? { ...s, ...data.state } : s));
+      } else {
+        throw new Error(data.msg || 'Unable to retrieve state hierarchy');
       }
     } catch (err) {
       console.error('Fetch state drilldown error:', err);
@@ -662,13 +668,17 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     if (!selectedState) return [];
     // Primary: use nested districts on selectedState from hierarchy endpoint
     if (selectedState.districts && selectedState.districts.length > 0) {
-      return selectedState.districts.filter(d => filterStatus === 'All' || d.status === filterStatus);
+      return selectedState.districts.filter(d => filterStatus === 'All' || (d.status || 'Active').toLowerCase() === filterStatus.toLowerCase());
     }
-    // Fallback: filter rawDistricts by stateId
+    // Fallback: match rawDistricts by stateId or state name
+    const stIdStr = String(selectedState._id || '');
+    const stNameLower = String(selectedState.name || '').toLowerCase();
+    const stCodeLower = String(selectedState.code || '').toLowerCase();
     return rawDistricts.filter(d => {
-      const parentId = d.stateId?._id || d.stateId;
-      const isParent = String(parentId) === String(selectedState._id);
-      const matchesStatus = filterStatus === 'All' || d.status === filterStatus;
+      const parentId = String(d.stateId?._id || d.stateId || '');
+      const parentStateName = String(d.state || '').toLowerCase();
+      const isParent = parentId === stIdStr || parentStateName === stNameLower || (d.stateCode && String(d.stateCode).toLowerCase() === stCodeLower);
+      const matchesStatus = filterStatus === 'All' || (d.status || 'Active').toLowerCase() === filterStatus.toLowerCase();
       return isParent && matchesStatus;
     });
   }, [selectedState, rawDistricts, filterStatus]);
@@ -679,12 +689,15 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     if (selectedDistrict) {
       // Filter strictly by the selected District
       if (selectedDistrict.divisions && selectedDistrict.divisions.length > 0) {
-        return selectedDistrict.divisions.filter(v => filterStatus === 'All' || v.status === filterStatus);
+        return selectedDistrict.divisions.filter(v => filterStatus === 'All' || (v.status || 'Active').toLowerCase() === filterStatus.toLowerCase());
       }
+      const dstIdStr = String(selectedDistrict._id || '');
+      const dstNameLower = String(selectedDistrict.name || '').toLowerCase();
       return rawDivisions.filter(v => {
-        const dId = v.districtId?._id || v.districtId;
-        const matchesDistrict = String(dId) === String(selectedDistrict._id);
-        const matchesStatus = filterStatus === 'All' || v.status === filterStatus;
+        const dId = String(v.districtId?._id || v.districtId || '');
+        const dName = String(v.district || '').toLowerCase();
+        const matchesDistrict = dId === dstIdStr || dName === dstNameLower;
+        const matchesStatus = filterStatus === 'All' || (v.status || 'Active').toLowerCase() === filterStatus.toLowerCase();
         return matchesDistrict && matchesStatus;
       });
     }
@@ -693,12 +706,15 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     stateDistricts.forEach(d => {
       if (d.divisions) {
         d.divisions.forEach(v => {
-          if (filterStatus === 'All' || v.status === filterStatus) {
+          if (filterStatus === 'All' || (v.status || 'Active').toLowerCase() === filterStatus.toLowerCase()) {
             allDivs.push({ ...v, parentDistrictName: d.name });
           }
         });
       }
     });
+    if (allDivs.length === 0 && rawDivisions.length > 0) {
+      return rawDivisions.filter(v => filterStatus === 'All' || (v.status || 'Active').toLowerCase() === filterStatus.toLowerCase());
+    }
     return allDivs;
   }, [selectedState, selectedDistrict, stateDistricts, rawDivisions, filterStatus]);
 
@@ -708,12 +724,15 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     if (selectedDivision) {
       // Filter strictly by the selected Division
       if (selectedDivision.pincodes && selectedDivision.pincodes.length > 0) {
-        return selectedDivision.pincodes.filter(p => filterStatus === 'All' || p.status === filterStatus);
+        return selectedDivision.pincodes.filter(p => filterStatus === 'All' || (p.status || 'Active').toLowerCase() === filterStatus.toLowerCase());
       }
+      const divIdStr = String(selectedDivision._id || '');
+      const divNameLower = String(selectedDivision.name || '').toLowerCase();
       return rawPincodes.filter(p => {
-        const divId = p.divisionId?._id || p.divisionId;
-        const matchesDivision = String(divId) === String(selectedDivision._id);
-        const matchesStatus = filterStatus === 'All' || p.status === filterStatus;
+        const divId = String(p.divisionId?._id || p.divisionId || '');
+        const divName = String(p.division || '').toLowerCase();
+        const matchesDivision = divId === divIdStr || divName === divNameLower;
+        const matchesStatus = filterStatus === 'All' || (p.status || 'Active').toLowerCase() === filterStatus.toLowerCase();
         return matchesDivision && matchesStatus;
       });
     }
@@ -722,26 +741,77 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
       const distPins = [];
       (selectedDistrict.divisions || []).forEach(v => {
         (v.pincodes || []).forEach(p => {
-          if (filterStatus === 'All' || p.status === filterStatus) {
+          if (filterStatus === 'All' || (p.status || 'Active').toLowerCase() === filterStatus.toLowerCase()) {
             distPins.push({ ...p, parentDivisionName: v.name });
           }
         });
       });
-      return distPins;
+      if (distPins.length > 0) return distPins;
+      const dstIdStr = String(selectedDistrict._id || '');
+      const dstNameLower = String(selectedDistrict.name || '').toLowerCase();
+      return rawPincodes.filter(p => {
+        const dId = String(p.districtId?._id || p.districtId || '');
+        const dName = String(p.district || '').toLowerCase();
+        return (dId === dstIdStr || dName === dstNameLower) && (filterStatus === 'All' || (p.status || 'Active').toLowerCase() === filterStatus.toLowerCase());
+      });
     }
     // State-level pincodes
     const statePins = [];
     stateDistricts.forEach(d => {
       (d.divisions || []).forEach(v => {
         (v.pincodes || []).forEach(p => {
-          if (filterStatus === 'All' || p.status === filterStatus) {
+          if (filterStatus === 'All' || (p.status || 'Active').toLowerCase() === filterStatus.toLowerCase()) {
             statePins.push({ ...p, parentDistrictName: d.name, parentDivisionName: v.name });
           }
         });
       });
     });
+    if (statePins.length === 0 && rawPincodes.length > 0) {
+      return rawPincodes.filter(p => filterStatus === 'All' || (p.status || 'Active').toLowerCase() === filterStatus.toLowerCase());
+    }
     return statePins;
   }, [selectedState, selectedDistrict, selectedDivision, stateDistricts, rawPincodes, filterStatus]);
+
+  // --- Scope-Aware KPI Metrics (Derived from Verified DB Records) ---
+  const currentScopeStats = useMemo(() => {
+    if (!selectedState) {
+      return {
+        scopeLabel: 'National Overview (Pan-India)',
+        isScoped: false,
+        totalStates: stats.totalStates,
+        totalDistricts: stats.totalDistricts,
+        totalDivisions: stats.totalDivisions,
+        totalPincodes: stats.totalPincodes,
+        activePincodes: stats.activePincodes,
+        assignedPincodes: stats.assignedPincodes,
+        availablePincodes: stats.availablePincodes,
+        activeManagers: stats.activeManagers
+      };
+    }
+
+    const scopedDistricts = stateDistricts.length;
+    const scopedDivisions = currentDivisions.length;
+    const scopedPincodes = currentPincodes.length;
+    const scopedActive = currentPincodes.filter(p => (p.status || 'Active').toLowerCase() === 'active').length;
+    const scopedAssigned = currentPincodes.filter(p => (p.activeAgentId && p.activeAgentId !== '') || p.isAssigned === true).length;
+    const scopedAvailable = Math.max(0, scopedPincodes - scopedAssigned);
+    const scopedManagers = (selectedState.managers?.length || 0) +
+      stateDistricts.reduce((sum, d) => sum + (d.managers?.length || 0), 0) +
+      currentDivisions.reduce((sum, v) => sum + (v.managers?.length || 0), 0);
+
+    return {
+      scopeLabel: `${selectedState.name} Scope`,
+      isScoped: true,
+      totalStates: 1,
+      totalDistricts: scopedDistricts,
+      totalDivisions: scopedDivisions,
+      totalPincodes: scopedPincodes,
+      activePincodes: scopedActive,
+      assignedPincodes: scopedAssigned,
+      availablePincodes: scopedAvailable,
+      activeManagers: scopedManagers > 0 ? scopedManagers : (selectedState.activeManagers || 0)
+    };
+  }, [selectedState, stats, stateDistricts, currentDivisions, currentPincodes]);
 
   return (
     <div className="space-y-6 animate-fadeIn pb-12">
@@ -953,38 +1023,61 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
         </div>
 
         {/* ── KPI METRICS SUMMARY ROW (REAL DB COUNTS) ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mt-6 pt-5 border-t border-slate-100 dark:border-slate-800/80">
-          <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">States</span>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{stats.totalStates}</div>
+        <div className="mt-6 pt-5 border-t border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${currentScopeStats.isScoped ? 'bg-primary-500 animate-pulse' : 'bg-emerald-500'}`} />
+              <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                {currentScopeStats.scopeLabel}
+              </span>
+            </div>
+            {currentScopeStats.isScoped && (
+              <button
+                onClick={() => {
+                  setSelectedState(null);
+                  setSelectedDistrict(null);
+                  setSelectedDivision(null);
+                  setSelectedPincode(null);
+                }}
+                className="text-[10px] text-primary-600 dark:text-primary-400 hover:underline font-bold cursor-pointer"
+              >
+                View National Overview
+              </button>
+            )}
           </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Districts</span>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{stats.totalDistricts}</div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Divisions</span>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{stats.totalDivisions}</div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Pincodes</span>
-            <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{stats.totalPincodes}</div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-black tracking-wider text-emerald-500">Active Pins</span>
-            <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{stats.activePincodes}</div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-black tracking-wider text-primary-500">Assigned Pins</span>
-            <div className="text-xl font-black text-primary-600 dark:text-primary-400 mt-0.5">{stats.assignedPincodes}</div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-black tracking-wider text-amber-500">Available Pins</span>
-            <div className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">{stats.availablePincodes}</div>
-          </div>
-          <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-black tracking-wider text-purple-500">Managers</span>
-            <div className="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">{stats.activeManagers}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">States</span>
+              <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{currentScopeStats.totalStates}</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Districts</span>
+              <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{currentScopeStats.totalDistricts}</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Divisions</span>
+              <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{currentScopeStats.totalDivisions}</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">Pincodes</span>
+              <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{currentScopeStats.totalPincodes}</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-black tracking-wider text-emerald-500">Active Pins</span>
+              <div className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{currentScopeStats.activePincodes}</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-black tracking-wider text-primary-500">Assigned Pins</span>
+              <div className="text-xl font-black text-primary-600 dark:text-primary-400 mt-0.5">{currentScopeStats.assignedPincodes}</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-black tracking-wider text-amber-500">Available Pins</span>
+              <div className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">{currentScopeStats.availablePincodes}</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-black tracking-wider text-purple-500">Managers</span>
+              <div className="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">{currentScopeStats.activeManagers}</div>
+            </div>
           </div>
         </div>
       </div>
@@ -1170,7 +1263,15 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                         <div className="w-10 h-10 rounded-2xl bg-primary-500/10 flex items-center justify-center text-primary-600 dark:text-primary-400 font-bold group-hover:scale-105 transition-transform">
                           <MapPin className="w-5 h-5" />
                         </div>
-                        <div>
+                        <div
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setSelectedDistrict(null);
+                            setSelectedDivision(null);
+                            setSelectedPincode(null);
+                            fetchStateHierarchy(st);
+                          }}
+                        >
                           <h4 className="font-extrabold text-sm text-slate-900 dark:text-white group-hover:text-primary-600 transition-colors">
                             {st.name}
                           </h4>
@@ -1230,10 +1331,10 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                     <span className="text-[10px] text-slate-400">Protected Entity</span>
                     <button
                       onClick={() => {
-                        setSelectedState(st);
                         setSelectedDistrict(null);
                         setSelectedDivision(null);
                         setSelectedPincode(null);
+                        fetchStateHierarchy(st);
                       }}
                       className="px-3.5 py-1.5 bg-primary-50 dark:bg-primary-950/30 hover:bg-primary-600 text-primary-600 dark:text-primary-400 hover:text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
@@ -1789,10 +1890,13 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                     <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => {
-                          setSelectedState(st);
+                          setSelectedDistrict(null);
+                          setSelectedDivision(null);
+                          setSelectedPincode(null);
+                          fetchStateHierarchy(st);
                           setViewMode('hierarchy');
                         }}
-                        className="px-2.5 py-1 bg-primary-50 dark:bg-primary-950/40 text-primary-600 rounded-lg text-xs font-bold"
+                        className="px-2.5 py-1 bg-primary-50 dark:bg-primary-950/40 text-primary-600 rounded-lg text-xs font-bold cursor-pointer"
                       >
                         View in Hierarchy
                       </button>

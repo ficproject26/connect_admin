@@ -642,6 +642,12 @@ const startServer = async () => {
         await connectDB();
         await seedMainCategoriesIfNeeded();
         await syncSuspendedVendorProductsOnBoot();
+        try {
+            const syncTerritoryData = require('./utils/syncTerritoryData');
+            await syncTerritoryData({ force: false });
+        } catch (terrSyncErr) {
+            console.error('Territory auto-sync on boot note:', terrSyncErr.message);
+        }
         const { verifyTransporter } = require('./config/mailer');
         await verifyTransporter();
     } catch (err) {
