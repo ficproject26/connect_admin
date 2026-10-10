@@ -2828,45 +2828,84 @@ const buildProductVendorQuery = (v) => {
     return { $or: orConds };
 };
 
-const findVendorByAnyId = async (idParam) => {
-    if (!idParam) return { userVendor: null, legacyVendor: null };
-    const isValidId = mongoose.Types.ObjectId.isValid(idParam);
-    const cleanId = String(idParam).trim();
+const findVendorByAnyId = async (idParam, extraHints = {}) => {
+    if (!idParam && !extraHints.email && !extraHints.phone && !extraHints._id && !extraHints.vendorId) {
+        return { userVendor: null, legacyVendor: null };
+    }
+    const cleanId = idParam ? String(idParam).trim() : '';
+    const cleanEmail = (extraHints.email || (cleanId.includes('@') ? cleanId : '')).toLowerCase().trim();
+    const cleanPhone = (extraHints.phone || '').replace(/\D/g, '');
+
+    const buildConditions = () => {
+        const conds = [];
+        if (cleanId) {
+            conds.push({ _id: cleanId });
+            conds.push({ id: cleanId });
+            conds.push({ vendorId: cleanId });
+            conds.push({ registrationId: cleanId });
+            if (mongoose.Types.ObjectId.isValid(cleanId)) {
+                conds.unshift({ _id: new mongoose.Types.ObjectId(cleanId) });
+            }
+        }
+        if (extraHints._id && String(extraHints._id).trim() !== cleanId) {
+            const extraId = String(extraHints._id).trim();
+            conds.push({ _id: extraId });
+            if (mongoose.Types.ObjectId.isValid(extraId)) {
+                conds.push({ _id: new mongoose.Types.ObjectId(extraId) });
+            }
+        }
+        if (extraHints.id && String(extraHints.id).trim() !== cleanId) {
+            conds.push({ id: String(extraHints.id).trim() });
+        }
+        if (extraHints.vendorId && String(extraHints.vendorId).trim() !== cleanId) {
+            conds.push({ vendorId: String(extraHints.vendorId).trim() });
+        }
+        if (extraHints.registrationId && String(extraHints.registrationId).trim() !== cleanId) {
+            conds.push({ registrationId: String(extraHints.registrationId).trim() });
+        }
+        if (cleanEmail) {
+            conds.push({ email: cleanEmail });
+        }
+        if (cleanPhone) {
+            conds.push({ phone: cleanPhone });
+            conds.push({ mobile: cleanPhone });
+        }
+        return conds;
+    };
+
+    const conditions = buildConditions();
+    if (conditions.length === 0) return { userVendor: null, legacyVendor: null };
 
     let userVendor = null;
-    if (isValidId) {
-        try { userVendor = await User.findById(cleanId); } catch (e) {}
-    }
-    if (!userVendor) {
-        try {
-            userVendor = await User.findOne({
-                $or: [
-                    { registrationId: cleanId },
-                    { vendorId: cleanId },
-                    { email: cleanId.toLowerCase() },
-                    { phone: cleanId }
-                ]
-            });
-        } catch (e) {}
-    }
+    try {
+        if (cleanId) {
+            userVendor = await User.findById(cleanId).catch(() => null);
+        }
+        if (!userVendor) {
+            userVendor = await User.findOne({ $or: conditions }).catch(() => null);
+        }
+    } catch (e) {}
 
     let legacyVendor = null;
     if (!userVendor) {
-        if (isValidId) {
-            try { legacyVendor = await Vendor.findById(cleanId); } catch (e) {}
-        }
-        if (!legacyVendor) {
-            try {
-                legacyVendor = await Vendor.findOne({
-                    $or: [
-                        { registrationId: cleanId },
-                        { vendorId: cleanId },
-                        { email: cleanId.toLowerCase() },
-                        { phone: cleanId }
-                    ]
-                });
-            } catch (e) {}
-        }
+        try {
+            if (cleanId) {
+                legacyVendor = await Vendor.findById(cleanId).catch(() => null);
+            }
+            if (!legacyVendor) {
+                legacyVendor = await Vendor.findOne({ $or: conditions }).catch(() => null);
+            }
+            if (!legacyVendor) {
+                const rawDoc = await Vendor.collection.findOne({ $or: conditions }).catch(() => null);
+                if (rawDoc) {
+                    legacyVendor = await Vendor.findById(rawDoc._id).catch(() => null);
+                    if (!legacyVendor) {
+                        legacyVendor = new Vendor(rawDoc);
+                        legacyVendor.isNew = false;
+                    }
+                }
+            }
+        } catch (e) {}
     }
 
     return { userVendor, legacyVendor };
@@ -2874,7 +2913,15 @@ const findVendorByAnyId = async (idParam) => {
 
 router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
     try {
-        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
+        const extraHints = {
+            _id: req.body?._id,
+            id: req.body?.id,
+            vendorId: req.body?.vendorId,
+            registrationId: req.body?.registrationId,
+            email: req.body?.email,
+            phone: req.body?.phone || req.body?.mobile
+        };
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id, extraHints);
         const bcrypt = require('bcryptjs');
         if (vendor) {
             vendor.status = 'Approved';
@@ -2901,7 +2948,7 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
             if (cleanEmail) {
                 await Vendor.updateOne(
                     { email: cleanEmail },
-                    { $set: { status: 'approved', kycStatus: 'approved', isActive: true, isApproved: true } }
+                    { $set: { status: 'Approved', kycStatus: 'approved', isActive: true, isApproved: true } }
                 ).catch(() => {});
             }
             await Product.updateMany(
@@ -2911,31 +2958,40 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
             return res.json(vendor);
         }
         if (legacy) {
-            legacy.status = 'approved';
+            legacy.status = 'Approved';
             legacy.kycStatus = 'approved';
             legacy.isActive = true;
             legacy.isApproved = true;
+            if (!legacy.phone && legacy.mobile) {
+                legacy.phone = legacy.mobile;
+            }
             if (!legacy.contactName) {
                 legacy.contactName = legacy.contactPerson || legacy.ownerName || legacy.businessName || legacy.name || 'Vendor Contact';
             }
             await legacy.save();
             await Vendor.updateOne(
                 { _id: legacy._id },
-                { $set: { status: 'approved', kycStatus: 'approved', isActive: true, isApproved: true } }
+                { $set: { status: 'Approved', kycStatus: 'approved', isActive: true, isApproved: true } }
             ).catch(() => {});
             
             // Sync to User collection if missing
             const cleanEmail = (legacy.email || '').toLowerCase().trim();
+            const rawPhone = (legacy.phone || legacy.mobile || '').replace(/\D/g, '');
             if (cleanEmail) {
-                let userRec = await User.findOne({ email: cleanEmail });
+                let userRec = await User.findOne({ email: cleanEmail }).catch(() => null);
+                const phoneInUse = rawPhone ? await User.findOne({ phone: rawPhone, email: { $ne: cleanEmail } }).catch(() => null) : null;
+                const safePhone = phoneInUse ? undefined : (rawPhone || undefined);
+
                 if (!userRec) {
                     const salt = await bcrypt.genSalt(10);
                     const hashedPassword = await bcrypt.hash('Vendor@12345', salt);
                     userRec = new User({
+                        _id: legacy._id,
                         name: legacy.name || legacy.businessName || 'Vendor Merchant',
                         businessName: legacy.businessName || legacy.name || 'Vendor Store',
                         contactPerson: legacy.contactPerson || legacy.ownerName || legacy.contactName || 'Contact Person',
                         email: cleanEmail,
+                        phone: safePhone,
                         password: hashedPassword,
                         role: 'Vendor',
                         category: legacy.category || 'General Store',
@@ -2945,7 +3001,7 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
                         isApproved: true,
                         createdAt: legacy.createdAt || new Date()
                     });
-                    await userRec.save().catch(() => {});
+                    await userRec.save().catch(e => console.warn('User sync save warning:', e.message));
                 } else {
                     if (!userRec.password) {
                         const salt = await bcrypt.genSalt(10);
@@ -2955,7 +3011,8 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
                     userRec.kycStatus = 'approved';
                     userRec.isActive = true;
                     userRec.isApproved = true;
-                    await userRec.save().catch(() => {});
+                    if (!userRec.phone && safePhone) userRec.phone = safePhone;
+                    await userRec.save().catch(e => console.warn('User sync update warning:', e.message));
                 }
             }
 
@@ -2965,19 +3022,29 @@ router.put('/vendors/:id/approve', [auth, adminAuth], async (req, res) => {
             ).catch(() => {});
             return res.json(legacy);
         }
-        res.status(404).json({ msg: 'Vendor not found', message: 'Vendor not found' });
+        return res.status(404).json({ msg: 'Vendor not found', message: 'Vendor not found' });
     } catch (err) {
         console.error('Fatal error in PUT /api/admin/vendors/:id/approve:', err);
-        res.status(500).json({ error: 'Server error', message: err.message, msg: err.message });
+        return res.status(500).json({ error: 'Server error', message: err.message, msg: err.message });
     }
 });
 
 router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
     try {
-        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
+        const extraHints = {
+            _id: req.body?._id,
+            id: req.body?.id,
+            vendorId: req.body?.vendorId,
+            registrationId: req.body?.registrationId,
+            email: req.body?.email,
+            phone: req.body?.phone || req.body?.mobile
+        };
+        const rejectionReason = req.body?.reason || req.body?.rejectionReason || 'KYC verification rejected / document re-upload requested by Admin';
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id, extraHints);
         if (vendor) {
             vendor.status = 'Rejected';
             vendor.kycStatus = 'rejected';
+            vendor.rejectionReason = rejectionReason;
             vendor.isActive = false;
             vendor.isApproved = false;
             await vendor.save();
@@ -2985,7 +3052,7 @@ router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
             if (cleanEmail) {
                 await Vendor.updateOne(
                     { email: cleanEmail },
-                    { $set: { status: 'rejected', kycStatus: 'rejected', isActive: false, isApproved: false } }
+                    { $set: { status: 'Rejected', kycStatus: 'rejected', rejectionReason, isActive: false, isApproved: false } }
                 ).catch(() => {});
             }
             await Product.updateMany(
@@ -2995,17 +3062,21 @@ router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
             return res.json(vendor);
         }
         if (legacy) {
-            legacy.status = 'rejected';
+            legacy.status = 'Rejected';
             legacy.kycStatus = 'rejected';
+            legacy.rejectionReason = rejectionReason;
             legacy.isActive = false;
             legacy.isApproved = false;
+            if (!legacy.phone && legacy.mobile) {
+                legacy.phone = legacy.mobile;
+            }
             if (!legacy.contactName) {
                 legacy.contactName = legacy.contactPerson || legacy.ownerName || legacy.businessName || legacy.name || 'Vendor Contact';
             }
             await legacy.save();
             await Vendor.updateOne(
                 { _id: legacy._id },
-                { $set: { status: 'rejected', kycStatus: 'rejected', isActive: false, isApproved: false } }
+                { $set: { status: 'Rejected', kycStatus: 'rejected', rejectionReason, isActive: false, isApproved: false } }
             ).catch(() => {});
             
             // Sync to User collection if exists
@@ -3013,7 +3084,7 @@ router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
             if (cleanEmail) {
                 await User.updateOne(
                     { email: cleanEmail },
-                    { $set: { status: 'Rejected', kycStatus: 'rejected', isActive: false, isApproved: false } }
+                    { $set: { status: 'Rejected', kycStatus: 'rejected', rejectionReason, isActive: false, isApproved: false } }
                 ).catch(() => {});
             }
 
@@ -3023,10 +3094,10 @@ router.put('/vendors/:id/reject', [auth, adminAuth], async (req, res) => {
             ).catch(() => {});
             return res.json(legacy);
         }
-        res.status(404).json({ msg: 'Vendor not found', message: 'Vendor not found' });
+        return res.status(404).json({ msg: 'Vendor not found', message: 'Vendor not found' });
     } catch (err) {
         console.error('Fatal error in PUT /api/admin/vendors/:id/reject:', err);
-        res.status(500).json({ error: 'Server error', message: err.message, msg: err.message });
+        return res.status(500).json({ error: 'Server error', message: err.message, msg: err.message });
     }
 });
 
@@ -3063,8 +3134,8 @@ router.put('/vendors/:id/suspend', [auth, adminAuth], async (req, res) => {
 
 router.put('/vendors/:id/toggle-status', [auth, adminAuth], async (req, res) => {
     try {
-        let vendor = await User.findById(req.params.id);
-        if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
+        if (vendor) {
             const isNowApproved = !(vendor.status === 'Approved' || vendor.status === 'approved');
             const targetStatus = isNowApproved ? 'Approved' : 'Suspended';
             vendor.status = targetStatus;
@@ -3076,10 +3147,9 @@ router.put('/vendors/:id/toggle-status', [auth, adminAuth], async (req, res) => 
             ).catch(() => {});
             return res.json(vendor);
         }
-        let legacy = await Vendor.findById(req.params.id);
         if (legacy) {
-            const isNowApproved = !(legacy.status === 'approved');
-            const targetStatus = isNowApproved ? 'approved' : 'suspended';
+            const isNowApproved = !(legacy.status === 'Approved' || legacy.status === 'approved');
+            const targetStatus = isNowApproved ? 'Approved' : 'Suspended';
             legacy.status = targetStatus;
             legacy.isActive = isNowApproved;
             await legacy.save();
@@ -3098,8 +3168,8 @@ router.put('/vendors/:id/toggle-status', [auth, adminAuth], async (req, res) => 
 
 router.put('/vendors/:id', [auth, adminAuth], async (req, res) => {
     try {
-        let vendor = await User.findById(req.params.id);
-        if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
+        if (vendor) {
             const { businessName, contactPerson, address, phone, email, category, subcategory, vendorType } = req.body;
             if (businessName) vendor.businessName = businessName;
             if (contactPerson) vendor.contactPerson = contactPerson;
@@ -3116,7 +3186,6 @@ router.put('/vendors/:id', [auth, adminAuth], async (req, res) => {
             await vendor.save();
             return res.json(vendor);
         }
-        let legacy = await Vendor.findById(req.params.id);
         if (legacy) {
             const { businessName, contactName, phone, email, category } = req.body;
             if (businessName) legacy.businessName = businessName;
@@ -3138,8 +3207,8 @@ router.put('/vendors/:id/status', [auth, adminAuth], async (req, res) => {
     const { status } = req.body;
     try {
         const isApproved = ['approved', 'active'].includes((status || '').toLowerCase().trim());
-        let vendor = await User.findById(req.params.id);
-        if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
+        if (vendor) {
             vendor.status = status;
             vendor.isActive = isApproved;
             vendor.isApproved = isApproved;
@@ -3150,14 +3219,18 @@ router.put('/vendors/:id/status', [auth, adminAuth], async (req, res) => {
             ).catch(() => {});
             return res.json(vendor);
         }
-        let legacy = await Vendor.findByIdAndUpdate(req.params.id, { status, isActive: isApproved }, { new: true });
         if (legacy) {
+            legacy.status = status;
+            legacy.isActive = isApproved;
+            legacy.isApproved = isApproved;
+            await legacy.save();
             await Product.updateMany(
                 buildProductVendorQuery(legacy),
                 { $set: { vendorStatus: (status || '').toLowerCase(), isVendorSuspended: !isApproved, isSuspended: !isApproved, isActive: isApproved, isAvailable: isApproved } }
             ).catch(() => {});
+            return res.json(legacy);
         }
-        res.json(legacy);
+        res.status(404).json({ msg: 'Vendor not found' });
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -3254,14 +3327,13 @@ router.put('/vendors/:id/businesses/:bizId/status', [auth, adminAuth], async (re
 // DELETE a vendor by ID
 router.delete('/vendors/:id', [auth, adminAuth], async (req, res) => {
     try {
-        let vendor = await User.findById(req.params.id);
-        if (vendor && (vendor.role === 'Vendor' || vendor.role === 'vendor')) {
-            await User.findByIdAndDelete(req.params.id);
+        const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
+        if (vendor) {
+            await User.deleteOne({ _id: vendor._id });
             return res.json({ msg: 'Vendor deleted' });
         }
-        let legacy = await Vendor.findById(req.params.id);
         if (legacy) {
-            await Vendor.findByIdAndDelete(req.params.id);
+            await Vendor.deleteOne({ _id: legacy._id });
             return res.json({ msg: 'Vendor deleted' });
         }
         res.status(404).json({ msg: 'Vendor not found' });

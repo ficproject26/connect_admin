@@ -1891,19 +1891,31 @@ function App() {
   };
 
   // Dedicated KYC Handlers with single-flight locking, optimistic state updates & auto-refresh
-  const handleVendorKycAction = async (vendorId, action) => {
-    if (processingKycId) return;
-    setProcessingKycId(vendorId);
+  const handleVendorKycAction = async (vendorArg, action) => {
+    const targetId = typeof vendorArg === 'object' ? (vendorArg._id || vendorArg.id || vendorArg.vendorId) : vendorArg;
+    const vendorObj = typeof vendorArg === 'object' ? vendorArg : vendors.find(v => v._id === targetId || v.id === targetId);
+    if (!targetId || processingKycId) return;
+
+    setProcessingKycId(targetId);
     setKycActionType(action);
     try {
-      const endpoint = action === 'approve' ? `/admin/vendors/${vendorId}/approve` : `/admin/vendors/${vendorId}/reject`;
+      const endpoint = action === 'approve' ? `/admin/vendors/${targetId}/approve` : `/admin/vendors/${targetId}/reject`;
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: 'PUT',
         headers: {
           'x-auth-token': token,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({
+          vendorId: targetId,
+          _id: vendorObj?._id || targetId,
+          id: vendorObj?.id || targetId,
+          registrationId: vendorObj?.registrationId,
+          email: vendorObj?.email,
+          phone: vendorObj?.phone || vendorObj?.mobile,
+          businessName: vendorObj?.businessName || vendorObj?.name,
+          reason: action === 'reject' ? 'KYC documents require re-upload / verification rejected by Admin' : undefined
+        })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -1919,7 +1931,7 @@ function App() {
         : 'Vendor KYC rejected / re-upload requested.';
 
       // Optimistically update vendor status so it leaves Pending and appears in Approved/Rejected immediately
-      setVendors(prev => prev.map(v => v._id === vendorId ? { ...v, status: newStatus, kycStatus: newStatus.toLowerCase() } : v));
+      setVendors(prev => prev.map(v => (v._id === targetId || v.id === targetId || (vendorObj?.email && v.email === vendorObj.email)) ? { ...v, status: newStatus, kycStatus: newStatus.toLowerCase() } : v));
       addToast(successMsg, 'success');
 
       delete apiCacheRef.current['vendors'];
@@ -3735,18 +3747,18 @@ function App() {
                             {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((vendor.status || '').toLowerCase()) && (
                               <div className="flex gap-3 justify-end">
                                 <button
-                                  onClick={() => handleVendorKycAction(vendor._id, 'reject')}
-                                  disabled={processingKycId === vendor._id}
+                                  onClick={() => handleVendorKycAction(vendor, 'reject')}
+                                  disabled={processingKycId === vendor._id || processingKycId === vendor.id}
                                   className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                 >
-                                  {processingKycId === vendor._id && kycActionType === 'reject' ? 'Rejecting...' : 'Reject / Request Reupload'}
+                                  {(processingKycId === vendor._id || processingKycId === vendor.id) && kycActionType === 'reject' ? 'Rejecting...' : 'Reject / Request Reupload'}
                                 </button>
                                 <button
-                                  onClick={() => handleVendorKycAction(vendor._id, 'approve')}
-                                  disabled={processingKycId === vendor._id}
+                                  onClick={() => handleVendorKycAction(vendor, 'approve')}
+                                  disabled={processingKycId === vendor._id || processingKycId === vendor.id}
                                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                                 >
-                                  {processingKycId === vendor._id && kycActionType === 'approve' ? (
+                                  {(processingKycId === vendor._id || processingKycId === vendor.id) && kycActionType === 'approve' ? (
                                     <>
                                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                       <span>Verifying...</span>

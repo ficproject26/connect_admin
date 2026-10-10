@@ -1,13 +1,15 @@
 const mongoose = require('mongoose');
 
 const VendorSchema = new mongoose.Schema({
+    _id: { type: mongoose.Schema.Types.Mixed, default: () => new mongoose.Types.ObjectId() },
     id: { type: String },
     businessName: { type: String, required: true },
     category: { type: String, default: 'General Store' },
     branchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
     agentId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Agent reference
     contactName: { type: String },
-    phone: { type: String, required: true },
+    phone: { type: String },
+    mobile: { type: String },
     email: { type: String, required: true },
     status: { type: String, default: 'pending' },
     isActive: { type: Boolean, default: false },
