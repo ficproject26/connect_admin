@@ -4,12 +4,26 @@ import './index.css'
 import App from './App.jsx'
 
 // Suppress third-party Chrome Extension background script noise in console
+const isExtensionNoise = (errOrMsg) => {
+  if (!errOrMsg) return false;
+  let str = '';
+  if (typeof errOrMsg === 'string') str = errOrMsg;
+  else if (errOrMsg instanceof Error) str = `${errOrMsg.name || ''} ${errOrMsg.message || ''} ${errOrMsg.stack || ''}`;
+  else if (typeof errOrMsg === 'object') str = `${errOrMsg.message || ''} ${errOrMsg.reason || ''} ${errOrMsg.error?.message || ''} ${String(errOrMsg)}`;
+  else str = String(errOrMsg);
+  const lower = str.toLowerCase();
+  return (
+    lower.includes('a listener indicated an asynchronous response') ||
+    lower.includes('message channel closed') ||
+    lower.includes('runtime.lasterror') ||
+    lower.includes('message channel closed before a response was received')
+  );
+};
+
 window.addEventListener('unhandledrejection', (event) => {
-  if (
-    event.reason?.message?.includes('A listener indicated an asynchronous response') ||
-    event.reason?.message?.includes('message channel closed')
-  ) {
+  if (isExtensionNoise(event.reason) || isExtensionNoise(event.message) || isExtensionNoise(event)) {
     event.preventDefault();
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
   }
 });
 
@@ -29,6 +43,11 @@ window.addEventListener('vite:preloadError', (event) => {
 });
 
 window.addEventListener('error', (event) => {
+  if (isExtensionNoise(event?.error) || isExtensionNoise(event?.message) || isExtensionNoise(event?.filename)) {
+    event.preventDefault();
+    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+    return;
+  }
   const msg = event?.message || '';
   if (
     msg.includes('dynamically imported module') ||
