@@ -634,6 +634,7 @@ export const VendorDirectoryModule = React.memo(({
   const [showManagerOnboardedModal, setShowManagerOnboardedModal] = useState(false);
   const [managerOnboardSearch, setManagerOnboardSearch] = useState('');
   const [managerOnboardedVendorsList, setManagerOnboardedVendorsList] = useState([]);
+  const [managerSummaryStats, setManagerSummaryStats] = useState({ total: 0, active: 0, pending: 0 });
   const [managerVendorsLoading, setManagerVendorsLoading] = useState(false);
   const [managerVendorsError, setManagerVendorsError] = useState(null);
 
@@ -926,7 +927,7 @@ export const VendorDirectoryModule = React.memo(({
     setManagerVendorsError(null);
     try {
       const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
-      const url = `${baseClean}/admin/enterprise/vendors?isManagerOnboarded=true&limit=500`;
+      const url = `${baseClean}/admin/enterprise/vendors?isManagerOnboarded=true&pendingOnly=true&limit=500`;
 
       try {
         const controller = new AbortController();
@@ -946,9 +947,15 @@ export const VendorDirectoryModule = React.memo(({
           const data = await res.json().catch(() => ({}));
           const rawVendors = Array.isArray(data.vendors) ? data.vendors : (Array.isArray(data) ? data : []);
           const list = deduplicateVendorsList(rawVendors);
-          // Keep all manager onboarded vendors (both active/approved and pending/others)
-          const managerOnly = list.filter(v => isVendorManagerOnboarded(v));
-          setManagerOnboardedVendorsList(managerOnly.length > 0 ? managerOnly : list);
+          // Action queue: strictly display only newly submitted, unprocessed pending vendor onboarding requests
+          const pendingOnly = list.filter(v => isVendorManagerOnboarded(v) && isPendingVendorReview(v.status));
+          setManagerOnboardedVendorsList(pendingOnly);
+
+          // Update summary KPI cards from real authoritative backend stats
+          const total = typeof data.total === 'number' ? data.total : list.length;
+          const active = typeof data.activeCount === 'number' ? data.activeCount : 0;
+          const pending = typeof data.pendingCount === 'number' ? data.pendingCount : pendingOnly.length;
+          setManagerSummaryStats({ total, active, pending });
           setManagerVendorsError(null);
         } else {
           const errData = await res.json().catch(() => ({}));
@@ -1158,8 +1165,13 @@ export const VendorDirectoryModule = React.memo(({
         // Backend confirmed approval -> update states to Active
         const newStatus = 'Active';
         setDirectRequests(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-        setAgentOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: true, isApproved: true } : v));
-        setManagerOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: true, isApproved: true } : v));
+        setAgentOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setManagerOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setManagerSummaryStats(prev => ({
+          ...prev,
+          active: prev.active + 1,
+          pending: Math.max(0, prev.pending - 1)
+        }));
         setVendors(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: true, isApproved: true } : v));
 
         if (selectedVendorDetails && (selectedVendorDetails._id === vendorId || selectedVendorDetails.id === vendorId)) {
@@ -1236,8 +1248,12 @@ export const VendorDirectoryModule = React.memo(({
       if (res.ok && data.success) {
         const newStatus = 'Rejected';
         setDirectRequests(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-        setAgentOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: false, isApproved: false } : v));
-        setManagerOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: false, isApproved: false } : v));
+        setAgentOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setManagerOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setManagerSummaryStats(prev => ({
+          ...prev,
+          pending: Math.max(0, prev.pending - 1)
+        }));
         setVendors(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: false, isApproved: false } : v));
 
         if (selectedVendorDetails && (selectedVendorDetails._id === vendorId || selectedVendorDetails.id === vendorId)) {
@@ -1408,7 +1424,8 @@ export const VendorDirectoryModule = React.memo(({
 
   const isPendingVendorReview = (status) => {
     const s = String(status || '').toLowerCase().trim();
-    return !s || ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', 'requested', 'unapproved'].includes(s);
+    if (['approved', 'active', 'rejected', 'suspended', 'inactive'].includes(s)) return false;
+    return !s || s.includes('pending') || ['under_verification', 'under verification', 'in_review', 'requested', 'unapproved'].includes(s);
   };
 
   const handleUpdateVendorStatus = (vendorObj, newStatus) => {
@@ -1447,7 +1464,16 @@ export const VendorDirectoryModule = React.memo(({
     setVendors(prev => prev.map(updateVendorObj));
     setDirectRequests(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
     setAgentOnboardedVendorsList(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
-    setManagerOnboardedVendorsList(prev => prev.map(updateVendorObj));
+    if (!isPendingVendorReview(newStatus)) {
+      setManagerOnboardedVendorsList(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
+      setManagerSummaryStats(prev => ({
+        ...prev,
+        active: ['Active', 'Approved'].includes(newStatus) ? prev.active + 1 : prev.active,
+        pending: Math.max(0, prev.pending - 1)
+      }));
+    } else {
+      setManagerOnboardedVendorsList(prev => prev.map(updateVendorObj));
+    }
     setSelectedVendorDetails(prev => prev ? updateVendorObj(prev) : null);
 
     try {
@@ -2955,11 +2981,9 @@ export const VendorDirectoryModule = React.memo(({
           return fields.some(f => f.includes(q));
         });
 
-        const totalCount = managerVendors.length;
-        const activeCount = managerVendors.filter(v =>
-          ['active', 'approved'].includes((v.status || '').toLowerCase().trim()) || v.isActive === true
-        ).length;
-        const pendingCount = totalCount - activeCount;
+        const totalCount = managerSummaryStats.total;
+        const activeCount = managerSummaryStats.active;
+        const pendingCount = managerSummaryStats.pending;
 
         return (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
@@ -2975,8 +2999,8 @@ export const VendorDirectoryModule = React.memo(({
                     <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Manager Onboarded Vendors</h3>
                     <p className="text-xs text-slate-400 font-semibold mt-0.5">
                       {managerVendorsLoading
-                        ? 'Fetching manager onboarded vendors...'
-                        : `${filtered.length} vendor${filtered.length !== 1 ? 's' : ''} onboarded by territory managers`}
+                        ? 'Fetching manager onboarded vendor requests...'
+                        : `${filtered.length} pending request${filtered.length !== 1 ? 's' : ''} awaiting review`}
                     </p>
                   </div>
                 </div>
@@ -3063,13 +3087,17 @@ export const VendorDirectoryModule = React.memo(({
                   </div>
                 ) : filtered.length === 0 ? (
                   <div className="text-center py-16 text-slate-400">
-                    <UserCog className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm font-bold">
+                    <UserCog className="w-12 h-12 mx-auto mb-3 opacity-30 text-teal-600" />
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
                       {managerVendors.length === 0
-                        ? 'No manager-onboarded vendors found in the directory yet.'
-                        : 'No vendors match your search query.'}
+                        ? 'No new pending vendor requests'
+                        : 'No pending requests match your search query'}
                     </p>
-                    <p className="text-xs mt-1 font-medium">Try a different search term.</p>
+                    <p className="text-xs mt-1 font-medium text-slate-400">
+                      {managerVendors.length === 0
+                        ? 'All manager onboarding applications have been reviewed and processed.'
+                        : 'Try a different search term.'}
+                    </p>
                   </div>
                 ) : (
                   filtered.map((v, idx) => {
@@ -3210,7 +3238,7 @@ export const VendorDirectoryModule = React.memo(({
               {/* Modal Footer */}
               <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
                 <span className="text-xs font-semibold text-slate-400">
-                  Showing <strong className="text-slate-600 dark:text-slate-300">{filtered.length}</strong> of <strong className="text-slate-600 dark:text-slate-300">{managerVendors.length}</strong> manager-onboarded vendors
+                  Showing <strong className="text-slate-600 dark:text-slate-300">{filtered.length}</strong> of <strong className="text-slate-600 dark:text-slate-300">{managerVendors.length}</strong> pending requests
                 </span>
                 <button
                   onClick={() => { setShowManagerOnboardedModal(false); setManagerOnboardSearch(''); }}

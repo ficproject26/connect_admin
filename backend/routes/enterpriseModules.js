@@ -1106,15 +1106,36 @@ router.get('/vendors', auth, async (req, res) => {
                 );
             }
 
+            const isApprovedActive = (v) => {
+                const s = String(v.status || '').toLowerCase().trim();
+                return ['active', 'approved'].includes(s) || v.isActive === true;
+            };
+
+            const isPendingUnprocessed = (v) => {
+                const s = String(v.status || '').toLowerCase().trim();
+                const handled = ['active', 'approved', 'rejected', 'suspended', 'inactive'];
+                if (v.isActive === true) return false;
+                if (handled.includes(s)) return false;
+                return !s || ['pending', 'pending_approval', 'pending approval', 'under_verification', 'under verification', 'in_review', 'requested', 'unapproved'].includes(s);
+            };
+
             const pageNum = Math.max(1, parseInt(page, 10) || 1);
             const limitNum = Math.max(1, parseInt(limit, 10) || 500);
             const total = enriched.length;
-            const activeCount = enriched.filter(v => ['active', 'approved'].includes((v.status || '').toLowerCase().trim()) || v.isActive === true).length;
-            const pendingCount = total - activeCount;
+            const activeCount = enriched.filter(isApprovedActive).length;
+            const pendingCount = enriched.filter(isPendingUnprocessed).length;
 
-            const paginated = (req.query.limit && limitNum < total)
-                ? enriched.slice((pageNum - 1) * limitNum, pageNum * limitNum)
-                : enriched;
+            let resultVendors = enriched;
+            if (req.query.pendingOnly === 'true' || (status && String(status).toLowerCase().trim() === 'pending')) {
+                resultVendors = enriched.filter(isPendingUnprocessed);
+            } else if (status && status !== 'all') {
+                const s = String(status).toLowerCase().trim();
+                resultVendors = enriched.filter(v => String(v.status || '').toLowerCase().trim() === s);
+            }
+
+            const paginated = (req.query.limit && limitNum < resultVendors.length)
+                ? resultVendors.slice((pageNum - 1) * limitNum, pageNum * limitNum)
+                : resultVendors;
 
             return res.json({
                 success: true,
@@ -1123,7 +1144,7 @@ router.get('/vendors', auth, async (req, res) => {
                 activeCount,
                 pendingCount,
                 page: pageNum,
-                pages: Math.ceil(total / limitNum) || 1
+                pages: Math.ceil(resultVendors.length / limitNum) || 1
             });
         }
 
@@ -2190,22 +2211,22 @@ router.post('/vendors/approve', auth, async (req, res) => {
         // 1. Update top-level status in User and Vendor collections to Active
         await User.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Active', isActive: true, isApproved: true, isLocked: false, rejectionReason: '' } }
+            { $set: { status: 'Active', isActive: true, isApproved: true, approvalStatus: 'Approved', isLocked: false, rejectionReason: '' } }
         ).catch(() => {});
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: 'Active', isActive: true, isApproved: true, isLocked: false, rejectionReason: '' } }
+            { $set: { status: 'Active', isActive: true, isApproved: true, approvalStatus: 'Approved', isLocked: false, rejectionReason: '' } }
         ).catch(() => {});
 
         await Vendor.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Active', isActive: true, isApproved: true } }
+            { $set: { status: 'Active', isActive: true, isApproved: true, approvalStatus: 'Approved' } }
         ).catch(() => {});
 
         await Vendor.updateMany(
             updateFilter,
-            { $set: { status: 'Active', isActive: true, isApproved: true } }
+            { $set: { status: 'Active', isActive: true, isApproved: true, approvalStatus: 'Approved' } }
         ).catch(() => {});
 
         // 2. Resolve matching vendor onboarding notifications in MongoDB
@@ -2340,22 +2361,22 @@ router.post('/vendors/reject', auth, async (req, res) => {
 
         await User.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false, isApproved: false, isLocked: true, rejectionReason: reason } }
+            { $set: { status: 'Rejected', isActive: false, isApproved: false, approvalStatus: 'Rejected', isLocked: true, rejectionReason: reason } }
         ).catch(() => {});
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false, isApproved: false, isLocked: true, rejectionReason: reason } }
+            { $set: { status: 'Rejected', isActive: false, isApproved: false, approvalStatus: 'Rejected', isLocked: true, rejectionReason: reason } }
         ).catch(() => {});
 
         await Vendor.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false, isApproved: false } }
+            { $set: { status: 'Rejected', isActive: false, isApproved: false, approvalStatus: 'Rejected' } }
         ).catch(() => {});
 
         await Vendor.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false, isApproved: false } }
+            { $set: { status: 'Rejected', isActive: false, isApproved: false, approvalStatus: 'Rejected' } }
         ).catch(() => {});
 
         // Resolve pending notifications in MongoDB
