@@ -1,7 +1,34 @@
+const fs = require('fs');
 const express = require('express');
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
+
+// Helper to synchronize vendor status directly to Manager portal data/vendors.json
+const syncVendorToManagerJson = (vendorId, email, updates) => {
+    try {
+        const mgrPath = 'D:/Connect App Project/Website/Manager/backend/data/vendors.json';
+        if (fs.existsSync(mgrPath)) {
+            const raw = fs.readFileSync(mgrPath, 'utf8');
+            const data = JSON.parse(raw);
+            let modified = false;
+            const updated = data.map(v => {
+                const idMatch = vendorId && (v.id === String(vendorId) || v._id === String(vendorId));
+                const emailMatch = email && v.email && String(v.email).toLowerCase().trim() === String(email).toLowerCase().trim();
+                if (idMatch || emailMatch) {
+                    modified = true;
+                    return { ...v, ...updates, updatedAt: new Date().toISOString() };
+                }
+                return v;
+            });
+            if (modified) {
+                fs.writeFileSync(mgrPath, JSON.stringify(updated, null, 2), 'utf8');
+            }
+        }
+    } catch (e) {
+        console.warn('[enterpriseModules] Sync to Manager vendors.json warning:', e.message);
+    }
+};
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
@@ -2160,25 +2187,48 @@ router.post('/vendors/approve', auth, async (req, res) => {
         const targetPhone = phone || mobile || '';
         const updateFilter = buildVendorQuery(targetId, targetEmail, registrationId, targetBizName);
 
+        // 1. Update top-level status in User and Vendor collections to Active
         await User.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Approved', isActive: true, isApproved: true, isLocked: false, rejectionReason: '' } }
+            { $set: { status: 'Active', isActive: true, isApproved: true, isLocked: false, rejectionReason: '' } }
         ).catch(() => {});
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: 'Approved', isActive: true, isApproved: true, isLocked: false, rejectionReason: '' } }
+            { $set: { status: 'Active', isActive: true, isApproved: true, isLocked: false, rejectionReason: '' } }
         ).catch(() => {});
 
         await Vendor.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Approved', isActive: true } }
+            { $set: { status: 'Active', isActive: true, isApproved: true } }
         ).catch(() => {});
 
         await Vendor.updateMany(
             updateFilter,
-            { $set: { status: 'Approved', isActive: true } }
+            { $set: { status: 'Active', isActive: true, isApproved: true } }
         ).catch(() => {});
+
+        // 2. Resolve matching vendor onboarding notifications in MongoDB
+        if (mongoose.connection.db) {
+            const notifOr = [
+                { 'data.vendorId': { $in: [String(targetId), targetId] } },
+                { 'data.email': targetEmail },
+                { recordId: { $in: [String(targetId), targetId] } }
+            ];
+            if (targetBizName) notifOr.push({ message: new RegExp(targetBizName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+            if (targetEmail) notifOr.push({ message: new RegExp(targetEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+            await mongoose.connection.db.collection('notifications').updateMany(
+                { $or: notifOr },
+                { $set: { isRead: true, isResolved: true, resolvedAt: new Date() } }
+            ).catch(() => {});
+        }
+
+        // 3. Sync to Manager portal data/vendors.json
+        syncVendorToManagerJson(targetId, targetEmail, {
+            status: 'Active',
+            isActive: true,
+            isApproved: true
+        });
 
         let user = await User.findOne(updateFilter);
         if (!user && (targetEmail || targetPhone || targetBizName)) {
@@ -2190,7 +2240,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
         }
 
         if (user) {
-            user.status = 'Approved';
+            user.status = 'Active';
             user.isActive = true;
             user.isApproved = true;
             user.isLocked = false;
@@ -2214,7 +2264,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
                     password: hashedPassword,
                     role: 'Vendor',
                     category: (rawVendor && rawVendor.category) || 'General Store',
-                    status: 'Approved',
+                    status: 'Active',
                     isActive: true,
                     isApproved: true,
                     isLocked: false,
@@ -2227,7 +2277,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
             }
         }
 
-        // Record Audit Log
+        // 4. Record Audit Log
         try {
             const adminUser = req.user ? await User.findById(req.user.id) : null;
             await AuditLog.create({
@@ -2244,8 +2294,8 @@ router.post('/vendors/approve', auth, async (req, res) => {
                     vendorId: user?._id || targetId,
                     vendorName: user?.businessName || user?.name || targetBizName,
                     oldStatus: 'Pending',
-                    newStatus: 'Approved',
-                    reason: 'Direct registration approved',
+                    newStatus: 'Active',
+                    reason: 'Vendor onboarding approved by Administrator',
                     timestamp: new Date()
                 }
             });
@@ -2256,22 +2306,33 @@ router.post('/vendors/approve', auth, async (req, res) => {
             io.emit('vendor_approved', {
                 vendorId: user?._id || targetId,
                 email: user?.email || targetEmail,
-                status: 'Approved',
+                status: 'Active',
+                timestamp: new Date()
+            });
+            io.emit('vendor_status_changed', {
+                vendorId: user?._id || targetId,
+                status: 'Active',
+                isActive: true,
                 timestamp: new Date()
             });
         }
 
-        res.json({ success: true, msg: 'Vendor approved and activated successfully', user: { id: user?._id || targetId, email: user?.email || targetEmail, status: 'Approved' } });
+        res.json({
+            success: true,
+            status: 'Active',
+            msg: 'Vendor approved and activated successfully',
+            user: { id: user?._id || targetId, email: user?.email || targetEmail, status: 'Active' }
+        });
     } catch (err) {
         console.error('Approve vendor error:', err);
-        res.status(500).send('Server error');
+        res.status(500).json({ success: false, message: 'Server error approving vendor' });
     }
 });
 
 // POST Reject Direct Vendor Request
 router.post('/vendors/reject', auth, async (req, res) => {
     try {
-        const { vendorId, registrationId, _id, email, businessName, name, reason = 'Registration application rejected' } = req.body;
+        const { vendorId, registrationId, _id, email, businessName, name, reason = 'Vendor onboarding application rejected' } = req.body;
         const targetId = _id || vendorId;
         const targetEmail = email ? String(email).toLowerCase().trim() : '';
         const targetBizName = businessName || name || '';
@@ -2279,23 +2340,46 @@ router.post('/vendors/reject', auth, async (req, res) => {
 
         await User.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false, isLocked: true, rejectionReason: reason } }
+            { $set: { status: 'Rejected', isActive: false, isApproved: false, isLocked: true, rejectionReason: reason } }
         ).catch(() => {});
 
         await User.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false, isLocked: true, rejectionReason: reason } }
+            { $set: { status: 'Rejected', isActive: false, isApproved: false, isLocked: true, rejectionReason: reason } }
         ).catch(() => {});
 
         await Vendor.collection.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false } }
+            { $set: { status: 'Rejected', isActive: false, isApproved: false } }
         ).catch(() => {});
 
         await Vendor.updateMany(
             updateFilter,
-            { $set: { status: 'Rejected', isActive: false } }
+            { $set: { status: 'Rejected', isActive: false, isApproved: false } }
         ).catch(() => {});
+
+        // Resolve pending notifications in MongoDB
+        if (mongoose.connection.db) {
+            const notifOr = [
+                { 'data.vendorId': { $in: [String(targetId), targetId] } },
+                { 'data.email': targetEmail },
+                { recordId: { $in: [String(targetId), targetId] } }
+            ];
+            if (targetBizName) notifOr.push({ message: new RegExp(targetBizName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+            if (targetEmail) notifOr.push({ message: new RegExp(targetEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+            await mongoose.connection.db.collection('notifications').updateMany(
+                { $or: notifOr },
+                { $set: { isRead: true, isResolved: true, resolvedAt: new Date() } }
+            ).catch(() => {});
+        }
+
+        // Sync to Manager portal data/vendors.json
+        syncVendorToManagerJson(targetId, targetEmail, {
+            status: 'Rejected',
+            isActive: false,
+            isApproved: false,
+            rejectionReason: reason
+        });
 
         let existingVendor = await User.findOne(updateFilter);
         if (existingVendor) {
@@ -2313,12 +2397,12 @@ router.post('/vendors/reject', auth, async (req, res) => {
                 action: 'vendor_status_changed',
                 ipAddress: req.ip || req.headers['x-forwarded-for'] || '127.0.0.1',
                 status: 'success',
-                details: `Admin rejected vendor "${existingVendor?.businessName || existingVendor?.name || vendorId}". Reason: ${reason}`,
+                details: `Admin rejected vendor "${existingVendor?.businessName || existingVendor?.name || targetBizName || vendorId}". Reason: ${reason}`,
                 metadata: {
                     adminId: req.user ? req.user.id : null,
                     adminName: adminUser?.name || 'Admin',
                     vendorId: existingVendor?._id || vendorId,
-                    vendorName: existingVendor?.businessName || existingVendor?.name || 'Vendor',
+                    vendorName: existingVendor?.businessName || existingVendor?.name || targetBizName || 'Vendor',
                     oldStatus: 'Pending',
                     newStatus: 'Rejected',
                     reason,
@@ -2330,8 +2414,14 @@ router.post('/vendors/reject', auth, async (req, res) => {
         const io = getIo(req);
         if (io) {
             io.emit('vendor_rejected', {
-                vendorId,
+                vendorId: targetId,
                 status: 'Rejected',
+                timestamp: new Date()
+            });
+            io.emit('vendor_status_changed', {
+                vendorId: targetId,
+                status: 'Rejected',
+                isActive: false,
                 timestamp: new Date()
             });
             if (existingVendor) {
@@ -2343,10 +2433,309 @@ router.post('/vendors/reject', auth, async (req, res) => {
             }
         }
 
-        res.json({ success: true, msg: 'Vendor rejected successfully' });
+        res.json({ success: true, status: 'Rejected', msg: 'Vendor rejected successfully' });
     } catch (err) {
         console.error('Reject vendor error:', err);
-        res.status(500).send('Server error');
+        res.status(500).json({ success: false, message: 'Server error rejecting vendor' });
+    }
+});
+
+// GET Vendor KYC Information (Real Documents & Verification Details)
+router.get('/vendors/:id/kyc', auth, async (req, res) => {
+    try {
+        const targetId = req.params.id;
+        const updateFilter = buildVendorQuery(targetId, '', targetId, '');
+        let vendorDoc = await Vendor.findOne(updateFilter).lean();
+        let userDoc = await User.findOne(updateFilter).lean();
+
+        if (!vendorDoc && !userDoc && mongoose.connection.db) {
+            vendorDoc = await mongoose.connection.db.collection('vendors').findOne({
+                $or: [
+                    { _id: targetId },
+                    { id: targetId },
+                    { registrationId: targetId }
+                ]
+            });
+        }
+
+        if (!vendorDoc && !userDoc) {
+            return res.status(404).json({ success: false, message: 'Vendor record not found.' });
+        }
+
+        const v = vendorDoc || userDoc;
+        const u = userDoc || vendorDoc;
+
+        // Collect authentic submitted documents from real vendor data
+        const realDocs = [];
+        if (Array.isArray(v.documents)) {
+            v.documents.forEach(d => {
+                if (d && (d.url || d.fileUrl || d.path)) {
+                    realDocs.push({
+                        name: d.name || 'Storefront On-Ground Photo',
+                        url: d.url || d.fileUrl || d.path,
+                        type: d.type || 'image/jpeg'
+                    });
+                }
+            });
+        }
+
+        const rawKycDocs = u.kycDocs || v.kycDocs || u.kyc || v.kyc || {};
+        if (rawKycDocs.storePhoto || rawKycDocs.storefrontPhoto || rawKycDocs.storeImage) {
+            realDocs.push({
+                name: 'Storefront Photo',
+                url: rawKycDocs.storePhoto || rawKycDocs.storefrontPhoto || rawKycDocs.storeImage,
+                type: 'image/jpeg'
+            });
+        }
+        if (rawKycDocs.aadhaarImage || rawKycDocs.aadharImage || rawKycDocs.aadhaarDoc) {
+            realDocs.push({
+                name: 'Aadhaar Card',
+                url: rawKycDocs.aadhaarImage || rawKycDocs.aadharImage || rawKycDocs.aadhaarDoc,
+                type: 'image/jpeg'
+            });
+        }
+        if (rawKycDocs.panImage || rawKycDocs.panDoc || rawKycDocs.panCard) {
+            realDocs.push({
+                name: 'PAN Card',
+                url: rawKycDocs.panImage || rawKycDocs.panDoc || rawKycDocs.panCard,
+                type: 'image/jpeg'
+            });
+        }
+        if (rawKycDocs.businessProofImage || rawKycDocs.businessProof || rawKycDocs.licenseDoc) {
+            realDocs.push({
+                name: 'Business Proof / License',
+                url: rawKycDocs.businessProofImage || rawKycDocs.businessProof || rawKycDocs.licenseDoc,
+                type: 'image/jpeg'
+            });
+        }
+
+        const kycPayload = {
+            vendorId: v._id || v.id,
+            businessName: v.businessName || v.name || 'Vendor Business',
+            ownerName: v.name || v.contactPerson || v.ownerName || 'Vendor Partner',
+            email: v.email || '',
+            phone: v.phone || v.mobile || '',
+            status: v.status || 'Pending',
+            kycStatus: v.kycStatus || (v.isApproved ? 'verified' : 'pending'),
+            panNumber: v.panNumber || rawKycDocs.panNumber || '',
+            gstNumber: v.gstNumber || v.gstin || '',
+            aadhaarNumber: v.aadhaarNumber || rawKycDocs.aadhaarNumber || '',
+            bankDetails: {
+                accountHolderName: v.accountHolderName || v.bankDetails?.accountHolderName || '',
+                accountNumber: v.accountNumber || v.bankDetails?.accountNumber || '',
+                bankName: v.bankName || v.bankDetails?.bankName || '',
+                ifsc: v.ifsc || v.bankDetails?.ifscCode || v.bankDetails?.ifsc || ''
+            },
+            documents: realDocs,
+            category: v.category || v.vendorType || 'Products',
+            address: v.address || v.fullAddress || '',
+            pincode: v.pincode || '',
+            createdAt: v.createdAt || new Date(),
+            onboardedBy: v.onboardedByManager || v.onboardedByAgent || v.createdBy || null
+        };
+
+        return res.json({
+            success: true,
+            kyc: kycPayload
+        });
+    } catch (err) {
+        console.error('Fetch vendor KYC error:', err);
+        return res.status(500).json({ success: false, message: 'Server error fetching vendor KYC.' });
+    }
+});
+
+// POST Verify Vendor Registered Pincode & Jurisdiction
+router.post('/vendors/verify-pincode', auth, async (req, res) => {
+    try {
+        const { vendorId, registrationId, _id, pincode } = req.body;
+        const targetId = _id || vendorId;
+        const updateFilter = buildVendorQuery(targetId, '', registrationId, '');
+
+        let vendor = await Vendor.findOne(updateFilter).lean() || await User.findOne(updateFilter).lean();
+        if (!vendor && mongoose.connection.db) {
+            vendor = await mongoose.connection.db.collection('vendors').findOne({
+                $or: [
+                    { _id: targetId },
+                    { id: targetId },
+                    { registrationId: targetId }
+                ]
+            });
+        }
+
+        if (!vendor) {
+            return res.status(404).json({ success: false, status: 'Not Found', message: 'Vendor record not found.' });
+        }
+
+        // Determine vendor's actual saved pincode
+        let vendorPin = (pincode || vendor.pincode || vendor.postalCode || '').trim();
+        let pinDoc = null;
+
+        if (!vendorPin && vendor.pincodeId) {
+            const pId = String(vendor.pincodeId);
+            pinDoc = await Pincode.findOne({
+                $or: [
+                    ...(mongoose.Types.ObjectId.isValid(pId) ? [{ _id: new mongoose.Types.ObjectId(pId) }] : []),
+                    { _id: pId },
+                    { id: pId },
+                    { code: pId }
+                ]
+            }).lean();
+            if (pinDoc && pinDoc.code) {
+                vendorPin = pinDoc.code;
+            }
+        }
+
+        if (!vendorPin) {
+            const match = (vendor.fullAddress || vendor.address || '').match(/\b\d{6}\b/);
+            if (match) vendorPin = match[0];
+        }
+
+        if (!vendorPin) {
+            return res.json({
+                success: true,
+                status: 'Pincode Not Provided',
+                message: 'Vendor record does not contain a registered pincode or postal address.',
+                vendorPincode: null,
+                vendorAddress: vendor.fullAddress || vendor.address || 'Address not provided',
+                details: null
+            });
+        }
+
+        // Validate pincode against MongoDB Pincodes Collection
+        if (!pinDoc) {
+            pinDoc = await Pincode.findOne({
+                $or: [
+                    { code: vendorPin },
+                    { pincodeId: `PIN-${vendorPin}` }
+                ]
+            }).lean();
+        }
+
+        // Postal format check
+        const isValidFormat = /^\d{6}$/.test(vendorPin);
+        if (!isValidFormat) {
+            return res.json({
+                success: true,
+                status: 'Invalid Pincode',
+                message: `The registered pincode "${vendorPin}" is not a valid 6-digit Indian Postal PIN.`,
+                vendorPincode: vendorPin,
+                vendorAddress: vendor.fullAddress || vendor.address || 'Address not provided',
+                details: null
+            });
+        }
+
+        // Check against Onboarding Manager Jurisdiction
+        let managerInfo = null;
+        let isWithinJurisdiction = true;
+        let jurisdictionNotes = 'Valid registered postal pincode in database registry.';
+
+        const mgrKey = vendor.createdBy || vendor.createdById || vendor.onboardedBy || vendor.managerId;
+        if (mgrKey) {
+            const isHexObjId = mongoose.Types.ObjectId.isValid(mgrKey) && String(mgrKey).length === 24;
+            let mgr = null;
+
+            if (mongoose.connection.db) {
+                mgr = await mongoose.connection.db.collection('managers').findOne({
+                    $or: [
+                        ...(isHexObjId ? [{ _id: new mongoose.Types.ObjectId(mgrKey) }] : []),
+                        { id: mgrKey },
+                        { _id: mgrKey },
+                        { managerId: mgrKey },
+                        { userId: mgrKey }
+                    ]
+                });
+
+                if (!mgr) {
+                    mgr = await mongoose.connection.db.collection('users').findOne({
+                        $or: [
+                            ...(isHexObjId ? [{ _id: new mongoose.Types.ObjectId(mgrKey) }] : []),
+                            { id: mgrKey },
+                            { _id: mgrKey },
+                            { managerId: mgrKey }
+                        ]
+                    });
+                }
+            }
+
+            if (mgr) {
+                const mgrPin = String(mgr.assignedPincode || mgr.pincode || '').trim();
+                const mgrDist = String(mgr.assignedDistrict || mgr.district || '').trim().toLowerCase();
+                const mgrDiv = String(mgr.assignedDivision || mgr.division || '').trim().toLowerCase();
+                const mgrState = String(mgr.assignedState || mgr.state || '').trim().toLowerCase();
+                const mgrRole = String(mgr.role || mgr.level || '').toLowerCase();
+
+                managerInfo = {
+                    managerName: mgr.name || 'Territory Manager',
+                    managerId: mgr.managerId || mgr.id || String(mgr._id),
+                    managerRole: mgr.role || 'Territory Manager',
+                    assignedPincode: mgrPin || 'All',
+                    assignedDistrict: mgr.assignedDistrict || mgr.district || '—',
+                    assignedDivision: mgr.assignedDivision || mgr.division || '—',
+                    assignedState: mgr.assignedState || mgr.state || '—'
+                };
+
+                if (mgrRole.includes('pincode') || mgrRole === '4' || mgr.level === 4) {
+                    if (mgrPin && mgrPin !== vendorPin) {
+                        isWithinJurisdiction = false;
+                        jurisdictionNotes = `Pincode ${vendorPin} is outside onboarding manager's assigned jurisdiction PIN (${mgrPin}).`;
+                    } else {
+                        jurisdictionNotes = `Pincode matches onboarding manager's assigned territory PIN: ${mgrPin}.`;
+                    }
+                } else if (mgrRole.includes('division') || mgr.level === 3) {
+                    if (pinDoc && pinDoc.division && mgrDiv && pinDoc.division.toLowerCase() !== mgrDiv) {
+                        isWithinJurisdiction = false;
+                        jurisdictionNotes = `Pincode belongs to division "${pinDoc.division}", outside manager's division "${mgr.assignedDivision}".`;
+                    }
+                } else if (mgrRole.includes('district') || mgr.level === 2) {
+                    if (pinDoc && pinDoc.district && mgrDist && pinDoc.district.toLowerCase() !== mgrDist) {
+                        isWithinJurisdiction = false;
+                        jurisdictionNotes = `Pincode belongs to district "${pinDoc.district}", outside manager's district "${mgr.assignedDistrict}".`;
+                    }
+                }
+            }
+        }
+
+        const finalStatus = !isWithinJurisdiction ? 'Outside Assigned Jurisdiction' : 'Verified';
+
+        return res.json({
+            success: true,
+            status: finalStatus,
+            message: finalStatus === 'Verified' ? 'Pincode successfully verified within territory jurisdiction.' : jurisdictionNotes,
+            vendorPincode: vendorPin,
+            vendorAddress: vendor.fullAddress || vendor.address || 'Address not provided',
+            details: pinDoc ? {
+                pincode: pinDoc.code,
+                officeName: pinDoc.postOffice || pinDoc.name || pinDoc.area || '',
+                district: pinDoc.district || '',
+                division: pinDoc.division || '',
+                state: pinDoc.state || '',
+                deliveryStatus: pinDoc.deliveryStatus || 'Delivery',
+                status: pinDoc.status || 'Active'
+            } : {
+                pincode: vendorPin,
+                officeName: vendor.city || vendor.district || 'Verified Area',
+                district: vendor.district || '—',
+                division: '—',
+                state: vendor.state || 'India',
+                deliveryStatus: 'Delivery',
+                status: 'Active'
+            },
+            jurisdiction: managerInfo ? {
+                matches: isWithinJurisdiction,
+                managerPincode: managerInfo.assignedPincode,
+                managerRole: managerInfo.managerRole,
+                managerName: managerInfo.managerName
+            } : null,
+            managerJurisdiction: managerInfo ? {
+                ...managerInfo,
+                isWithinJurisdiction
+            } : null,
+            jurisdictionNotes,
+            verifiedAt: new Date().toISOString()
+        });
+    } catch (err) {
+        console.error('Verify vendor pincode error:', err);
+        return res.status(500).json({ success: false, message: 'Server error during pincode verification.' });
     }
 });
 

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Store, LayoutGrid, List, Search, Filter, Download, ArrowUpRight, CheckCircle,
   XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, AlertTriangle, RefreshCw, X, ChevronRight, Trash2,
-  Eye, Building, Building2, Phone, Mail, FileText, CreditCard, ShieldCheck, User, Globe, Tag, Calendar, Layers, UserCog
+  Eye, Building, Building2, Phone, Mail, FileText, CreditCard, ShieldCheck, User, Globe, Tag, Calendar, Layers, UserCog,
+  ZoomIn, ExternalLink, Check, Loader2
 } from 'lucide-react';
 
 const formatVendorId = (rawId, index = 0) => {
@@ -596,7 +597,14 @@ export const deduplicateVendorsList = (list = []) => {
 
 const vendorModuleCacheMap = new Map();
 
-export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSection = null, highlightVendorId = null }) => {
+export const VendorDirectoryModule = React.memo(({
+  token,
+  API_BASE,
+  initialSection = null,
+  highlightVendorId = null,
+  onVendorStatusChange = null,
+  onToast = null
+}) => {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -644,11 +652,57 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     reason: ''
   });
 
+  // Dedicated KYC Details Modal
+  const [vendorKycModal, setVendorKycModal] = useState({
+    isOpen: false,
+    vendor: null,
+    loading: false,
+    data: null,
+    error: null
+  });
+
+  // Dedicated Pincode Verification Modal
+  const [pincodeVerifyModal, setPincodeVerifyModal] = useState({
+    isOpen: false,
+    vendor: null,
+    loading: false,
+    data: null,
+    error: null
+  });
+
+  // Rejection Reason Confirmation Modal
+  const [rejectConfirmModal, setRejectConfirmModal] = useState({
+    isOpen: false,
+    vendor: null,
+    reason: 'Application does not meet onboarding requirements.',
+    processing: false
+  });
+
+  // Tracking in-flight actions per vendor ID
+  const [processingVendorActionId, setProcessingVendorActionId] = useState(null);
+
+  // In-module Toast Notification State
+  const [vendorActionToast, setVendorActionToast] = useState(null);
+
+  // Full-size image preview modal for KYC documents
+  const [previewZoomImage, setPreviewZoomImage] = useState(null);
+
   // Full Vendor Details Profile Modal
   const [selectedVendorDetails, setSelectedVendorDetails] = useState(null);
 
   // Highlight state for notification-driven deep-link
   const [highlightedVendorId, setHighlightedVendorId] = useState(highlightVendorId || null);
+
+  const showToast = useCallback((msg, type = 'success') => {
+    setVendorActionToast({ message: msg, type });
+    if (onToast) onToast({ title: type === 'success' ? 'Vendor Status' : 'Notice', message: msg, type });
+  }, [onToast]);
+
+  useEffect(() => {
+    if (!vendorActionToast) return;
+    const t = setTimeout(() => setVendorActionToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [vendorActionToast]);
 
   const activeControllerRef = useRef(null);
   const inFlightKeyRef = useRef(null);
@@ -1063,89 +1117,283 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
   };
 
   const handleApproveVendor = async (vendorObj) => {
-    const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
-    const targetVendor = typeof vendorObj === 'object' ? vendorObj : (directRequests.find(v => v._id === vendorId) || agentOnboardedVendorsList.find(v => v._id === vendorId) || managerOnboardedVendorsList.find(v => v._id === vendorId));
+    if (!vendorObj) return;
+    const vendorId = typeof vendorObj === 'object' ? (vendorObj._id || vendorObj.id || vendorObj.registrationId) : vendorObj;
+    if (processingVendorActionId === vendorId) return;
+
+    const targetVendor = typeof vendorObj === 'object' ? vendorObj : (
+      directRequests.find(v => v._id === vendorId || v.id === vendorId) ||
+      agentOnboardedVendorsList.find(v => v._id === vendorId || v.id === vendorId) ||
+      managerOnboardedVendorsList.find(v => v._id === vendorId || v.id === vendorId) ||
+      vendors.find(v => v._id === vendorId || v.id === vendorId)
+    );
+
     const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
     const registrationId = targetVendor?.registrationId || '';
+    const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : '');
 
-    // Instantly remove approved vendor from direct requests and onboarding review lists, and update status in manager onboarded directory
-    setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
-    setAgentOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-    setManagerOnboardedVendorsList(prev => prev.map(v => {
-      if (v._id === vendorId || (v.registrationId && v.registrationId === vendorId) || (email && (v.email || '').toLowerCase() === email)) {
-        return { ...v, status: 'Approved', isActive: true };
-      }
-      return v;
-    }));
+    setProcessingVendorActionId(vendorId);
 
     try {
-      await fetch(`${API_BASE}/admin/enterprise/vendors/approve`, {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors/approve`, {
         method: 'POST',
         headers: {
-          'x-auth-token': token,
+          'x-auth-token': activeToken || '',
+          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           vendorId,
           registrationId,
-          _id: targetVendor?._id,
+          _id: targetVendor?._id || vendorId,
           email,
           businessName: targetVendor?.businessName || targetVendor?.name,
           name: targetVendor?.contactPerson || targetVendor?.name
         })
       });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        // Backend confirmed approval -> update states to Active
+        const newStatus = 'Active';
+        setDirectRequests(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setAgentOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: true, isApproved: true } : v));
+        setManagerOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: true, isApproved: true } : v));
+        setVendors(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: true, isApproved: true } : v));
+
+        if (selectedVendorDetails && (selectedVendorDetails._id === vendorId || selectedVendorDetails.id === vendorId)) {
+          setSelectedVendorDetails(prev => prev ? { ...prev, status: newStatus, isActive: true, isApproved: true } : null);
+        }
+        if (vendorKycModal.isOpen && vendorKycModal.vendor && (vendorKycModal.vendor._id === vendorId || vendorKycModal.vendor.id === vendorId)) {
+          setVendorKycModal(prev => ({
+            ...prev,
+            vendor: { ...prev.vendor, status: newStatus, isActive: true, isApproved: true },
+            data: prev.data ? { ...prev.data, status: newStatus, kycStatus: 'verified' } : null
+          }));
+        }
+
+        if (onVendorStatusChange) {
+          onVendorStatusChange(targetVendor?._id || vendorId, newStatus);
+        }
+
+        showToast(`Vendor "${targetVendor?.businessName || targetVendor?.name || 'Partner'}" approved and activated successfully.`, 'success');
+        fetchVendors();
+      } else {
+        const errMsg = data.message || data.msg || `Server returned HTTP ${res.status}`;
+        showToast(`Failed to approve vendor: ${errMsg}`, 'error');
+      }
     } catch (err) {
       console.error('Approve vendor error:', err);
+      showToast(`Network error approving vendor: ${err.message}`, 'error');
     } finally {
-      if (targetVendor) {
-        const updated = { ...targetVendor, status: 'Approved', isActive: true };
-        setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email))]);
-        setTotal(prev => prev + 1);
-      }
-      fetchVendors();
+      setProcessingVendorActionId(null);
     }
   };
 
-  const handleRejectVendor = async (vendorObj) => {
-    const vendorId = typeof vendorObj === 'object' ? vendorObj._id : vendorObj;
-    const targetVendor = typeof vendorObj === 'object' ? vendorObj : (directRequests.find(v => v._id === vendorId) || agentOnboardedVendorsList.find(v => v._id === vendorId) || managerOnboardedVendorsList.find(v => v._id === vendorId));
-    const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
+  const handleRejectVendor = (vendorObj) => {
+    if (!vendorObj) return;
+    setRejectConfirmModal({
+      isOpen: true,
+      vendor: vendorObj,
+      reason: 'Application does not meet onboarding criteria.',
+      processing: false
+    });
+  };
 
-    // Instantly remove rejected vendor from direct requests and onboarding review lists, and update status in manager onboarded directory
-    setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
-    setAgentOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-    setManagerOnboardedVendorsList(prev => prev.map(v => {
-      if (v._id === vendorId || (v.registrationId && v.registrationId === vendorId) || (email && (v.email || '').toLowerCase() === email)) {
-        return { ...v, status: 'Rejected', isActive: false };
-      }
-      return v;
-    }));
+  const confirmRejectVendor = async () => {
+    const { vendor: targetVendor, reason } = rejectConfirmModal;
+    if (!targetVendor) return;
+
+    const vendorId = targetVendor._id || targetVendor.id || targetVendor.registrationId;
+    const email = targetVendor.email ? targetVendor.email.toLowerCase() : '';
+    const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : '');
+
+    setRejectConfirmModal(prev => ({ ...prev, processing: true }));
+    setProcessingVendorActionId(vendorId);
 
     try {
-      await fetch(`${API_BASE}/admin/enterprise/vendors/reject`, {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors/reject`, {
         method: 'POST',
         headers: {
-          'x-auth-token': token,
+          'x-auth-token': activeToken || '',
+          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           vendorId,
-          registrationId: targetVendor?.registrationId,
-          _id: targetVendor?._id,
+          registrationId: targetVendor.registrationId,
+          _id: targetVendor._id || vendorId,
           email,
-          businessName: targetVendor?.businessName || targetVendor?.name,
-          name: targetVendor?.contactPerson || targetVendor?.name
+          businessName: targetVendor.businessName || targetVendor.name,
+          name: targetVendor.contactPerson || targetVendor.name,
+          reason: reason || 'Vendor onboarding application rejected by Administrator'
         })
       });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        const newStatus = 'Rejected';
+        setDirectRequests(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setAgentOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: false, isApproved: false } : v));
+        setManagerOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: false, isApproved: false } : v));
+        setVendors(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: false, isApproved: false } : v));
+
+        if (selectedVendorDetails && (selectedVendorDetails._id === vendorId || selectedVendorDetails.id === vendorId)) {
+          setSelectedVendorDetails(prev => prev ? { ...prev, status: newStatus, isActive: false, isApproved: false } : null);
+        }
+        if (vendorKycModal.isOpen && vendorKycModal.vendor && (vendorKycModal.vendor._id === vendorId || vendorKycModal.vendor.id === vendorId)) {
+          setVendorKycModal(prev => ({
+            ...prev,
+            vendor: { ...prev.vendor, status: newStatus, isActive: false, isApproved: false },
+            data: prev.data ? { ...prev.data, status: newStatus, kycStatus: 'rejected' } : null
+          }));
+        }
+
+        if (onVendorStatusChange) {
+          onVendorStatusChange(targetVendor._id || vendorId, newStatus);
+        }
+
+        setRejectConfirmModal({ isOpen: false, vendor: null, reason: '', processing: false });
+        showToast(`Vendor "${targetVendor.businessName || targetVendor.name || 'Partner'}" rejected successfully.`, 'info');
+        fetchVendors();
+      } else {
+        const errMsg = data.message || data.msg || `Server returned HTTP ${res.status}`;
+        showToast(`Failed to reject vendor: ${errMsg}`, 'error');
+        setRejectConfirmModal(prev => ({ ...prev, processing: false }));
+      }
     } catch (err) {
       console.error('Reject vendor error:', err);
+      showToast(`Network error rejecting vendor: ${err.message}`, 'error');
+      setRejectConfirmModal(prev => ({ ...prev, processing: false }));
     } finally {
-      if (targetVendor) {
-        const updated = { ...targetVendor, status: 'Rejected' };
-        setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email))]);
-        setTotal(prev => prev + 1);
+      setProcessingVendorActionId(null);
+    }
+  };
+
+  const handleOpenVendorKycModal = async (vendorObj) => {
+    if (!vendorObj) return;
+    const vendorId = vendorObj._id || vendorObj.id || vendorObj.registrationId;
+    const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : '');
+
+    setVendorKycModal({
+      isOpen: true,
+      vendor: vendorObj,
+      loading: true,
+      data: null,
+      error: null
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors/${vendorId}/kyc`, {
+        headers: {
+          'x-auth-token': activeToken || '',
+          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success && data.kyc) {
+        setVendorKycModal(prev => ({
+          ...prev,
+          loading: false,
+          data: data.kyc,
+          error: null
+        }));
+      } else {
+        // Fallback to existing vendor fields if endpoint returns 404
+        const fallbackDocs = Array.isArray(vendorObj.documents) ? vendorObj.documents : [];
+        setVendorKycModal(prev => ({
+          ...prev,
+          loading: false,
+          data: {
+            vendorId: vendorObj._id || vendorObj.id,
+            businessName: vendorObj.businessName || vendorObj.name,
+            ownerName: vendorObj.name || vendorObj.contactPerson,
+            email: vendorObj.email || '',
+            phone: getVendorPhone(vendorObj),
+            status: vendorObj.status || 'Pending',
+            kycStatus: vendorObj.kycStatus || 'pending',
+            panNumber: vendorObj.panNumber || '',
+            gstNumber: vendorObj.gstNumber || vendorObj.gstin || '',
+            aadhaarNumber: vendorObj.aadhaarNumber || '',
+            bankDetails: {
+              accountHolderName: vendorObj.accountHolderName || '',
+              accountNumber: vendorObj.accountNumber || '',
+              bankName: vendorObj.bankName || '',
+              ifsc: vendorObj.ifsc || ''
+            },
+            documents: fallbackDocs,
+            category: getVendorCategory(vendorObj),
+            address: getVendorAddress(vendorObj),
+            pincode: vendorObj.pincode || '',
+            onboardedBy: vendorObj.onboardedByManager || vendorObj.onboardedByAgent || null
+          },
+          error: null
+        }));
       }
-      fetchVendors();
+    } catch (err) {
+      console.error('Fetch vendor KYC modal error:', err);
+      setVendorKycModal(prev => ({
+        ...prev,
+        loading: false,
+        error: err.message || 'Failed to fetch KYC records from server.'
+      }));
+    }
+  };
+
+  const handleVerifyVendorPincode = async (vendorObj) => {
+    if (!vendorObj) return;
+    const vendorId = vendorObj._id || vendorObj.id || vendorObj.registrationId;
+    const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : '');
+
+    setPincodeVerifyModal({
+      isOpen: true,
+      vendor: vendorObj,
+      loading: true,
+      data: null,
+      error: null
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/admin/enterprise/vendors/verify-pincode`, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': activeToken || '',
+          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          vendorId,
+          registrationId: vendorObj.registrationId,
+          _id: vendorObj._id,
+          pincode: vendorObj.pincode
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        setPincodeVerifyModal(prev => ({
+          ...prev,
+          loading: false,
+          data,
+          error: null
+        }));
+      } else {
+        setPincodeVerifyModal(prev => ({
+          ...prev,
+          loading: false,
+          error: data.message || `Server verification failed (status ${res.status})`
+        }));
+      }
+    } catch (err) {
+      console.error('Verify vendor pincode error:', err);
+      setPincodeVerifyModal(prev => ({
+        ...prev,
+        loading: false,
+        error: err.message || 'Unable to connect to postal verification service.'
+      }));
     }
   };
 
@@ -2580,29 +2828,48 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             onClick={() => handleApproveVendor(v)}
-                            className="px-3.5 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-none"
-                            title="Approve Vendor Onboarding"
+                            disabled={processingVendorActionId === (v._id || v.id) || ['active', 'approved'].includes((v.status || '').toLowerCase())}
+                            className={`px-3.5 py-2 text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 transition-all border-none ${
+                              ['active', 'approved'].includes((v.status || '').toLowerCase())
+                                ? 'bg-emerald-600/50 text-white cursor-not-allowed opacity-60'
+                                : processingVendorActionId === (v._id || v.id)
+                                ? 'bg-emerald-600 text-white cursor-wait opacity-80'
+                                : 'text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 cursor-pointer'
+                            }`}
+                            title={['active', 'approved'].includes((v.status || '').toLowerCase()) ? 'Vendor already active' : 'Approve Vendor Onboarding'}
                           >
-                            <CheckCircle className="w-4 h-4" /> Approve
+                            {processingVendorActionId === (v._id || v.id) ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                            {['active', 'approved'].includes((v.status || '').toLowerCase()) ? 'Approved' : 'Approve'}
                           </button>
                           <button
                             onClick={() => handleRejectVendor(v)}
-                            className="px-3.5 py-2 text-xs font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                            title="Reject Vendor Onboarding"
+                            disabled={processingVendorActionId === (v._id || v.id) || (v.status || '').toLowerCase() === 'rejected'}
+                            className={`px-3.5 py-2 text-xs font-black rounded-xl border flex items-center gap-1.5 transition-all ${
+                              (v.status || '').toLowerCase() === 'rejected'
+                                ? 'text-rose-400 bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/50 cursor-not-allowed opacity-60'
+                                : processingVendorActionId === (v._id || v.id)
+                                ? 'text-rose-600 bg-rose-50 border-rose-200 cursor-wait opacity-80'
+                                : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border-rose-200 dark:border-rose-900/40 active:scale-95 cursor-pointer'
+                            }`}
+                            title={(v.status || '').toLowerCase() === 'rejected' ? 'Vendor already rejected' : 'Reject Vendor Onboarding'}
                           >
                             <XCircle className="w-4 h-4" /> Reject
                           </button>
                           <button
-                            onClick={() => { setShowAgentOnboardedModal(false); setSelectedVendorDetails(v); }}
+                            onClick={() => handleOpenVendorKycModal(v)}
                             className="px-3.5 py-2 text-xs font-black text-purple-700 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-600 hover:text-white border border-purple-500/20 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                            title="View Vendor Profile & KYC Documents"
+                            title="View Vendor Profile & Submitted KYC Documents"
                           >
                             <Eye className="w-4 h-4" /> View KYC
                           </button>
                           <button
-                            onClick={() => handleAutoAssignPincodeAgent(v)}
+                            onClick={() => handleVerifyVendorPincode(v)}
                             className="px-3.5 py-2 text-xs font-black text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-600 hover:text-white border border-amber-500/20 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                            title="Verify Pincode & Assign Agent"
+                            title="Validate Postal Pincode & Jurisdiction"
                           >
                             <MapPin className="w-4 h-4" /> Verify Pincode
                           </button>
@@ -2627,6 +2894,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                               <option value="Active">🟢 Active</option>
                               <option value="Suspended">⚫ Suspend</option>
                               <option value="Rejected">🔴 Reject</option>
+                              <option value="Inactive">⭕ Inactive</option>
                             </select>
                           </div>
                         )}
@@ -2862,29 +3130,48 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                         <div className="flex flex-wrap items-center gap-2">
                           <button
                             onClick={() => handleApproveVendor(v)}
-                            className="px-3.5 py-2 text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 border-none"
-                            title="Approve Vendor Onboarding"
+                            disabled={processingVendorActionId === (v._id || v.id) || ['active', 'approved'].includes((v.status || '').toLowerCase())}
+                            className={`px-3.5 py-2 text-xs font-black rounded-xl shadow-xs flex items-center gap-1.5 transition-all border-none ${
+                              ['active', 'approved'].includes((v.status || '').toLowerCase())
+                                ? 'bg-emerald-600/50 text-white cursor-not-allowed opacity-60'
+                                : processingVendorActionId === (v._id || v.id)
+                                ? 'bg-emerald-600 text-white cursor-wait opacity-80'
+                                : 'text-white bg-emerald-600 hover:bg-emerald-700 active:scale-95 cursor-pointer'
+                            }`}
+                            title={['active', 'approved'].includes((v.status || '').toLowerCase()) ? 'Vendor already active' : 'Approve Vendor Onboarding'}
                           >
-                            <CheckCircle className="w-4 h-4" /> Approve
+                            {processingVendorActionId === (v._id || v.id) ? (
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                            {['active', 'approved'].includes((v.status || '').toLowerCase()) ? 'Approved' : 'Approve'}
                           </button>
                           <button
                             onClick={() => handleRejectVendor(v)}
-                            className="px-3.5 py-2 text-xs font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                            title="Reject Vendor Onboarding"
+                            disabled={processingVendorActionId === (v._id || v.id) || (v.status || '').toLowerCase() === 'rejected'}
+                            className={`px-3.5 py-2 text-xs font-black rounded-xl border flex items-center gap-1.5 transition-all ${
+                              (v.status || '').toLowerCase() === 'rejected'
+                                ? 'text-rose-400 bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/50 cursor-not-allowed opacity-60'
+                                : processingVendorActionId === (v._id || v.id)
+                                ? 'text-rose-600 bg-rose-50 border-rose-200 cursor-wait opacity-80'
+                                : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 hover:bg-rose-100 border-rose-200 dark:border-rose-900/40 active:scale-95 cursor-pointer'
+                            }`}
+                            title={(v.status || '').toLowerCase() === 'rejected' ? 'Vendor already rejected' : 'Reject Vendor Onboarding'}
                           >
                             <XCircle className="w-4 h-4" /> Reject
                           </button>
                           <button
-                            onClick={() => { setShowManagerOnboardedModal(false); setSelectedVendorDetails(v); }}
+                            onClick={() => handleOpenVendorKycModal(v)}
                             className="px-3.5 py-2 text-xs font-black text-teal-700 dark:text-teal-300 bg-teal-500/10 hover:bg-teal-600 hover:text-white border border-teal-500/20 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                            title="View Vendor Profile & KYC Documents"
+                            title="View Vendor Profile & Submitted KYC Documents"
                           >
                             <Eye className="w-4 h-4" /> View KYC
                           </button>
                           <button
-                            onClick={() => handleAutoAssignPincodeAgent(v)}
+                            onClick={() => handleVerifyVendorPincode(v)}
                             className="px-3.5 py-2 text-xs font-black text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-600 hover:text-white border border-amber-500/20 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                            title="Verify Pincode & Assign Agent"
+                            title="Validate Postal Pincode & Jurisdiction"
                           >
                             <MapPin className="w-4 h-4" /> Verify Pincode
                           </button>
@@ -2909,6 +3196,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                               <option value="Active">🟢 Active</option>
                               <option value="Suspended">⚫ Suspend</option>
                               <option value="Rejected">🔴 Reject</option>
+                              <option value="Inactive">⭕ Inactive</option>
                             </select>
                           </div>
                         )}
@@ -3195,6 +3483,576 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* 6. TOAST NOTIFICATION BANNER */}
+      {vendorActionToast && (
+        <div className="fixed bottom-6 right-6 z-60 max-w-md animate-in fade-in slide-in-from-bottom-5 duration-300">
+          <div className={`p-4 rounded-2xl shadow-2xl border backdrop-blur-md flex items-center gap-3 ${
+            vendorActionToast.type === 'error'
+              ? 'bg-rose-500/95 text-white border-rose-400/40 shadow-rose-500/20'
+              : vendorActionToast.type === 'info'
+              ? 'bg-slate-800/95 text-white border-slate-700/60 shadow-slate-900/40'
+              : 'bg-emerald-600/95 text-white border-emerald-500/40 shadow-emerald-600/25'
+          }`}>
+            <div className="p-2 rounded-xl bg-white/20 shrink-0">
+              {vendorActionToast.type === 'error' ? (
+                <XCircle className="w-5 h-5 text-white" />
+              ) : vendorActionToast.type === 'info' ? (
+                <AlertCircle className="w-5 h-5 text-white" />
+              ) : (
+                <Check className="w-5 h-5 text-white" />
+              )}
+            </div>
+            <div className="flex-1 text-xs font-bold leading-relaxed">
+              {vendorActionToast.message}
+            </div>
+            <button
+              onClick={() => setVendorActionToast(null)}
+              className="p-1.5 rounded-lg hover:bg-white/20 transition-all text-white/80 hover:text-white cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 7. REJECT CONFIRMATION MODAL */}
+      {rejectConfirmModal.isOpen && rejectConfirmModal.vendor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl shadow-2xl p-6 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-2xl border border-rose-500/20">
+                  <XCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">Reject Vendor Application</h3>
+                  <p className="text-xs text-slate-400 font-semibold">
+                    Confirm rejection of onboarding application
+                  </p>
+                </div>
+              </div>
+              <button
+                disabled={rejectConfirmModal.processing}
+                onClick={() => setRejectConfirmModal({ isOpen: false, vendor: null, reason: '', processing: false })}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-slate-700 dark:text-slate-200">
+                  {rejectConfirmModal.vendor.businessName || rejectConfirmModal.vendor.name || 'Vendor Business'}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold">
+                  {rejectConfirmModal.vendor.registrationId || formatVendorId(rejectConfirmModal.vendor._id)}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                Contact: <strong className="text-slate-700 dark:text-slate-300">{rejectConfirmModal.vendor.name || rejectConfirmModal.vendor.contactPerson || '—'}</strong> ({getVendorPhone(rejectConfirmModal.vendor)})
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-black text-slate-700 dark:text-slate-300">
+                Reason for Rejection <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                value={rejectConfirmModal.reason}
+                onChange={e => setRejectConfirmModal(prev => ({ ...prev, reason: e.target.value }))}
+                rows={3}
+                placeholder="Enter specific reason for rejecting this onboarding application..."
+                className="w-full text-xs font-medium p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+              />
+              <span className="text-[10px] text-slate-400">
+                This reason will be logged in the audit trail and linked to the onboarding notification resolution.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+              <button
+                disabled={rejectConfirmModal.processing}
+                onClick={() => setRejectConfirmModal({ isOpen: false, vendor: null, reason: '', processing: false })}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={rejectConfirmModal.processing}
+                onClick={confirmRejectVendor}
+                className="px-5 py-2.5 rounded-xl text-xs font-black text-white bg-rose-600 hover:bg-rose-700 transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {rejectConfirmModal.processing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Rejecting...
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="w-4 h-4" /> Confirm Rejection
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 8. POSTAL PINCODE VERIFICATION MODAL */}
+      {pincodeVerifyModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-xl rounded-3xl shadow-2xl p-6 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-2xl border border-amber-500/20">
+                  <MapPin className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">Postal Pincode Verification</h3>
+                  <p className="text-xs text-slate-400 font-semibold">
+                    Validating vendor territory against official postal records & manager jurisdiction
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setPincodeVerifyModal({ isOpen: false, vendor: null, loading: false, data: null, error: null })}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Vendor Header Summary */}
+            {pincodeVerifyModal.vendor && (
+              <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-black text-slate-800 dark:text-slate-100 block">
+                    {pincodeVerifyModal.vendor.businessName || pincodeVerifyModal.vendor.name || 'Vendor Partner'}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    ID: <strong className="font-mono text-slate-600 dark:text-slate-300">{pincodeVerifyModal.vendor.registrationId || formatVendorId(pincodeVerifyModal.vendor._id)}</strong>
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Submitted Pincode</span>
+                  <span className="text-sm font-black font-mono text-amber-600 dark:text-amber-400">
+                    {pincodeVerifyModal.vendor.pincode || pincodeVerifyModal.vendor.postalCode || 'Not Provided'}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Content Body */}
+            {pincodeVerifyModal.loading ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3">
+                <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  Verifying postal code and jurisdiction against database...
+                </span>
+              </div>
+            ) : pincodeVerifyModal.error ? (
+              <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 shrink-0" />
+                <span>{pincodeVerifyModal.error}</span>
+              </div>
+            ) : pincodeVerifyModal.data ? (
+              <div className="flex flex-col gap-4">
+                {/* Status Badge Banner */}
+                <div className={`p-4 rounded-2xl border flex items-center gap-3 ${
+                  pincodeVerifyModal.data.status === 'Verified'
+                    ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
+                    : pincodeVerifyModal.data.status === 'Invalid Pincode'
+                    ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25'
+                    : pincodeVerifyModal.data.status === 'Outside Assigned Jurisdiction'
+                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25'
+                    : 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/25'
+                }`}>
+                  <div className="p-2 rounded-xl bg-white/40 dark:bg-black/20 shrink-0">
+                    {pincodeVerifyModal.data.status === 'Verified' ? (
+                      <CheckCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    ) : pincodeVerifyModal.data.status === 'Invalid Pincode' ? (
+                      <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-sm font-black">
+                      Verification Result: {pincodeVerifyModal.data.status}
+                    </div>
+                    <div className="text-xs font-medium opacity-90 mt-0.5">
+                      {pincodeVerifyModal.data.message}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Postal Details Grid */}
+                {pincodeVerifyModal.data.details && (
+                  <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Official Postal PIN</span>
+                      <strong className="text-slate-800 dark:text-slate-200 font-mono text-sm">{pincodeVerifyModal.data.details.pincode}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Post Office / Area</span>
+                      <strong className="text-slate-800 dark:text-slate-200">{pincodeVerifyModal.data.details.officeName || '—'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">District</span>
+                      <strong className="text-slate-800 dark:text-slate-200">{pincodeVerifyModal.data.details.district || '—'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">State</span>
+                      <strong className="text-slate-800 dark:text-slate-200">{pincodeVerifyModal.data.details.state || '—'}</strong>
+                    </div>
+                  </div>
+                )}
+
+                {/* Manager Jurisdiction Cross-Check */}
+                {pincodeVerifyModal.data.jurisdiction && (
+                  <div className="p-4 rounded-2xl bg-teal-500/5 border border-teal-500/20 text-xs flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-teal-800 dark:text-teal-300 flex items-center gap-1.5">
+                        <UserCheck className="w-4 h-4 text-teal-600" /> Onboarding Manager Cross-Check
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] uppercase ${
+                        pincodeVerifyModal.data.jurisdiction.matches
+                          ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                          : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                      }`}>
+                        {pincodeVerifyModal.data.jurisdiction.matches ? 'Jurisdiction Match' : 'Out of Jurisdiction'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-400">
+                      Manager assigned pincode: <strong className="font-mono text-slate-800 dark:text-slate-200">{pincodeVerifyModal.data.jurisdiction.managerPincode}</strong>
+                      {pincodeVerifyModal.data.jurisdiction.matches
+                        ? ' matches vendor territory.'
+                        : ' differs from vendor submitted pincode.'}
+                    </div>
+                  </div>
+                )}
+
+                {/* Informational Notice */}
+                <div className="text-[11px] text-slate-400 italic bg-slate-100 dark:bg-slate-800/20 p-3 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  ℹ️ <strong>System Notice:</strong> Postal pincode verification is strictly informational for territory audits and does not modify the vendor&apos;s current onboarding status.
+                </div>
+              </div>
+            ) : null}
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+              <button
+                onClick={() => setPincodeVerifyModal({ isOpen: false, vendor: null, loading: false, data: null, error: null })}
+                className="px-5 py-2 rounded-xl text-xs font-black text-white bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 transition-all cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. AUTHENTIC VENDOR KYC DOCUMENTS MODAL */}
+      {vendorKycModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-3xl rounded-3xl shadow-2xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-2xl border border-indigo-500/20">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">
+                    Vendor KYC & Verification Documents
+                  </h3>
+                  <p className="text-xs text-slate-400 font-semibold">
+                    Review submitted credentials, storefront photos, and compliance records
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setVendorKycModal({ isOpen: false, vendor: null, loading: false, data: null, error: null })}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col gap-6">
+              {vendorKycModal.loading ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-3">
+                  <Loader2 className="w-8 h-8 text-indigo-500 animate-spin" />
+                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    Loading authentic KYC documents and credentials from server...
+                  </span>
+                </div>
+              ) : vendorKycModal.error ? (
+                <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-bold flex items-center gap-3">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <span>{vendorKycModal.error}</span>
+                </div>
+              ) : vendorKycModal.data ? (
+                <>
+                  {/* Vendor Identity Card */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-black text-slate-800 dark:text-slate-100">
+                          {vendorKycModal.data.businessName || vendorKycModal.data.ownerName || 'Vendor Partner'}
+                        </span>
+                        <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${
+                          ['active', 'approved'].includes(String(vendorKycModal.data.status || '').toLowerCase())
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                            : String(vendorKycModal.data.status || '').toLowerCase() === 'rejected'
+                            ? 'bg-rose-500/10 text-rose-600 border-rose-500/20'
+                            : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                        }`}>
+                          {vendorKycModal.data.status || 'Pending'}
+                        </span>
+                      </div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        Owner: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.ownerName || '—'}</strong> • Phone: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.phone || '—'}</strong> • Email: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.email || '—'}</strong>
+                      </span>
+                    </div>
+                    <div className="flex flex-col items-start md:items-end gap-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">KYC Verification State</span>
+                      <span className={`px-2.5 py-1 rounded-xl text-xs font-black uppercase flex items-center gap-1.5 ${
+                        vendorKycModal.data.kycStatus === 'verified'
+                          ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                          : vendorKycModal.data.kycStatus === 'rejected'
+                          ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                          : 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                      }`}>
+                        {vendorKycModal.data.kycStatus === 'verified' ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                        {vendorKycModal.data.kycStatus || 'pending'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Authentic Documents & Photos */}
+                  <div className="flex flex-col gap-3">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-indigo-500" /> Submitted Proof of Storefront & Physical Presence
+                    </h4>
+                    {Array.isArray(vendorKycModal.data.documents) && vendorKycModal.data.documents.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        {vendorKycModal.data.documents.map((doc, idx) => {
+                          const isImg = doc.url && (
+                            doc.url.startsWith('data:image') ||
+                            /\.(jpe?g|png|webp|gif)($|\?)/i.test(doc.url) ||
+                            doc.type === 'image' ||
+                            doc.documentType === 'storefront' ||
+                            doc.documentType === 'photo'
+                          );
+                          return (
+                            <div
+                              key={idx}
+                              className="group relative rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-3 flex flex-col gap-2 overflow-hidden hover:shadow-md transition-all"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black text-slate-700 dark:text-slate-200 truncate">
+                                  {doc.title || doc.name || doc.documentType || `Document #${idx + 1}`}
+                                </span>
+                                {doc.verified && (
+                                  <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                                    <Check className="w-3 h-3" /> Verified
+                                  </span>
+                                )}
+                              </div>
+
+                              {isImg ? (
+                                <div
+                                  onClick={() => setPreviewZoomImage(doc.url)}
+                                  className="relative h-36 rounded-xl overflow-hidden bg-slate-200 dark:bg-slate-700 cursor-pointer group-hover:opacity-95 transition-all"
+                                >
+                                  <img
+                                    src={doc.url}
+                                    alt={doc.title || 'Storefront Photo'}
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                  />
+                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                    <span className="px-3 py-1.5 rounded-xl bg-white/90 text-slate-900 text-xs font-black flex items-center gap-1.5 shadow-lg">
+                                      <ZoomIn className="w-4 h-4" /> Click to Zoom
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="h-36 rounded-xl bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center gap-2 p-3 text-center border border-dashed border-slate-300 dark:border-slate-700">
+                                  <FileText className="w-8 h-8 text-slate-400" />
+                                  <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 line-clamp-2">
+                                    {doc.fileName || doc.title || 'Document File'}
+                                  </span>
+                                  {doc.url && (
+                                    <a
+                                      href={doc.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-[11px] font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                                    >
+                                      <ExternalLink className="w-3.5 h-3.5" /> View Original
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+
+                              <div className="text-[10px] text-slate-400 flex items-center justify-between">
+                                <span>Type: {doc.documentType || 'Identity Proof'}</span>
+                                {doc.number && <span className="font-mono">{doc.number}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-8 rounded-2xl bg-slate-50 dark:bg-slate-800/20 border border-dashed border-slate-200 dark:border-slate-800 text-center flex flex-col items-center justify-center gap-2">
+                        <FileText className="w-8 h-8 text-slate-300 dark:text-slate-600" />
+                        <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                          No physical storefront photos or scanned KYC documents submitted for this vendor application.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Identification Credentials & Banking Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Tax & Government IDs */}
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col gap-3">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                        <CreditCard className="w-4 h-4 text-emerald-500" /> Government & Tax Identifiers
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">PAN Number</span>
+                          <strong className="text-slate-800 dark:text-slate-200 font-mono text-xs">
+                            {vendorKycModal.data.panNumber || 'Not Provided'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">GSTIN / GST Number</span>
+                          <strong className="text-slate-800 dark:text-slate-200 font-mono text-xs">
+                            {vendorKycModal.data.gstNumber || 'Not Provided'}
+                          </strong>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Aadhaar / National ID</span>
+                          <strong className="text-slate-800 dark:text-slate-200 font-mono text-xs">
+                            {vendorKycModal.data.aadhaarNumber || 'Not Provided'}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bank Settlement Details */}
+                    <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col gap-3">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                        <Building2 className="w-4 h-4 text-teal-500" /> Bank Settlement Information
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bank Name</span>
+                          <strong className="text-slate-800 dark:text-slate-200">
+                            {vendorKycModal.data.bankDetails?.bankName || 'Not Provided'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Account Holder</span>
+                          <strong className="text-slate-800 dark:text-slate-200">
+                            {vendorKycModal.data.bankDetails?.accountHolderName || 'Not Provided'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Account Number</span>
+                          <strong className="text-slate-800 dark:text-slate-200 font-mono">
+                            {vendorKycModal.data.bankDetails?.accountNumber || 'Not Provided'}
+                          </strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">IFSC Code</span>
+                          <strong className="text-slate-800 dark:text-slate-200 font-mono">
+                            {vendorKycModal.data.bankDetails?.ifsc || 'Not Provided'}
+                          </strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Registered Location */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Store Address</span>
+                      <strong className="text-slate-800 dark:text-slate-200">{vendorKycModal.data.address || 'Address not specified'}</strong>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Postal PIN</span>
+                      <strong className="font-mono text-amber-600 dark:text-amber-400">{vendorKycModal.data.pincode || '—'}</strong>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-slate-400">
+                Viewing KYC credentials for administrative compliance audit
+              </span>
+              <div className="flex items-center gap-3">
+                {vendorKycModal.vendor && isPendingVendorReview(vendorKycModal.vendor.status) && (
+                  <>
+                    <button
+                      disabled={processingVendorActionId === (vendorKycModal.vendor._id || vendorKycModal.vendor.registrationId)}
+                      onClick={() => handleRejectVendor(vendorKycModal.vendor)}
+                      className="px-4 py-2 rounded-xl text-xs font-black text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 border border-rose-200 dark:border-rose-900/40 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <XCircle className="w-4 h-4" /> Reject Application
+                    </button>
+                    <button
+                      disabled={processingVendorActionId === (vendorKycModal.vendor._id || vendorKycModal.vendor.registrationId)}
+                      onClick={() => handleApproveVendor(vendorKycModal.vendor)}
+                      className="px-4 py-2 rounded-xl text-xs font-black text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <CheckCircle className="w-4 h-4" /> Approve & Activate
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setVendorKycModal({ isOpen: false, vendor: null, loading: false, data: null, error: null })}
+                  className="px-5 py-2 rounded-xl text-xs font-black text-white bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. IMAGE ZOOM LIGHTBOX */}
+      {previewZoomImage && (
+        <div
+          onClick={() => setPreviewZoomImage(null)}
+          className="fixed inset-0 z-70 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 cursor-zoom-out animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
+            <button
+              onClick={() => setPreviewZoomImage(null)}
+              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-all cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={previewZoomImage}
+              alt="Zoomed document"
+              className="max-h-[85vh] max-w-full rounded-2xl shadow-2xl object-contain border border-white/20"
+              onClick={e => e.stopPropagation()}
+            />
           </div>
         </div>
       )}

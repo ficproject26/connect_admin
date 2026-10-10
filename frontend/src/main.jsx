@@ -4,6 +4,16 @@ import './index.css'
 import App from './App.jsx'
 
 // Suppress third-party Chrome Extension background script noise in console
+const EXTENSION_PATTERNS = [
+  'a listener indicated an asynchronous response',
+  'message channel closed',
+  'runtime.lasterror',
+  'message channel closed before a response was received',
+  'the message channel closed',
+  'could not establish connection. receiving end does not exist',
+  'unchecked runtime.lasterror'
+];
+
 const isExtensionNoise = (errOrMsg) => {
   if (!errOrMsg) return false;
   let str = '';
@@ -12,20 +22,21 @@ const isExtensionNoise = (errOrMsg) => {
   else if (typeof errOrMsg === 'object') str = `${errOrMsg.message || ''} ${errOrMsg.reason || ''} ${errOrMsg.error?.message || ''} ${String(errOrMsg)}`;
   else str = String(errOrMsg);
   const lower = str.toLowerCase();
-  return (
-    lower.includes('a listener indicated an asynchronous response') ||
-    lower.includes('message channel closed') ||
-    lower.includes('runtime.lasterror') ||
-    lower.includes('message channel closed before a response was received')
-  );
+  return EXTENSION_PATTERNS.some(pat => lower.includes(pat));
 };
 
-window.addEventListener('unhandledrejection', (event) => {
-  if (isExtensionNoise(event.reason) || isExtensionNoise(event.message) || isExtensionNoise(event)) {
-    event.preventDefault();
-    if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+const handleRejection = (event) => {
+  if (isExtensionNoise(event?.reason) || isExtensionNoise(event?.message) || isExtensionNoise(event)) {
+    try {
+      event.preventDefault();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+      if (typeof event.stopPropagation === 'function') event.stopPropagation();
+    } catch (_) {}
   }
-});
+};
+
+window.addEventListener('unhandledrejection', handleRejection, { capture: true, passive: false });
+window.addEventListener('unhandledrejection', handleRejection, false);
 
 // Auto-recover from stale chunks after new deployments on Vercel
 const triggerDeploymentReload = (source, err) => {

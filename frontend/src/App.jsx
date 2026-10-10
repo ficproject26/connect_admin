@@ -2996,6 +2996,11 @@ function App() {
               API_BASE={API_BASE}
               initialSection={vendorDirInitialSection}
               highlightVendorId={vendorDirHighlightId}
+              onVendorStatusChange={(vendorId, newStatus) => {
+                setVendors(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || v.registrationId === vendorId) ? { ...v, status: newStatus, isActive: ['Active', 'Approved'].includes(newStatus) } : v));
+                invalidateCache('vendors');
+              }}
+              onToast={addToast}
             />
           )}
 
@@ -3712,36 +3717,92 @@ function App() {
 
                             {/* Documents viewer */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                              <div
-                                onClick={() => setKycPreviewImage(vendor.kycDocs?.aadhaarImage || vendor.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500')}
-                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                              >
-                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
-                                <img src={vendor.kycDocs?.aadhaarImage || vendor.kyc?.aadhaarImage || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150'} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
-                                <span className="block text-[10px] font-mono mt-2">{vendor.kycDocs?.aadhaarNumber || vendor.kyc?.aadhaarNumber || '987654321098'}</span>
-                              </div>
-                              <div
-                                onClick={() => setKycPreviewImage(vendor.kycDocs?.panImage || vendor.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500')}
-                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                              >
-                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
-                                <img src={vendor.kycDocs?.panImage || vendor.kyc?.panImage || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150'} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
-                                <span className="block text-[10px] font-mono mt-2">{vendor.kycDocs?.panNumber || vendor.kyc?.panNumber || 'ABCDE1234F'}</span>
-                              </div>
-                              <div
-                                onClick={() => setKycPreviewImage(vendor.kycDocs?.selfie || vendor.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500')}
-                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                              >
-                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Photo/Video</span>
-                                <img src={vendor.kycDocs?.selfie || vendor.kyc?.selfie || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} alt="Selfie" className="w-full h-24 object-cover rounded-lg border" />
-                              </div>
-                              <div
-                                onClick={() => setKycPreviewImage(vendor.kycDocs?.businessProofImage || vendor.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=500')}
-                                className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
-                              >
-                                <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business License/Proof</span>
-                                <img src={vendor.kycDocs?.businessProofImage || vendor.kyc?.businessProofImage || 'https://images.unsplash.com/photo-1450133064473-71024230f91b?w=150'} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
-                              </div>
+                              {(() => {
+                                const aadhaarImg = (vendor.kycDocs?.aadhaarImage && !vendor.kycDocs.aadhaarImage.includes('unsplash.com')) ? vendor.kycDocs.aadhaarImage : (vendor.kyc?.aadhaarImage && !vendor.kyc.aadhaarImage.includes('unsplash.com') ? vendor.kyc.aadhaarImage : (vendor.documents?.find(d => d.type === 'aadhaar' || d.documentType === 'aadhaar')?.url || null));
+                                const aadhaarNum = vendor.kycDocs?.aadhaarNumber || vendor.kyc?.aadhaarNumber || vendor.aadhaarNumber || '';
+                                return (
+                                  <div
+                                    onClick={() => aadhaarImg && setKycPreviewImage(aadhaarImg)}
+                                    className={`bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center transition-all ${aadhaarImg ? 'cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700' : ''}`}
+                                  >
+                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
+                                    {aadhaarImg ? (
+                                      <img src={aadhaarImg} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
+                                    ) : (
+                                      <div className="w-full h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                                        <FileText className="w-6 h-6 mb-1 opacity-40" />
+                                        <span className="text-[10px] font-semibold">Not Submitted</span>
+                                      </div>
+                                    )}
+                                    <span className="block text-[10px] font-mono mt-2 text-slate-600 dark:text-slate-400">{aadhaarNum || '—'}</span>
+                                  </div>
+                                );
+                              })()}
+
+                              {(() => {
+                                const panImg = (vendor.kycDocs?.panImage && !vendor.kycDocs.panImage.includes('unsplash.com')) ? vendor.kycDocs.panImage : (vendor.kyc?.panImage && !vendor.kyc.panImage.includes('unsplash.com') ? vendor.kyc.panImage : (vendor.documents?.find(d => d.type === 'pan' || d.documentType === 'pan')?.url || null));
+                                const panNum = vendor.kycDocs?.panNumber || vendor.kyc?.panNumber || vendor.panNumber || '';
+                                return (
+                                  <div
+                                    onClick={() => panImg && setKycPreviewImage(panImg)}
+                                    className={`bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center transition-all ${panImg ? 'cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700' : ''}`}
+                                  >
+                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
+                                    {panImg ? (
+                                      <img src={panImg} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
+                                    ) : (
+                                      <div className="w-full h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                                        <FileText className="w-6 h-6 mb-1 opacity-40" />
+                                        <span className="text-[10px] font-semibold">Not Submitted</span>
+                                      </div>
+                                    )}
+                                    <span className="block text-[10px] font-mono mt-2 text-slate-600 dark:text-slate-400">{panNum || '—'}</span>
+                                  </div>
+                                );
+                              })()}
+
+                              {(() => {
+                                const storefrontImg = (vendor.kycDocs?.selfie && !vendor.kycDocs.selfie.includes('unsplash.com')) ? vendor.kycDocs.selfie : (vendor.kyc?.selfie && !vendor.kyc.selfie.includes('unsplash.com') ? vendor.kyc.selfie : (vendor.documents?.find(d => d.documentType === 'storefront' || d.type === 'storefront' || d.title?.toLowerCase().includes('storefront') || d.title?.toLowerCase().includes('photo'))?.url || null));
+                                return (
+                                  <div
+                                    onClick={() => storefrontImg && setKycPreviewImage(storefrontImg)}
+                                    className={`bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center transition-all ${storefrontImg ? 'cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700' : ''}`}
+                                  >
+                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Storefront / Photo</span>
+                                    {storefrontImg ? (
+                                      <img src={storefrontImg} alt="Storefront Photo" className="w-full h-24 object-cover rounded-lg border" />
+                                    ) : (
+                                      <div className="w-full h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                                        <FileText className="w-6 h-6 mb-1 opacity-40" />
+                                        <span className="text-[10px] font-semibold">Not Submitted</span>
+                                      </div>
+                                    )}
+                                    <span className="block text-[10px] font-medium mt-2 text-slate-500">Storefront Proof</span>
+                                  </div>
+                                );
+                              })()}
+
+                              {(() => {
+                                const proofImg = (vendor.kycDocs?.businessProofImage && !vendor.kycDocs.businessProofImage.includes('unsplash.com')) ? vendor.kycDocs.businessProofImage : (vendor.kyc?.businessProofImage && !vendor.kyc.businessProofImage.includes('unsplash.com') ? vendor.kyc.businessProofImage : (vendor.documents?.find(d => d.type === 'gst' || d.type === 'license' || d.documentType === 'business')?.url || null));
+                                const proofNum = vendor.gstNumber || vendor.gstin || '';
+                                return (
+                                  <div
+                                    onClick={() => proofImg && setKycPreviewImage(proofImg)}
+                                    className={`bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center transition-all ${proofImg ? 'cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700' : ''}`}
+                                  >
+                                    <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof / GST</span>
+                                    {proofImg ? (
+                                      <img src={proofImg} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
+                                    ) : (
+                                      <div className="w-full h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
+                                        <FileText className="w-6 h-6 mb-1 opacity-40" />
+                                        <span className="text-[10px] font-semibold">Not Submitted</span>
+                                      </div>
+                                    )}
+                                    <span className="block text-[10px] font-mono mt-2 text-slate-600 dark:text-slate-400">{proofNum || '—'}</span>
+                                  </div>
+                                );
+                              })()}
                             </div>
 
                             {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((vendor.status || '').toLowerCase()) && (
