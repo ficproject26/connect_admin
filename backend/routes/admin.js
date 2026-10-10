@@ -2395,9 +2395,49 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
 
         const isDirectPendingVendor = (v) => {
             if (!v) return false;
-            const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-            if (isAgentOnboarded) return false;
-            return isPendingStatus(v.status);
+            if (!isPendingStatus(v.status)) return false;
+
+            // 1. Exclude secondary business requests
+            if (v.requestType === 'business_request' || v.requestType === 'business' || v.isSecondaryBusiness === true || v.isPrimary === false) {
+                return false;
+            }
+
+            const jType = String(v.joiningType || '').toLowerCase().trim();
+            const cVia = String(v.createdVia || '').toLowerCase().trim();
+            const rSource = String(v.registrationSource || '').toLowerCase().trim();
+            const rOrigin = String(v.requestOrigin || '').toLowerCase().trim();
+
+            // 2. Exclude manager onboarded
+            const isManager = jType === 'manager' ||
+                ['manager', 'manager_website'].includes(cVia) ||
+                ['manager', 'manager_website'].includes(rSource) ||
+                ['manager', 'manager_website'].includes(rOrigin) ||
+                Boolean(v.managerId || v.onboardedByManagerId || v.managerRegistrationId || v.onboardedByManager || v.assignedManager || v.managerName) ||
+                Boolean(v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('manager')) ||
+                Boolean(v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('manager')) ||
+                (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('MGR-') || v.onboardedBy.startsWith('mgr_')));
+            if (isManager) return false;
+
+            // 3. Exclude agent onboarded
+            const isAgent = jType === 'agent' ||
+                ['agent', 'agent_website'].includes(cVia) ||
+                ['agent', 'agent_website'].includes(rSource) ||
+                ['agent', 'agent_website'].includes(rOrigin) ||
+                Boolean(v.agentId || v.onboardedByAgentId || v.agentRegistrationId || v.onboardedByAgent || v.assignedAgent || v.agentName || v.referredBy) ||
+                Boolean(v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('agent')) ||
+                Boolean(v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('agent')) ||
+                (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('AG-') || v.onboardedBy.startsWith('agt_') || (!v.onboardedBy.startsWith('MGR-') && v.onboardedBy.trim() !== ''))) ||
+                Boolean(v.onboardedBy && typeof v.onboardedBy === 'object');
+            if (isAgent) return false;
+
+            // 4. Require explicit direct self-registration origin
+            const isDirect = jType === 'direct' ||
+                ['vendor', 'vendor_website', 'direct', 'website'].includes(cVia) ||
+                ['vendor', 'vendor_website', 'direct', 'website'].includes(rSource) ||
+                ['vendor_website', 'vendor', 'direct'].includes(rOrigin) ||
+                v.isDirectRequest === true;
+
+            return isDirect;
         };
 
         const pendingUserVendors = allUserVendors.filter(isDirectPendingVendor);

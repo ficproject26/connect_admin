@@ -249,21 +249,82 @@ const getVendorFullAddressObject = (v) => {
   };
 };
 
-const isVendorAgentOnboarded = (v) => {
+export const isVendorBusinessRequest = (v) => {
   if (!v) return false;
+  return (
+    v.requestType === 'business_request' ||
+    v.requestType === 'business' ||
+    v.isSecondaryBusiness === true ||
+    (v.isPrimary === false && (v.businessId || (v._id && v.vendorUserId)))
+  );
+};
+
+export const isVendorManagerOnboarded = (v) => {
+  if (!v) return false;
+  if (isVendorBusinessRequest(v)) return false;
   const jType = String(v.joiningType || '').toLowerCase();
   const cVia = String(v.createdVia || '').toLowerCase();
   const rSource = String(v.registrationSource || '').toLowerCase();
+  const rOrigin = String(v.requestOrigin || '').toLowerCase();
+  return (
+    jType === 'manager' ||
+    ['manager', 'manager_website'].includes(cVia) ||
+    ['manager', 'manager_website'].includes(rSource) ||
+    ['manager', 'manager_website'].includes(rOrigin) ||
+    Boolean(v.onboardedByManager) ||
+    Boolean(v.managerId) ||
+    Boolean(v.assignedManager) ||
+    Boolean(v.onboardedByManagerId) ||
+    Boolean(v.managerName) ||
+    Boolean(v.managerRegistrationId) ||
+    (v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('manager')) ||
+    (v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('manager')) ||
+    (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('MGR-') || v.onboardedBy.startsWith('mgr_')))
+  );
+};
+
+export const isVendorAgentOnboarded = (v) => {
+  if (!v) return false;
+  if (isVendorBusinessRequest(v)) return false;
+  if (isVendorManagerOnboarded(v)) return false;
+  const jType = String(v.joiningType || '').toLowerCase();
+  const cVia = String(v.createdVia || '').toLowerCase();
+  const rSource = String(v.registrationSource || '').toLowerCase();
+  const rOrigin = String(v.requestOrigin || '').toLowerCase();
   return (
     jType === 'agent' ||
-    cVia === 'agent' ||
-    rSource === 'agent' ||
+    ['agent', 'agent_website'].includes(cVia) ||
+    ['agent', 'agent_website'].includes(rSource) ||
+    ['agent', 'agent_website'].includes(rOrigin) ||
     Boolean(v.onboardedByAgent) ||
-    Boolean(v.onboardedBy) ||
     Boolean(v.agentId) ||
     Boolean(v.onboardedByAgentId) ||
+    Boolean(v.assignedAgent) ||
+    Boolean(v.agentRegistrationId) ||
     Boolean(v.referredBy) ||
-    Boolean(v.agentName)
+    Boolean(v.agentName) ||
+    (v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('agent')) ||
+    (v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('agent')) ||
+    (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('AG-') || v.onboardedBy.startsWith('agt_') || (!v.onboardedBy.startsWith('MGR-') && v.onboardedBy.trim() !== ''))) ||
+    Boolean(v.onboardedBy && typeof v.onboardedBy === 'object')
+  );
+};
+
+export const isVendorDirectRequest = (v) => {
+  if (!v) return false;
+  if (isVendorBusinessRequest(v)) return false;
+  if (isVendorManagerOnboarded(v)) return false;
+  if (isVendorAgentOnboarded(v)) return false;
+  const jType = String(v.joiningType || '').toLowerCase();
+  const cVia = String(v.createdVia || '').toLowerCase();
+  const rSource = String(v.registrationSource || '').toLowerCase();
+  const rOrigin = String(v.requestOrigin || '').toLowerCase();
+  return (
+    jType === 'direct' ||
+    ['vendor', 'vendor_website', 'direct', 'website'].includes(cVia) ||
+    ['vendor', 'vendor_website', 'direct', 'website'].includes(rSource) ||
+    ['vendor_website', 'vendor', 'direct'].includes(rOrigin) ||
+    v.isDirectRequest === true
   );
 };
 
@@ -315,24 +376,6 @@ const getAgentInfo = (v) => {
   };
 };
 
-const isVendorManagerOnboarded = (v) => {
-  if (!v) return false;
-  const jType = String(v.joiningType || '').toLowerCase();
-  const cVia = String(v.createdVia || '').toLowerCase();
-  const rSource = String(v.registrationSource || '').toLowerCase();
-  return (
-    jType === 'manager' ||
-    cVia === 'manager' ||
-    rSource === 'manager' ||
-    Boolean(v.onboardedByManager) ||
-    Boolean(v.managerId) ||
-    Boolean(v.assignedManager) ||
-    Boolean(v.onboardedByManagerId) ||
-    Boolean(v.managerName) ||
-    (v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('manager'))
-  );
-};
-
 const getManagerInfo = (v) => {
   if (!v) return { name: '—', registrationId: '—', pincode: '—' };
 
@@ -367,13 +410,13 @@ const getManagerInfo = (v) => {
   };
 };
 
-const getVendorJoiningSource = (v) => {
-  if (isVendorAgentOnboarded(v)) {
+export const getVendorJoiningSource = (v) => {
+  if (isVendorBusinessRequest(v)) {
     return {
-      type: 'agent',
-      label: 'Agent Onboarded',
-      badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
-      icon: '👤'
+      type: 'business_request',
+      label: 'Business Request',
+      badgeClass: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
+      icon: '🏢'
     };
   }
   if (isVendorManagerOnboarded(v)) {
@@ -384,11 +427,27 @@ const getVendorJoiningSource = (v) => {
       icon: '👔'
     };
   }
+  if (isVendorAgentOnboarded(v)) {
+    return {
+      type: 'agent',
+      label: 'Agent Onboarded',
+      badgeClass: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
+      icon: '👤'
+    };
+  }
+  if (isVendorDirectRequest(v)) {
+    return {
+      type: 'direct',
+      label: 'Direct Request',
+      badgeClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
+      icon: '🌐'
+    };
+  }
   return {
-    type: 'direct',
-    label: 'Direct Request',
-    badgeClass: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
-    icon: '🌐'
+    type: 'ambiguous',
+    label: 'Unverified Source',
+    badgeClass: 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20',
+    icon: '❓'
   };
 };
 
@@ -455,8 +514,11 @@ export const deduplicateVendorsList = (list = []) => {
         existing.assignedManager = existing.assignedManager || v.assignedManager;
         existing.managerId = existing.managerId || v.managerId;
         existing.managerName = existing.managerName || v.managerName;
+      } else if (isVendorDirectRequest(v) || isVendorDirectRequest(existing)) {
+        existing.joiningType = 'direct';
+        existing.isDirectRequest = true;
       } else {
-        existing.joiningType = existing.joiningType || v.joiningType || 'direct';
+        existing.joiningType = existing.joiningType || v.joiningType || 'ambiguous';
       }
 
       // Fill in any missing properties
@@ -475,9 +537,18 @@ export const deduplicateVendorsList = (list = []) => {
     } else {
       const vendorCopy = { ...v };
       if (regId) vendorCopy.registrationId = regId;
-      if (isVendorAgentOnboarded(vendorCopy)) vendorCopy.joiningType = 'agent';
-      else if (isVendorManagerOnboarded(vendorCopy)) vendorCopy.joiningType = 'manager';
-      else vendorCopy.joiningType = vendorCopy.joiningType || 'direct';
+      if (isVendorBusinessRequest(vendorCopy)) {
+        vendorCopy.requestType = 'business_request';
+      } else if (isVendorAgentOnboarded(vendorCopy)) {
+        vendorCopy.joiningType = 'agent';
+      } else if (isVendorManagerOnboarded(vendorCopy)) {
+        vendorCopy.joiningType = 'manager';
+      } else if (isVendorDirectRequest(vendorCopy)) {
+        vendorCopy.joiningType = 'direct';
+        vendorCopy.isDirectRequest = true;
+      } else {
+        vendorCopy.joiningType = vendorCopy.joiningType || 'ambiguous';
+      }
 
       canonicalVendors.push(vendorCopy);
 
@@ -712,9 +783,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           const list = deduplicateVendorsList(data.vendors || []);
           const pendingOnly = list.filter(v => {
             const s = (v.status || '').toLowerCase().trim();
-            const isAgent = isVendorAgentOnboarded(v);
-            const isManager = isVendorManagerOnboarded(v);
-            return !isAgent && !isManager && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
+            return isVendorDirectRequest(v) && (s === 'pending' || (s !== 'approved' && s !== 'rejected' && s !== 'assigned' && s !== 'active' && s !== 'suspended'));
           });
           setDirectRequests(pendingOnly);
         }
@@ -751,7 +820,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           const list = deduplicateVendorsList(data.vendors || []);
           const pendingOnly = list.filter(v => {
             const s = (v.status || '').toLowerCase().trim();
-            return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
+            return isVendorAgentOnboarded(v) && (s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended'));
           });
           setAgentOnboardedVendorsList(pendingOnly);
         }
@@ -788,7 +857,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
           const list = deduplicateVendorsList(data.vendors || []);
           const pendingOnly = list.filter(v => {
             const s = (v.status || '').toLowerCase().trim();
-            return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
+            return isVendorManagerOnboarded(v) && (s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended'));
           });
           setManagerOnboardedVendorsList(pendingOnly);
         }
@@ -1226,13 +1295,14 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
   };
 
   const exportCSV = () => {
-    const headers = ['Business Name', 'Contact Person', 'Email', 'Phone', 'Category', 'State', 'Pincode', 'Status'];
+    const headers = ['Business Name', 'Contact Person', 'Email', 'Phone', 'Category', 'Source', 'State', 'Pincode', 'Status'];
     const rows = vendors.map(v => [
       `"${v.businessName || v.name || ''}"`,
       `"${v.contactPerson || ''}"`,
       `"${v.email || ''}"`,
       `"${v.phone || ''}"`,
       `"${v.category || v.vendorType || ''}"`,
+      `"${getVendorJoiningSource(v).label}"`,
       `"${v.assignedArea || ''}"`,
       `"${v.pincode || ''}"`,
       `"${v.status || ''}"`
@@ -1303,7 +1373,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
             <Clock className="w-4 h-4 shrink-0" />
             <span>Direct Requests</span>
             <span className="bg-white text-amber-800 px-2 py-0.5 rounded-full text-[10px] font-black shrink-0">
-              {directRequests.length || '!'}
+              {directRequests.length}
             </span>
           </button>
 
@@ -1640,7 +1710,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                               Manager ID: <strong className="text-slate-700 dark:text-slate-300">{getManagerInfo(v).registrationId}</strong>
                             </div>
                           </div>
-                        ) : (
+                        ) : isVendorDirectRequest(v) ? (
                           <div className="p-3 bg-amber-500/5 border border-amber-500/15 rounded-2xl min-h-[58px] flex flex-col justify-center space-y-1 text-xs">
                             <div className="flex items-center justify-between">
                               <span className="text-amber-700 dark:text-amber-400 font-extrabold flex items-center gap-1.5 truncate">
@@ -1657,6 +1727,36 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                               ) : (
                                 <span>Direct Registration • <strong className="text-slate-700 dark:text-slate-300">Self Onboarded</strong></span>
                               )}
+                            </div>
+                          </div>
+                        ) : isVendorBusinessRequest(v) ? (
+                          <div className="p-3 bg-emerald-500/5 border border-emerald-500/15 rounded-2xl min-h-[58px] flex flex-col justify-center space-y-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-emerald-700 dark:text-emerald-400 font-extrabold flex items-center gap-1.5 truncate">
+                                <Building2 className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">Business Request</span>
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 font-mono shrink-0 ml-1">
+                                Pin: {v.pincode || '—'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-medium truncate">
+                              <span>Existing Vendor • <strong className="text-slate-700 dark:text-slate-300">Additional Business</strong></span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-slate-500/5 border border-slate-500/15 rounded-2xl min-h-[58px] flex flex-col justify-center space-y-1 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-600 dark:text-slate-400 font-extrabold flex items-center gap-1.5 truncate">
+                                <span className="w-2 h-2 rounded-full bg-slate-400 inline-block shrink-0" />
+                                <span className="truncate">Unverified Source</span>
+                              </span>
+                              <span className="text-[10px] font-bold text-slate-400 font-mono shrink-0 ml-1">
+                                Pin: {v.pincode || '—'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-slate-400 font-medium truncate">
+                              <span>Legacy Record • <strong className="text-slate-600 dark:text-slate-400">Unspecified Origin</strong></span>
                             </div>
                           </div>
                         )}
@@ -2141,10 +2241,20 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                       <div className="flex justify-between"><span className="text-slate-400">Manager ID:</span><span className="font-mono font-bold">{getManagerInfo(selectedVendorDetails).registrationId}</span></div>
                       <div className="flex justify-between"><span className="text-slate-400">Manager Pincode:</span><span className="font-mono font-bold">{getManagerInfo(selectedVendorDetails).pincode}</span></div>
                     </>
-                  ) : (
+                  ) : isVendorDirectRequest(selectedVendorDetails) ? (
                     <>
                       <div className="flex justify-between"><span className="text-slate-400">Onboarding Type:</span><span className="font-bold text-amber-700 dark:text-amber-400">Direct Merchant Application</span></div>
                       <div className="flex justify-between"><span className="text-slate-400">Pincode Agent:</span><span className="font-bold">{selectedVendorDetails.assignedPincodeAgent?.name || 'Automated Territory Resolution'}</span></div>
+                    </>
+                  ) : isVendorBusinessRequest(selectedVendorDetails) ? (
+                    <>
+                      <div className="flex justify-between"><span className="text-slate-400">Onboarding Type:</span><span className="font-bold text-emerald-600 dark:text-emerald-400">Existing Vendor Business Request</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Primary Vendor:</span><span className="font-bold">{selectedVendorDetails.vendorName || selectedVendorDetails.businessName || 'Existing Vendor'}</span></div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex justify-between"><span className="text-slate-400">Onboarding Type:</span><span className="font-bold text-slate-500">Unverified / Legacy Onboarding</span></div>
+                      <div className="flex justify-between"><span className="text-slate-400">Pincode Agent:</span><span className="font-bold">{selectedVendorDetails.assignedPincodeAgent?.name || 'Unassigned'}</span></div>
                     </>
                   )}
                   <div className="flex justify-between"><span className="text-slate-400">Assigned Territory:</span><span className="font-bold">{selectedVendorDetails.assignedArea || `${selectedVendorDetails.state || ''} / ${selectedVendorDetails.city || selectedVendorDetails.district || ''}` || '—'}</span></div>

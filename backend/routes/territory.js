@@ -156,19 +156,22 @@ const logAudit = async (req, action, territoryType, territoryId, territoryName, 
     }
 };
 
-// In-memory caching for hierarchy and summary to eliminate heavy database scans and reduce latency to <5ms
+// In-memory caching for hierarchy, summary, and drilldown to eliminate heavy database scans and reduce latency to <5ms
 let cachedHierarchyResponse = null;
 let cachedHierarchyTimestamp = 0;
 let cachedSummaryResponse = null;
 let cachedSummaryTimestamp = 0;
-const HIERARCHY_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
-const SUMMARY_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const cachedDrilldownMap = new Map();
+const HIERARCHY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const SUMMARY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const DRILLDOWN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const invalidateHierarchyCache = () => {
     cachedHierarchyResponse = null;
     cachedHierarchyTimestamp = 0;
     cachedSummaryResponse = null;
     cachedSummaryTimestamp = 0;
+    cachedDrilldownMap.clear();
 };
 
 // Helper: Auto-sync existing Pincodes in database in background with throttle
@@ -315,20 +318,25 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
             autoSyncExistingPincodes(true).catch(e => console.warn('Background autoSync note:', e.message));
         }
 
+        if (req.query.force === 'true') {
+            invalidateHierarchyCache();
+        }
+
         const scope = getTerritoryScope(req.user);
         const onlyActive = req.query.status ? req.query.status.toLowerCase() !== 'all' : true;
         const isUnscoped = !scope || scope.isSuperAdmin;
         const isSummaryMode = req.query.mode === 'summary' || req.query.summary === 'true';
         const targetStateParam = (req.query.stateId || req.query.state || '').trim();
 
-        // ── A. FAST SUMMARY MODE (Aggregates 3 states + totals in <150ms) ──
+        // ── A. FAST SUMMARY MODE (Aggregates states + totals with indexes & cache) ──
         if (isSummaryMode) {
-            if (isUnscoped && cachedSummaryResponse && (Date.now() - cachedSummaryTimestamp < SUMMARY_CACHE_TTL) && cachedSummaryResponse.onlyActive === onlyActive) {
+            if (isUnscoped && cachedSummaryResponse && (Date.now() - cachedSummaryTimestamp < SUMMARY_CACHE_TTL) && cachedSummaryResponse.onlyActive === onlyActive && cachedSummaryResponse.payload?.states?.length > 0) {
                 return res.json(cachedSummaryResponse.payload);
             }
 
-            const stateMatch = onlyActive ? { status: { $regex: /^active$/i } } : {};
-            const childMatch = onlyActive ? { status: { $regex: /^active$/i } } : {};
+            const activeStatusList = ['Active', 'active', 'ACTIVE'];
+            const stateMatch = onlyActive ? { status: { $in: activeStatusList } } : {};
+            const childMatch = onlyActive ? { status: { $in: activeStatusList } } : {};
 
             const [states, districtCounts, divisionCounts, pincodeCounts, agents, managers] = await Promise.all([
                 State.find(stateMatch).sort({ name: 1 }).lean(),
@@ -339,7 +347,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                             _id: { $toString: '$stateId' },
                             count: { $sum: 1 },
                             activeCount: {
-                                $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'active'] }, 1, 0] }
+                                $sum: { $cond: [{ $in: ['$status', activeStatusList] }, 1, 0] }
                             }
                         }
                     }
@@ -351,7 +359,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                             _id: { $toString: '$stateId' },
                             count: { $sum: 1 },
                             activeCount: {
-                                $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'active'] }, 1, 0] }
+                                $sum: { $cond: [{ $in: ['$status', activeStatusList] }, 1, 0] }
                             }
                         }
                     }
@@ -363,7 +371,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                             _id: { $toString: '$stateId' },
                             count: { $sum: 1 },
                             activeCount: {
-                                $sum: { $cond: [{ $eq: [{ $toLower: { $ifNull: ['$status', ''] } }, 'active'] }, 1, 0] }
+                                $sum: { $cond: [{ $in: ['$status', activeStatusList] }, 1, 0] }
                             },
                             assignedCount: {
                                 $sum: {
@@ -426,7 +434,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
             });
 
             const hierarchyStats = {
-                totalStates: states.length,
+                totalStates: statesWithTotals.length,
                 totalDistricts,
                 totalDivisions,
                 totalPincodes,
@@ -444,7 +452,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 rawDistricts: [],
                 rawDivisions: [],
                 rawPincodes: [],
-                totalStates: states.length,
+                totalStates: statesWithTotals.length,
                 totalDistricts,
                 totalDivisions,
                 totalPincodes,
@@ -452,7 +460,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 stats: hierarchyStats
             };
 
-            if (isUnscoped) {
+            if (isUnscoped && statesWithTotals.length > 0) {
                 cachedSummaryResponse = {
                     onlyActive,
                     payload: responsePayload
@@ -465,31 +473,43 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
 
         // ── B. STATE-SCOPED DRILLDOWN MODE (Queries only that specific state) ──
         if (targetStateParam) {
+            const cacheKey = `${targetStateParam}_${onlyActive}`;
+            if (isUnscoped && cachedDrilldownMap.has(cacheKey)) {
+                const entry = cachedDrilldownMap.get(cacheKey);
+                if (Date.now() - entry.timestamp < DRILLDOWN_CACHE_TTL) {
+                    return res.json(entry.payload);
+                }
+            }
+
             let targetState = await State.findOne({
                 $or: [
-                    mongoose.Types.ObjectId.isValid(targetStateParam) ? { _id: targetStateParam } : null,
                     { _id: targetStateParam },
+                    { _id: String(targetStateParam) },
+                    ...(mongoose.Types.ObjectId.isValid(targetStateParam) ? [{ _id: new mongoose.Types.ObjectId(targetStateParam) }] : []),
                     { stateId: targetStateParam.toUpperCase() },
                     { code: targetStateParam.toUpperCase() },
                     { name: new RegExp(`^${targetStateParam}$`, 'i') }
-                ].filter(Boolean)
+                ]
             }).lean();
 
             if (!targetState) {
                 return res.status(404).json({ success: false, msg: 'State not found' });
             }
 
+            const activeStatusList = ['Active', 'active', 'ACTIVE'];
             const stIdStr = String(targetState._id);
-            const stateIdFilter = {
-                $or: [
-                    { stateId: targetState._id },
-                    { stateId: stIdStr },
-                    mongoose.Types.ObjectId.isValid(stIdStr) ? { stateId: new mongoose.Types.ObjectId(stIdStr) } : null
-                ].filter(Boolean)
+            const childFilter = {
+                stateId: {
+                    $in: [
+                        targetState._id,
+                        stIdStr,
+                        targetState.name,
+                        targetState.code,
+                        ...(mongoose.Types.ObjectId.isValid(stIdStr) ? [new mongoose.Types.ObjectId(stIdStr)] : [])
+                    ].filter(Boolean)
+                },
+                ...(onlyActive ? { status: { $in: activeStatusList } } : {})
             };
-
-            const statusClause = onlyActive ? { status: { $regex: /^active$/i } } : {};
-            const childFilter = { ...stateIdFilter, ...statusClause };
 
             const [districts, divisions, pincodes, agents, managers] = await Promise.all([
                 District.find(childFilter).sort({ name: 1 }).lean(),
@@ -502,22 +522,81 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 Manager.find({ status: { $ne: 'Inactive' } }).select('name email phone level assignedState assignedDistrict assignedDivision assignedPincode stateId districtId divisionId pincodeId role').lean()
             ]);
 
+            // Pre-index agents and managers by district and division for O(1) lookups
+            const agentsByDistrict = new Map();
+            const managersByDistrict = new Map();
+            const agentsByDivision = new Map();
+            const managersByDivision = new Map();
+            const stateManagers = [];
+
+            agents.forEach(a => {
+                const lvl = String(a.level || '').toLowerCase();
+                if (lvl === 'state' && (a.assignedState === targetState.name || a.assignedState === targetState.code)) {
+                    stateManagers.push(a);
+                } else if (lvl === 'district') {
+                    const key1 = String(a.assignedDistrict || '').toLowerCase();
+                    if (key1) {
+                        if (!agentsByDistrict.has(key1)) agentsByDistrict.set(key1, []);
+                        agentsByDistrict.get(key1).push(a);
+                    }
+                } else if (lvl === 'division') {
+                    const area = String(a.assignedArea || '').toLowerCase();
+                    const dist = String(a.assignedDistrict || '').toLowerCase();
+                    if (area) {
+                        if (!agentsByDivision.has(area)) agentsByDivision.set(area, []);
+                        agentsByDivision.get(area).push(a);
+                    }
+                    if (dist && dist !== area) {
+                        if (!agentsByDivision.has(dist)) agentsByDivision.set(dist, []);
+                        agentsByDivision.get(dist).push(a);
+                    }
+                }
+            });
+
+            managers.forEach(m => {
+                const lvl = String(m.level || '').toLowerCase();
+                const role = String(m.role || '').toLowerCase();
+                if ((lvl === 'state' || role === 'state_manager') && (m.assignedState === targetState.name || m.assignedState === targetState.code || String(m.stateId) === stIdStr)) {
+                    stateManagers.push(m);
+                } else if (lvl === 'district' || role === 'district_manager') {
+                    const key1 = String(m.assignedDistrict || '').toLowerCase();
+                    const dId = String(m.districtId || '');
+                    if (key1) {
+                        if (!managersByDistrict.has(key1)) managersByDistrict.set(key1, []);
+                        managersByDistrict.get(key1).push(m);
+                    }
+                    if (dId) {
+                        if (!managersByDistrict.has(dId)) managersByDistrict.set(dId, []);
+                        managersByDistrict.get(dId).push(m);
+                    }
+                } else if (lvl === 'division' || role === 'division_manager') {
+                    const divName = String(m.assignedDivision || '').toLowerCase();
+                    const divId = String(m.divisionId || '');
+                    if (divName) {
+                        if (!managersByDivision.has(divName)) managersByDivision.set(divName, []);
+                        managersByDivision.get(divName).push(m);
+                    }
+                    if (divId) {
+                        if (!managersByDivision.has(divId)) managersByDivision.set(divId, []);
+                        managersByDivision.get(divId).push(m);
+                    }
+                }
+            });
+
             const stateEntry = {
                 ...targetState,
                 districts: [],
                 totalDistricts: districts.length,
                 totalDivisions: divisions.length,
                 totalPincodes: pincodes.length,
-                activePincodes: pincodes.filter(p => (p.status || '').toLowerCase() === 'active').length,
-                managers: [
-                    ...agents.filter(a => (a.level || '').toLowerCase() === 'state' && (a.assignedState === targetState.name || a.assignedState === targetState.code)),
-                    ...managers.filter(m => (m.level === 'state' || m.role === 'state_manager') && (m.assignedState === targetState.name || m.assignedState === targetState.code || String(m.stateId) === stIdStr))
-                ]
+                activePincodes: pincodes.filter(p => activeStatusList.includes(p.status || 'Active')).length,
+                managers: stateManagers
             };
 
             const districtMap = {};
             districts.forEach(dst => {
                 const idStr = String(dst._id);
+                const nameLower = (dst.name || '').toLowerCase();
                 districtMap[idStr] = {
                     ...dst,
                     divisions: [],
@@ -525,8 +604,9 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                     totalPincodes: 0,
                     activePincodes: 0,
                     managers: [
-                        ...agents.filter(a => (a.level || '').toLowerCase() === 'district' && (a.assignedDistrict === dst.name || a.assignedDistrict === dst.code)),
-                        ...managers.filter(m => (m.level === 'district' || m.role === 'district_manager') && (m.assignedDistrict === dst.name || m.assignedDistrict === dst.code || String(m.districtId) === idStr))
+                        ...(agentsByDistrict.get(nameLower) || []),
+                        ...(managersByDistrict.get(nameLower) || []),
+                        ...(managersByDistrict.get(idStr) || [])
                     ]
                 };
             });
@@ -534,14 +614,16 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
             const divisionMap = {};
             divisions.forEach(div => {
                 const idStr = String(div._id);
+                const nameLower = (div.name || '').toLowerCase();
                 divisionMap[idStr] = {
                     ...div,
                     pincodes: [],
                     totalPincodes: 0,
                     activePincodes: 0,
                     managers: [
-                        ...agents.filter(a => (a.level || '').toLowerCase() === 'division' && ((a.assignedArea || '').includes(div.name) || (a.assignedDistrict === div.name))),
-                        ...managers.filter(m => (m.level === 'division' || m.role === 'division_manager') && ((m.assignedDivision || '').includes(div.name) || (m.assignedDistrict === div.name) || String(m.divisionId) === idStr))
+                        ...(agentsByDivision.get(nameLower) || []),
+                        ...(managersByDivision.get(nameLower) || []),
+                        ...(managersByDivision.get(idStr) || [])
                     ]
                 };
             });
@@ -551,7 +633,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 if (divIdStr && divisionMap[divIdStr]) {
                     divisionMap[divIdStr].pincodes.push(pin);
                     divisionMap[divIdStr].totalPincodes += 1;
-                    if ((pin.status || '').toLowerCase() === 'active') divisionMap[divIdStr].activePincodes += 1;
+                    if (activeStatusList.includes(pin.status || 'Active')) divisionMap[divIdStr].activePincodes += 1;
                 }
             });
 
@@ -569,7 +651,7 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 stateEntry.districts.push(dst);
             });
 
-            return res.json({
+            const drilldownPayload = {
                 success: true,
                 state: stateEntry,
                 hierarchy: [stateEntry],
@@ -577,7 +659,16 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 rawDistricts: districts,
                 rawDivisions: divisions,
                 rawPincodes: pincodes
-            });
+            };
+
+            if (isUnscoped) {
+                cachedDrilldownMap.set(cacheKey, {
+                    timestamp: Date.now(),
+                    payload: drilldownPayload
+                });
+            }
+
+            return res.json(drilldownPayload);
         }
 
         // ── C. FULL HIERARCHY / TREE VIEW MODE ──
@@ -777,25 +868,26 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
 // ============================================================
 router.get('/stats', [optionalAuth], async (req, res) => {
     try {
-        if (cachedHierarchyResponse && cachedHierarchyResponse.payload?.stats && (Date.now() - cachedHierarchyTimestamp < HIERARCHY_CACHE_TTL)) {
-            return res.json({
-                success: true,
-                stats: cachedHierarchyResponse.payload.stats
-            });
-        }
         if (cachedSummaryResponse && cachedSummaryResponse.payload?.stats && (Date.now() - cachedSummaryTimestamp < SUMMARY_CACHE_TTL)) {
             return res.json({
                 success: true,
                 stats: cachedSummaryResponse.payload.stats
             });
         }
+        if (cachedHierarchyResponse && cachedHierarchyResponse.payload?.stats && (Date.now() - cachedHierarchyTimestamp < HIERARCHY_CACHE_TTL)) {
+            return res.json({
+                success: true,
+                stats: cachedHierarchyResponse.payload.stats
+            });
+        }
 
+        const activeStatusList = ['Active', 'active', 'ACTIVE'];
         const [statesCount, districtsCount, divisionsCount, pincodesCount, activePincodesCount, assignedPincodesCount, agentsCount, managersCount] = await Promise.all([
-            State.countDocuments({ status: { $regex: /^active$/i } }),
-            District.countDocuments({ status: { $regex: /^active$/i } }),
-            Division.countDocuments({ status: { $regex: /^active$/i } }),
+            State.countDocuments({ status: { $in: activeStatusList } }),
+            District.countDocuments({ status: { $in: activeStatusList } }),
+            Division.countDocuments({ status: { $in: activeStatusList } }),
             Pincode.countDocuments(),
-            Pincode.countDocuments({ status: { $regex: /^active$/i } }),
+            Pincode.countDocuments({ status: { $in: activeStatusList } }),
             Pincode.countDocuments({ $or: [{ activeAgentId: { $ne: null } }, { isAssigned: true }] }),
             User.countDocuments({ role: 'agent', isActive: { $ne: false } }),
             Manager.countDocuments({ status: { $ne: 'Inactive' } })
@@ -810,18 +902,20 @@ router.get('/stats', [optionalAuth], async (req, res) => {
 
         const totalAssigned = Math.max(assignedPincodesCount, distinctAssignedPins.length);
 
+        const computedStats = {
+            totalStates: statesCount,
+            totalDistricts: districtsCount,
+            totalDivisions: divisionsCount,
+            totalPincodes: pincodesCount,
+            activePincodes: activePincodesCount,
+            assignedPincodes: totalAssigned,
+            availablePincodes: Math.max(0, pincodesCount - totalAssigned),
+            activeManagers: agentsCount + managersCount
+        };
+
         res.json({
             success: true,
-            stats: {
-                totalStates: statesCount,
-                totalDistricts: districtsCount,
-                totalDivisions: divisionsCount,
-                totalPincodes: pincodesCount,
-                activePincodes: activePincodesCount,
-                assignedPincodes: totalAssigned,
-                availablePincodes: Math.max(0, pincodesCount - totalAssigned),
-                activeManagers: agentsCount + managersCount
-            }
+            stats: computedStats
         });
     } catch (err) {
         console.error('Stats error:', err);
@@ -2084,5 +2178,6 @@ router.post('/validate', [optionalAuth], async (req, res) => {
 });
 
 router.validateTerritoryHierarchy = validateTerritoryHierarchy;
+router.invalidateHierarchyCache = invalidateHierarchyCache;
 
 module.exports = router;

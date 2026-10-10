@@ -83,6 +83,100 @@ const sanitizeVendorAddressObj = (vObj) => {
     return vObj;
 };
 
+/**
+ * Authoritative Canonical Request Classifier for Vendor Directory
+ * Precedence Order:
+ * 1. Business Request (Secondary business offering submitted by existing registered vendor)
+ * 2. Agent Onboarded (Vendor onboarding initiated through Agent website/agent)
+ * 3. Manager Onboarded (Vendor onboarding initiated through Manager website/manager)
+ * 4. Direct Request (Vendor self-registration from Vendor website)
+ * 5. Ambiguous (Legacy/missing source metadata - safely isolated, never defaulted to Direct Request)
+ */
+const classifyVendorRequest = (v) => {
+    if (!v) return { classification: 'ambiguous', isDirect: false, isAgent: false, isManager: false, isBusinessRequest: false };
+
+    // 1. Business Request (Secondary business submission by an existing registered vendor)
+    const isBusinessReq = v.requestType === 'business_request' ||
+                          v.requestType === 'business' ||
+                          v.isSecondaryBusiness === true ||
+                          (v.isPrimary === false && (v.businessId || v._id && v.vendorUserId));
+    if (isBusinessReq) {
+        return { classification: 'business_request', isDirect: false, isAgent: false, isManager: false, isBusinessRequest: true };
+    }
+
+    const jType = String(v.joiningType || '').toLowerCase().trim();
+    const cVia = String(v.createdVia || '').toLowerCase().trim();
+    const rSource = String(v.registrationSource || '').toLowerCase().trim();
+    const rOrigin = String(v.requestOrigin || '').toLowerCase().trim();
+
+    // 2. Manager Onboarded Verification
+    const hasManagerExplicit = jType === 'manager' ||
+                               cVia === 'manager' || cVia === 'manager_website' ||
+                               rSource === 'manager' || rSource === 'manager_website' ||
+                               rOrigin === 'manager_website' || rOrigin === 'manager';
+
+    const hasManagerId = Boolean(
+        v.managerId ||
+        v.onboardedByManagerId ||
+        v.managerRegistrationId ||
+        (v.onboardedByManager && (typeof v.onboardedByManager === 'string' || v.onboardedByManager._id || v.onboardedByManager.name || v.onboardedByManager.registrationId || v.onboardedByManager.managerId))
+    );
+
+    const hasManagerRole = Boolean(v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('manager')) ||
+                           Boolean(v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('manager')) ||
+                           Boolean(typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('MGR-') || v.onboardedBy.startsWith('mgr_')));
+
+    const hasManagerAssigned = Boolean(v.assignedManager || v.managerName);
+
+    const isManager = hasManagerExplicit || hasManagerId || hasManagerRole || hasManagerAssigned;
+
+    // 3. Agent Onboarded Verification
+    const hasAgentExplicit = jType === 'agent' ||
+                             cVia === 'agent' || cVia === 'agent_website' ||
+                             rSource === 'agent' || rSource === 'agent_website' ||
+                             rOrigin === 'agent_website' || rOrigin === 'agent';
+
+    const hasAgentId = Boolean(
+        v.agentId ||
+        v.onboardedByAgentId ||
+        v.agentRegistrationId ||
+        (v.onboardedByAgent && (typeof v.onboardedByAgent === 'string' || v.onboardedByAgent._id || v.onboardedByAgent.name || v.onboardedByAgent.registrationId))
+    );
+
+    const hasAgentRole = Boolean(v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('agent')) ||
+                         Boolean(v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('agent')) ||
+                         Boolean(typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('AG-') || v.onboardedBy.startsWith('agt_')));
+
+    const hasAgentAssigned = Boolean(v.assignedAgent || v.agentName);
+    const hasAgentReferred = Boolean(v.referredBy);
+    const hasAgentOnboardedBy = Boolean(v.onboardedBy && !isManager && !hasManagerExplicit);
+
+    // If explicitly marked as manager, it is NEVER classified as agent
+    const isAgent = !isManager && (hasAgentExplicit || hasAgentId || hasAgentRole || hasAgentAssigned || hasAgentReferred || hasAgentOnboardedBy);
+
+    if (isAgent) {
+        return { classification: 'agent', isDirect: false, isAgent: true, isManager: false, isBusinessRequest: false };
+    }
+
+    if (isManager) {
+        return { classification: 'manager', isDirect: false, isAgent: false, isManager: true, isBusinessRequest: false };
+    }
+
+    // 4. Direct Request Verification (Vendor self-registration via Vendor website)
+    const hasDirectExplicit = jType === 'direct' ||
+                              ['vendor', 'vendor_website', 'direct', 'website'].includes(cVia) ||
+                              ['vendor', 'vendor_website', 'direct', 'website'].includes(rSource) ||
+                              ['vendor_website', 'vendor', 'direct'].includes(rOrigin) ||
+                              v.isDirectRequest === true;
+
+    if (hasDirectExplicit) {
+        return { classification: 'direct', isDirect: true, isAgent: false, isManager: false, isBusinessRequest: false };
+    }
+
+    // 5. Ambiguous / Legacy without identifiable source
+    return { classification: 'ambiguous', isDirect: false, isAgent: false, isManager: false, isBusinessRequest: false };
+};
+
 const batchEnrichVendors = async (vendorsList = []) => {
     if (!Array.isArray(vendorsList) || vendorsList.length === 0) return [];
 
@@ -224,23 +318,15 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
     vObj.postalCode = pin || '—';
     if (addr) vObj.address = addr;
 
-    // Normalize Agent Onboarded status
-    const isAgentOnboarded = vObj.joiningType === 'agent' ||
-        !!vObj.onboardedByAgent ||
-        !!vObj.onboardedBy ||
-        !!vObj.agentId ||
-        !!vObj.assignedAgent ||
-        !!vObj.onboardedByAgentId ||
-        !!vObj.referredBy ||
-        !!vObj.agentName ||
-        (vObj.createdVia && String(vObj.createdVia).toLowerCase() === 'agent') ||
-        (vObj.registrationSource && String(vObj.registrationSource).toLowerCase() === 'agent');
+    // Canonical Request Classification across all 4 categories
+    const classificationInfo = classifyVendorRequest(vObj);
+    vObj.requestClassification = classificationInfo.classification;
 
-    if (isAgentOnboarded) {
+    if (classificationInfo.isAgent) {
         vObj.joiningType = 'agent';
         
         let agentDoc = null;
-        const possibleAgentId = (vObj.assignedAgent && typeof vObj.assignedAgent === 'object' ? (vObj.assignedAgent._id || vObj.assignedAgent) : vObj.assignedAgent) || vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId;
+        const possibleAgentId = (vObj.assignedAgent && typeof vObj.assignedAgent === 'object' ? (vObj.assignedAgent._id || vObj.assignedAgent) : vObj.assignedAgent) || vObj.agentId || vObj.onboardedByAgentId || vObj.onboardedByAgent || vObj.onboardedBy || vObj.referredBy;
 
         if (possibleAgentId) {
             const keyStr = possibleAgentId.toString();
@@ -286,9 +372,9 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
             agentLvlCode = rawAgentLvl.trim().slice(0, 4).toUpperCase();
         }
 
-        const agentName = agentDoc?.name || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.name : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.name : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.name : null) || (typeof vObj.referredBy === 'object' ? vObj.referredBy?.name : null) || (typeof vObj.onboardedBy === 'string' ? vObj.onboardedBy : null) || vObj.agentName || 'Field Agent';
+        const agentName = agentDoc?.name || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.name : null) || (typeof vObj.onboardedByAgent === 'object' ? vObj.onboardedByAgent?.name : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.name : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.name : null) || (typeof vObj.referredBy === 'object' ? vObj.referredBy?.name : null) || (typeof vObj.onboardedBy === 'string' ? vObj.onboardedBy : null) || vObj.agentName || 'Field Agent';
 
-        const regId = agentDoc?.registrationId || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.registrationId : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.registrationId : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.registrationId : null) || `AG-${agentLvlCode}-${String(agentDoc?._id || '1001').slice(-4)}`;
+        const regId = agentDoc?.registrationId || (typeof vObj.assignedAgent === 'object' ? vObj.assignedAgent?.registrationId : null) || (typeof vObj.onboardedByAgent === 'object' ? vObj.onboardedByAgent?.registrationId : null) || (typeof vObj.onboardedBy === 'object' ? vObj.onboardedBy?.registrationId : null) || (typeof vObj.agentId === 'object' ? vObj.agentId?.registrationId : null) || `AG-${agentLvlCode}-${String(agentDoc?._id || '1001').slice(-4)}`;
 
         const pinCode = agentDoc?.pincode || (agentDoc?.territory && typeof agentDoc.territory === 'object' ? agentDoc.territory.pincode : null) || '—';
 
@@ -297,106 +383,99 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
             registrationId: regId,
             pincode: pinCode
         };
-    } else {
-        const isManagerOnboarded = vObj.joiningType === 'manager' ||
-            !!vObj.onboardedByManager ||
-            !!vObj.managerId ||
-            !!vObj.assignedManager ||
-            !!vObj.onboardedByManagerId ||
-            !!vObj.managerName ||
-            (vObj.createdVia && String(vObj.createdVia).toLowerCase() === 'manager') ||
-            (vObj.registrationSource && String(vObj.registrationSource).toLowerCase() === 'manager') ||
-            (vObj.addedBy && vObj.addedBy.role && String(vObj.addedBy.role).toLowerCase().includes('manager'));
+    } else if (classificationInfo.isManager) {
+        vObj.joiningType = 'manager';
+        
+        let managerDoc = null;
+        const possibleManagerId = (vObj.assignedManager && typeof vObj.assignedManager === 'object' ? (vObj.assignedManager._id || vObj.assignedManager) : vObj.assignedManager) || vObj.managerId || vObj.onboardedByManagerId || (typeof vObj.onboardedByManager === 'string' ? vObj.onboardedByManager : vObj.onboardedByManager?._id) || (vObj.addedBy && vObj.addedBy.id);
 
-        if (isManagerOnboarded) {
-            vObj.joiningType = 'manager';
-            
-            let managerDoc = null;
-            const possibleManagerId = (vObj.assignedManager && typeof vObj.assignedManager === 'object' ? (vObj.assignedManager._id || vObj.assignedManager) : vObj.assignedManager) || vObj.managerId || vObj.onboardedByManager || vObj.onboardedByManagerId || (vObj.addedBy && vObj.addedBy.id);
-
-            if (possibleManagerId) {
-                const db = mongoose.connection.db;
-                if (db) {
-                    try {
-                        const filter = mongoose.Types.ObjectId.isValid(possibleManagerId)
-                            ? { _id: new mongoose.Types.ObjectId(possibleManagerId) }
-                            : { $or: [{ managerId: possibleManagerId }, { registrationId: possibleManagerId }, { email: possibleManagerId }] };
-                        managerDoc = await db.collection('managers').findOne(filter, {
-                            projection: {
-                                name: 1,
-                                managerId: 1,
-                                registrationId: 1,
-                                phone: 1,
-                                email: 1,
-                                level: 1,
-                                assignedPincode: 1,
-                                assignedDistrict: 1,
-                                assignedState: 1
-                            }
-                        });
-                        if (!managerDoc) {
-                            if (mongoose.Types.ObjectId.isValid(possibleManagerId)) {
-                                managerDoc = await User.findById(possibleManagerId).select('name registrationId phone email level role').lean();
-                            } else {
-                                managerDoc = await User.findOne({
-                                    $or: [
-                                        { _id: possibleManagerId },
-                                        { managerId: possibleManagerId },
-                                        { registrationId: possibleManagerId },
-                                        { email: possibleManagerId }
-                                    ]
-                                }).select('name registrationId phone email level role').lean();
-                            }
+        if (possibleManagerId) {
+            const db = mongoose.connection.db;
+            if (db) {
+                try {
+                    const filter = mongoose.Types.ObjectId.isValid(possibleManagerId)
+                        ? { _id: new mongoose.Types.ObjectId(possibleManagerId) }
+                        : { $or: [{ managerId: possibleManagerId }, { registrationId: possibleManagerId }, { email: possibleManagerId }] };
+                    managerDoc = await db.collection('managers').findOne(filter, {
+                        projection: {
+                            name: 1,
+                            managerId: 1,
+                            registrationId: 1,
+                            phone: 1,
+                            email: 1,
+                            level: 1,
+                            assignedPincode: 1,
+                            assignedDistrict: 1,
+                            assignedState: 1
                         }
-                    } catch (e) {}
-                }
+                    });
+                    if (!managerDoc) {
+                        if (mongoose.Types.ObjectId.isValid(possibleManagerId)) {
+                            managerDoc = await User.findById(possibleManagerId).select('name registrationId phone email level role').lean();
+                        } else {
+                            managerDoc = await User.findOne({
+                                $or: [
+                                    { _id: possibleManagerId },
+                                    { managerId: possibleManagerId },
+                                    { registrationId: possibleManagerId },
+                                    { email: possibleManagerId }
+                                ]
+                            }).select('name registrationId phone email level role').lean();
+                        }
+                    }
+                } catch (e) {}
             }
-
-            const managerName = managerDoc?.name || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.name : null) || (typeof vObj.onboardedByManager === 'object' ? vObj.onboardedByManager?.name : null) || vObj.managerName || (vObj.addedBy && vObj.addedBy.name) || 'Territory Manager';
-
-            const rawMgrLvl = managerDoc?.level ?? 'GEN';
-            let mgrLvlCode = 'GEN';
-            if (rawMgrLvl === 1 || rawMgrLvl === '1' || String(rawMgrLvl).toLowerCase().includes('state')) {
-                mgrLvlCode = 'STM';
-            } else if (rawMgrLvl === 2 || rawMgrLvl === '2' || String(rawMgrLvl).toLowerCase().includes('dist')) {
-                mgrLvlCode = 'DTM';
-            } else if (rawMgrLvl === 3 || rawMgrLvl === '3' || String(rawMgrLvl).toLowerCase().includes('div')) {
-                mgrLvlCode = 'DIV';
-            } else if (rawMgrLvl === 4 || rawMgrLvl === '4' || String(rawMgrLvl).toLowerCase().includes('pin')) {
-                mgrLvlCode = 'PIN';
-            } else if (typeof rawMgrLvl === 'string' && rawMgrLvl.trim()) {
-                mgrLvlCode = rawMgrLvl.trim().slice(0, 3).toUpperCase();
-            }
-
-            const formatManagerLevel = (lvl) => {
-                if (lvl === 1 || lvl === '1') return 'State Manager';
-                if (lvl === 2 || lvl === '2') return 'District Manager';
-                if (lvl === 3 || lvl === '3') return 'Division Manager';
-                if (lvl === 4 || lvl === '4') return 'Pincode Manager';
-                if (typeof lvl === 'string' && lvl.trim()) {
-                    const s = lvl.trim().toLowerCase();
-                    if (s === 'state' || s === 'state_manager') return 'State Manager';
-                    if (s === 'district' || s === 'district_manager') return 'District Manager';
-                    if (s === 'division' || s === 'division_manager') return 'Division Manager';
-                    if (s === 'pincode' || s === 'pincode_manager') return 'Pincode Manager';
-                    return lvl.charAt(0).toUpperCase() + lvl.slice(1);
-                }
-                return 'Manager';
-            };
-
-            const regId = managerDoc?.managerId || managerDoc?.registrationId || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.registrationId : null) || (vObj.managerId) || `MGR-${mgrLvlCode}-${String(managerDoc?._id || '1001').slice(-4)}`;
-
-            const pinCode = managerDoc?.assignedPincode || managerDoc?.pincode || '—';
-
-            vObj.onboardedByManager = {
-                name: managerName,
-                registrationId: regId,
-                pincode: pinCode,
-                level: formatManagerLevel(managerDoc?.level)
-            };
-        } else {
-            vObj.joiningType = vObj.joiningType || 'direct';
         }
+
+        const managerName = managerDoc?.name || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.name : null) || (typeof vObj.onboardedByManager === 'object' ? vObj.onboardedByManager?.name : null) || vObj.managerName || (vObj.addedBy && vObj.addedBy.name) || 'Territory Manager';
+
+        const rawMgrLvl = managerDoc?.level ?? 'GEN';
+        let mgrLvlCode = 'GEN';
+        if (rawMgrLvl === 1 || rawMgrLvl === '1' || String(rawMgrLvl).toLowerCase().includes('state')) {
+            mgrLvlCode = 'STM';
+        } else if (rawMgrLvl === 2 || rawMgrLvl === '2' || String(rawMgrLvl).toLowerCase().includes('dist')) {
+            mgrLvlCode = 'DTM';
+        } else if (rawMgrLvl === 3 || rawMgrLvl === '3' || String(rawMgrLvl).toLowerCase().includes('div')) {
+            mgrLvlCode = 'DIV';
+        } else if (rawMgrLvl === 4 || rawMgrLvl === '4' || String(rawMgrLvl).toLowerCase().includes('pin')) {
+            mgrLvlCode = 'PIN';
+        } else if (typeof rawMgrLvl === 'string' && rawMgrLvl.trim()) {
+            mgrLvlCode = rawMgrLvl.trim().slice(0, 3).toUpperCase();
+        }
+
+        const formatManagerLevel = (lvl) => {
+            if (lvl === 1 || lvl === '1') return 'State Manager';
+            if (lvl === 2 || lvl === '2') return 'District Manager';
+            if (lvl === 3 || lvl === '3') return 'Division Manager';
+            if (lvl === 4 || lvl === '4') return 'Pincode Manager';
+            if (typeof lvl === 'string' && lvl.trim()) {
+                const s = lvl.trim().toLowerCase();
+                if (s === 'state' || s === 'state_manager') return 'State Manager';
+                if (s === 'district' || s === 'district_manager') return 'District Manager';
+                if (s === 'division' || s === 'division_manager') return 'Division Manager';
+                if (s === 'pincode' || s === 'pincode_manager') return 'Pincode Manager';
+                return lvl.charAt(0).toUpperCase() + lvl.slice(1);
+            }
+            return 'Manager';
+        };
+
+        const regId = managerDoc?.managerId || managerDoc?.registrationId || (typeof vObj.assignedManager === 'object' ? vObj.assignedManager?.registrationId : null) || (vObj.managerRegistrationId) || (vObj.managerId) || `MGR-${mgrLvlCode}-${String(managerDoc?._id || '1001').slice(-4)}`;
+
+        const pinCode = managerDoc?.assignedPincode || managerDoc?.pincode || '—';
+
+        vObj.onboardedByManager = {
+            name: managerName,
+            registrationId: regId,
+            pincode: pinCode,
+            level: formatManagerLevel(managerDoc?.level)
+        };
+    } else if (classificationInfo.isDirect) {
+        vObj.joiningType = 'direct';
+        vObj.isDirectRequest = true;
+    } else {
+        // Safe handling for ambiguous / legacy records with missing metadata
+        vObj.joiningType = vObj.joiningType || 'ambiguous';
+        vObj.isAmbiguousSource = true;
     }
 
     sanitizeVendorAddressObj(vObj);
@@ -541,6 +620,8 @@ const deduplicateVendorsList = (list = []) => {
         else if (email && emailMap.has(email)) existing = emailMap.get(email);
         else if (idStr && idMap.has(idStr)) existing = idMap.get(idStr);
 
+        const vClass = classifyVendorRequest(v);
+
         if (existing) {
             // Merge records: prefer active/approved status
             const existingStatus = String(existing.status || '').toLowerCase().trim();
@@ -550,23 +631,33 @@ const deduplicateVendorsList = (list = []) => {
                 existing.isActive = true;
             }
 
-            // Determine and preserve Joining Type
-            if (isAgentCheck(v) || isAgentCheck(existing)) {
+            const exClass = classifyVendorRequest(existing);
+
+            // Determine and preserve Joining Type canonically
+            if (vClass.isAgent || exClass.isAgent) {
                 existing.joiningType = 'agent';
+                existing.createdVia = existing.createdVia || v.createdVia || 'agent';
+                existing.registrationSource = existing.registrationSource || v.registrationSource || 'agent';
                 existing.onboardedByAgent = existing.onboardedByAgent || v.onboardedByAgent;
                 existing.assignedAgent = existing.assignedAgent || v.assignedAgent;
                 existing.agentId = existing.agentId || v.agentId;
                 existing.agentName = existing.agentName || v.agentName;
                 existing.agentRegistrationId = existing.agentRegistrationId || v.agentRegistrationId;
                 existing.onboardedBy = existing.onboardedBy || v.onboardedBy;
-            } else if (isManagerCheck(v) || isManagerCheck(existing)) {
+            } else if (vClass.isManager || exClass.isManager) {
                 existing.joiningType = 'manager';
+                existing.createdVia = existing.createdVia || v.createdVia || 'manager';
+                existing.registrationSource = existing.registrationSource || v.registrationSource || 'manager';
                 existing.onboardedByManager = existing.onboardedByManager || v.onboardedByManager;
                 existing.assignedManager = existing.assignedManager || v.assignedManager;
                 existing.managerId = existing.managerId || v.managerId;
                 existing.managerName = existing.managerName || v.managerName;
+                existing.managerRegistrationId = existing.managerRegistrationId || v.managerRegistrationId;
+            } else if (vClass.isDirect || exClass.isDirect) {
+                existing.joiningType = 'direct';
+                existing.isDirectRequest = true;
             } else {
-                existing.joiningType = existing.joiningType || v.joiningType || 'direct';
+                existing.joiningType = existing.joiningType || v.joiningType || 'ambiguous';
             }
 
             // Fill non-empty properties
@@ -588,9 +679,14 @@ const deduplicateVendorsList = (list = []) => {
         } else {
             const vendorCopy = { ...v };
             if (regId) vendorCopy.registrationId = regId;
-            if (isAgentCheck(vendorCopy)) vendorCopy.joiningType = 'agent';
-            else if (isManagerCheck(vendorCopy)) vendorCopy.joiningType = 'manager';
-            else vendorCopy.joiningType = vendorCopy.joiningType || 'direct';
+            if (vClass.isAgent) vendorCopy.joiningType = 'agent';
+            else if (vClass.isManager) vendorCopy.joiningType = 'manager';
+            else if (vClass.isDirect) {
+                vendorCopy.joiningType = 'direct';
+                vendorCopy.isDirectRequest = true;
+            } else {
+                vendorCopy.joiningType = vendorCopy.joiningType || 'ambiguous';
+            }
 
             canonicalVendors.push(vendorCopy);
 
@@ -610,36 +706,34 @@ router.get('/vendors', auth, async (req, res) => {
         const { search, category, state, status, isDirectRequest, isAgentOnboarded, isManagerOnboarded, page = 1, limit = 20 } = req.query;
 
         if (isAgentOnboarded === 'true') {
+            const agentMongoQuery = {
+                $or: [
+                    { joiningType: 'agent' },
+                    { createdVia: { $in: ['agent', 'agent_website'] } },
+                    { registrationSource: { $in: ['agent', 'agent_website'] } },
+                    { requestOrigin: 'agent_website' },
+                    { onboardedByAgent: { $exists: true, $ne: null } },
+                    { agentId: { $exists: true, $ne: null } },
+                    { assignedAgent: { $exists: true, $ne: null } },
+                    { onboardedByAgentId: { $exists: true, $ne: null } },
+                    { agentName: { $exists: true, $ne: '' } },
+                    { agentRegistrationId: { $exists: true, $ne: '' } },
+                    { referredBy: { $exists: true, $ne: null } }
+                ],
+                joiningType: { $ne: 'manager' }
+            };
+
             const [agentVendorsFromUser, agentVendorsFromVendor] = await Promise.all([
-                User.find({
-                    $or: [
-                        { joiningType: 'agent' },
-                        { createdVia: 'agent' },
-                        { registrationSource: 'agent' },
-                        { onboardedBy: { $exists: true, $ne: null } },
-                        { agentId: { $exists: true, $ne: null } },
-                        { assignedAgent: { $exists: true, $ne: null } },
-                        { onboardedByAgentId: { $exists: true, $ne: null } },
-                        { referredBy: { $exists: true, $ne: null } }
-                    ]
-                }).select('-password -__v').sort({ createdAt: -1 }).lean(),
-                Vendor.find({
-                    $or: [
-                        { joiningType: 'agent' },
-                        { createdVia: 'agent' },
-                        { registrationSource: 'agent' },
-                        { onboardedBy: { $exists: true, $ne: null } },
-                        { agentId: { $exists: true, $ne: null } },
-                        { assignedAgent: { $exists: true, $ne: null } },
-                        { onboardedByAgentId: { $exists: true, $ne: null } },
-                        { referredBy: { $exists: true, $ne: null } }
-                    ]
-                }).select('-__v').sort({ createdAt: -1 }).lean()
+                User.find(agentMongoQuery).select('-password -__v').sort({ createdAt: -1 }).lean(),
+                Vendor.find(agentMongoQuery).select('-__v').sort({ createdAt: -1 }).lean()
             ]);
 
             const rawAgent = [...agentVendorsFromUser, ...agentVendorsFromVendor];
             const dedupedAgent = deduplicateVendorsList(rawAgent);
             let enriched = await batchEnrichVendors(dedupedAgent);
+
+            // Filter strictly by canonical agent classification
+            enriched = enriched.filter(v => classifyVendorRequest(v).isAgent);
 
             if (search) {
                 const s = search.toLowerCase();
@@ -668,36 +762,34 @@ router.get('/vendors', auth, async (req, res) => {
         }
 
         if (isManagerOnboarded === 'true') {
+            const managerMongoQuery = {
+                $or: [
+                    { joiningType: 'manager' },
+                    { createdVia: { $in: ['manager', 'manager_website'] } },
+                    { registrationSource: { $in: ['manager', 'manager_website'] } },
+                    { requestOrigin: 'manager_website' },
+                    { onboardedByManager: { $exists: true, $ne: null } },
+                    { managerId: { $exists: true, $ne: null } },
+                    { assignedManager: { $exists: true, $ne: null } },
+                    { onboardedByManagerId: { $exists: true, $ne: null } },
+                    { managerName: { $exists: true, $ne: '' } },
+                    { managerRegistrationId: { $exists: true, $ne: '' } },
+                    { 'addedBy.role': { $regex: /manager/i } }
+                ],
+                joiningType: { $ne: 'agent' }
+            };
+
             const [managerVendorsFromUser, managerVendorsFromVendor] = await Promise.all([
-                User.find({
-                    $or: [
-                        { joiningType: 'manager' },
-                        { createdVia: 'manager' },
-                        { registrationSource: 'manager' },
-                        { onboardedByManager: { $exists: true, $ne: null } },
-                        { managerId: { $exists: true, $ne: null } },
-                        { assignedManager: { $exists: true, $ne: null } },
-                        { onboardedByManagerId: { $exists: true, $ne: null } },
-                        { 'addedBy.role': { $regex: /manager/i } }
-                    ]
-                }).select('-password -__v').sort({ createdAt: -1 }).lean(),
-                Vendor.find({
-                    $or: [
-                        { joiningType: 'manager' },
-                        { createdVia: 'manager' },
-                        { registrationSource: 'manager' },
-                        { onboardedByManager: { $exists: true, $ne: null } },
-                        { managerId: { $exists: true, $ne: null } },
-                        { assignedManager: { $exists: true, $ne: null } },
-                        { onboardedByManagerId: { $exists: true, $ne: null } },
-                        { 'addedBy.role': { $regex: /manager/i } }
-                    ]
-                }).select('-__v').sort({ createdAt: -1 }).lean()
+                User.find(managerMongoQuery).select('-password -__v').sort({ createdAt: -1 }).lean(),
+                Vendor.find(managerMongoQuery).select('-__v').sort({ createdAt: -1 }).lean()
             ]);
 
             const rawManager = [...managerVendorsFromUser, ...managerVendorsFromVendor];
             const dedupedManager = deduplicateVendorsList(rawManager);
             let enriched = await batchEnrichVendors(dedupedManager);
+
+            // Filter strictly by canonical manager classification
+            enriched = enriched.filter(v => classifyVendorRequest(v).isManager);
 
             if (search) {
                 const s = search.toLowerCase();
@@ -726,30 +818,32 @@ router.get('/vendors', auth, async (req, res) => {
         }
 
         if (isDirectRequest === 'true') {
+            const handledStatuses = new Set(['approved', 'rejected', 'assigned', 'active', 'suspended']);
+            const directMongoQuery = {
+                $or: [
+                    { isDirectRequest: true },
+                    { joiningType: 'direct' },
+                    { createdVia: { $in: ['vendor', 'vendor_website', 'direct', 'website'] } },
+                    { registrationSource: { $in: ['vendor', 'vendor_website', 'direct', 'website'] } },
+                    { requestOrigin: { $in: ['vendor_website', 'vendor', 'direct'] } }
+                ],
+                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] },
+                requestType: { $ne: 'business_request' }
+            };
+
             const [directVendors, directVendorDocs] = await Promise.all([
-                User.find({
-                    $or: [
-                        { role: { $regex: /vendor|merchant/i } },
-                        { userType: { $regex: /vendor|merchant/i } },
-                        { isDirectRequest: true }
-                    ],
-                    status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
-                }).select('-password -__v').sort({ createdAt: -1 }).lean(),
-                Vendor.find({
-                    status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] }
-                }).select('-__v').sort({ createdAt: -1 }).lean()
+                User.find(directMongoQuery).select('-password -__v').sort({ createdAt: -1 }).lean(),
+                Vendor.find(directMongoQuery).select('-__v').sort({ createdAt: -1 }).lean()
             ]);
 
             const rawDirect = deduplicateVendorsList([...directVendors, ...directVendorDocs]);
             let allDirect = await batchEnrichVendors(rawDirect);
 
-            const handledStatuses = new Set(['approved', 'rejected', 'assigned', 'active', 'suspended']);
             let pendingDirect = allDirect.filter(v => {
                 const s = String(v.status || '').toLowerCase().trim();
-                const isHandled = handledStatuses.has(s);
-                const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-                const isManagerOnboarded = v.joiningType === 'manager' || !!v.onboardedByManager || !!v.managerId || (v.createdVia && String(v.createdVia).toLowerCase() === 'manager');
-                return !isHandled && !isAgentOnboarded && !isManagerOnboarded;
+                if (handledStatuses.has(s)) return false;
+                const cr = classifyVendorRequest(v);
+                return cr.isDirect;
             });
 
             if (search) {
@@ -805,15 +899,16 @@ router.get('/vendors', auth, async (req, res) => {
         // Attach Pincode Agent information & normalize profile fields
         let enrichedVendors = await batchEnrichVendors(dedupedVendors);
 
-        // Compute authoritative stats across all unique vendors
+        // Compute authoritative stats across all unique vendors using canonical classification
         const stats = {
             total: enrichedVendors.length,
             active: enrichedVendors.filter(v => ['active', 'approved'].includes(String(v.status || '').toLowerCase())).length,
             pending: enrichedVendors.filter(v => ['pending', 'under_verification', 'requested', 'in_review'].includes(String(v.status || '').toLowerCase())).length,
             suspended: enrichedVendors.filter(v => ['suspended', 'revoked', 'rejected'].includes(String(v.status || '').toLowerCase())).length,
-            agentOnboarded: enrichedVendors.filter(v => v.joiningType === 'agent').length,
-            managerOnboarded: enrichedVendors.filter(v => v.joiningType === 'manager').length,
-            directRequests: enrichedVendors.filter(v => v.joiningType === 'direct' && !['active', 'approved'].includes(String(v.status || '').toLowerCase())).length
+            agentOnboarded: enrichedVendors.filter(v => classifyVendorRequest(v).isAgent).length,
+            managerOnboarded: enrichedVendors.filter(v => classifyVendorRequest(v).isManager).length,
+            directRequests: enrichedVendors.filter(v => classifyVendorRequest(v).isDirect && !['active', 'approved', 'rejected', 'suspended'].includes(String(v.status || '').toLowerCase())).length,
+            ambiguous: enrichedVendors.filter(v => classifyVendorRequest(v).classification === 'ambiguous').length
         };
 
         const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -912,6 +1007,8 @@ router.post('/vendors/agent-onboard', async (req, res) => {
             joiningType: 'agent',
             createdVia: 'agent',
             registrationSource: 'agent',
+            requestType: 'onboarding',
+            requestOrigin: 'agent_website',
             onboardedBy: targetAgentId,
             agentId: targetAgentId,
             onboardedByAgentId: targetAgentId,
@@ -977,6 +1074,356 @@ router.post('/vendors/agent-onboard', async (req, res) => {
         res.status(500).json({ success: false, message: 'Server error onboarding vendor', error: err.message });
     }
 });
+
+// POST Manager Onboard New Vendor (Creates Pending Vendor linked to Manager and Territory)
+router.post('/vendors/manager-onboard', async (req, res) => {
+    try {
+        const {
+            businessName, name, contactPerson, email, phone, category, subCategory,
+            assignedState, assignedDistrict, assignedDivision, pincode, assignedArea,
+            address, kycDocs, managerId
+        } = req.body;
+
+        const targetManagerId = managerId || req.user?.id || req.body.onboardedByManager;
+        let managerDoc = null;
+        if (targetManagerId) {
+            const db = mongoose.connection.db;
+            if (db) {
+                const filter = mongoose.Types.ObjectId.isValid(targetManagerId)
+                    ? { _id: new mongoose.Types.ObjectId(targetManagerId) }
+                    : { $or: [{ managerId: targetManagerId }, { registrationId: targetManagerId }, { email: targetManagerId }] };
+                managerDoc = await db.collection('managers').findOne(filter).catch(() => null);
+            }
+            if (!managerDoc) {
+                if (mongoose.Types.ObjectId.isValid(targetManagerId)) {
+                    managerDoc = await User.findById(targetManagerId).select('name registrationId phone email level role assignedState assignedDistrict assignedDivision assignedPincode').lean().catch(() => null);
+                } else {
+                    managerDoc = await User.findOne({
+                        $or: [
+                            { _id: targetManagerId },
+                            { managerId: targetManagerId },
+                            { registrationId: targetManagerId },
+                            { email: targetManagerId }
+                        ]
+                    }).select('name registrationId phone email level role assignedState assignedDistrict assignedDivision assignedPincode').lean().catch(() => null);
+                }
+            }
+        }
+
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randDigits = Math.floor(1000 + Math.random() * 9000);
+        const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
+
+        const lowerEmail = (email || `vendor_mgr_${randDigits}@connect.app`).toLowerCase().trim();
+        const cleanPhone = (phone || '').replace(/\D/g, '');
+
+        const existingVendorUser = await User.findOne({
+            $or: [
+                { email: lowerEmail },
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone }] : []),
+                ...(businessName ? [{ businessName: new RegExp(`^${businessName.trim()}$`, 'i') }] : [])
+            ]
+        }) || await Vendor.findOne({
+            $or: [
+                { email: lowerEmail },
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone }] : []),
+                ...(businessName ? [{ businessName: new RegExp(`^${businessName.trim()}$`, 'i') }] : [])
+            ]
+        });
+
+        if (existingVendorUser) {
+            const isPhoneMatch = cleanPhone && (existingVendorUser.phone === cleanPhone || existingVendorUser.phone === phone);
+            const isBizMatch = businessName && (existingVendorUser.businessName || existingVendorUser.name || '').toLowerCase() === businessName.trim().toLowerCase();
+            const errorMsg = isPhoneMatch ? 'A user with this phone number already exists.' : (isBizMatch ? 'A vendor with this business name already exists.' : 'A vendor with this email address already exists.');
+            return res.status(400).json({ success: false, msg: errorMsg, message: errorMsg });
+        }
+
+        const territoryParts = [
+            assignedState || managerDoc?.assignedState || managerDoc?.state || '',
+            assignedDistrict || managerDoc?.assignedDistrict || managerDoc?.district || '',
+            assignedDivision || managerDoc?.assignedDivision || managerDoc?.division || '',
+            pincode || managerDoc?.assignedPincode || managerDoc?.pincode || ''
+        ].filter(Boolean);
+
+        const territoryStr = assignedArea || (territoryParts.length > 0 ? territoryParts.join(' / ') : '');
+
+        const bcrypt = require('bcryptjs');
+        const defaultSalt = await bcrypt.genSalt(10);
+        const defaultHashedPassword = await bcrypt.hash('Vendor@12345', defaultSalt);
+
+        const rawMgrLvl = managerDoc?.level ?? 'GEN';
+        let mgrLvlCode = 'GEN';
+        if (rawMgrLvl === 1 || rawMgrLvl === '1' || String(rawMgrLvl).toLowerCase().includes('state')) mgrLvlCode = 'STM';
+        else if (rawMgrLvl === 2 || rawMgrLvl === '2' || String(rawMgrLvl).toLowerCase().includes('dist')) mgrLvlCode = 'DTM';
+        else if (rawMgrLvl === 3 || rawMgrLvl === '3' || String(rawMgrLvl).toLowerCase().includes('div')) mgrLvlCode = 'DIV';
+        else if (rawMgrLvl === 4 || rawMgrLvl === '4' || String(rawMgrLvl).toLowerCase().includes('pin')) mgrLvlCode = 'PIN';
+        else if (typeof rawMgrLvl === 'string' && rawMgrLvl.trim()) mgrLvlCode = rawMgrLvl.trim().slice(0, 3).toUpperCase();
+
+        const managerRegId = managerDoc?.managerId || managerDoc?.registrationId || (targetManagerId ? `MGR-${mgrLvlCode}-${String(targetManagerId).slice(-4)}` : 'MGR-GEN-1001');
+
+        const vendorData = {
+            name: name || contactPerson || businessName || 'Vendor Merchant',
+            businessName: businessName || name || 'Vendor Business',
+            contactPerson: contactPerson || name || businessName || 'Contact Person',
+            email: lowerEmail,
+            phone: cleanPhone || undefined,
+            password: defaultHashedPassword,
+            role: 'Vendor',
+            vendorType: category || 'General Store',
+            category: category || 'General Store',
+            subCategory: subCategory || '',
+            status: 'pending',
+            kycStatus: 'Pending KYC',
+            joiningType: 'manager',
+            createdVia: 'manager_website',
+            registrationSource: 'manager_website',
+            requestType: 'onboarding',
+            requestOrigin: 'manager_website',
+            onboardedByManager: targetManagerId,
+            onboardedByManagerId: targetManagerId,
+            managerId: targetManagerId,
+            assignedManager: targetManagerId,
+            managerName: managerDoc?.name || 'Territory Manager',
+            managerRegistrationId: managerRegId,
+            assignedArea: territoryStr,
+            assignedState: assignedState || managerDoc?.assignedState || managerDoc?.state || '',
+            assignedDistrict: assignedDistrict || managerDoc?.assignedDistrict || managerDoc?.district || '',
+            assignedDivision: assignedDivision || managerDoc?.assignedDivision || managerDoc?.division || '',
+            pincode: pincode || managerDoc?.assignedPincode || managerDoc?.pincode || '',
+            address: address || territoryStr,
+            registrationId,
+            createdAt: new Date()
+        };
+
+        const newVendorUser = new User(vendorData);
+        await newVendorUser.save();
+
+        const newVendorDoc = new Vendor({ ...vendorData, _id: newVendorUser._id });
+        await newVendorDoc.save().catch(() => {});
+
+        const enriched = await enrichVendorData(newVendorUser);
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to('admin').emit('vendor_onboarded_by_manager', enriched);
+            io.emit('vendor_onboarded_by_manager', enriched);
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Vendor onboarded successfully by manager and submitted for Admin approval',
+            vendor: enriched
+        });
+    } catch (err) {
+        console.error('Manager vendor onboarding error:', err);
+        res.status(500).json({ success: false, message: 'Server error onboarding vendor', error: err.message });
+    }
+});
+
+// POST Vendor Direct Self-Registration from Vendor Website
+const handleVendorDirectRegister = async (req, res) => {
+    try {
+        const {
+            businessName, name, contactPerson, email, phone, password, category, subCategory,
+            assignedState, assignedDistrict, assignedDivision, pincode, assignedArea,
+            address, kycDocs
+        } = req.body;
+
+        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        const randDigits = Math.floor(1000 + Math.random() * 9000);
+        const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
+
+        const lowerEmail = (email || '').toLowerCase().trim();
+        const cleanPhone = (phone || '').replace(/\D/g, '');
+
+        if (!lowerEmail && !cleanPhone) {
+            return res.status(400).json({ success: false, msg: 'Email or phone number is required', message: 'Email or phone number is required' });
+        }
+
+        const existingVendorUser = await User.findOne({
+            $or: [
+                ...(lowerEmail ? [{ email: lowerEmail }] : []),
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone }] : []),
+                ...(businessName ? [{ businessName: new RegExp(`^${businessName.trim()}$`, 'i') }] : [])
+            ]
+        }) || await Vendor.findOne({
+            $or: [
+                ...(lowerEmail ? [{ email: lowerEmail }] : []),
+                ...(cleanPhone ? [{ phone: cleanPhone }, { phone }] : []),
+                ...(businessName ? [{ businessName: new RegExp(`^${businessName.trim()}$`, 'i') }] : [])
+            ]
+        });
+
+        if (existingVendorUser) {
+            const isPhoneMatch = cleanPhone && (existingVendorUser.phone === cleanPhone || existingVendorUser.phone === phone);
+            const isBizMatch = businessName && (existingVendorUser.businessName || existingVendorUser.name || '').toLowerCase() === businessName.trim().toLowerCase();
+            const errorMsg = isPhoneMatch ? 'A user with this phone number already exists.' : (isBizMatch ? 'A vendor with this business name already exists.' : 'A vendor with this email address already exists.');
+            return res.status(400).json({ success: false, msg: errorMsg, message: errorMsg });
+        }
+
+        const territoryParts = [assignedState || '', assignedDistrict || '', assignedDivision || '', pincode || ''].filter(Boolean);
+        const territoryStr = assignedArea || (territoryParts.length > 0 ? territoryParts.join(' / ') : '');
+
+        const bcrypt = require('bcryptjs');
+        const defaultSalt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password || 'Vendor@12345', defaultSalt);
+
+        const vendorData = {
+            name: name || contactPerson || businessName || 'Vendor Merchant',
+            businessName: businessName || name || 'Vendor Business',
+            contactPerson: contactPerson || name || businessName || 'Contact Person',
+            email: lowerEmail || `vendor_${randDigits}@connect.app`,
+            phone: cleanPhone || undefined,
+            password: hashedPassword,
+            role: 'Vendor',
+            vendorType: category || 'General Store',
+            category: category || 'General Store',
+            subCategory: subCategory || '',
+            status: 'pending',
+            kycStatus: 'Pending KYC',
+            joiningType: 'direct',
+            createdVia: 'vendor_website',
+            registrationSource: 'vendor_website',
+            requestType: 'onboarding',
+            requestOrigin: 'vendor_website',
+            isDirectRequest: true,
+            assignedArea: territoryStr,
+            assignedState: assignedState || '',
+            assignedDistrict: assignedDistrict || '',
+            assignedDivision: assignedDivision || '',
+            pincode: pincode || '',
+            address: address || territoryStr,
+            registrationId,
+            createdAt: new Date()
+        };
+
+        const newVendorUser = new User(vendorData);
+        await newVendorUser.save();
+
+        const newVendorDoc = new Vendor({ ...vendorData, _id: newVendorUser._id });
+        await newVendorDoc.save().catch(() => {});
+
+        const enriched = await enrichVendorData(newVendorUser);
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to('admin').emit('vendor_registered_direct', enriched);
+            io.emit('vendor_registered_direct', enriched);
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Vendor registered successfully from website and submitted for Admin approval',
+            vendor: enriched
+        });
+    } catch (err) {
+        console.error('Vendor direct register error:', err);
+        res.status(500).json({ success: false, message: 'Server error registering vendor', error: err.message });
+    }
+};
+
+router.post('/vendors/direct-register', handleVendorDirectRegister);
+router.post('/vendors/register', handleVendorDirectRegister);
+
+// POST Add Additional Business Request by an Existing Registered Vendor
+const handleVendorAddBusinessRequest = async (req, res) => {
+    try {
+        const {
+            userId, vendorId, email, phone, businessName, category, subcategory,
+            vendorType, address, pincode, contactPerson, state, district, division
+        } = req.body;
+
+        if (!businessName) {
+            return res.status(400).json({ success: false, message: 'businessName is required' });
+        }
+
+        const targetId = userId || vendorId || req.user?.id;
+        const targetEmail = (email || req.user?.email || '').toLowerCase().trim();
+        const targetPhone = (phone || '').replace(/\D/g, '');
+
+        const orFind = [];
+        if (targetId && mongoose.Types.ObjectId.isValid(targetId)) orFind.push({ _id: new mongoose.Types.ObjectId(targetId) });
+        if (targetId) {
+            orFind.push({ registrationId: String(targetId) });
+            orFind.push({ vendorId: String(targetId) });
+        }
+        if (targetEmail) orFind.push({ email: targetEmail });
+        if (targetPhone) orFind.push({ phone: targetPhone });
+
+        if (orFind.length === 0) {
+            return res.status(400).json({ success: false, message: 'Existing vendor identification (userId, vendorId, or email) is required' });
+        }
+
+        const user = await User.findOne({ $or: orFind });
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Existing registered vendor not found' });
+        }
+
+        const newBusinessId = new mongoose.Types.ObjectId();
+        const newBusiness = {
+            _id: newBusinessId,
+            businessName: businessName.trim(),
+            category: category || user.category || 'General Store',
+            subcategory: subcategory || '',
+            vendorType: vendorType || user.vendorType || 'Products',
+            address: address || user.address || '',
+            pincode: pincode || user.pincode || '',
+            state: state || user.assignedState || user.state || '',
+            district: district || user.assignedDistrict || user.district || '',
+            division: division || user.assignedDivision || user.division || '',
+            phone: phone || user.phone || '',
+            status: 'Pending Approval',
+            isPrimary: false,
+            requestType: 'business_request',
+            requestOrigin: 'existing_vendor',
+            createdAt: new Date()
+        };
+
+        user.businesses = Array.isArray(user.businesses) ? user.businesses : [];
+        user.businesses.push(newBusiness);
+        user.markModified('businesses');
+        await user.save();
+
+        // Also sync to legacy Vendor document if present
+        try {
+            const legacyVendor = await Vendor.findOne({ $or: orFind });
+            if (legacyVendor) {
+                legacyVendor.businesses = Array.isArray(legacyVendor.businesses) ? legacyVendor.businesses : [];
+                legacyVendor.businesses.push(newBusiness);
+                legacyVendor.markModified('businesses');
+                await legacyVendor.save();
+            }
+        } catch (legErr) {}
+
+        const io = req.app.get('io');
+        if (io) {
+            io.to('admin').emit('vendor_business_request_submitted', {
+                vendorId: user._id,
+                vendorName: user.businessName || user.name,
+                business: newBusiness
+            });
+            io.emit('vendor_business_request_submitted', {
+                vendorId: user._id,
+                vendorName: user.businessName || user.name,
+                business: newBusiness
+            });
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Additional business request submitted successfully for Admin review',
+            business: newBusiness,
+            vendorId: user._id,
+            registrationId: user.registrationId
+        });
+    } catch (err) {
+        console.error('Vendor add business request error:', err);
+        res.status(500).json({ success: false, message: 'Server error submitting business request', error: err.message });
+    }
+};
+
+router.post('/vendors/business-requests', auth, handleVendorAddBusinessRequest);
+router.post('/vendors/add-business', auth, handleVendorAddBusinessRequest);
 
 // POST Auto-Assign Pincode Agent for Vendor Verification
 router.post('/vendors/auto-assign-agent', auth, async (req, res) => {

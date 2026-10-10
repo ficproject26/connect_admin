@@ -128,16 +128,21 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
   const inFlightSummaryPromiseRef = React.useRef(null);
 
   // --- API Fetchers ---
-  // Fast Summary Mode Fetcher (Loads the States Directory in <150ms)
+  // Fast Summary Mode Fetcher (Loads the States Directory in <150ms with stale-while-revalidate)
   const fetchSummaryData = useCallback(async (force = false) => {
-    if (!force && statesSummaryCacheRef.current) {
+    // 1. If valid cached data exists, immediately render it (0ms latency)
+    if (!force && statesSummaryCacheRef.current && statesSummaryCacheRef.current.states?.length > 0) {
       setHierarchyData(statesSummaryCacheRef.current.states);
       if (statesSummaryCacheRef.current.stats) {
         setStats(prev => ({ ...prev, ...statesSummaryCacheRef.current.stats }));
       }
       setLoading(false);
       setLoadError(null);
-      return;
+
+      // Background revalidation if cache is older than 30 seconds
+      if (Date.now() - (statesSummaryCacheRef.current.timestamp || 0) < 30000) {
+        return;
+      }
     }
 
     if (!force && inFlightSummaryPromiseRef.current) {
@@ -146,21 +151,42 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
 
     const task = (async () => {
       try {
-        setLoading(true);
+        if (!statesSummaryCacheRef.current || !statesSummaryCacheRef.current.states?.length) {
+          setLoading(true);
+        }
         setLoadError(null);
-        const res = await fetch(`${API_BASE}/admin/territory/hierarchy?summary=true`, {
+        const res = await fetch(`${API_BASE}/admin/territory/hierarchy?summary=true${force ? '&force=true' : ''}`, {
           headers: { 'x-auth-token': token }
         });
         const data = await res.json();
         if (data.success) {
           const statesList = data.states || data.hierarchy || [];
-          statesSummaryCacheRef.current = {
-            states: statesList,
-            stats: data.stats || {}
-          };
-          setHierarchyData(statesList);
+          if (statesList.length > 0) {
+            statesSummaryCacheRef.current = {
+              states: statesList,
+              stats: data.stats || {},
+              timestamp: Date.now()
+            };
+            setHierarchyData(statesList);
+          } else if (statesSummaryCacheRef.current && statesSummaryCacheRef.current.states?.length > 0) {
+            // Preserve valid cache if server temporarily returned empty
+            setHierarchyData(statesSummaryCacheRef.current.states);
+          } else {
+            setHierarchyData([]);
+          }
+
           if (data.stats) {
-            setStats(prev => ({ ...prev, ...data.stats }));
+            setStats(prev => ({
+              ...prev,
+              totalStates: data.stats.totalStates ?? (statesList.length || prev.totalStates),
+              totalDistricts: data.stats.totalDistricts ?? prev.totalDistricts,
+              totalDivisions: data.stats.totalDivisions ?? prev.totalDivisions,
+              totalPincodes: data.stats.totalPincodes ?? prev.totalPincodes,
+              activePincodes: data.stats.activePincodes ?? prev.activePincodes,
+              assignedPincodes: data.stats.assignedPincodes ?? prev.assignedPincodes,
+              availablePincodes: data.stats.availablePincodes ?? prev.availablePincodes,
+              activeManagers: data.stats.activeManagers ?? prev.activeManagers
+            }));
           }
           setLoadError(null);
 
@@ -175,8 +201,11 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
         }
       } catch (err) {
         console.error('Fetch states summary error:', err);
-        setLoadError(err.message || 'Unable to connect to territory service. Please retry.');
-        showToast('Failed to load states directory', 'error');
+        // Only set loadError if we don't have valid cached data
+        if (!statesSummaryCacheRef.current || !statesSummaryCacheRef.current.states?.length) {
+          setLoadError(err.message || 'Unable to connect to territory service. Please retry.');
+          showToast('Failed to load states directory', 'error');
+        }
       } finally {
         setLoading(false);
         inFlightSummaryPromiseRef.current = null;
@@ -311,7 +340,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     let isMounted = true;
     const loadAll = async () => {
       try {
-        await Promise.allSettled([fetchSummaryData(), fetchStats(), fetchAuditLogs()]);
+        await fetchSummaryData();
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -320,7 +349,14 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     return () => {
       isMounted = false;
     };
-  }, [fetchSummaryData, fetchStats, fetchAuditLogs]);
+  }, [fetchSummaryData]);
+
+  // Lazy-load audit logs only when Audit tab is activated
+  useEffect(() => {
+    if (viewMode === 'audit' && auditLogs.length === 0) {
+      fetchAuditLogs();
+    }
+  }, [viewMode, auditLogs.length, fetchAuditLogs]);
 
   // Automatically trigger drilldown fetch if a state is selected without children loaded
   useEffect(() => {
@@ -517,8 +553,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
       const data = await res.json();
       if (res.ok && data.success) {
         showToast(`${type.toUpperCase()} marked as ${newStatus}`);
-        fetchHierarchy();
-        fetchStats();
+        fetchHierarchy(true);
       } else {
         showToast(data.msg || 'Status update failed', 'error');
       }
@@ -562,8 +597,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
         if (type === 'pincode' && selectedPincode?._id === item._id) {
           setSelectedPincode(null);
         }
-        fetchHierarchy();
-        fetchStats();
+        fetchHierarchy(true);
       } else {
         // Show prominent dependency warning dialog
         setDependencyWarning({
@@ -603,12 +637,22 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
 
   // --- Filtered States for Initial Screen ---
   const filteredStates = useMemo(() => {
+    const searchLower = (searchTerm || '').trim().toLowerCase();
+    const filterStatusLower = (filterStatus || 'All').trim().toLowerCase();
+
     return hierarchyData.filter(st => {
-      const matchesSearch = !searchTerm ||
-        st.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        st.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (st.stateId && st.stateId.toLowerCase().includes(searchTerm.toLowerCase()));
-      const matchesStatus = filterStatus === 'All' || st.status === filterStatus;
+      const stateName = (st.name || '').toLowerCase();
+      const stateCode = (st.code || '').toLowerCase();
+      const stateId = (st.stateId || '').toLowerCase();
+
+      const matchesSearch = !searchLower ||
+        stateName.includes(searchLower) ||
+        stateCode.includes(searchLower) ||
+        stateId.includes(searchLower);
+
+      const stStatusLower = (st.status || 'Active').toLowerCase();
+      const matchesStatus = filterStatusLower === 'all' || stStatusLower === filterStatusLower;
+
       return matchesSearch && matchesStatus;
     });
   }, [hierarchyData, searchTerm, filterStatus]);
@@ -899,7 +943,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
             )}
 
             <button
-              onClick={() => { fetchHierarchy(); fetchStats(); fetchAuditLogs(); }}
+              onClick={() => { fetchHierarchy(true); }}
               className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer"
               title="Refresh Territory Data"
             >
@@ -1024,12 +1068,21 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                 Select a state below to view and manage its districts, divisions, and pin codes.
               </p>
             </div>
-            <button
-              onClick={() => { setModalData(null); setActiveModal('add-state'); }}
-              className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-primary-600 hover:bg-primary-500 text-white shadow-sm flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add State
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => fetchSummaryData(true)}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors shadow-2xs cursor-pointer"
+                title="Refresh States Directory"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-primary-500' : ''}`} />
+              </button>
+              <button
+                onClick={() => { setModalData(null); setActiveModal('add-state'); }}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-primary-600 hover:bg-primary-500 text-white shadow-sm flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add State
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -1070,16 +1123,38 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
           ) : filteredStates.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center space-y-3">
               <MapPin className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto" />
-              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No States Found</h4>
+              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                {searchTerm || filterStatus !== 'All' ? 'No Matching States Found' : 'No States Found'}
+              </h4>
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                No state records match your filter criteria or have been created in the database yet.
+                {searchTerm || filterStatus !== 'All'
+                  ? `No states match search "${searchTerm}" with status "${filterStatus}". Try resetting filters or search query.`
+                  : hierarchyData.length === 0 && stats.totalStates > 0
+                    ? `Database has ${stats.totalStates} states registered. Click below to synchronize and refresh the directory.`
+                    : 'No state records match your filter criteria or have been created in the database yet.'}
               </p>
-              <button
-                onClick={() => { setModalData(null); setActiveModal('add-state'); }}
-                className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" /> Add State
-              </button>
+              <div className="flex items-center justify-center gap-2 pt-2">
+                {(searchTerm || filterStatus !== 'All') && (
+                  <button
+                    onClick={() => { setSearchTerm(''); setFilterStatus('All'); }}
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    Clear Filters
+                  </button>
+                )}
+                <button
+                  onClick={() => fetchSummaryData(true)}
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-500 text-white font-bold rounded-xl text-xs inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Refresh Directory
+                </button>
+                <button
+                  onClick={() => { setModalData(null); setActiveModal('add-state'); }}
+                  className="px-4 py-2 bg-slate-900 dark:bg-slate-100 hover:bg-slate-800 text-white dark:text-slate-900 font-bold rounded-xl text-xs inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add State
+                </button>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -1910,8 +1985,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                   if (res.ok && data.success) {
                     showToast(`State ${payload.name} saved successfully`);
                     setActiveModal(null);
-                    fetchHierarchy();
-                    fetchStats();
+                    fetchHierarchy(true);
                   } else {
                     setModalError(data.msg || 'Failed to save state');
                   }
@@ -2055,8 +2129,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                   if (res.ok && data.success) {
                     showToast(`District ${payload.name} saved successfully`);
                     setActiveModal(null);
-                    fetchHierarchy();
-                    fetchStats();
+                    fetchHierarchy(true);
                   } else {
                     setModalError(data.msg || 'Failed to save district');
                   }
@@ -2216,8 +2289,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                   if (res.ok && data.success) {
                     showToast(`Division ${payload.name} saved successfully`);
                     setActiveModal(null);
-                    fetchHierarchy();
-                    fetchStats();
+                    fetchHierarchy(true);
                   } else {
                     setModalError(data.msg || 'Failed to save division');
                   }
@@ -2409,8 +2481,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
                   if (res.ok && data.success) {
                     showToast(`Pincode ${payload.code} saved successfully`);
                     setActiveModal(null);
-                    fetchHierarchy();
-                    fetchStats();
+                    fetchHierarchy(true);
                   } else {
                     setModalError(data.msg || 'Failed to save pincode');
                   }

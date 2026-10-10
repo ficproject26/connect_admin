@@ -80,10 +80,10 @@ const createSecuritySession = async (userId, token, req) => {
     }
 };
 
-// @route    POST api/auth/register
-// @desc     Register user
+// @route    POST api/auth/register & api/auth/register-vendor
+// @desc     Register user (Agent, Vendor, etc.)
 // @access   Public
-router.post('/register', async (req, res) => {
+const handleRegister = async (req, res) => {
     const { name, email, password, role, level } = req.body;
     try {
         const lowerEmail = (email || '').toLowerCase().trim();
@@ -163,6 +163,102 @@ router.post('/register', async (req, res) => {
                 cleanTerritory.pincode = terrVal.data.pincode.code;
                 pincodeId = terrVal.data.pincode._id;
             }
+        }
+
+        const kDocs = req.body.kycDocs || {};
+        const kycMapped = req.body.kyc || {};
+
+        const isVendorRole = rawRole === 'vendor' || rawRole === 'merchant';
+        if (isVendorRole) {
+            const Vendor = require('../models/Vendor');
+            user = new User({
+                name: name || req.body.contactPerson || req.body.businessName || 'Vendor Merchant',
+                businessName: req.body.businessName || name || 'Vendor Business',
+                contactPerson: req.body.contactPerson || name || 'Contact Person',
+                email: lowerEmail,
+                phone: req.body.phone,
+                altPhone: req.body.altPhone || req.body.alternativePhone || req.body.secondaryPhone || '',
+                password,
+                role: 'Vendor',
+                vendorType: req.body.category || req.body.vendorType || 'General Store',
+                category: req.body.category || req.body.vendorType || 'General Store',
+                subCategory: req.body.subCategory || req.body.subcategory || '',
+                joiningType: 'direct',
+                createdVia: 'vendor_website',
+                registrationSource: 'vendor_website',
+                requestType: 'onboarding',
+                requestOrigin: 'vendor_website',
+                isDirectRequest: true,
+                assignedArea: territoryStr,
+                assignedState: cleanTerritory.state,
+                assignedDistrict: cleanTerritory.district,
+                assignedDivision: cleanTerritory.division,
+                state: cleanTerritory.state,
+                district: cleanTerritory.district,
+                division: cleanTerritory.division,
+                pincode: cleanTerritory.pincode,
+                address: req.body.address || req.body.fullAddress || territoryStr,
+                fullAddress: req.body.fullAddress || req.body.address || territoryStr,
+                registrationId,
+                status: 'pending',
+                kycStatus: 'Pending KYC',
+                isActive: false,
+                kycDocs: kDocs,
+                kyc: kycMapped,
+                createdAt: new Date()
+            });
+
+            const salt = await bcrypt.genSalt(12);
+            user.password = await bcrypt.hash(password, salt);
+            await user.save();
+
+            try {
+                const newVendorDoc = new Vendor({
+                    ...user.toObject(),
+                    _id: user._id
+                });
+                await newVendorDoc.save().catch(() => {});
+            } catch (vErr) {}
+
+            try {
+                const io = req.app.get('io');
+                if (io) {
+                    const payload = {
+                        _id: user._id,
+                        id: user._id,
+                        name: user.name,
+                        businessName: user.businessName,
+                        email: user.email,
+                        phone: user.phone,
+                        role: 'Vendor',
+                        status: 'pending',
+                        registrationId: user.registrationId,
+                        joiningType: 'direct',
+                        isDirectRequest: true,
+                        createdAt: new Date()
+                    };
+                    io.to('admin').emit('vendor_registered_direct', payload);
+                    io.to('admin').emit('new_registration_request', payload);
+                    io.emit('vendor_registered_direct', payload);
+                    io.emit('new_registration_request', payload);
+                }
+            } catch (ioErr) {}
+
+            return res.status(201).json({
+                message: 'Vendor registered successfully. Pending Admin approval.',
+                registrationId,
+                role: 'Vendor',
+                status: 'pending',
+                vendor: {
+                    id: user._id,
+                    businessName: user.businessName,
+                    name: user.name,
+                    email: user.email,
+                    role: 'Vendor',
+                    status: 'pending',
+                    registrationId
+                }
+            });
         }
 
         user = new User({ 
@@ -296,7 +392,13 @@ router.post('/register', async (req, res) => {
         console.error('Registration error:', err);
         return res.status(500).json({ message: 'Internal server error', error: err.message });
     }
-});
+};
+
+router.post('/register', handleRegister);
+router.post('/register-vendor', (req, res, next) => {
+    req.body.role = req.body.role || 'Vendor';
+    next();
+}, handleRegister);
 
 // @route    POST api/auth/register-customer
 // @desc     Register customer user directly

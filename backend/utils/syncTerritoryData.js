@@ -448,6 +448,13 @@ async function syncTerritoryData(options = { force: false }) {
     console.log(`   Divisions: ${finalDivisions}`);
     console.log(`   Pincodes: ${finalPincodes}`);
 
+    try {
+        const territoryRoute = require('../routes/territory');
+        if (territoryRoute && territoryRoute.invalidateHierarchyCache) {
+            territoryRoute.invalidateHierarchyCache();
+        }
+    } catch (e) {}
+
     return {
         success: true,
         counts: {
