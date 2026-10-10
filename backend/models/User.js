@@ -6,8 +6,13 @@ const UserSchema = new mongoose.Schema({
     email: { type: String, required: true, unique: true },
     phone: { type: String, unique: true, sparse: true },
     password: { type: String, required: true },
-    role: { type: String, enum: ['admin', 'super-admin', 'agent', 'Vendor', 'Member', 'vendor', 'member', 'customer', 'Customer'], default: 'agent' },
-    level: { type: String, enum: ['state', 'district', 'division', 'pincode'], default: 'pincode' },
+    role: { type: String, enum: ['admin', 'super-admin', 'agent', 'Vendor', 'Member', 'vendor', 'member', 'customer', 'Customer', 'manager', 'Manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager'], default: 'agent' },
+    level: { type: mongoose.Schema.Types.Mixed, default: 'pincode' },
+    approvalStage: { type: String, default: null },
+    subadminApprovedBy: { type: mongoose.Schema.Types.Mixed, default: null },
+    subadminApprovedByName: { type: String, default: '' },
+    subadminApprovedAt: { type: Date, default: null },
+    managerId: { type: String },
     assignedArea: { type: String }, // For state, district, division
     assignedPincode: { type: mongoose.Schema.Types.Mixed, ref: 'Pincode' },
     assignedDistrict: { type: String }, // For district agents / admin

@@ -261,6 +261,204 @@ const handleRegister = async (req, res) => {
             });
         }
 
+        const isManagerRole = (
+            rawRole.includes('manager') ||
+            ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'].includes(rawRole) ||
+            ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'].includes(String(req.body.role || '').toLowerCase().trim()) ||
+            ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'].includes(String(req.body.level || '').toLowerCase().trim())
+        );
+
+        if (isManagerRole) {
+            const ManagerRequest = require('../models/ManagerRequest');
+
+            let mgrLevelStr = 'state';
+            let mgrLevelRank = 1;
+            if (rawRole.includes('dist') || req.body.level === 2 || req.body.level === '2' || rawRole === 'district_manager') {
+                mgrLevelStr = 'district';
+                mgrLevelRank = 2;
+            } else if (rawRole.includes('div') || req.body.level === 3 || req.body.level === '3' || rawRole === 'division_manager') {
+                mgrLevelStr = 'division';
+                mgrLevelRank = 3;
+            } else if (rawRole.includes('pin') || req.body.level === 4 || req.body.level === '4' || rawRole === 'pincode_manager') {
+                mgrLevelStr = 'pincode';
+                mgrLevelRank = 4;
+            } else if (rawRole.includes('state') || req.body.level === 1 || req.body.level === '1' || rawRole === 'state_manager') {
+                mgrLevelStr = 'state';
+                mgrLevelRank = 1;
+            }
+
+            // Find authorized territory Sub-Admin (fallback to Super Admin)
+            let targetAdmin = null;
+            try {
+                if (mgrLevelStr === 'pincode' && cleanTerritory.pincode) {
+                    targetAdmin = await User.findOne({
+                        $or: [
+                            { role: { $in: ['pincode-admin', 'pincode_admin', 'Pincode Admin'] } },
+                            { adminRole: { $in: ['pincode-admin', 'pincode_admin'] } }
+                        ],
+                        $and: [
+                            { $or: [{ assignedPincode: cleanTerritory.pincode }, { pincode: cleanTerritory.pincode }] }
+                        ]
+                    }).lean();
+                }
+                if (!targetAdmin && ['pincode', 'division'].includes(mgrLevelStr) && cleanTerritory.division) {
+                    targetAdmin = await User.findOne({
+                        $or: [
+                            { role: { $in: ['division-admin', 'division_admin', 'Division Admin'] } },
+                            { adminRole: { $in: ['division-admin', 'division_admin'] } }
+                        ],
+                        assignedDivision: new RegExp(`^${cleanTerritory.division}$`, 'i')
+                    }).lean();
+                }
+                if (!targetAdmin && ['pincode', 'division', 'district'].includes(mgrLevelStr) && cleanTerritory.district) {
+                    targetAdmin = await User.findOne({
+                        $or: [
+                            { role: { $in: ['district-admin', 'district_admin', 'branch-admin', 'District Admin'] } },
+                            { adminRole: { $in: ['district-admin', 'district_admin', 'branch-admin'] } }
+                        ],
+                        assignedDistrict: new RegExp(`^${cleanTerritory.district}$`, 'i')
+                    }).lean();
+                }
+                if (!targetAdmin && cleanTerritory.state) {
+                    targetAdmin = await User.findOne({
+                        $or: [
+                            { role: { $in: ['state-admin', 'state_admin', 'State Admin'] } },
+                            { adminRole: { $in: ['state-admin', 'state_admin'] } }
+                        ],
+                        assignedState: new RegExp(`^${cleanTerritory.state}$`, 'i')
+                    }).lean();
+                }
+                if (!targetAdmin) {
+                    targetAdmin = await User.findOne({
+                        $or: [
+                            { role: { $in: ['super-admin', 'superadmin', 'admin'] } },
+                            { adminRole: { $in: ['super-admin', 'superadmin'] } }
+                        ]
+                    }).lean();
+                }
+            } catch (tErr) {
+                console.warn('Error resolving target admin for manager registration:', tErr.message);
+            }
+
+            const salt = await bcrypt.genSalt(12);
+            const hashedPassword = await bcrypt.hash(password, salt);
+
+            user = new User({
+                name,
+                email: lowerEmail,
+                phone: req.body.phone || req.body.mobile,
+                mobile: req.body.phone || req.body.mobile,
+                altPhone: req.body.altPhone || req.body.alternativePhone || '',
+                password: hashedPassword,
+                passwordHash: hashedPassword,
+                role: `${mgrLevelStr}_manager`,
+                level: mgrLevelRank,
+                territory: cleanTerritory,
+                assignedArea: territoryStr,
+                assignedState: cleanTerritory.state,
+                assignedDistrict: cleanTerritory.district,
+                assignedDivision: cleanTerritory.division,
+                assignedPincode: cleanTerritory.pincode,
+                state: cleanTerritory.state,
+                stateName: cleanTerritory.state,
+                district: cleanTerritory.district,
+                districtName: cleanTerritory.district,
+                division: cleanTerritory.division,
+                divisionName: cleanTerritory.division,
+                pincode: cleanTerritory.pincode,
+                pincodeCode: cleanTerritory.pincode,
+                address: req.body.address || req.body.fullAddress || territoryStr,
+                registrationId: req.body.registrationId || `REQ-MGR-${mgrLevelStr.slice(0, 3).toUpperCase()}-${dateStr}-${randDigits}`,
+                status: 'under_review',
+                approvalStage: 'subadmin_review',
+                kycStatus: 'pending_verification',
+                isActive: false,
+                isApproved: false,
+                targetAdminId: targetAdmin?._id || null,
+                targetAdminName: targetAdmin?.name || 'Super Admin',
+                targetAdminRole: targetAdmin?.adminRole || targetAdmin?.role || 'super-admin',
+                documents: req.body.documents || kDocs || {},
+                kycDocs: kDocs,
+                kyc: kycMapped,
+                dob: req.body.dob || req.body.dateOfBirth || '',
+                gender: req.body.gender || '',
+                declarationAccepted: !!req.body.declarationAccepted,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+
+            await user.save();
+
+            // Create ManagerRequest document in managerrequests collection
+            const managerReq = new ManagerRequest({
+                requestId: user.registrationId,
+                userId: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone || user.mobile,
+                altPhone: user.altPhone || '',
+                level: mgrLevelStr,
+                assignedState: cleanTerritory.state,
+                assignedDistrict: cleanTerritory.district,
+                assignedDivision: cleanTerritory.division,
+                assignedPincode: cleanTerritory.pincode,
+                address: user.address,
+                notes: req.body.notes || 'Direct self-registration through Manager Portal',
+                status: 'Pending',
+                approvalStage: 'subadmin_review',
+                targetAdminId: targetAdmin?._id || null,
+                targetAdminName: targetAdmin?.name || 'Super Admin',
+                targetAdminRole: targetAdmin?.adminRole || targetAdmin?.role || 'super-admin',
+                documents: req.body.documents || kDocs || {},
+                createdAt: new Date()
+            });
+
+            await managerReq.save().catch(e => console.error('ManagerRequest save error:', e.message));
+
+            // Socket.IO notifications
+            try {
+                const io = req.app.get('io');
+                if (io) {
+                    const payload = {
+                        _id: managerReq._id,
+                        id: managerReq._id,
+                        userId: user._id,
+                        name: user.name,
+                        email: user.email,
+                        phone: user.phone,
+                        level: mgrLevelStr,
+                        role: `${mgrLevelStr}_manager`,
+                        status: 'Pending',
+                        approvalStage: 'subadmin_review',
+                        registrationId: user.registrationId,
+                        assignedState: cleanTerritory.state,
+                        assignedDistrict: cleanTerritory.district,
+                        targetAdminName: managerReq.targetAdminName,
+                        createdAt: new Date()
+                    };
+                    io.to('admin').emit('manager_registered', payload);
+                    io.to('admin').emit('new_registration_request', payload);
+                    io.emit('manager_registered', payload);
+                    io.emit('new_registration_request', payload);
+                }
+            } catch (ioErr) {}
+
+            return res.status(201).json({
+                success: true,
+                message: 'Manager registered successfully. Your registration is under review by the authorized territory administrator.',
+                msg: 'Manager registered successfully. Your registration is under review by the authorized territory administrator.',
+                registrationId: user.registrationId,
+                role: `${mgrLevelStr}_manager`,
+                level: mgrLevelStr,
+                status: 'under_review',
+                approvalStage: 'subadmin_review',
+                targetAdmin: {
+                    name: managerReq.targetAdminName,
+                    role: managerReq.targetAdminRole
+                }
+            });
+        }
+
         user = new User({ 
             name, 
             email: lowerEmail, 
@@ -397,6 +595,10 @@ const handleRegister = async (req, res) => {
 router.post('/register', handleRegister);
 router.post('/register-vendor', (req, res, next) => {
     req.body.role = req.body.role || 'Vendor';
+    next();
+}, handleRegister);
+router.post('/register-manager', (req, res, next) => {
+    req.body.role = req.body.role || req.body.level || 'state_manager';
     next();
 }, handleRegister);
 
@@ -576,8 +778,9 @@ router.post('/login', async (req, res) => {
             });
         }
 
-        // 3. Match Password
-        const isMatch = await bcrypt.compare(password, user.password);
+        // 3. Match Password (supports both user.password and user.passwordHash)
+        const passwordToCompare = user.password || user.passwordHash || '';
+        const isMatch = await bcrypt.compare(password, passwordToCompare);
         if (!isMatch) {
             user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
 
@@ -731,6 +934,61 @@ router.post('/login', async (req, res) => {
                     msg: 'Your vendor account registration was rejected.',
                     status: 'rejected'
                 });
+            }
+        }
+
+        // For managers: enforce territory sub-admin and KYC approval gating
+        const isManager = (
+            user.role === 'manager' ||
+            user.role === 'Manager' ||
+            String(user.role || '').endsWith('_manager') ||
+            String(user.role || '').toLowerCase().includes('manager') ||
+            ['state_manager', 'district_manager', 'division_manager', 'pincode_manager'].includes(user.role) ||
+            ['state', 'district', 'division', 'pincode'].includes(String(user.level).toLowerCase()) ||
+            (user.registrationId && (user.registrationId.startsWith('MGR-') || user.registrationId.startsWith('REQ-MGR-')))
+        );
+
+        if (isManager) {
+            const rawStatus = (user.status || '').toLowerCase().trim();
+            const approvalStage = (user.approvalStage || '').toLowerCase().trim();
+            const kycStatus = (user.kycStatus || '').toLowerCase().trim();
+
+            if (rawStatus === 'suspended') {
+                return res.status(403).json({
+                    message: 'Your manager account has been suspended. Please contact the administrator.',
+                    msg: 'Your manager account has been suspended. Please contact the administrator.',
+                    status: 'suspended'
+                });
+            }
+
+            if (rawStatus === 'rejected') {
+                const reasonText = user.rejectionReason ? ` Reason: ${user.rejectionReason}` : '';
+                return res.status(403).json({
+                    message: `Your manager registration request was rejected.${reasonText}`,
+                    msg: `Your manager registration request was rejected.${reasonText}`,
+                    rejectionReason: user.rejectionReason || '',
+                    status: 'rejected'
+                });
+            }
+
+            if (approvalStage === 'kyc_review' || (rawStatus === 'under_review' && kycStatus === 'pending_verification' && user.subadminApprovedBy)) {
+                return res.status(403).json({
+                    message: 'Your registration has been approved by the territory administrator and is currently under KYC verification. Please wait for the review to be completed.',
+                    msg: 'Your registration has been approved by the territory administrator and is currently under KYC verification. Please wait for the review to be completed.',
+                    status: 'under_review',
+                    approvalStage: 'kyc_review'
+                });
+            }
+
+            if (rawStatus === 'under_review' || rawStatus === 'pending' || rawStatus === 'pending_approval' || approvalStage === 'subadmin_review' || !user.isActive) {
+                if (rawStatus !== 'active' && rawStatus !== 'approved') {
+                    return res.status(403).json({
+                        message: 'Your registration is under review by the authorized territory administrator. Please wait for the review to be completed.',
+                        msg: 'Your registration is under review by the authorized territory administrator. Please wait for the review to be completed.',
+                        status: 'under_review',
+                        approvalStage: 'subadmin_review'
+                    });
+                }
             }
         }
 

@@ -983,6 +983,57 @@ router.get('/audit-logs', [optionalAuth], async (req, res) => {
 });
 
 // ============================================================
+// 2B. STATE ADMINISTRATOR CAPACITY (MAX 4 PER STATE)
+// ============================================================
+router.get(['/state-capacity', '/state-capacity/:stateName'], async (req, res) => {
+    try {
+        const stateName = (req.query.state || req.params.stateName || req.params.state || '').trim();
+        if (!stateName) {
+            return res.status(400).json({ success: false, msg: 'State parameter is required' });
+        }
+
+        const stateRegex = new RegExp(`^${stateName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+        const qualifyingAdmins = await User.find({
+            role: 'admin',
+            $or: [
+                { adminLevel: 'state' },
+                { level: 'state' },
+                { adminRole: 'state-admin' }
+            ],
+            email: { $ne: 'admin@example.com' },
+            $or: [
+                { assignedState: stateRegex },
+                { state: stateRegex }
+            ],
+            status: { $nin: ['deleted', 'rejected', 'revoked'] },
+            isDeleted: { $ne: true }
+        }).select('_id name email phone status adminRole adminLevel assignedState registrationId createdAt').lean();
+
+        const limit = 4;
+        const used = qualifyingAdmins.length;
+        const remaining = Math.max(0, limit - used);
+        const isFull = used >= limit;
+
+        return res.json({
+            success: true,
+            state: stateName,
+            limit,
+            used,
+            remaining,
+            isFull,
+            message: isFull
+                ? 'This state has reached its maximum capacity of 4 State Administrators.'
+                : `State Administrators: ${used} of 4 slots used. ${remaining} slot${remaining === 1 ? '' : 's'} remaining.`,
+            admins: qualifyingAdmins
+        });
+    } catch (err) {
+        console.error('Error fetching state capacity in territory.js:', err);
+        return res.status(500).json({ success: false, msg: 'Server error retrieving state capacity', error: err.message });
+    }
+});
+
+// ============================================================
 // 3. STATE CRUD
 // ============================================================
 router.get('/states', [optionalAuth], async (req, res) => {

@@ -745,7 +745,8 @@ function App() {
   const [adImageUrl, setAdImageUrl] = useState("");
   const [adVideoUrl, setAdVideoUrl] = useState("");
   const [offerImageUrl, setOfferImageUrl] = useState("");
-  const [kycRoleTab, setKycRoleTab] = useState("agent"); // 'agent' or 'vendor'
+  const [kycRoleTab, setKycRoleTab] = useState("agent"); // 'agent', 'vendor', or 'manager'
+  const [managerKycRequests, setManagerKycRequests] = useState([]);
   const [processingKycId, setProcessingKycId] = useState(null);
   const [kycActionType, setKycActionType] = useState(null); // 'approve' or 'reject'
   const [catSubFilter, setCatSubFilter] = useState("All");
@@ -1590,6 +1591,7 @@ function App() {
     } else if (activeTab === 'kyc') {
       safeFetch(`${API_BASE}/admin/vendors`, setVendors);
       safeFetch(`${API_BASE}/admin/agents`, handleSetAgents);
+      fetchManagerKycRequests();
     }
   }, [activeTab, token, API_BASE, reportType, safeFetch, handleSetAgents]);
 
@@ -1975,6 +1977,48 @@ function App() {
     } catch (err) {
       console.error(`Agent KYC ${action} exception:`, err);
       addToast(err.message || 'Action failed: Server error or network issue.', 'error');
+    } finally {
+      setProcessingKycId(null);
+      setKycActionType(null);
+    }
+  };
+
+  const fetchManagerKycRequests = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/manager-directory/requests?status=All`, {
+        headers: { 'x-auth-token': localStorage.getItem('token') || '' }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setManagerKycRequests(data.requests || []);
+      }
+    } catch (e) {
+      console.warn('Error fetching manager KYC requests:', e);
+    }
+  }, [API_BASE]);
+
+  const handleManagerKycAction = async (request, action) => {
+    if (processingKycId) return;
+    setProcessingKycId(request._id);
+    setKycActionType(action);
+    try {
+      const endpoint = action === 'approve'
+        ? `${API_BASE}/admin/manager-directory/requests/${request._id}/approve-kyc`
+        : `${API_BASE}/admin/manager-directory/requests/${request._id}/reject`;
+      const res = await fetch(endpoint, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': localStorage.getItem('token') || ''
+        },
+        body: JSON.stringify(action === 'approve' ? { stage: 'kyc' } : { reason: 'KYC Verification Rejected by KYC Administrator' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.msg || data.message || 'Action failed');
+      addToast(action === 'approve' ? 'Manager KYC approved & activated successfully.' : 'Manager KYC rejected.', 'success');
+      await fetchManagerKycRequests();
+    } catch (err) {
+      addToast(err.message || 'Action failed', 'error');
     } finally {
       setProcessingKycId(null);
       setKycActionType(null);
@@ -2402,8 +2446,9 @@ function App() {
                         </div>
                       ))}
                       {vendors.filter(v => v.status?.toLowerCase() === 'pending').map(v => {
-                        const isAgentOnboarded = v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent');
-                        const section = isAgentOnboarded ? 'agent-onboarded' : 'direct-requests';
+                        const isMgr = v.isManagerOnboarded || v.joiningType === 'manager' || !!v.onboardedByManager || !!v.managerId || !!v.managerName || (v.createdVia && String(v.createdVia).toLowerCase() === 'manager') || (v.createdBy && String(v.createdBy).startsWith('usr_mgr_')) || (v.createdByRole && String(v.createdByRole).toLowerCase().includes('manager')) || (v.creatorRole && String(v.creatorRole).toLowerCase().includes('manager'));
+                        const isAgt = !isMgr && (v.isAgentOnboarded || v.joiningType === 'agent' || !!v.onboardedByAgent || !!v.onboardedBy || !!v.agentId || !!v.onboardedByAgentId || !!v.referredBy || (v.createdVia && String(v.createdVia).toLowerCase() === 'agent') || (v.createdByRole && String(v.createdByRole).toLowerCase().includes('agent')) || (v.creatorRole && String(v.creatorRole).toLowerCase().includes('agent')));
+                        const section = isMgr ? 'manager-onboarded' : (isAgt ? 'agent-onboarded' : 'direct-requests');
                         return (
                         <div 
                           key={v._id} 
@@ -2480,7 +2525,9 @@ function App() {
                   {
                     title: 'Total Revenue',
                     value: (stats?.kpis?.totalRevenue !== undefined && stats?.kpis?.totalRevenue !== null) ? `₹${(stats.kpis.totalRevenue || 0).toLocaleString()}` : null,
-                    change: '+12.4% vs last mo',
+                    change: (stats?.kpis?.revenueChangeMoM !== undefined && stats?.kpis?.revenueChangeMoM !== null)
+                      ? `${stats.kpis.revenueChangeMoM >= 0 ? '+' : ''}${stats.kpis.revenueChangeMoM}% vs last mo`
+                      : '0% vs last mo',
                     icon: DollarSign,
                     cardBg: 'bg-emerald-50 dark:bg-emerald-950/20',
                     borderColor: 'border-emerald-100 dark:border-emerald-900/30',
@@ -2492,7 +2539,9 @@ function App() {
                   {
                     title: 'Total Orders',
                     value: stats?.kpis?.totalOrders ?? null,
-                    change: '+8.2% vs last mo',
+                    change: (stats?.kpis?.ordersChangeMoM !== undefined && stats?.kpis?.ordersChangeMoM !== null)
+                      ? `${stats.kpis.ordersChangeMoM >= 0 ? '+' : ''}${stats.kpis.ordersChangeMoM}% vs last mo`
+                      : '0% vs last mo',
                     icon: FileText,
                     cardBg: 'bg-blue-50 dark:bg-blue-950/20',
                     borderColor: 'border-blue-100 dark:border-blue-900/30',
@@ -3460,6 +3509,12 @@ function App() {
                       >
                         Vendor KYC ({vendors.filter(v => ['pending', 'pending_approval', 'under_verification', 'in_review'].includes((v.status || '').toLowerCase())).length})
                       </button>
+                      <button
+                        onClick={() => setKycRoleTab('manager')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${kycRoleTab === 'manager' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                      >
+                        Manager KYC ({managerKycRequests.filter(m => ['pending', 'pending_approval', 'under_verification', 'in_review'].includes((m.status || '').toLowerCase()) || m.approvalStage === 'kyc_review').length})
+                      </button>
                     </div>
                   </div>
 
@@ -3717,6 +3772,155 @@ function App() {
                             No vendor KYC records found for this status.
                           </div>
                         )}
+                    </>
+                  )}
+
+                  {kycRoleTab === 'manager' && (
+                    <>
+                      {managerKycRequests
+                        .filter(m => {
+                          const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                          const mStatus = (m.status || '').toLowerCase();
+                          const mStage = (m.approvalStage || '').toLowerCase();
+                          if (currentFilter === 'pending') {
+                            return mStage === 'kyc_review' || ['pending', 'pending_approval', 'under_verification', 'in_review'].includes(mStatus);
+                          }
+                          if (currentFilter === 'approved') return mStatus === 'approved' || mStage === 'approved';
+                          if (currentFilter === 'rejected') return mStatus === 'rejected' || mStage === 'rejected';
+                          return true;
+                        })
+                        .map((mgr) => {
+                          const docs = mgr.documents || mgr.kycDocs || {};
+                          const aadhaarUrl = docs.aadharUrl || docs.aadhaarImage || docs.aadhaarUrl;
+                          const panUrl = docs.panUrl || docs.panImage;
+                          const bankUrl = docs.bankUrl || docs.bankProof;
+                          const signatureUrl = docs.signatureUrl || docs.signature;
+
+                          return (
+                            <div key={mgr._id} className="py-5 space-y-4">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{mgr.name}</span>
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                      {mgr.level} Manager
+                                    </span>
+                                  </div>
+                                  <span className="block text-xs text-slate-400 mt-0.5">
+                                    {mgr.email} • {mgr.phone} • Territory: {[mgr.assignedState, mgr.assignedDistrict, mgr.assignedDivision, mgr.assignedPincode].filter(Boolean).join(' / ') || 'General Territory'}
+                                  </span>
+                                  {mgr.subadminApprovedByName && (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+                                      ✓ Stage 1 Approved by Territory Administrator: {mgr.subadminApprovedByName}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                                  (mgr.status || '').toLowerCase() === 'approved' || mgr.approvalStage === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                                  (mgr.status || '').toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
+                                  mgr.approvalStage === 'kyc_review' ? 'bg-blue-500/10 text-blue-500' :
+                                  'bg-amber-500/10 text-amber-500'
+                                }`}>
+                                  {mgr.approvalStage === 'kyc_review' ? 'Stage 2: KYC Review' : (mgr.status || 'Pending').toUpperCase()}
+                                </span>
+                              </div>
+
+                              {/* Documents viewer */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div
+                                  onClick={() => setKycPreviewImage(aadhaarUrl || getDocFallbackSvg('Aadhaar Card', mgr.name))}
+                                  className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                >
+                                  <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
+                                  <img
+                                    src={aadhaarUrl || getDocFallbackSvg('Aadhaar Card', mgr.name)}
+                                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Aadhaar Card', mgr.name); }}
+                                    alt="Aadhaar"
+                                    className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                  />
+                                </div>
+                                <div
+                                  onClick={() => setKycPreviewImage(panUrl || getDocFallbackSvg('PAN Card', mgr.name))}
+                                  className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                >
+                                  <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
+                                  <img
+                                    src={panUrl || getDocFallbackSvg('PAN Card', mgr.name)}
+                                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('PAN Card', mgr.name); }}
+                                    alt="PAN"
+                                    className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                  />
+                                </div>
+                                <div
+                                  onClick={() => setKycPreviewImage(bankUrl || getDocFallbackSvg('Bank Document', mgr.name))}
+                                  className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                >
+                                  <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Bank Document</span>
+                                  <img
+                                    src={bankUrl || getDocFallbackSvg('Bank Document', mgr.name)}
+                                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Bank Document', mgr.name); }}
+                                    alt="Bank"
+                                    className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                  />
+                                </div>
+                                <div
+                                  onClick={() => setKycPreviewImage(signatureUrl || getDocFallbackSvg('Signature', mgr.name))}
+                                  className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                >
+                                  <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Signature</span>
+                                  <img
+                                    src={signatureUrl || getDocFallbackSvg('Signature', mgr.name)}
+                                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Signature', mgr.name); }}
+                                    alt="Signature"
+                                    className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                  />
+                                </div>
+                              </div>
+
+                              {((mgr.status || '').toLowerCase() === 'pending' || mgr.approvalStage === 'kyc_review') && (
+                                <div className="flex gap-3 justify-end">
+                                  <button
+                                    onClick={() => handleManagerKycAction(mgr, 'reject')}
+                                    disabled={processingKycId === mgr._id}
+                                    className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                  >
+                                    {processingKycId === mgr._id && kycActionType === 'reject' ? 'Rejecting...' : 'Reject KYC'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleManagerKycAction(mgr, 'approve')}
+                                    disabled={processingKycId === mgr._id}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                  >
+                                    {processingKycId === mgr._id && kycActionType === 'approve' ? (
+                                      <>
+                                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                        <span>Approving & Activating...</span>
+                                      </>
+                                    ) : (
+                                      <span>Verify & Approve Manager KYC</span>
+                                    )}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      {managerKycRequests.filter(m => {
+                        const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                        const mStatus = (m.status || '').toLowerCase();
+                        const mStage = (m.approvalStage || '').toLowerCase();
+                        if (currentFilter === 'pending') {
+                          return mStage === 'kyc_review' || ['pending', 'pending_approval', 'under_verification', 'in_review'].includes(mStatus);
+                        }
+                        if (currentFilter === 'approved') return mStatus === 'approved' || mStage === 'approved';
+                        if (currentFilter === 'rejected') return mStatus === 'rejected' || mStage === 'rejected';
+                        return true;
+                      }).length === 0 && (
+                        <div className="text-center py-12 text-slate-400 text-sm">
+                          <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                          No manager KYC records found for this status.
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -5093,16 +5297,17 @@ function App() {
                                 <span className="block text-[10px] text-slate-400 mt-0.5">HR: {hrVal}</span>
                               </td>
                               <td className="px-6 py-4">
-                                <select
-                                  value={job.status}
-                                  onChange={(e) => executeAction(`/admin/jobs/${job._id}`, 'PUT', { status: e.target.value })}
-                                  className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-xs p-1"
-                                >
-                                  <option value="applied">Applied</option>
-                                  <option value="interviewing">Interviewing</option>
-                                  <option value="selected">Selected</option>
-                                  <option value="rejected">Rejected</option>
-                                </select>
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold capitalize ${
+                                  (job.status || '').toLowerCase() === 'selected'
+                                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                    : (job.status || '').toLowerCase() === 'rejected'
+                                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                                    : ['interviewing', 'shortlisted'].includes((job.status || '').toLowerCase())
+                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                                    : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                }`}>
+                                  {job.status || 'Applied'}
+                                </span>
                               </td>
                               <td className="px-6 py-4 text-xs text-slate-400">{new Date(job.createdAt || job.appliedDate).toLocaleDateString()}</td>
                               <td className="px-6 py-4 text-right">
@@ -8131,21 +8336,20 @@ function App() {
             <div className="space-y-4 pt-3 border-t dark:border-slate-800">
               <h4 className="text-xs font-bold text-primary-500 uppercase tracking-wider">Application Status</h4>
               <div>
-                <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Application Status</span>
-                <select
-                  value={modalData.status}
-                  onChange={(e) => {
-                    executeAction(`/admin/jobs/${modalData._id}`, 'PUT', { status: e.target.value });
-                    setModalData({ ...modalData, status: e.target.value });
-                  }}
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-sm px-3.5 py-2.5 font-semibold text-slate-800 dark:text-slate-200"
-                >
-                  <option value="APPLICATION RECEIVED">APPLICATION RECEIVED</option>
-                  <option value="UNDER REVIEW">UNDER REVIEW</option>
-                  <option value="SHORTLISTED">SHORTLISTED</option>
-                  <option value="SELECTED">SELECTED</option>
-                  <option value="REJECTED">REJECTED</option>
-                </select>
+                <span className="block text-[10px] text-slate-400 font-bold uppercase mb-2">Application Status (Read-Only)</span>
+                <div className="flex items-center">
+                  <span className={`inline-flex items-center px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider ${
+                    (modalData.status || '').toLowerCase() === 'selected'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      : (modalData.status || '').toLowerCase() === 'rejected'
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                      : ['interviewing', 'shortlisted', 'under review'].includes((modalData.status || '').toLowerCase())
+                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                      : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                  }`}>
+                    {modalData.status || 'Application Received'}
+                  </span>
+                </div>
               </div>
               <div className="pt-2">
                 <span className="block text-[10px] text-slate-400 font-bold uppercase">Applied Date</span>
@@ -8589,22 +8793,18 @@ function App() {
               <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Application Status</h4>
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 flex flex-wrap justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs text-slate-400 font-semibold">Update Status:</span>
-                  <select
-                    value={modalData.status}
-                    onChange={(e) => {
-                      const newStatus = e.target.value;
-                      executeAction(`/admin/jobs/${modalData._id}`, 'PUT', { status: newStatus });
-                      setModalData(prev => ({ ...prev, status: newStatus }));
-                    }}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-bold uppercase"
-                  >
-                    <option value="APPLICATION RECEIVED">APPLICATION RECEIVED</option>
-                    <option value="UNDER REVIEW">UNDER REVIEW</option>
-                    <option value="SHORTLISTED">SHORTLISTED</option>
-                    <option value="SELECTED">SELECTED</option>
-                    <option value="REJECTED">REJECTED</option>
-                  </select>
+                  <span className="text-xs text-slate-400 font-semibold">Status:</span>
+                  <span className={`px-3 py-1 rounded-xl text-xs font-bold uppercase ${
+                    (modalData.status || '').toLowerCase() === 'selected'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      : (modalData.status || '').toLowerCase() === 'rejected'
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                      : ['interviewing', 'shortlisted', 'under review'].includes((modalData.status || '').toLowerCase())
+                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                      : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                  }`}>
+                    {modalData.status || 'Application Received'}
+                  </span>
                 </div>
               </div>
             </div>

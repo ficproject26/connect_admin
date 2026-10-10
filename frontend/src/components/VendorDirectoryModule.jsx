@@ -266,7 +266,9 @@ export const isVendorManagerOnboarded = (v) => {
   const cVia = String(v.createdVia || '').toLowerCase();
   const rSource = String(v.registrationSource || '').toLowerCase();
   const rOrigin = String(v.requestOrigin || '').toLowerCase();
+  const cRole = String(v.createdByRole || v.creatorRole || '').toLowerCase();
   return (
+    v.isManagerOnboarded === true ||
     jType === 'manager' ||
     ['manager', 'manager_website'].includes(cVia) ||
     ['manager', 'manager_website'].includes(rSource) ||
@@ -277,9 +279,11 @@ export const isVendorManagerOnboarded = (v) => {
     Boolean(v.onboardedByManagerId) ||
     Boolean(v.managerName) ||
     Boolean(v.managerRegistrationId) ||
+    cRole.includes('manager') ||
     (v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('manager')) ||
     (v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('manager')) ||
-    (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('MGR-') || v.onboardedBy.startsWith('mgr_')))
+    (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('MGR-') || v.onboardedBy.startsWith('mgr_'))) ||
+    (typeof v.createdBy === 'string' && v.createdBy.startsWith('usr_mgr_'))
   );
 };
 
@@ -291,7 +295,9 @@ export const isVendorAgentOnboarded = (v) => {
   const cVia = String(v.createdVia || '').toLowerCase();
   const rSource = String(v.registrationSource || '').toLowerCase();
   const rOrigin = String(v.requestOrigin || '').toLowerCase();
+  const cRole = String(v.createdByRole || v.creatorRole || '').toLowerCase();
   return (
+    v.isAgentOnboarded === true ||
     jType === 'agent' ||
     ['agent', 'agent_website'].includes(cVia) ||
     ['agent', 'agent_website'].includes(rSource) ||
@@ -303,6 +309,7 @@ export const isVendorAgentOnboarded = (v) => {
     Boolean(v.agentRegistrationId) ||
     Boolean(v.referredBy) ||
     Boolean(v.agentName) ||
+    cRole.includes('agent') ||
     (v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('agent')) ||
     (v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('agent')) ||
     (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('AG-') || v.onboardedBy.startsWith('agt_') || (!v.onboardedBy.startsWith('MGR-') && v.onboardedBy.trim() !== ''))) ||
@@ -485,10 +492,19 @@ export const deduplicateVendorsList = (list = []) => {
     const idStr = v._id ? String(v._id) : '';
 
     let existing = null;
-    if (regId && regMap.has(regId)) existing = regMap.get(regId);
-    else if (phone && phoneMap.has(phone)) existing = phoneMap.get(phone);
+    if (idStr && idMap.has(idStr)) existing = idMap.get(idStr);
+    else if (regId && regMap.has(regId)) existing = regMap.get(regId);
     else if (email && emailMap.has(email)) existing = emailMap.get(email);
-    else if (idStr && idMap.has(idStr)) existing = idMap.get(idStr);
+    else if (phone && phoneMap.has(phone)) existing = phoneMap.get(phone);
+
+    if (existing) {
+      const exName = (existing.businessName || existing.name || '').toLowerCase().trim();
+      const curName = (v.businessName || v.name || '').toLowerCase().trim();
+      const isSameId = (idStr && idMap.has(idStr)) || (regId && regMap.has(regId));
+      if (!isSameId && exName && curName && exName !== curName && !exName.includes(curName) && !curName.includes(exName)) {
+        existing = null;
+      }
+    }
 
     if (existing) {
       // Merge records: prefer active/approved status
@@ -499,21 +515,24 @@ export const deduplicateVendorsList = (list = []) => {
         existing.isActive = true;
       }
 
-      // Determine and preserve Joining Type
-      if (isVendorAgentOnboarded(v) || isVendorAgentOnboarded(existing)) {
+      // Determine and preserve Joining Type (Manager > Agent > Direct)
+      if (isVendorManagerOnboarded(v) || isVendorManagerOnboarded(existing)) {
+        existing.joiningType = 'manager';
+        existing.isManagerOnboarded = true;
+        existing.onboardedByManager = existing.onboardedByManager || v.onboardedByManager;
+        existing.assignedManager = existing.assignedManager || v.assignedManager;
+        existing.managerId = existing.managerId || v.managerId;
+        existing.managerName = existing.managerName || v.managerName;
+        existing.createdByRole = existing.createdByRole || v.createdByRole;
+      } else if (isVendorAgentOnboarded(v) || isVendorAgentOnboarded(existing)) {
         existing.joiningType = 'agent';
+        existing.isAgentOnboarded = true;
         existing.onboardedByAgent = existing.onboardedByAgent || v.onboardedByAgent;
         existing.assignedAgent = existing.assignedAgent || v.assignedAgent;
         existing.agentId = existing.agentId || v.agentId;
         existing.agentName = existing.agentName || v.agentName;
         existing.agentRegistrationId = existing.agentRegistrationId || v.agentRegistrationId;
         existing.onboardedBy = existing.onboardedBy || v.onboardedBy;
-      } else if (isVendorManagerOnboarded(v) || isVendorManagerOnboarded(existing)) {
-        existing.joiningType = 'manager';
-        existing.onboardedByManager = existing.onboardedByManager || v.onboardedByManager;
-        existing.assignedManager = existing.assignedManager || v.assignedManager;
-        existing.managerId = existing.managerId || v.managerId;
-        existing.managerName = existing.managerName || v.managerName;
       } else if (isVendorDirectRequest(v) || isVendorDirectRequest(existing)) {
         existing.joiningType = 'direct';
         existing.isDirectRequest = true;
@@ -2458,10 +2477,12 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                     <p className="text-xs mt-1 font-medium">Try a different search term.</p>
                   </div>
                 ) : (
-                  filtered.map((v, idx) => (
+                  filtered.map((v, idx) => {
+                    const isHighlighted = highlightedVendorId && (String(v._id) === String(highlightedVendorId) || String(v.registrationId) === String(highlightedVendorId) || String(v.vendorId) === String(highlightedVendorId));
+                    return (
                     <div
                       key={v._id || idx}
-                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 space-y-4 hover:border-purple-400/50 hover:shadow-md transition-all"
+                      className={`rounded-2xl p-5 space-y-4 transition-all ${isHighlighted ? 'bg-purple-500/10 border-2 border-purple-500 ring-4 ring-purple-400/30 shadow-lg' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 hover:border-purple-400/50 hover:shadow-md'}`}
                     >
                       {/* Top Row: Vendor Info & Agent Info side-by-side */}
                       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -2566,7 +2587,8 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                         )}
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 
@@ -2682,10 +2704,12 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                     <p className="text-xs mt-1 font-medium">Try a different search term.</p>
                   </div>
                 ) : (
-                  filtered.map((v, idx) => (
+                  filtered.map((v, idx) => {
+                    const isHighlighted = highlightedVendorId && (String(v._id) === String(highlightedVendorId) || String(v.registrationId) === String(highlightedVendorId) || String(v.vendorId) === String(highlightedVendorId));
+                    return (
                     <div
                       key={v._id || idx}
-                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 space-y-4 hover:border-teal-400/50 hover:shadow-md transition-all"
+                      className={`rounded-2xl p-5 space-y-4 transition-all ${isHighlighted ? 'bg-teal-500/10 border-2 border-teal-500 ring-4 ring-teal-400/30 shadow-lg' : 'bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 hover:border-teal-400/50 hover:shadow-md'}`}
                     >
                       {/* Top Row: Vendor Info & Manager Info side-by-side */}
                       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -2790,7 +2814,8 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                         )}
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 

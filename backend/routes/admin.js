@@ -421,10 +421,19 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         const pendingVendorApprovals = allVendorsList.filter(v => v.cleanStatus === 'pending').length;
         const pendingVendorKYC = allVendorsList.filter(v => (v.kycVal || '').includes('pending')).length;
 
-        // ── 3. REVENUE & ORDER TOTALS ─────────────────────────────────────────
+        // ── 3. REVENUE & ORDER TOTALS (GENUINE COMMERCE RECORDS ONLY) ────────
+        // Filter out candidate job applications stored under Order collection
+        const isJobApplicationRecord = (item) => {
+            const t = (item.type || '').toLowerCase();
+            const s = (item.status || '').toLowerCase();
+            return t === 'job' || t === 'jobs' || t === 'job application' ||
+                   ['applied', 'interviewing', 'selected', 'shortlisted', 'application received'].includes(s);
+        };
+        const qualifyingCommerceOrders = (completedOrders || []).filter(o => !isJobApplicationRecord(o));
+
         const getItemAmount = (item) => Number(item.finalAmount || item.totalAmount || item.amount || item.price || item.total || 0);
-        const totalRevenue = (completedOrders || []).reduce((sum, o) => sum + getItemAmount(o), 0) + (completedBookings || []).reduce((sum, b) => sum + getItemAmount(b), 0);
-        const ordersCount = (completedOrders || []).length;
+        const totalRevenue = qualifyingCommerceOrders.reduce((sum, o) => sum + getItemAmount(o), 0) + (completedBookings || []).reduce((sum, b) => sum + getItemAmount(b), 0);
+        const ordersCount = qualifyingCommerceOrders.length;
         const bookingsCount = (completedBookings || []).length;
 
         // ── 4. DYNAMIC MONTH-WISE REVENUE TRENDS (LAST 6 MONTHS) ──────────────
@@ -442,8 +451,15 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             });
         }
 
-        (completedOrders || []).forEach(o => {
-            const oDate = new Date(o.createdAt || Date.now());
+        const getDocDate = (item) => {
+            if (item.createdAt) return new Date(item.createdAt);
+            if (item.created_at) return new Date(item.created_at);
+            if (item._id && typeof item._id.getTimestamp === 'function') return item._id.getTimestamp();
+            return new Date();
+        };
+
+        qualifyingCommerceOrders.forEach(o => {
+            const oDate = getDocDate(o);
             const match = last6Months.find(m => m.monthIndex === oDate.getMonth() && m.year === oDate.getFullYear());
             if (match) {
                 match.revenue += getItemAmount(o);
@@ -451,7 +467,7 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             }
         });
         (completedBookings || []).forEach(b => {
-            const bDate = new Date(b.createdAt || Date.now());
+            const bDate = getDocDate(b);
             const match = last6Months.find(m => m.monthIndex === bDate.getMonth() && m.year === bDate.getFullYear());
             if (match) {
                 match.revenue += getItemAmount(b);
@@ -464,6 +480,21 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             revenue: m.revenue || 0,
             orders: m.orders || 0
         }));
+
+        // Calculate Month-over-Month changes from genuine database monthly records
+        const currentMonthRev = last6Months[last6Months.length - 1]?.revenue || 0;
+        const prevMonthRev = last6Months[last6Months.length - 2]?.revenue || 0;
+        let revenueChangeMoM = 0;
+        if (prevMonthRev > 0) {
+            revenueChangeMoM = Math.round(((currentMonthRev - prevMonthRev) / prevMonthRev) * 1000) / 10;
+        }
+
+        const currentMonthOrders = last6Months[last6Months.length - 1]?.orders || 0;
+        const prevMonthOrders = last6Months[last6Months.length - 2]?.orders || 0;
+        let ordersChangeMoM = 0;
+        if (prevMonthOrders > 0) {
+            ordersChangeMoM = Math.round(((currentMonthOrders - prevMonthOrders) / prevMonthOrders) * 1000) / 10;
+        }
 
         // ── 5. CATEGORY WISE REVENUE (REAL DATABASE ATTRIBUTION) ───────────────
         const categoryMap = {};
@@ -585,6 +616,8 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
                 totalOrders: ordersCount,
                 totalBookings: bookingsCount,
                 totalRevenue,
+                revenueChangeMoM,
+                ordersChangeMoM,
                 totalHospitals,
                 totalHotels,
                 totalServices,
@@ -706,6 +739,60 @@ router.delete('/branches/:id', [auth, adminAuth], async (req, res) => {
         res.status(500).send('Server error');
     }
 });
+
+// GET State Administrator Capacity (Max 4 accounts per state independently)
+const getStateCapacityAdminHandler = async (req, res) => {
+    try {
+        const stateName = (req.query.state || req.params.stateName || req.params.state || '').trim();
+        if (!stateName) {
+            return res.status(400).json({ success: false, msg: 'State parameter is required' });
+        }
+
+        const stateRegex = new RegExp(`^${stateName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+        const qualifyingAdmins = await User.find({
+            role: 'admin',
+            $or: [
+                { adminLevel: 'state' },
+                { level: 'state' },
+                { adminRole: 'state-admin' }
+            ],
+            email: { $ne: 'admin@example.com' },
+            $or: [
+                { assignedState: stateRegex },
+                { state: stateRegex }
+            ],
+            status: { $nin: ['deleted', 'rejected', 'revoked'] },
+            isDeleted: { $ne: true }
+        }).select('_id name email phone status adminRole adminLevel assignedState registrationId createdAt').lean();
+
+        const limit = 4;
+        const used = qualifyingAdmins.length;
+        const remaining = Math.max(0, limit - used);
+        const isFull = used >= limit;
+
+        return res.json({
+            success: true,
+            state: stateName,
+            limit,
+            used,
+            remaining,
+            isFull,
+            message: isFull
+                ? 'This state has reached its maximum capacity of 4 State Administrators.'
+                : `State Administrators: ${used} of 4 slots used. ${remaining} slot${remaining === 1 ? '' : 's'} remaining.`,
+            admins: qualifyingAdmins
+        });
+    } catch (err) {
+        console.error('Error fetching state capacity in admin.js:', err);
+        return res.status(500).json({ success: false, msg: 'Server error retrieving state capacity', error: err.message });
+    }
+};
+
+router.get('/admins/state-capacity', [auth, adminAuth], getStateCapacityAdminHandler);
+router.get('/admins/state-capacity/:stateName', [auth, adminAuth], getStateCapacityAdminHandler);
+router.get('/territory/state-capacity', [auth, adminAuth], getStateCapacityAdminHandler);
+router.get('/territory/state-capacity/:stateName', [auth, adminAuth], getStateCapacityAdminHandler);
 
 // ==========================================
 // 3. ADMIN USER MANAGEMENT
@@ -912,6 +999,26 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
 
         const targetLevel = (req.body.adminLevel || (adminRole === 'state-admin' ? 'state' : 'branch')).toLowerCase();
         const finalState = req.body.assignedState || req.body.state || undefined;
+
+        // State Administrator Capacity Limit: Maximum 4 accounts per state independently
+        if (targetLevel === 'state' && finalState) {
+            const stateRegex = new RegExp(`^${finalState.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+            const stateAdminCount = await User.countDocuments({
+                role: 'admin',
+                $or: [{ adminLevel: 'state' }, { level: 'state' }, { adminRole: 'state-admin' }],
+                email: { $ne: 'admin@example.com' },
+                $or: [{ assignedState: stateRegex }, { state: stateRegex }],
+                status: { $nin: ['deleted', 'rejected', 'revoked'] },
+                isDeleted: { $ne: true }
+            });
+            if (stateAdminCount >= 4) {
+                return res.status(400).json({
+                    success: false,
+                    msg: 'This state has reached its maximum capacity of 4 State Administrators.',
+                    message: 'This state has reached its maximum capacity of 4 State Administrators.'
+                });
+            }
+        }
 
         // Auto-generate registrationId if State Admin
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -2266,9 +2373,28 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
             return `ven-fic-2026-v${seq}`;
         };
 
+        // Preload manager identities for reliable source resolution
+        const managerUsers = await User.find({
+            $or: [
+                { role: { $regex: /manager/i } },
+                { adminRole: { $regex: /manager/i } }
+            ]
+        }).select('_id id registrationId managerId name role').lean().catch(() => []);
+        const managerIdsSet = new Set(managerUsers.flatMap(u => [String(u._id), u.id, u.registrationId, u.managerId].filter(Boolean)));
+        const managerMap = new Map();
+        managerUsers.forEach(u => {
+            if (u._id) managerMap.set(String(u._id), u);
+            if (u.id) managerMap.set(String(u.id), u);
+            if (u.registrationId) managerMap.set(String(u.registrationId), u);
+            if (u.managerId) managerMap.set(String(u.managerId), u);
+        });
+
         const formattedUserVendors = (usersVendors || []).map((v, idx) => {
             if (!v) return null;
             const vId = formatVId(v, idx);
+            const isCreatedByMgr = v.createdBy && (managerIdsSet.has(String(v.createdBy)) || String(v.createdBy).startsWith('usr_mgr_'));
+            const mgrDoc = isCreatedByMgr ? managerMap.get(String(v.createdBy)) : null;
+
             return sanitizeHeavyFields({
                 _id: v._id,
                 registrationId: vId,
@@ -2282,7 +2408,7 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
                 phone: v.phone || '',
                 email: v.email || '',
                 status: v.status || 'Pending',
-                agentId: v.referredBy || null,
+                agentId: v.referredBy || v.agentId || null,
                 membership: { status: v.isPaid ? 'active' : 'none' },
                 createdAt: v.createdAt || new Date(),
                 kycStatus: v.status || 'Pending',
@@ -2295,8 +2421,30 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
                     businessProofImage: v.kyc?.businessProofImage ? (String(v.kyc.businessProofImage).startsWith('http') ? v.kyc.businessProofImage : '[Uploaded Document]') : ''
                 },
                 address: v.address || '',
+                pincode: v.pincode || '',
+                assignedState: v.assignedState || v.state || '',
+                assignedDistrict: v.assignedDistrict || v.district || '',
+                assignedDivision: v.assignedDivision || v.division || '',
                 bankDetails: v.bankDetails || null,
                 paymentOptions: v.paymentOptions || null,
+                joiningType: isCreatedByMgr ? 'manager' : (v.joiningType || (v.createdVia === 'agent' ? 'agent' : (v.createdVia === 'vendor_website' ? 'direct' : 'ambiguous'))),
+                createdVia: isCreatedByMgr ? 'manager_website' : (v.createdVia || ''),
+                registrationSource: isCreatedByMgr ? 'manager_website' : (v.registrationSource || ''),
+                requestOrigin: v.requestOrigin || '',
+                requestType: v.requestType || 'onboarding',
+                isDirectRequest: !isCreatedByMgr && (v.isDirectRequest === true || v.joiningType === 'direct'),
+                isManagerOnboarded: isCreatedByMgr || v.isManagerOnboarded === true || v.joiningType === 'manager',
+                isAgentOnboarded: !isCreatedByMgr && (v.isAgentOnboarded === true || v.joiningType === 'agent'),
+                createdBy: v.createdBy || null,
+                createdByRole: isCreatedByMgr ? (mgrDoc?.role || 'district_manager') : (v.createdByRole || ''),
+                creatorRole: isCreatedByMgr ? (mgrDoc?.role || 'district_manager') : (v.creatorRole || ''),
+                managerId: isCreatedByMgr ? (mgrDoc?.managerId || String(v.createdBy)) : (v.managerId || null),
+                managerName: isCreatedByMgr ? (mgrDoc?.name || 'Territory Manager') : (v.managerName || null),
+                onboardedByManager: isCreatedByMgr ? { name: mgrDoc?.name || 'Territory Manager', registrationId: mgrDoc?.registrationId || String(v.createdBy), role: mgrDoc?.role || 'district_manager' } : v.onboardedByManager,
+                onboardedByAgent: v.onboardedByAgent || null,
+                onboardedBy: v.onboardedBy || null,
+                referredBy: v.referredBy || null,
+                agentName: v.agentName || null,
                 isUserCollection: true
             });
         }).filter(Boolean);
@@ -2304,6 +2452,9 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
         const formattedLegacy = (legacyVendors || []).map((v, idx) => {
             if (!v) return null;
             const vId = formatVId(v, (usersVendors || []).length + idx);
+            const isCreatedByMgr = v.createdBy && (managerIdsSet.has(String(v.createdBy)) || String(v.createdBy).startsWith('usr_mgr_'));
+            const mgrDoc = isCreatedByMgr ? managerMap.get(String(v.createdBy)) : null;
+
             return sanitizeHeavyFields({
                 _id: v._id,
                 registrationId: vId,
@@ -2323,6 +2474,28 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
                 kycStatus: v.kycStatus || 'pending',
                 kycDocs: v.kycDocs || null,
                 address: v.address || '',
+                pincode: v.pincode || '',
+                assignedState: v.assignedState || v.state || '',
+                assignedDistrict: v.assignedDistrict || v.district || '',
+                assignedDivision: v.assignedDivision || v.division || '',
+                joiningType: isCreatedByMgr ? 'manager' : (v.joiningType || (v.createdVia === 'agent' ? 'agent' : (v.createdVia === 'vendor_website' ? 'direct' : 'ambiguous'))),
+                createdVia: isCreatedByMgr ? 'manager_website' : (v.createdVia || ''),
+                registrationSource: isCreatedByMgr ? 'manager_website' : (v.registrationSource || ''),
+                requestOrigin: v.requestOrigin || '',
+                requestType: v.requestType || 'onboarding',
+                isDirectRequest: !isCreatedByMgr && (v.isDirectRequest === true || v.joiningType === 'direct'),
+                isManagerOnboarded: isCreatedByMgr || v.isManagerOnboarded === true || v.joiningType === 'manager',
+                isAgentOnboarded: !isCreatedByMgr && (v.isAgentOnboarded === true || v.joiningType === 'agent'),
+                createdBy: v.createdBy || null,
+                createdByRole: isCreatedByMgr ? (mgrDoc?.role || 'district_manager') : (v.createdByRole || ''),
+                creatorRole: isCreatedByMgr ? (mgrDoc?.role || 'district_manager') : (v.creatorRole || ''),
+                managerId: isCreatedByMgr ? (mgrDoc?.managerId || String(v.createdBy)) : (v.managerId || null),
+                managerName: isCreatedByMgr ? (mgrDoc?.name || 'Territory Manager') : (v.managerName || null),
+                onboardedByManager: isCreatedByMgr ? { name: mgrDoc?.name || 'Territory Manager', registrationId: mgrDoc?.registrationId || String(v.createdBy), role: mgrDoc?.role || 'district_manager' } : v.onboardedByManager,
+                onboardedByAgent: v.onboardedByAgent || null,
+                onboardedBy: v.onboardedBy || null,
+                referredBy: v.referredBy || null,
+                agentName: v.agentName || null,
                 isUserCollection: false
             });
         }).filter(Boolean);
@@ -4832,9 +5005,48 @@ router.post(['/jobs', '/public/jobs'], async (req, res) => {
     }
 });
 
-// PUT update job applied status
+// Protective endpoints: Block Main Admin & Sub-Admin from manually mutating operational order statuses
+router.put(['/orders/:id', '/orders/:id/status', '/public/orders/:id', '/public/orders/:id/status'], [auth, adminAuth], async (req, res) => {
+    return res.status(403).json({
+        success: false,
+        msg: 'Administrators have read-only access to operational statuses. Order statuses must be updated through authorized vendor or logistics workflows.',
+        message: 'Administrators have read-only access to operational statuses. Order statuses must be updated through authorized vendor or logistics workflows.'
+    });
+});
+router.patch(['/orders/:id', '/orders/:id/status', '/public/orders/:id', '/public/orders/:id/status'], [auth, adminAuth], async (req, res) => {
+    return res.status(403).json({
+        success: false,
+        msg: 'Administrators have read-only access to operational statuses. Order statuses must be updated through authorized vendor or logistics workflows.',
+        message: 'Administrators have read-only access to operational statuses. Order statuses must be updated through authorized vendor or logistics workflows.'
+    });
+});
+
+// Protective endpoints: Block Main Admin & Sub-Admin from manually mutating operational booking statuses
+router.put(['/bookings/:id', '/bookings/:id/status', '/public/bookings/:id', '/public/bookings/:id/status'], [auth, adminAuth], async (req, res) => {
+    return res.status(403).json({
+        success: false,
+        msg: 'Administrators have read-only access to operational statuses. Booking statuses must be updated through authorized vendor or customer workflows.',
+        message: 'Administrators have read-only access to operational statuses. Booking statuses must be updated through authorized vendor or customer workflows.'
+    });
+});
+router.patch(['/bookings/:id', '/bookings/:id/status', '/public/bookings/:id', '/public/bookings/:id/status'], [auth, adminAuth], async (req, res) => {
+    return res.status(403).json({
+        success: false,
+        msg: 'Administrators have read-only access to operational statuses. Booking statuses must be updated through authorized vendor or customer workflows.',
+        message: 'Administrators have read-only access to operational statuses. Booking statuses must be updated through authorized vendor or customer workflows.'
+    });
+});
+
+// PUT update job applied status (Administrators have read-only access to job application operational statuses)
 router.put('/jobs/:id', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.body && req.body.status !== undefined) {
+            return res.status(403).json({
+                success: false,
+                msg: 'Administrators have read-only access to operational statuses. Job application status must be updated through authorized recruitment workflows.',
+                message: 'Administrators have read-only access to operational statuses. Job application status must be updated through authorized recruitment workflows.'
+            });
+        }
         let job = await JobApplied.findByIdAndUpdate(req.params.id, req.body, { new: true });
         if (!job) {
             const orderJob = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });

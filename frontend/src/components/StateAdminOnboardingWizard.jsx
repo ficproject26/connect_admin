@@ -239,9 +239,18 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
     passportPhoto:null, drivingLicence:'', voterId:''
   });
 
-  // Step 4: Territory
+  // Step 4: Territory & Capacity
   const [terr, setTerr] = useState({ assignedState: prefilledState });
   const [activeStates, setActiveStates] = useState([]);
+  const [capacityState, setCapacityState] = useState({
+    loading: false,
+    used: 0,
+    limit: 4,
+    remaining: 4,
+    isFull: false,
+    state: '',
+    error: null
+  });
 
   useEffect(() => {
     const fetchStates = async () => {
@@ -261,6 +270,53 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
     };
     fetchStates();
   }, [API_BASE, token]);
+
+  // Dynamic State Capacity Check (Strict limit: 4 State Admins per state independently)
+  useEffect(() => {
+    const selectedState = terr.assignedState?.trim();
+    if (!selectedState) {
+      setCapacityState({ loading: false, used: 0, limit: 4, remaining: 4, isFull: false, state: '', error: null });
+      return;
+    }
+
+    let isMounted = true;
+    const fetchStateCapacity = async () => {
+      setCapacityState(prev => ({ ...prev, loading: true, state: selectedState, error: null }));
+      try {
+        const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
+        const res = await fetch(`${API_BASE}/admin/territory/state-capacity?state=${encodeURIComponent(selectedState)}`, {
+          headers: { 'x-auth-token': activeToken || '', Authorization: `Bearer ${activeToken}` }
+        });
+        if (!isMounted) return;
+        if (res.ok) {
+          const data = await res.json();
+          const used = data.used ?? 0;
+          const limit = data.limit ?? 4;
+          const remaining = data.remaining ?? Math.max(0, limit - used);
+          const isFull = Boolean(data.isFull || used >= limit);
+          setCapacityState({
+            loading: false,
+            used,
+            limit,
+            remaining,
+            isFull,
+            state: selectedState,
+            error: null
+          });
+        } else {
+          setCapacityState(prev => ({ ...prev, loading: false }));
+        }
+      } catch (err) {
+        if (isMounted) {
+          console.warn('Capacity query notice:', err.message);
+          setCapacityState(prev => ({ ...prev, loading: false, error: err.message }));
+        }
+      }
+    };
+
+    fetchStateCapacity();
+    return () => { isMounted = false; };
+  }, [terr.assignedState, API_BASE, token]);
 
   // Step 5: Account Setup
   const [acc, setAcc] = useState({
@@ -316,7 +372,11 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
       if (!kyc.useAadhaarAsAddressProof && !kyc.addressProofType) e.addressProofType='Select an address proof type';
     }
     if (step===4) {
-      if (!terr.assignedState) e.assignedState='Please select the assigned state';
+      if (!terr.assignedState) {
+        e.assignedState='Please select the assigned state';
+      } else if (capacityState.isFull) {
+        e.assignedState='This state has reached its maximum capacity of 4 State Administrators.';
+      }
     }
     if (step===5) {
       const emailToUse = acc.loginEmail.trim() || cont.email.trim();
@@ -678,11 +738,50 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
                 <ErrMsg msg={errors.assignedState}/>
               </div>
               {terr.assignedState&&(
-                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-2xl p-4 space-y-1.5 text-xs">
-                  <p className="text-[10px] font-extrabold uppercase text-emerald-600 dark:text-emerald-400 mb-1">Access Scope Preview</p>
-                  <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-semibold"><CheckCircle className="w-3.5 h-3.5"/>Full operational access to <strong>{terr.assignedState}</strong></div>
-                  <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400"><CheckCircle className="w-3.5 h-3.5"/>Authorized to manage Districts, Divisions, Pincodes inside {terr.assignedState}</div>
-                  <div className="flex items-center gap-2 text-red-500 font-semibold"><AlertCircle className="w-3.5 h-3.5"/>Zero access to Kerala, Karnataka, Andhra Pradesh, or other states (403 Forbidden)</div>
+                <div className="space-y-3">
+                  {/* Dynamic Capacity Feedback */}
+                  <div className={`p-4 rounded-2xl border text-xs space-y-1.5 transition-all ${
+                    capacityState.isFull
+                      ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300'
+                      : 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                        State Admin Capacity ({terr.assignedState})
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                        capacityState.isFull
+                          ? 'bg-rose-500 text-white'
+                          : 'bg-emerald-600/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                      }`}>
+                        {capacityState.isFull ? 'Capacity Reached' : `${capacityState.remaining} of 4 Slots Available`}
+                      </span>
+                    </div>
+
+                    {capacityState.loading ? (
+                      <div className="flex items-center gap-2 text-slate-500 py-1 font-semibold">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-500" />
+                        <span>Verifying state capacity for {terr.assignedState}…</span>
+                      </div>
+                    ) : capacityState.isFull ? (
+                      <div className="flex items-start gap-2 text-rose-600 dark:text-rose-400 font-bold text-xs pt-0.5">
+                        <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>This state has reached its maximum capacity of 4 State Administrators.</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-bold text-xs pt-0.5">
+                        <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+                        <span>State Administrators: {capacityState.used} of 4 slots used. {capacityState.remaining} slot{capacityState.remaining === 1 ? '' : 's'} remaining.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Access Scope Preview */}
+                  <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1.5 text-xs">
+                    <p className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 mb-1">Access Scope Preview</p>
+                    <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-semibold"><CheckCircle className="w-3.5 h-3.5 text-emerald-500"/>Full operational access to <strong>{terr.assignedState}</strong></div>
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400"><CheckCircle className="w-3.5 h-3.5 text-emerald-500"/>Authorized to manage Districts, Divisions, Pincodes inside {terr.assignedState}</div>
+                  </div>
                 </div>
               )}
             </div>
@@ -830,7 +929,11 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
             <div className="text-[11px] text-slate-400 font-semibold">{step} / 6</div>
 
             {step<6 ? (
-              <button onClick={next} className="flex items-center gap-1.5 px-5 py-2 text-xs font-extrabold text-white bg-primary-600 hover:bg-primary-500 rounded-xl shadow-sm transition-colors cursor-pointer">
+              <button
+                onClick={next}
+                disabled={step === 4 && (capacityState.isFull || capacityState.loading)}
+                className="flex items-center gap-1.5 px-5 py-2 text-xs font-extrabold text-white bg-primary-600 hover:bg-primary-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl shadow-sm transition-colors cursor-pointer"
+              >
                 Next <ChevronRight className="w-4 h-4"/>
               </button>
             ) : (

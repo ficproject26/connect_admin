@@ -79,11 +79,20 @@ async function getUnifiedRealManagers(territoryFilter = {}, options = {}) {
         let pin = String(doc.assignedPincode || doc.pincode || '').trim();
 
         // Standardize status
-        const rawStatus = String(doc.status || 'Active').toLowerCase();
+        const rawStatus = String(doc.status || 'Active').toLowerCase().trim();
+        const approvalStage = String(doc.approvalStage || '').toLowerCase().trim();
         let normalizedStatus = 'Active';
         if (rawStatus === 'suspended') normalizedStatus = 'Suspended';
         else if (rawStatus === 'inactive') normalizedStatus = 'Inactive';
-        else if (['active', 'approved'].includes(rawStatus)) normalizedStatus = 'Active';
+        else if (rawStatus === 'rejected') normalizedStatus = 'Rejected';
+        else if (approvalStage === 'kyc_review' || rawStatus === 'kyc_review') normalizedStatus = 'KYC Verification';
+        else if (['under_review', 'pending', 'pending_approval', 'subadmin_review', 'under_verification'].includes(rawStatus) || approvalStage === 'subadmin_review') {
+            normalizedStatus = 'Under Review';
+        } else if (['active', 'approved'].includes(rawStatus)) {
+            normalizedStatus = 'Active';
+        } else {
+            normalizedStatus = doc.isActive ? 'Active' : 'Under Review';
+        }
 
         const createdByAdmin = doc.createdByAdmin || doc.adminApprovedBy || doc.parentAdminId?.name || doc.targetAdminName || 'Authorized Admin';
         const createdById = doc.createdById || doc.adminApprovedById || doc.parentAdminId?._id || doc.targetAdminId || '';
@@ -748,6 +757,55 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
         }
 
         const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // Auto-mirror any pending manager users from 'users' into 'managerrequests'
+        try {
+            const pendingUsers = await User.find({
+                $or: [
+                    { role: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'] } },
+                    { level: { $in: [1, 2, 3, 4, '1', '2', '3', '4', 'state', 'district', 'division', 'pincode'] }, role: /manager/i }
+                ],
+                status: { $in: ['under_review', 'pending', 'pending_approval', 'subadmin_review', 'kyc_review', 'pending_verification'] }
+            }).select('-password -passwordHash').lean().catch(() => []);
+
+            for (const pu of pendingUsers) {
+                const userEmail = (pu.email || '').toLowerCase().trim();
+                const existing = await ManagerRequest.findOne({
+                    $or: [
+                        { userId: String(pu._id) },
+                        ...(userEmail ? [{ email: userEmail }] : [])
+                    ]
+                });
+                if (!existing) {
+                    const normLvl = normalizeManagerLevelStr(pu.level || pu.role);
+                    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                    const rand = Math.floor(1000 + Math.random() * 9000);
+                    const reqId = pu.registrationId || `REQ-MGR-${normLvl.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
+                    await ManagerRequest.create({
+                        requestId: reqId,
+                        userId: String(pu._id),
+                        name: pu.name || 'Manager Applicant',
+                        email: userEmail,
+                        phone: pu.phone || pu.mobile || '',
+                        altPhone: pu.altPhone || '',
+                        level: normLvl,
+                        assignedState: pu.assignedState || pu.state || '',
+                        assignedDistrict: pu.assignedDistrict || pu.district || '',
+                        assignedDivision: pu.assignedDivision || pu.division || '',
+                        assignedPincode: pu.assignedPincode || pu.pincode || '',
+                        address: pu.address || pu.fullAddress || '',
+                        notes: 'Synced from Manager registration application',
+                        status: pu.status === 'rejected' ? 'Rejected' : 'Pending',
+                        approvalStage: pu.approvalStage || (pu.status === 'under_review' ? 'subadmin_review' : 'subadmin_review'),
+                        documents: pu.documents || pu.kycDocs || {},
+                        createdAt: pu.createdAt || new Date()
+                    }).catch(() => {});
+                }
+            }
+        } catch (syncErr) {
+            console.warn('Auto-sync pending manager users error:', syncErr.message);
+        }
+
         const [requests, total] = await Promise.all([
             ManagerRequest.find(query)
                 .populate('requestedBy', 'name email adminRole adminLevel')
@@ -762,7 +820,8 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
         const formattedRequests = requests.map(r => ({
             ...r,
             phone: r.phone || r.mobile || '',
-            level: normalizeManagerLevelStr(r.level)
+            level: normalizeManagerLevelStr(r.level),
+            approvalStage: r.approvalStage || (r.status === 'Approved' ? 'approved' : 'subadmin_review')
         }));
 
         res.json({
@@ -779,58 +838,170 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
 });
 
 // ============================================================
-// 10. APPROVE MANAGER REQUEST
-// PUT /manager-directory/requests/:id/approve
+// 10. APPROVE MANAGER REQUEST (TWO-STAGE APPROVAL WORKFLOW)
+// PUT /manager-directory/requests/:id/approve and /approve-kyc
 // ============================================================
-router.put('/manager-directory/requests/:id/approve', auth, async (req, res) => {
+const handleApproveManagerRequest = async (req, res) => {
     try {
         const mReq = await ManagerRequest.findById(req.params.id);
         if (!mReq) return res.status(404).json({ msg: 'Manager request not found' });
-        if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already approved.' });
+        if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already fully approved.' });
         if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request has been rejected.' });
 
+        const isKycStage = req.path.includes('approve-kyc') || req.query.stage === 'kyc' || req.body.stage === 'kyc' || mReq.approvalStage === 'kyc_review' || req.body.directActivate;
         const normLevel = normalizeManagerLevelStr(mReq.level);
-        const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        const rand = Math.floor(1000 + Math.random() * 9000);
-        const managerId = `MGR-${normLevel.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
 
-        // Create Manager in Manager collection
-        const newManager = new Manager({
-            managerId,
-            name: mReq.name,
-            email: mReq.email,
-            phone: mReq.phone,
-            altPhone: mReq.altPhone || '',
-            level: normLevel,
-            assignedState: mReq.assignedState,
-            assignedDistrict: mReq.assignedDistrict || '',
-            assignedDivision: mReq.assignedDivision || '',
-            assignedPincode: mReq.assignedPincode || '',
-            address: mReq.address || '',
-            notes: mReq.notes || '',
-            parentAdminId: mReq.requestedBy,
-            requestedBy: mReq.requestedBy,
-            approvedBy: req.user.id,
-            status: 'Active'
-        });
-        await newManager.save();
+        // Fetch operator identity
+        let operatorName = req.user?.name || 'Administrator';
+        let operatorRole = req.user?.role || req.user?.adminRole || 'admin';
+        if (req.user?.id) {
+            const u = await User.findById(req.user.id).select('name role adminRole').lean();
+            if (u) {
+                operatorName = u.name || operatorName;
+                operatorRole = u.role || u.adminRole || operatorRole;
+            }
+        }
 
-        mReq.status = 'Approved';
-        mReq.reviewedBy = req.user.id;
-        mReq.reviewedAt = new Date();
-        await mReq.save();
+        if (isKycStage) {
+            // =====================================================
+            // STAGE 2: KYC TEAM / FINAL APPROVAL -> ACTIVATE MANAGER
+            // =====================================================
+            const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const rand = Math.floor(1000 + Math.random() * 9000);
+            const managerId = `MGR-${normLevel.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
 
-        res.json({
-            success: true,
-            msg: `Manager onboarding approved. ${mReq.name} is now an active ${normLevel} manager.`,
-            manager: newManager,
-            request: mReq
-        });
+            // Create or update in Manager collection
+            let newManager = await Manager.findOne({
+                $or: [
+                    { email: mReq.email.toLowerCase().trim() },
+                    { managerId: mReq.requestId }
+                ]
+            });
+
+            if (!newManager) {
+                newManager = new Manager({
+                    managerId,
+                    name: mReq.name,
+                    email: mReq.email,
+                    phone: mReq.phone,
+                    altPhone: mReq.altPhone || '',
+                    level: normLevel,
+                    assignedState: mReq.assignedState,
+                    assignedDistrict: mReq.assignedDistrict || '',
+                    assignedDivision: mReq.assignedDivision || '',
+                    assignedPincode: mReq.assignedPincode || '',
+                    address: mReq.address || '',
+                    notes: mReq.notes || '',
+                    parentAdminId: mReq.requestedBy || req.user.id,
+                    requestedBy: mReq.requestedBy,
+                    approvedBy: req.user.id,
+                    status: 'Active'
+                });
+                await newManager.save();
+            } else {
+                newManager.status = 'Active';
+                newManager.approvedBy = req.user.id;
+                await newManager.save();
+            }
+
+            mReq.status = 'Approved';
+            mReq.approvalStage = 'approved';
+            mReq.kycApprovedBy = req.user.id;
+            mReq.kycApprovedByName = operatorName;
+            mReq.kycApprovedAt = new Date();
+            mReq.reviewedBy = req.user.id;
+            mReq.reviewedAt = new Date();
+            await mReq.save();
+
+            // Update matching User document to Active
+            const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+            await User.findOneAndUpdate(userFilter, {
+                status: 'active',
+                approvalStage: 'approved',
+                kycStatus: 'Verified',
+                isActive: true,
+                isApproved: true,
+                managerId: newManager.managerId
+            });
+
+            // Emit real-time notification
+            try {
+                const io = req.app.get('io');
+                if (io) {
+                    io.to('admin').emit('manager_activated', {
+                        id: newManager._id,
+                        managerId: newManager.managerId,
+                        name: newManager.name,
+                        email: newManager.email,
+                        level: normLevel,
+                        status: 'Active'
+                    });
+                }
+            } catch (ioErr) {}
+
+            return res.json({
+                success: true,
+                stage: 'approved',
+                msg: `Manager KYC approved and activated. ${mReq.name} is now an active ${normLevel} manager.`,
+                manager: newManager,
+                request: mReq
+            });
+        } else {
+            // =====================================================
+            // STAGE 1: SUB-ADMIN TERRITORY APPROVAL -> KYC REVIEW
+            // =====================================================
+            mReq.approvalStage = 'kyc_review';
+            mReq.subadminApprovedBy = req.user.id;
+            mReq.subadminApprovedByName = operatorName;
+            mReq.subadminApprovedAt = new Date();
+            mReq.status = 'Pending'; // Remains Pending until KYC approval
+            await mReq.save();
+
+            // Update User to KYC review stage
+            const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+            await User.findOneAndUpdate(userFilter, {
+                status: 'under_review',
+                approvalStage: 'kyc_review',
+                kycStatus: 'pending_verification',
+                subadminApprovedBy: req.user.id,
+                subadminApprovedByName: operatorName,
+                subadminApprovedAt: new Date()
+            });
+
+            // Emit real-time notification to KYC team and admin
+            try {
+                const io = req.app.get('io');
+                if (io) {
+                    const payload = {
+                        _id: mReq._id,
+                        requestId: mReq.requestId,
+                        name: mReq.name,
+                        email: mReq.email,
+                        level: normLevel,
+                        approvalStage: 'kyc_review',
+                        subadminApprovedByName: operatorName,
+                        createdAt: new Date()
+                    };
+                    io.to('admin').emit('manager_stage1_approved', payload);
+                    io.to('admin').emit('new_kyc_request', payload);
+                }
+            } catch (ioErr) {}
+
+            return res.json({
+                success: true,
+                stage: 'kyc_review',
+                msg: `Stage 1 territory review approved by ${operatorName}. Sent to KYC Verification team for final review.`,
+                request: mReq
+            });
+        }
     } catch (err) {
         console.error('Manager directory approve error:', err);
         res.status(500).json({ msg: 'Error approving request', error: err.message });
     }
-});
+};
+
+router.put('/manager-directory/requests/:id/approve', auth, handleApproveManagerRequest);
+router.put('/manager-directory/requests/:id/approve-kyc', auth, handleApproveManagerRequest);
 
 // ============================================================
 // 11. REJECT MANAGER REQUEST
@@ -843,11 +1014,22 @@ router.put('/manager-directory/requests/:id/reject', auth, async (req, res) => {
         if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already approved. Cannot reject.' });
         if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request is already rejected.' });
 
+        const rejectionReason = (req.body.reason || req.body.rejectionReason || '').trim() || 'Rejected by Administrator';
+
         mReq.status = 'Rejected';
-        mReq.rejectionReason = (req.body.reason || '').trim() || 'Rejected by Administrator';
+        mReq.approvalStage = 'rejected';
+        mReq.rejectionReason = rejectionReason;
         mReq.reviewedBy = req.user.id;
         mReq.reviewedAt = new Date();
         await mReq.save();
+
+        // Synchronize rejection to User record
+        const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+        await User.findOneAndUpdate(userFilter, {
+            status: 'rejected',
+            approvalStage: 'rejected',
+            rejectionReason
+        });
 
         res.json({ success: true, msg: 'Manager request rejected.', request: mReq });
     } catch (err) {

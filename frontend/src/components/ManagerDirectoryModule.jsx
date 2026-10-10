@@ -53,7 +53,8 @@ const getStatusBadgeClass = (status) => {
   if (s === 'active' || s === 'approved') return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20';
   if (s === 'inactive')                   return 'bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20';
   if (s === 'suspended')                  return 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
-  if (s === 'pending')                    return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+  if (s === 'pending' || s === 'under review' || s === 'under_review') return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20';
+  if (s === 'kyc verification' || s === 'kyc_review') return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20';
   if (s === 'rejected')                   return 'bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20';
   return 'bg-slate-500/10 text-slate-500 border border-slate-500/20';
 };
@@ -76,7 +77,8 @@ const StatusBadge = ({ status }) => {
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${getStatusBadgeClass(status)}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${
         s === 'active' || s === 'approved' ? 'bg-emerald-500' :
-        s === 'pending' ? 'bg-amber-500' :
+        s === 'pending' || s === 'under review' || s === 'under_review' ? 'bg-amber-500' :
+        s === 'kyc verification' || s === 'kyc_review' ? 'bg-blue-500' :
         s === 'rejected' || s === 'suspended' ? 'bg-red-500' : 'bg-slate-500'
       }`} />
       {displayStatus}
@@ -416,6 +418,26 @@ const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => 
         </p>
       )}
 
+      {/* Approval Stage Indicator */}
+      <div className="mb-3 flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+        <span className="text-slate-500 font-bold">Workflow Stage:</span>
+        <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
+          request.approvalStage === 'kyc_review'
+            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+            : request.status === 'Approved'
+            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+        }`}>
+          {request.approvalStage === 'kyc_review' ? 'Stage 2: KYC Review' : request.status === 'Approved' ? 'Active' : 'Stage 1: Territory Review'}
+        </span>
+      </div>
+
+      {request.subadminApprovedByName && (
+        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-2">
+          ✓ Stage 1 Approved by <span className="font-semibold">{request.subadminApprovedByName}</span>
+        </p>
+      )}
+
       {request.status === 'Pending' && (
         <div className="flex gap-2 mt-1">
           <button
@@ -424,7 +446,7 @@ const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => 
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs"
           >
             <CheckCircle className="w-4 h-4" />
-            {approving ? 'Approving…' : 'Direct Approve'}
+            {approving ? 'Approving…' : request.approvalStage === 'kyc_review' ? 'Approve KYC & Activate' : 'Approve Territory (Stage 1)'}
           </button>
           <button
             onClick={() => onReject(request)}

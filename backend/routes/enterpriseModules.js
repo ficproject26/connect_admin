@@ -113,7 +113,8 @@ const classifyVendorRequest = (v) => {
     const hasManagerExplicit = jType === 'manager' ||
                                cVia === 'manager' || cVia === 'manager_website' ||
                                rSource === 'manager' || rSource === 'manager_website' ||
-                               rOrigin === 'manager_website' || rOrigin === 'manager';
+                               rOrigin === 'manager_website' || rOrigin === 'manager' ||
+                               v.isManagerOnboarded === true;
 
     const hasManagerId = Boolean(
         v.managerId ||
@@ -124,6 +125,8 @@ const classifyVendorRequest = (v) => {
 
     const hasManagerRole = Boolean(v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('manager')) ||
                            Boolean(v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('manager')) ||
+                           Boolean(v.createdByRole && String(v.createdByRole).toLowerCase().includes('manager')) ||
+                           Boolean(v.creatorRole && String(v.creatorRole).toLowerCase().includes('manager')) ||
                            Boolean(typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('MGR-') || v.onboardedBy.startsWith('mgr_')));
 
     const hasManagerAssigned = Boolean(v.assignedManager || v.managerName);
@@ -134,7 +137,8 @@ const classifyVendorRequest = (v) => {
     const hasAgentExplicit = jType === 'agent' ||
                              cVia === 'agent' || cVia === 'agent_website' ||
                              rSource === 'agent' || rSource === 'agent_website' ||
-                             rOrigin === 'agent_website' || rOrigin === 'agent';
+                             rOrigin === 'agent_website' || rOrigin === 'agent' ||
+                             v.isAgentOnboarded === true;
 
     const hasAgentId = Boolean(
         v.agentId ||
@@ -145,6 +149,8 @@ const classifyVendorRequest = (v) => {
 
     const hasAgentRole = Boolean(v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('agent')) ||
                          Boolean(v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('agent')) ||
+                         Boolean(v.createdByRole && String(v.createdByRole).toLowerCase().includes('agent')) ||
+                         Boolean(v.creatorRole && String(v.creatorRole).toLowerCase().includes('agent')) ||
                          Boolean(typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('AG-') || v.onboardedBy.startsWith('agt_')));
 
     const hasAgentAssigned = Boolean(v.assignedAgent || v.agentName);
@@ -182,12 +188,17 @@ const batchEnrichVendors = async (vendorsList = []) => {
 
     const agentIdsSet = new Set();
     const pincodeCodesSet = new Set();
+    const creatorIdsSet = new Set();
 
     vendorsList.forEach(v => {
         const vObj = typeof v.toObject === 'function' ? v.toObject() : v;
         const possibleAgentId = (vObj.assignedAgent && typeof vObj.assignedAgent === 'object' ? (vObj.assignedAgent._id || vObj.assignedAgent) : vObj.assignedAgent) || vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId;
         if (possibleAgentId) {
             agentIdsSet.add(possibleAgentId.toString());
+        }
+
+        if (vObj.createdBy) {
+            creatorIdsSet.add(vObj.createdBy.toString());
         }
 
         sanitizeVendorAddressObj(vObj);
@@ -203,6 +214,7 @@ const batchEnrichVendors = async (vendorsList = []) => {
 
     const agentDocsMap = new Map();
     const pincodeMap = new Map();
+    const creatorDocsMap = new Map();
 
     const db = mongoose.connection.db;
     const fetchPromises = [];
@@ -251,6 +263,44 @@ const batchEnrichVendors = async (vendorsList = []) => {
         }
     }
 
+    if (creatorIdsSet.size > 0) {
+        const creatorArr = Array.from(creatorIdsSet);
+        const validCreatorObjIds = creatorArr.filter(id => mongoose.Types.ObjectId.isValid(id)).map(id => new mongoose.Types.ObjectId(id));
+        fetchPromises.push(
+            User.find({
+                $or: [
+                    ...(validCreatorObjIds.length > 0 ? [{ _id: { $in: validCreatorObjIds } }] : []),
+                    { _id: { $in: creatorArr } },
+                    { id: { $in: creatorArr } },
+                    { registrationId: { $in: creatorArr } }
+                ]
+            }).select('name registrationId managerId email phone level role adminRole assignedState assignedDistrict assignedDivision assignedPincode territory pincode state district').lean().then(creators => {
+                creators.forEach(c => {
+                    if (c._id) creatorDocsMap.set(c._id.toString(), c);
+                    if (c.id) creatorDocsMap.set(c.id.toString(), c);
+                    if (c.registrationId) creatorDocsMap.set(c.registrationId.toString(), c);
+                });
+            }).catch(() => {})
+        );
+
+        if (db) {
+            fetchPromises.push(
+                db.collection('managers').find({
+                    $or: [
+                        ...(validCreatorObjIds.length > 0 ? [{ _id: { $in: validCreatorObjIds } }] : []),
+                        { managerId: { $in: creatorArr } },
+                        { id: { $in: creatorArr } }
+                    ]
+                }).toArray().then(mgrs => {
+                    mgrs.forEach(m => {
+                        if (m._id && !creatorDocsMap.has(m._id.toString())) creatorDocsMap.set(m._id.toString(), { ...m, role: 'district_manager' });
+                        if (m.managerId && !creatorDocsMap.has(m.managerId.toString())) creatorDocsMap.set(m.managerId.toString(), { ...m, role: 'district_manager' });
+                    });
+                }).catch(() => {})
+            );
+        }
+    }
+
     if (pincodeCodesSet.size > 0) {
         const pinCodesArr = Array.from(pincodeCodesSet);
         pinCodesArr.forEach(c => pincodeMap.set(c, null));
@@ -268,11 +318,57 @@ const batchEnrichVendors = async (vendorsList = []) => {
 
     await Promise.all(fetchPromises);
 
-    return Promise.all(vendorsList.map(v => enrichVendorData(v, agentDocsMap, pincodeMap)));
+    return Promise.all(vendorsList.map(v => enrichVendorData(v, agentDocsMap, pincodeMap, creatorDocsMap)));
 };
 
-const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap = null) => {
+const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap = null, preloadedCreatorMap = null) => {
     const vObj = typeof v.toObject === 'function' ? v.toObject() : v;
+
+    // Check creator document if present to resolve manager or agent source
+    if (vObj.createdBy) {
+        let creatorDoc = null;
+        const cKey = String(vObj.createdBy);
+        if (preloadedCreatorMap && preloadedCreatorMap.has(cKey)) {
+            creatorDoc = preloadedCreatorMap.get(cKey);
+        } else {
+            try {
+                creatorDoc = await User.findOne({ $or: [{ _id: vObj.createdBy }, { id: vObj.createdBy }] }).select('name registrationId managerId email phone level role adminRole assignedState assignedDistrict').lean();
+            } catch (e) {}
+        }
+
+        if (creatorDoc) {
+            const cRole = String(creatorDoc.role || creatorDoc.adminRole || '').toLowerCase();
+            if (cRole.includes('manager')) {
+                vObj.createdByRole = creatorDoc.role || 'district_manager';
+                vObj.creatorRole = creatorDoc.role || 'district_manager';
+                vObj.managerName = creatorDoc.name;
+                vObj.managerId = creatorDoc.managerId || creatorDoc.id || String(creatorDoc._id);
+                vObj.managerRegistrationId = creatorDoc.registrationId || creatorDoc.managerId || `MGR-${String(creatorDoc._id).slice(-4)}`;
+                vObj.onboardedByManager = {
+                    name: creatorDoc.name,
+                    registrationId: creatorDoc.registrationId || creatorDoc.managerId || `MGR-${String(creatorDoc._id).slice(-4)}`,
+                    role: creatorDoc.role || 'district_manager',
+                    pincode: creatorDoc.assignedPincode || creatorDoc.assignedDistrict || creatorDoc.state || '—'
+                };
+                vObj.joiningType = 'manager';
+                vObj.isManagerOnboarded = true;
+            } else if (cRole.includes('agent')) {
+                vObj.createdByRole = creatorDoc.role || 'agent';
+                vObj.creatorRole = creatorDoc.role || 'agent';
+                vObj.agentName = creatorDoc.name;
+                vObj.agentId = creatorDoc.id || String(creatorDoc._id);
+                vObj.agentRegistrationId = creatorDoc.registrationId || `AG-${String(creatorDoc._id).slice(-4)}`;
+                vObj.onboardedByAgent = {
+                    name: creatorDoc.name,
+                    registrationId: creatorDoc.registrationId || `AG-${String(creatorDoc._id).slice(-4)}`,
+                    role: creatorDoc.role || 'agent',
+                    pincode: creatorDoc.assignedPincode || creatorDoc.pincode || '—'
+                };
+                vObj.joiningType = 'agent';
+                vObj.isAgentOnboarded = true;
+            }
+        }
+    }
 
     if (Array.isArray(vObj.categories) && vObj.categories.length > 0) {
         vObj.category = vObj.categories.join(', ');
@@ -589,20 +685,29 @@ const deduplicateVendorsList = (list = []) => {
         return (r && r !== 'undefined' && r !== 'null' && r !== '—') ? r.toUpperCase() : '';
     };
 
-    const isAgentCheck = (v) => {
-        if (!v) return false;
-        const j = String(v.joiningType || '').toLowerCase();
-        const c = String(v.createdVia || '').toLowerCase();
-        const r = String(v.registrationSource || '').toLowerCase();
-        return j === 'agent' || c === 'agent' || r === 'agent' || Boolean(v.onboardedByAgent) || Boolean(v.onboardedBy) || Boolean(v.agentId) || Boolean(v.agentName) || Boolean(v.assignedAgent);
-    };
-
     const isManagerCheck = (v) => {
         if (!v) return false;
         const j = String(v.joiningType || '').toLowerCase();
         const c = String(v.createdVia || '').toLowerCase();
         const r = String(v.registrationSource || '').toLowerCase();
-        return j === 'manager' || c === 'manager' || r === 'manager' || Boolean(v.onboardedByManager) || Boolean(v.managerId) || Boolean(v.assignedManager) || Boolean(v.managerName);
+        const cRole = String(v.createdByRole || v.creatorRole || '').toLowerCase();
+        return v.isManagerOnboarded === true ||
+            j === 'manager' || c === 'manager' || r === 'manager' ||
+            Boolean(v.onboardedByManager) || Boolean(v.managerId) || Boolean(v.assignedManager) || Boolean(v.managerName) ||
+            cRole.includes('manager');
+    };
+
+    const isAgentCheck = (v) => {
+        if (!v) return false;
+        if (isManagerCheck(v)) return false;
+        const j = String(v.joiningType || '').toLowerCase();
+        const c = String(v.createdVia || '').toLowerCase();
+        const r = String(v.registrationSource || '').toLowerCase();
+        const cRole = String(v.createdByRole || v.creatorRole || '').toLowerCase();
+        return v.isAgentOnboarded === true ||
+            j === 'agent' || c === 'agent' || r === 'agent' ||
+            Boolean(v.onboardedByAgent) || Boolean(v.onboardedBy) || Boolean(v.agentId) || Boolean(v.agentName) || Boolean(v.assignedAgent) ||
+            cRole.includes('agent');
     };
 
     for (const item of list) {
@@ -615,10 +720,19 @@ const deduplicateVendorsList = (list = []) => {
         const idStr = v._id ? String(v._id) : '';
 
         let existing = null;
-        if (regId && regMap.has(regId)) existing = regMap.get(regId);
-        else if (phone && phoneMap.has(phone)) existing = phoneMap.get(phone);
+        if (idStr && idMap.has(idStr)) existing = idMap.get(idStr);
+        else if (regId && regMap.has(regId)) existing = regMap.get(regId);
         else if (email && emailMap.has(email)) existing = emailMap.get(email);
-        else if (idStr && idMap.has(idStr)) existing = idMap.get(idStr);
+        else if (phone && phoneMap.has(phone)) existing = phoneMap.get(phone);
+
+        if (existing) {
+            const exName = (existing.businessName || existing.name || '').toLowerCase().trim();
+            const curName = (v.businessName || v.name || '').toLowerCase().trim();
+            const isSameId = (idStr && idMap.has(idStr)) || (regId && regMap.has(regId));
+            if (!isSameId && exName && curName && exName !== curName && !exName.includes(curName) && !curName.includes(exName)) {
+                existing = null;
+            }
+        }
 
         const vClass = classifyVendorRequest(v);
 
@@ -633,9 +747,23 @@ const deduplicateVendorsList = (list = []) => {
 
             const exClass = classifyVendorRequest(existing);
 
-            // Determine and preserve Joining Type canonically
-            if (vClass.isAgent || exClass.isAgent) {
+            // Determine and preserve Joining Type canonically (Manager > Agent > Direct)
+            if (vClass.isManager || exClass.isManager || isManagerCheck(v) || isManagerCheck(existing)) {
+                existing.joiningType = 'manager';
+                existing.isManagerOnboarded = true;
+                existing.createdVia = existing.createdVia || v.createdVia || 'manager';
+                existing.registrationSource = existing.registrationSource || v.registrationSource || 'manager';
+                existing.onboardedByManager = existing.onboardedByManager || v.onboardedByManager;
+                existing.assignedManager = existing.assignedManager || v.assignedManager;
+                existing.managerId = existing.managerId || v.managerId;
+                existing.managerName = existing.managerName || v.managerName;
+                existing.managerRegistrationId = existing.managerRegistrationId || v.managerRegistrationId;
+                existing.createdBy = existing.createdBy || v.createdBy;
+                existing.createdByRole = existing.createdByRole || v.createdByRole;
+                existing.creatorRole = existing.creatorRole || v.creatorRole;
+            } else if (vClass.isAgent || exClass.isAgent || isAgentCheck(v) || isAgentCheck(existing)) {
                 existing.joiningType = 'agent';
+                existing.isAgentOnboarded = true;
                 existing.createdVia = existing.createdVia || v.createdVia || 'agent';
                 existing.registrationSource = existing.registrationSource || v.registrationSource || 'agent';
                 existing.onboardedByAgent = existing.onboardedByAgent || v.onboardedByAgent;
@@ -644,15 +772,9 @@ const deduplicateVendorsList = (list = []) => {
                 existing.agentName = existing.agentName || v.agentName;
                 existing.agentRegistrationId = existing.agentRegistrationId || v.agentRegistrationId;
                 existing.onboardedBy = existing.onboardedBy || v.onboardedBy;
-            } else if (vClass.isManager || exClass.isManager) {
-                existing.joiningType = 'manager';
-                existing.createdVia = existing.createdVia || v.createdVia || 'manager';
-                existing.registrationSource = existing.registrationSource || v.registrationSource || 'manager';
-                existing.onboardedByManager = existing.onboardedByManager || v.onboardedByManager;
-                existing.assignedManager = existing.assignedManager || v.assignedManager;
-                existing.managerId = existing.managerId || v.managerId;
-                existing.managerName = existing.managerName || v.managerName;
-                existing.managerRegistrationId = existing.managerRegistrationId || v.managerRegistrationId;
+                existing.createdBy = existing.createdBy || v.createdBy;
+                existing.createdByRole = existing.createdByRole || v.createdByRole;
+                existing.creatorRole = existing.creatorRole || v.creatorRole;
             } else if (vClass.isDirect || exClass.isDirect) {
                 existing.joiningType = 'direct';
                 existing.isDirectRequest = true;
@@ -706,6 +828,9 @@ router.get('/vendors', auth, async (req, res) => {
         const { search, category, state, status, isDirectRequest, isAgentOnboarded, isManagerOnboarded, page = 1, limit = 20 } = req.query;
 
         if (isAgentOnboarded === 'true') {
+            const agentUsers = await User.find({ role: { $regex: /agent/i } }).select('_id id registrationId').lean().catch(() => []);
+            const agentIds = agentUsers.flatMap(u => [String(u._id), u.id, u.registrationId].filter(Boolean));
+
             const agentMongoQuery = {
                 $or: [
                     { joiningType: 'agent' },
@@ -718,7 +843,12 @@ router.get('/vendors', auth, async (req, res) => {
                     { onboardedByAgentId: { $exists: true, $ne: null } },
                     { agentName: { $exists: true, $ne: '' } },
                     { agentRegistrationId: { $exists: true, $ne: '' } },
-                    { referredBy: { $exists: true, $ne: null } }
+                    { referredBy: { $exists: true, $ne: null } },
+                    { isAgentOnboarded: true },
+                    { createdByRole: { $regex: /agent/i } },
+                    { creatorRole: { $regex: /agent/i } },
+                    ...(agentIds.length > 0 ? [{ createdBy: { $in: agentIds } }] : []),
+                    ...(agentIds.length > 0 ? [{ onboardedBy: { $in: agentIds } }] : [])
                 ],
                 joiningType: { $ne: 'manager' }
             };
@@ -762,6 +892,14 @@ router.get('/vendors', auth, async (req, res) => {
         }
 
         if (isManagerOnboarded === 'true') {
+            const managerUsers = await User.find({
+                $or: [
+                    { role: { $regex: /manager/i } },
+                    { adminRole: { $regex: /manager/i } }
+                ]
+            }).select('_id id registrationId managerId').lean().catch(() => []);
+            const managerIds = managerUsers.flatMap(u => [String(u._id), u.id, u.registrationId, u.managerId].filter(Boolean));
+
             const managerMongoQuery = {
                 $or: [
                     { joiningType: 'manager' },
@@ -774,7 +912,12 @@ router.get('/vendors', auth, async (req, res) => {
                     { onboardedByManagerId: { $exists: true, $ne: null } },
                     { managerName: { $exists: true, $ne: '' } },
                     { managerRegistrationId: { $exists: true, $ne: '' } },
-                    { 'addedBy.role': { $regex: /manager/i } }
+                    { 'addedBy.role': { $regex: /manager/i } },
+                    { isManagerOnboarded: true },
+                    { createdByRole: { $regex: /manager/i } },
+                    { creatorRole: { $regex: /manager/i } },
+                    ...(managerIds.length > 0 ? [{ createdBy: { $in: managerIds } }] : []),
+                    ...(managerIds.length > 0 ? [{ onboardedBy: { $in: managerIds } }] : [])
                 ],
                 joiningType: { $ne: 'agent' }
             };
@@ -871,14 +1014,12 @@ router.get('/vendors', auth, async (req, res) => {
             });
         }
 
-        const query = { role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] } };
-
-        if (category && category !== 'all') query.category = category;
-        if (state && state !== 'all') query.assignedArea = { $regex: new RegExp(state, 'i') };
-        if (status && status !== 'all') query.status = status;
-
+        const userQuery = { role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] } };
+        if (category && category !== 'all') userQuery.category = category;
+        if (state && state !== 'all') userQuery.assignedArea = { $regex: new RegExp(state, 'i') };
+        if (status && status !== 'all') userQuery.status = status;
         if (search) {
-            query.$or = [
+            userQuery.$or = [
                 { businessName: { $regex: new RegExp(search, 'i') } },
                 { contactPerson: { $regex: new RegExp(search, 'i') } },
                 { email: { $regex: new RegExp(search, 'i') } },
@@ -887,9 +1028,37 @@ router.get('/vendors', auth, async (req, res) => {
             ];
         }
 
+        const vendorDocQuery = {};
+        if (category && category !== 'all') vendorDocQuery.category = category;
+        if (state && state !== 'all') vendorDocQuery.assignedArea = { $regex: new RegExp(state, 'i') };
+        if (status && status !== 'all') vendorDocQuery.status = status;
+        const roleScopeCondition = {
+            $or: [
+                { role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] } },
+                { role: { $exists: false } },
+                { role: null }
+            ]
+        };
+        if (search) {
+            vendorDocQuery.$and = [
+                roleScopeCondition,
+                {
+                    $or: [
+                        { businessName: { $regex: new RegExp(search, 'i') } },
+                        { contactPerson: { $regex: new RegExp(search, 'i') } },
+                        { email: { $regex: new RegExp(search, 'i') } },
+                        { phone: { $regex: new RegExp(search, 'i') } },
+                        { registrationId: { $regex: new RegExp(search, 'i') } }
+                    ]
+                }
+            ];
+        } else {
+            vendorDocQuery.$or = roleScopeCondition.$or;
+        }
+
         const [userVendors, docVendors] = await Promise.all([
-            User.find(query).select('-password -__v').sort({ createdAt: -1 }).lean(),
-            Vendor.find(query).select('-__v').sort({ createdAt: -1 }).lean()
+            User.find(userQuery).select('-password -__v').sort({ createdAt: -1 }).lean(),
+            Vendor.find(vendorDocQuery).select('-__v').sort({ createdAt: -1 }).lean()
         ]);
         const rawVendors = [...userVendors, ...docVendors];
 

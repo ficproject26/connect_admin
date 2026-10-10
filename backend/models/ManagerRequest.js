@@ -65,7 +65,13 @@ const ManagerRequestSchema = new mongoose.Schema({
     requestedBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: false,
+        default: null
+    },
+    userId: {
+        type: String,
+        default: null,
+        trim: true
     },
     requestingAdminName: {
         type: String,
@@ -74,6 +80,54 @@ const ManagerRequestSchema = new mongoose.Schema({
     requestingAdminRole: {
         type: String,
         default: ''
+    },
+    targetAdminId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    targetAdminName: {
+        type: String,
+        default: ''
+    },
+    targetAdminRole: {
+        type: String,
+        default: ''
+    },
+    approvalStage: {
+        type: String,
+        enum: ['subadmin_review', 'kyc_review', 'approved', 'rejected'],
+        default: 'subadmin_review'
+    },
+    subadminApprovedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    subadminApprovedByName: {
+        type: String,
+        default: ''
+    },
+    subadminApprovedAt: {
+        type: Date,
+        default: null
+    },
+    kycApprovedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        default: null
+    },
+    kycApprovedByName: {
+        type: String,
+        default: ''
+    },
+    kycApprovedAt: {
+        type: Date,
+        default: null
+    },
+    documents: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
     },
     status: {
         type: String,

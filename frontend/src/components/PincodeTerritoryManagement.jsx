@@ -1045,7 +1045,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
               </button>
             )}
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
               <span className="text-[10px] uppercase font-black tracking-wider text-slate-400">States</span>
               <div className="text-xl font-black text-slate-900 dark:text-white mt-0.5">{currentScopeStats.totalStates}</div>
@@ -1073,10 +1073,6 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
             <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
               <span className="text-[10px] uppercase font-black tracking-wider text-amber-500">Available Pins</span>
               <div className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">{currentScopeStats.availablePincodes}</div>
-            </div>
-            <div className="bg-slate-50 dark:bg-slate-950/40 p-3 rounded-2xl border border-slate-200/60 dark:border-slate-800">
-              <span className="text-[10px] uppercase font-black tracking-wider text-purple-500">Managers</span>
-              <div className="text-xl font-black text-purple-600 dark:text-purple-400 mt-0.5">{currentScopeStats.activeManagers}</div>
             </div>
           </div>
         </div>

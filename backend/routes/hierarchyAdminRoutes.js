@@ -457,6 +457,63 @@ router.get('/hierarchy-admins/assigned-hierarchy', [auth, territoryScope], async
 });
 
 // ============================================================
+// 1C. GET STATE ADMINISTRATOR CAPACITY (MAX 4 PER STATE)
+// ============================================================
+const getStateCapacityHandler = async (req, res) => {
+    try {
+        const stateName = (req.query.state || req.params.stateName || req.params.state || '').trim();
+        if (!stateName) {
+            return res.status(400).json({ success: false, msg: 'State parameter is required' });
+        }
+
+        const stateRegex = new RegExp(`^${stateName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+
+        // Query genuine State Administrator accounts registered for this state
+        const qualifyingAdmins = await User.find({
+            role: 'admin',
+            $or: [
+                { adminLevel: 'state' },
+                { level: 'state' },
+                { adminRole: 'state-admin' }
+            ],
+            email: { $ne: 'admin@example.com' },
+            $or: [
+                { assignedState: stateRegex },
+                { state: stateRegex }
+            ],
+            status: { $nin: ['deleted', 'rejected', 'revoked'] },
+            isDeleted: { $ne: true }
+        }).select('_id name email phone status adminRole adminLevel assignedState registrationId createdAt').lean();
+
+        const limit = 4;
+        const used = qualifyingAdmins.length;
+        const remaining = Math.max(0, limit - used);
+        const isFull = used >= limit;
+
+        return res.json({
+            success: true,
+            state: stateName,
+            limit,
+            used,
+            remaining,
+            isFull,
+            message: isFull
+                ? 'This state has reached its maximum capacity of 4 State Administrators.'
+                : `State Administrators: ${used} of 4 slots used. ${remaining} slot${remaining === 1 ? '' : 's'} remaining.`,
+            admins: qualifyingAdmins
+        });
+    } catch (err) {
+        console.error('Error fetching state capacity:', err);
+        return res.status(500).json({ success: false, msg: 'Server error retrieving state capacity', error: err.message });
+    }
+};
+
+router.get('/admins/state-capacity', [auth, territoryScope], getStateCapacityHandler);
+router.get('/admins/state-capacity/:stateName', [auth, territoryScope], getStateCapacityHandler);
+router.get('/territory/state-capacity', [auth, territoryScope], getStateCapacityHandler);
+router.get('/territory/state-capacity/:stateName', [auth, territoryScope], getStateCapacityHandler);
+
+// ============================================================
 // 1B. GET ONBOARDING REQUESTS & ACTIVITY AUDIT TRAIL
 // ============================================================
 const getAdminRequestsHandler = async (req, res) => {
@@ -1182,17 +1239,30 @@ const createHierarchyAdminHandler = async (req, res) => {
             }
         }
 
-        // 7. CHECK DUPLICATE STATE ADMIN (only one active State Admin per state by default)
+        // 7. ENFORCE STATE ADMINISTRATOR CAPACITY LIMIT (MAXIMUM 4 PER STATE INDEPENDENTLY)
         if (targetLevel === 'state' && finalState) {
-            const existingStateAdmin = await User.findOne({
-                adminLevel: 'state',
-                adminRole: 'state-admin',
-                assignedState: new RegExp(`^${finalState.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
-                status: { $in: ['approved', 'Active', 'active'] }
+            const stateRegex = new RegExp(`^${finalState.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+            const qualifyingCount = await User.countDocuments({
+                role: 'admin',
+                $or: [
+                    { adminLevel: 'state' },
+                    { level: 'state' },
+                    { adminRole: 'state-admin' }
+                ],
+                email: { $ne: 'admin@example.com' },
+                $or: [
+                    { assignedState: stateRegex },
+                    { state: stateRegex }
+                ],
+                status: { $nin: ['deleted', 'rejected', 'revoked'] },
+                isDeleted: { $ne: true }
             });
-            if (existingStateAdmin) {
+
+            if (qualifyingCount >= 4) {
                 return res.status(400).json({
-                    msg: `An active State Administrator already exists for ${finalState}. Deactivate the existing State Admin before creating a new one.`
+                    success: false,
+                    msg: 'This state has reached its maximum capacity of 4 State Administrators.',
+                    message: 'This state has reached its maximum capacity of 4 State Administrators.'
                 });
             }
         }
@@ -1269,6 +1339,26 @@ const createHierarchyAdminHandler = async (req, res) => {
             registrationId,
             createdAt: new Date()
         });
+
+        // Concurrency-safe capacity re-check immediately prior to persistence
+        if (targetLevel === 'state' && finalState) {
+            const stateRegex = new RegExp(`^${finalState.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+            const recheckCount = await User.countDocuments({
+                role: 'admin',
+                $or: [{ adminLevel: 'state' }, { level: 'state' }, { adminRole: 'state-admin' }],
+                email: { $ne: 'admin@example.com' },
+                $or: [{ assignedState: stateRegex }, { state: stateRegex }],
+                status: { $nin: ['deleted', 'rejected', 'revoked'] },
+                isDeleted: { $ne: true }
+            });
+            if (recheckCount >= 4) {
+                return res.status(400).json({
+                    success: false,
+                    msg: 'This state has reached its maximum capacity of 4 State Administrators.',
+                    message: 'This state has reached its maximum capacity of 4 State Administrators.'
+                });
+            }
+        }
 
         await newAdmin.save();
 
@@ -1679,15 +1769,76 @@ router.get('/managers/requests', [auth, territoryScope], async (req, res) => {
 // ============================================================
 router.put('/managers/requests/:id/approve', [auth, territoryScope], async (req, res) => {
     try {
-        if (!req.adminUser.isMainAdmin) {
-            return res.status(403).json({ msg: 'Unauthorized. ONLY Main Admin can approve manager onboarding requests.' });
-        }
-
         const mReq = await ManagerRequest.findById(req.params.id);
         if (!mReq) return res.status(404).json({ msg: 'Manager request not found' });
         if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already approved' });
 
-        // Double check limit before approving
+        // Territory Authorization Check for Sub-Admins
+        if (!req.adminUser.isMainAdmin) {
+            const adminTier = (req.adminUser.adminTier || '').toLowerCase();
+            let territoryMatches = false;
+            if (adminTier === 'state' && req.adminUser.assignedState && req.adminUser.assignedState.toLowerCase() === (mReq.assignedState || '').toLowerCase()) {
+                territoryMatches = true;
+            } else if (adminTier === 'district' && req.adminUser.assignedDistrict && req.adminUser.assignedDistrict.toLowerCase() === (mReq.assignedDistrict || '').toLowerCase()) {
+                territoryMatches = true;
+            } else if (adminTier === 'division' && req.adminUser.assignedDivision && req.adminUser.assignedDivision.toLowerCase() === (mReq.assignedDivision || '').toLowerCase()) {
+                territoryMatches = true;
+            } else if (adminTier === 'pincode' && req.adminUser.assignedPincode && String(req.adminUser.assignedPincode) === String(mReq.assignedPincode || '')) {
+                territoryMatches = true;
+            }
+            if (!territoryMatches) {
+                return res.status(403).json({ msg: 'Unauthorized. You can only review manager onboarding requests within your assigned territory.' });
+            }
+        }
+
+        const isKycStage = req.query.stage === 'kyc' || req.body.stage === 'kyc' || mReq.approvalStage === 'kyc_review' || (req.adminUser.isMainAdmin && req.body.directActivate);
+
+        if (!isKycStage && !req.adminUser.isMainAdmin) {
+            // STAGE 1: SUB-ADMIN TERRITORY APPROVAL
+            mReq.approvalStage = 'kyc_review';
+            mReq.subadminApprovedBy = req.adminUser._id;
+            mReq.subadminApprovedByName = req.adminUser.name;
+            mReq.subadminApprovedAt = new Date();
+            mReq.status = 'Pending';
+            await mReq.save();
+
+            const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+            await User.findOneAndUpdate(userFilter, {
+                status: 'under_review',
+                approvalStage: 'kyc_review',
+                kycStatus: 'pending_verification',
+                subadminApprovedBy: req.adminUser._id,
+                subadminApprovedByName: req.adminUser.name,
+                subadminApprovedAt: new Date()
+            });
+
+            try {
+                const io = req.app.get('io');
+                if (io) {
+                    const payload = {
+                        _id: mReq._id,
+                        requestId: mReq.requestId,
+                        name: mReq.name,
+                        email: mReq.email,
+                        level: mReq.level,
+                        approvalStage: 'kyc_review',
+                        subadminApprovedByName: req.adminUser.name,
+                        createdAt: new Date()
+                    };
+                    io.to('admin').emit('manager_stage1_approved', payload);
+                    io.to('admin').emit('new_kyc_request', payload);
+                }
+            } catch (ioErr) {}
+
+            return res.json({
+                success: true,
+                stage: 'kyc_review',
+                msg: `Stage 1 territory review approved by ${req.adminUser.name}. Sent to KYC verification team for review.`,
+                request: mReq
+            });
+        }
+
+        // STAGE 2: KYC TEAM / MAIN ADMIN FINAL APPROVAL
         const maxLimit = MANAGER_LIMITS[mReq.level] || 2;
         const countFilter = {
             level: mReq.level,
@@ -1716,34 +1867,75 @@ router.put('/managers/requests/:id/approve', [auth, territoryScope], async (req,
         const managerId = `MGR-${lvlCode}-${dateStr}-${randDigits}`;
 
         // Create Manager in Manager Collection
-        const newManager = new Manager({
-            managerId,
-            name: mReq.name,
-            email: mReq.email,
-            phone: mReq.phone,
-            altPhone: mReq.altPhone,
-            level: mReq.level,
-            assignedState: mReq.assignedState,
-            assignedDistrict: mReq.assignedDistrict,
-            assignedDivision: mReq.assignedDivision,
-            assignedPincode: mReq.assignedPincode,
-            address: mReq.address,
-            parentAdminId: mReq.requestedBy,
-            requestedBy: mReq.requestedBy,
-            approvedBy: req.adminUser._id,
-            status: 'Active',
-            notes: mReq.notes
+        let newManager = await Manager.findOne({
+            $or: [
+                { email: mReq.email.toLowerCase().trim() },
+                { managerId: mReq.requestId }
+            ]
         });
 
-        await newManager.save();
+        if (!newManager) {
+            newManager = new Manager({
+                managerId,
+                name: mReq.name,
+                email: mReq.email,
+                phone: mReq.phone,
+                altPhone: mReq.altPhone,
+                level: mReq.level,
+                assignedState: mReq.assignedState,
+                assignedDistrict: mReq.assignedDistrict,
+                assignedDivision: mReq.assignedDivision,
+                assignedPincode: mReq.assignedPincode,
+                address: mReq.address,
+                parentAdminId: mReq.requestedBy || req.adminUser._id,
+                requestedBy: mReq.requestedBy,
+                approvedBy: req.adminUser._id,
+                status: 'Active',
+                notes: mReq.notes
+            });
+            await newManager.save();
+        } else {
+            newManager.status = 'Active';
+            newManager.approvedBy = req.adminUser._id;
+            await newManager.save();
+        }
 
         mReq.status = 'Approved';
+        mReq.approvalStage = 'approved';
+        mReq.kycApprovedBy = req.adminUser._id;
+        mReq.kycApprovedByName = req.adminUser.name;
+        mReq.kycApprovedAt = new Date();
         mReq.reviewedBy = req.adminUser._id;
         mReq.reviewedAt = new Date();
         await mReq.save();
 
+        const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+        await User.findOneAndUpdate(userFilter, {
+            status: 'active',
+            approvalStage: 'approved',
+            kycStatus: 'Verified',
+            isActive: true,
+            isApproved: true,
+            managerId: newManager.managerId
+        });
+
+        try {
+            const io = req.app.get('io');
+            if (io) {
+                io.to('admin').emit('manager_activated', {
+                    id: newManager._id,
+                    managerId: newManager.managerId,
+                    name: newManager.name,
+                    email: newManager.email,
+                    level: mReq.level,
+                    status: 'Active'
+                });
+            }
+        } catch (ioErr) {}
+
         res.json({
             success: true,
+            stage: 'approved',
             msg: 'Manager onboarding request approved. Manager is now active in the territory.',
             manager: newManager,
             request: mReq
@@ -1755,22 +1947,45 @@ router.put('/managers/requests/:id/approve', [auth, territoryScope], async (req,
 });
 
 // ============================================================
-// 8. REJECT MANAGER REQUEST (MAIN ADMIN ONLY)
+// 8. REJECT MANAGER REQUEST
 // ============================================================
 router.put('/managers/requests/:id/reject', [auth, territoryScope], async (req, res) => {
     try {
-        if (!req.adminUser.isMainAdmin) {
-            return res.status(403).json({ msg: 'Unauthorized. ONLY Main Admin can reject manager onboarding requests.' });
-        }
-
         const mReq = await ManagerRequest.findById(req.params.id);
         if (!mReq) return res.status(404).json({ msg: 'Manager request not found' });
 
+        if (!req.adminUser.isMainAdmin) {
+            const adminTier = (req.adminUser.adminTier || '').toLowerCase();
+            let territoryMatches = false;
+            if (adminTier === 'state' && req.adminUser.assignedState && req.adminUser.assignedState.toLowerCase() === (mReq.assignedState || '').toLowerCase()) {
+                territoryMatches = true;
+            } else if (adminTier === 'district' && req.adminUser.assignedDistrict && req.adminUser.assignedDistrict.toLowerCase() === (mReq.assignedDistrict || '').toLowerCase()) {
+                territoryMatches = true;
+            } else if (adminTier === 'division' && req.adminUser.assignedDivision && req.adminUser.assignedDivision.toLowerCase() === (mReq.assignedDivision || '').toLowerCase()) {
+                territoryMatches = true;
+            } else if (adminTier === 'pincode' && req.adminUser.assignedPincode && String(req.adminUser.assignedPincode) === String(mReq.assignedPincode || '')) {
+                territoryMatches = true;
+            }
+            if (!territoryMatches) {
+                return res.status(403).json({ msg: 'Unauthorized. You can only reject manager onboarding requests within your assigned territory.' });
+            }
+        }
+
+        const rejectionReason = req.body.reason || req.body.rejectionReason || 'Rejected by Administrator';
+
         mReq.status = 'Rejected';
-        mReq.rejectionReason = req.body.reason || 'Rejected by Main Admin';
+        mReq.approvalStage = 'rejected';
+        mReq.rejectionReason = rejectionReason;
         mReq.reviewedBy = req.adminUser._id;
         mReq.reviewedAt = new Date();
         await mReq.save();
+
+        const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+        await User.findOneAndUpdate(userFilter, {
+            status: 'rejected',
+            approvalStage: 'rejected',
+            rejectionReason
+        });
 
         res.json({
             success: true,
