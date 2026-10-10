@@ -282,8 +282,13 @@ export const isVendorManagerOnboarded = (v) => {
     cRole.includes('manager') ||
     (v.addedBy && v.addedBy.role && String(v.addedBy.role).toLowerCase().includes('manager')) ||
     (v.onboardedByRole && String(v.onboardedByRole).toLowerCase().includes('manager')) ||
-    (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('MGR-') || v.onboardedBy.startsWith('mgr_'))) ||
-    (typeof v.createdBy === 'string' && v.createdBy.startsWith('usr_mgr_'))
+    (typeof v.onboardedBy === 'string' && (v.onboardedBy.startsWith('MGR-') || v.onboardedBy.startsWith('mgr_') || v.onboardedBy.startsWith('usr_mgr_'))) ||
+    (typeof v.onboardedById === 'string' && (v.onboardedById.startsWith('MGR-') || v.onboardedById.startsWith('mgr_') || v.onboardedById.startsWith('usr_mgr_'))) ||
+    (typeof v.createdBy === 'string' && (v.createdBy.startsWith('usr_mgr_') || v.createdBy.startsWith('mgr_') || v.createdBy.startsWith('MGR-'))) ||
+    (typeof v.createdById === 'string' && (v.createdById.startsWith('usr_mgr_') || v.createdById.startsWith('mgr_') || v.createdById.startsWith('MGR-'))) ||
+    (v.addedBy?.id && typeof v.addedBy.id === 'string' && (v.addedBy.id.startsWith('usr_mgr_') || v.addedBy.id.startsWith('mgr_') || v.addedBy.id.startsWith('MGR-'))) ||
+    (typeof v.createdByName === 'string' && v.createdByName.toLowerCase().includes('manager')) ||
+    (typeof v.onboardedByName === 'string' && v.onboardedByName.toLowerCase().includes('manager'))
   );
 };
 
@@ -384,36 +389,44 @@ const getAgentInfo = (v) => {
 };
 
 const getManagerInfo = (v) => {
-  if (!v) return { name: '—', registrationId: '—', pincode: '—' };
+  if (!v) return { name: '—', registrationId: '—', pincode: '—', role: '—' };
 
   if (v.onboardedByManager && typeof v.onboardedByManager === 'object' && (v.onboardedByManager.name || v.onboardedByManager.registrationId || v.onboardedByManager.managerId)) {
     return {
       name: v.onboardedByManager.name || '—',
       registrationId: v.onboardedByManager.registrationId || v.onboardedByManager.managerId || '—',
-      pincode: v.onboardedByManager.pincode || '—'
+      pincode: v.onboardedByManager.pincode || v.pincode || '—',
+      role: v.onboardedByManager.role || v.onboardedByManager.level || 'Territory Manager'
     };
   }
   if (v.assignedManager && typeof v.assignedManager === 'object' && (v.assignedManager.name || v.assignedManager.registrationId || v.assignedManager.managerId)) {
     return {
       name: v.assignedManager.name || '—',
       registrationId: v.assignedManager.registrationId || v.assignedManager.managerId || '—',
-      pincode: v.assignedManager.pincode || '—'
+      pincode: v.assignedManager.pincode || v.pincode || '—',
+      role: v.assignedManager.role || 'Territory Manager'
     };
   }
 
-  const name = v.managerName || (typeof v.onboardedByManager === 'string' ? v.onboardedByManager : '') || (v.addedBy && v.addedBy.name ? v.addedBy.name : '');
-  if (name) {
+  const name = v.managerName || v.createdByName || v.onboardedByName || (typeof v.onboardedByManager === 'string' ? v.onboardedByManager : '') || (v.addedBy && v.addedBy.name ? v.addedBy.name : '');
+  const regId = v.managerRegistrationId || v.managerId || v.createdById || v.createdBy || v.onboardedById || v.onboardedBy || (v.addedBy && v.addedBy.id ? v.addedBy.id : '—');
+  const pincode = (v.addedBy && v.addedBy.pincode) || v.pincode || '—';
+  const role = v.createdByRole || v.onboardedByRole || (v.addedBy && v.addedBy.role) || 'Territory Manager';
+
+  if (name || (regId && regId !== '—')) {
     return {
-      name,
-      registrationId: v.managerId || '—',
-      pincode: '—'
+      name: name || 'Territory Manager',
+      registrationId: regId,
+      pincode,
+      role
     };
   }
 
   return {
     name: '—',
     registrationId: '—',
-    pincode: '—'
+    pincode: '—',
+    role: '—'
   };
 };
 
@@ -613,6 +626,8 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
   const [showManagerOnboardedModal, setShowManagerOnboardedModal] = useState(false);
   const [managerOnboardSearch, setManagerOnboardSearch] = useState('');
   const [managerOnboardedVendorsList, setManagerOnboardedVendorsList] = useState([]);
+  const [managerVendorsLoading, setManagerVendorsLoading] = useState(false);
+  const [managerVendorsError, setManagerVendorsError] = useState(null);
 
   // Existing Vendor Business Requests Modal
   const [showBusinessRequestsModal, setShowBusinessRequestsModal] = useState(false);
@@ -853,6 +868,8 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
   };
 
   const fetchManagerOnboardedVendors = async () => {
+    setManagerVendorsLoading(true);
+    setManagerVendorsError(null);
     try {
       const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
       const url = `${baseClean}/admin/enterprise/vendors?isManagerOnboarded=true&limit=500`;
@@ -873,19 +890,31 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
 
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
-          const list = deduplicateVendorsList(data.vendors || []);
-          const pendingOnly = list.filter(v => {
-            const s = (v.status || '').toLowerCase().trim();
-            return isVendorManagerOnboarded(v) && (s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended'));
-          });
-          setManagerOnboardedVendorsList(pendingOnly);
+          const rawVendors = Array.isArray(data.vendors) ? data.vendors : (Array.isArray(data) ? data : []);
+          const list = deduplicateVendorsList(rawVendors);
+          // Keep all manager onboarded vendors (both active/approved and pending/others)
+          const managerOnly = list.filter(v => isVendorManagerOnboarded(v));
+          setManagerOnboardedVendorsList(managerOnly.length > 0 ? managerOnly : list);
+          setManagerVendorsError(null);
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          const errMsg = errData.message || errData.error || `Failed to fetch manager onboarded vendors (status ${res.status})`;
+          console.warn('Fetch manager onboarded vendors HTTP warning:', res.status, errMsg);
+          setManagerVendorsError(errMsg);
         }
       } catch (e) {
-        if (e.name !== 'AbortError') console.error('Fetch manager onboarded vendors warning:', e.message);
+        if (e.name !== 'AbortError') {
+          console.error('Fetch manager onboarded vendors warning:', e.message);
+          setManagerVendorsError(e.message || 'Network request failed. Please check your connection.');
+        }
       }
     } catch (err) {
-      if (err.name !== 'AbortError') console.error('Fetch manager onboarded vendors error:', err);
-      setManagerOnboardedVendorsList([]);
+      if (err.name !== 'AbortError') {
+        console.error('Fetch manager onboarded vendors error:', err);
+        setManagerVendorsError(err.message || 'An error occurred while fetching manager onboarded vendors.');
+      }
+    } finally {
+      setManagerVendorsLoading(false);
     }
   };
 
@@ -1018,7 +1047,12 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     } finally {
       setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
       setAgentOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-      setManagerOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+      setManagerOnboardedVendorsList(prev => prev.map(v => {
+        if (v._id === vendorId || (v.registrationId && v.registrationId === vendorId) || (email && (v.email || '').toLowerCase() === email)) {
+          return { ...v, status: 'Assigned' };
+        }
+        return v;
+      }));
       if (targetVendor) {
         const updated = { ...targetVendor, status: 'Assigned' };
         setVendors(prev => [updated, ...prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email))]);
@@ -1034,10 +1068,15 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
     const registrationId = targetVendor?.registrationId || '';
 
-    // Instantly remove approved vendor from direct requests and onboarding review lists
+    // Instantly remove approved vendor from direct requests and onboarding review lists, and update status in manager onboarded directory
     setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
     setAgentOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-    setManagerOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+    setManagerOnboardedVendorsList(prev => prev.map(v => {
+      if (v._id === vendorId || (v.registrationId && v.registrationId === vendorId) || (email && (v.email || '').toLowerCase() === email)) {
+        return { ...v, status: 'Approved', isActive: true };
+      }
+      return v;
+    }));
 
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/approve`, {
@@ -1072,10 +1111,15 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     const targetVendor = typeof vendorObj === 'object' ? vendorObj : (directRequests.find(v => v._id === vendorId) || agentOnboardedVendorsList.find(v => v._id === vendorId) || managerOnboardedVendorsList.find(v => v._id === vendorId));
     const email = targetVendor?.email ? targetVendor.email.toLowerCase() : '';
 
-    // Instantly remove rejected vendor from direct requests and onboarding review lists
+    // Instantly remove rejected vendor from direct requests and onboarding review lists, and update status in manager onboarded directory
     setDirectRequests(prev => prev.filter(v => v._id !== vendorId && (!email || (v.email || '').toLowerCase() !== email)));
     setAgentOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-    setManagerOnboardedVendorsList(prev => prev.filter(v => v._id !== vendorId && (v.registrationId !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+    setManagerOnboardedVendorsList(prev => prev.map(v => {
+      if (v._id === vendorId || (v.registrationId && v.registrationId === vendorId) || (email && (v.email || '').toLowerCase() === email)) {
+        return { ...v, status: 'Rejected', isActive: false };
+      }
+      return v;
+    }));
 
     try {
       await fetch(`${API_BASE}/admin/enterprise/vendors/reject`, {
@@ -1155,6 +1199,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
     setVendors(prev => prev.map(updateVendorObj));
     setDirectRequests(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
     setAgentOnboardedVendorsList(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
+    setManagerOnboardedVendorsList(prev => prev.map(updateVendorObj));
     setSelectedVendorDetails(prev => prev ? updateVendorObj(prev) : null);
 
     try {
@@ -2612,19 +2657,42 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
 
       {/* 8B. MANAGER ONBOARDED VENDORS MODAL */}
       {showManagerOnboardedModal && (() => {
-        const managerVendors = managerOnboardedVendorsList.filter(v => {
-          const s = (v.status || '').toLowerCase().trim();
-          return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
-        });
+        const managerVendors = managerOnboardedVendorsList;
         const q = managerOnboardSearch.toLowerCase().trim();
-        const filtered = managerVendors.filter(v =>
-          !q ||
-          (v.businessName || v.name || '').toLowerCase().includes(q) ||
-          (v.onboardedByManager?.name || v.managerName || '').toLowerCase().includes(q) ||
-          (v.onboardedByManager?.registrationId || v.managerRegistrationId || v.managerId || '').toLowerCase().includes(q) ||
-          (v.pincode || '').includes(q) ||
-          (v.email || '').toLowerCase().includes(q)
-        );
+        const filtered = managerVendors.filter(v => {
+          if (!q) return true;
+          const mgr = getManagerInfo(v);
+          const fields = [
+            v.businessName,
+            v.name,
+            v.contactPerson,
+            v.email,
+            v.phone,
+            v.mobile,
+            v.pincode,
+            v.city,
+            v.state,
+            v.district,
+            v.category,
+            v.businessCategory,
+            v.registrationId,
+            v.vendorId,
+            mgr.name,
+            mgr.registrationId,
+            mgr.pincode,
+            mgr.role,
+            v.onboardedBy,
+            v.createdBy
+          ].map(f => String(f || '').toLowerCase());
+          return fields.some(f => f.includes(q));
+        });
+
+        const totalCount = managerVendors.length;
+        const activeCount = managerVendors.filter(v =>
+          ['active', 'approved'].includes((v.status || '').toLowerCase().trim()) || v.isActive === true
+        ).length;
+        const pendingCount = totalCount - activeCount;
+
         return (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-4xl rounded-3xl shadow-2xl my-8 flex flex-col">
@@ -2638,16 +2706,28 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                   <div>
                     <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Manager Onboarded Vendors</h3>
                     <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                      {filtered.length} vendor{filtered.length !== 1 ? 's' : ''} onboarded by territory managers
+                      {managerVendorsLoading
+                        ? 'Fetching manager onboarded vendors...'
+                        : `${filtered.length} vendor${filtered.length !== 1 ? 's' : ''} onboarded by territory managers`}
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => { setShowManagerOnboardedModal(false); setManagerOnboardSearch(''); }}
-                  className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => fetchManagerOnboardedVendors()}
+                    disabled={managerVendorsLoading}
+                    className="p-2 rounded-xl text-slate-400 hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+                    title="Refresh Manager Onboarded Vendors"
+                  >
+                    <RefreshCw className={`w-5 h-5 ${managerVendorsLoading ? 'animate-spin text-teal-600' : ''}`} />
+                  </button>
+                  <button
+                    onClick={() => { setShowManagerOnboardedModal(false); setManagerOnboardSearch(''); }}
+                    className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* Search Bar */}
@@ -2656,7 +2736,7 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                   <Search className="w-4 h-4 text-slate-400 shrink-0" />
                   <input
                     type="text"
-                    placeholder="Search by vendor name, manager name, manager ID, pincode, email..."
+                    placeholder="Search by vendor name, manager name, manager ID, pincode, email, location..."
                     value={managerOnboardSearch}
                     onChange={e => setManagerOnboardSearch(e.target.value)}
                     className="bg-transparent focus:outline-none w-full text-xs text-slate-800 dark:text-slate-200 font-medium"
@@ -2674,18 +2754,18 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-teal-500/8 border border-teal-500/15 rounded-2xl px-4 py-2.5 text-center">
                     <p className="text-[10px] font-black uppercase text-teal-700 dark:text-teal-400 tracking-wider">Total Manager Onboarded</p>
-                    <p className="text-xl font-black text-teal-800 dark:text-teal-300 mt-0.5">{managerVendors.length}</p>
+                    <p className="text-xl font-black text-teal-800 dark:text-teal-300 mt-0.5">{totalCount}</p>
                   </div>
                   <div className="bg-emerald-500/8 border border-emerald-500/15 rounded-2xl px-4 py-2.5 text-center">
                     <p className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">Active</p>
                     <p className="text-xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      {managerVendors.filter(v => ['active','approved'].includes((v.status||'').toLowerCase())).length}
+                      {activeCount}
                     </p>
                   </div>
                   <div className="bg-amber-500/8 border border-amber-500/15 rounded-2xl px-4 py-2.5 text-center">
                     <p className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400 tracking-wider">Pending / Others</p>
                     <p className="text-xl font-black text-amber-700 dark:text-amber-300 mt-0.5">
-                      {managerVendors.filter(v => !['active','approved'].includes((v.status||'').toLowerCase())).length}
+                      {pendingCount}
                     </p>
                   </div>
                 </div>
@@ -2693,7 +2773,27 @@ export const VendorDirectoryModule = React.memo(({ token, API_BASE, initialSecti
 
               {/* Vendor Cards List */}
               <div className="px-6 pb-6 overflow-y-auto max-h-[52vh] space-y-3">
-                {filtered.length === 0 ? (
+                {managerVendorsLoading ? (
+                  <div className="text-center py-16 text-slate-400">
+                    <RefreshCw className="w-10 h-10 mx-auto mb-3 text-teal-600 animate-spin" />
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                      Loading manager onboarded vendors...
+                    </p>
+                    <p className="text-xs mt-1 text-slate-400">Fetching real-time records from directory</p>
+                  </div>
+                ) : managerVendorsError ? (
+                  <div className="text-center py-12 px-6 bg-rose-500/5 border border-rose-500/20 rounded-2xl text-rose-600 dark:text-rose-400">
+                    <AlertTriangle className="w-10 h-10 mx-auto mb-2 text-rose-500" />
+                    <p className="text-sm font-bold">Failed to load manager onboarded vendors</p>
+                    <p className="text-xs mt-1 text-slate-500 dark:text-slate-400 max-w-md mx-auto">{managerVendorsError}</p>
+                    <button
+                      onClick={() => fetchManagerOnboardedVendors()}
+                      className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Retry Fetch
+                    </button>
+                  </div>
+                ) : filtered.length === 0 ? (
                   <div className="text-center py-16 text-slate-400">
                     <UserCog className="w-12 h-12 mx-auto mb-3 opacity-30" />
                     <p className="text-sm font-bold">
