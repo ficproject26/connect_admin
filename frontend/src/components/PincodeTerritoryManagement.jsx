@@ -130,6 +130,9 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
   // --- API Fetchers ---
   // Fast Summary Mode Fetcher (Loads the States Directory in <150ms with stale-while-revalidate)
   const fetchSummaryData = useCallback(async (force = false) => {
+    if (force) {
+      statesSummaryCacheRef.current = null;
+    }
     // 1. If valid cached data exists, immediately render it (0ms latency)
     if (!force && statesSummaryCacheRef.current && statesSummaryCacheRef.current.states?.length > 0) {
       setHierarchyData(statesSummaryCacheRef.current.states);
@@ -155,7 +158,8 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
           setLoading(true);
         }
         setLoadError(null);
-        const res = await fetch(`${API_BASE}/admin/territory/hierarchy?summary=true${force ? '&force=true' : ''}`, {
+        const statusParam = (filterStatus && filterStatus !== 'All') ? `&status=${encodeURIComponent(filterStatus.toLowerCase())}` : '&status=all';
+        const res = await fetch(`${API_BASE}/admin/territory/hierarchy?summary=true${statusParam}${force ? '&force=true' : ''}`, {
           headers: { 'x-auth-token': token }
         });
         const data = await res.json();
@@ -214,7 +218,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
 
     inFlightSummaryPromiseRef.current = task;
     await task;
-  }, [API_BASE, token]);
+  }, [API_BASE, token, filterStatus]);
 
   // State-Scoped Drilldown Fetcher (Queries ONLY that state's districts, divisions, pincodes)
   const fetchStateHierarchy = useCallback(async (targetState, force = false) => {

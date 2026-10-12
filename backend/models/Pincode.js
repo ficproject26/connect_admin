@@ -27,6 +27,7 @@ const PincodeSchema = new mongoose.Schema({
     divisionId: { type: mongoose.Schema.Types.Mixed, ref: 'Division', default: null },
 
     activeAgentId: { type: mongoose.Schema.Types.Mixed, ref: 'User', default: null },
+    isAssigned: { type: Boolean, default: false },
     joiningFee: { type: Number, default: 100000 },
     isBlocked: { type: Boolean, default: false }
 }, {

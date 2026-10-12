@@ -344,7 +344,14 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                     { $match: childMatch },
                     {
                         $group: {
-                            _id: { $toString: '$stateId' },
+                            _id: {
+                                $convert: {
+                                    input: { $ifNull: ['$stateId._id', '$stateId'] },
+                                    to: 'string',
+                                    onError: null,
+                                    onNull: null
+                                }
+                            },
                             count: { $sum: 1 },
                             activeCount: {
                                 $sum: { $cond: [{ $in: ['$status', activeStatusList] }, 1, 0] }
@@ -356,7 +363,14 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                     { $match: childMatch },
                     {
                         $group: {
-                            _id: { $toString: '$stateId' },
+                            _id: {
+                                $convert: {
+                                    input: { $ifNull: ['$stateId._id', '$stateId'] },
+                                    to: 'string',
+                                    onError: null,
+                                    onNull: null
+                                }
+                            },
                             count: { $sum: 1 },
                             activeCount: {
                                 $sum: { $cond: [{ $in: ['$status', activeStatusList] }, 1, 0] }
@@ -368,7 +382,14 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                     { $match: childMatch },
                     {
                         $group: {
-                            _id: { $toString: '$stateId' },
+                            _id: {
+                                $convert: {
+                                    input: { $ifNull: ['$stateId._id', { $ifNull: ['$stateId', '$state'] }] },
+                                    to: 'string',
+                                    onError: null,
+                                    onNull: null
+                                }
+                            },
                             count: { $sum: 1 },
                             activeCount: {
                                 $sum: { $cond: [{ $in: ['$status', activeStatusList] }, 1, 0] }
@@ -407,15 +428,28 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
 
             const statesWithTotals = states.map(st => {
                 const stIdStr = String(st._id);
-                const dAgg = districtCounts.find(d => d._id === stIdStr);
-                const vAgg = divisionCounts.find(v => v._id === stIdStr);
-                const pAgg = pincodeCounts.find(p => p._id === stIdStr);
+                const stName = (st.name || '').toLowerCase();
+                const stCode = (st.code || '').toLowerCase();
+                const stCustomId = (st.stateId || '').toLowerCase();
 
-                const dCount = dAgg?.count || 0;
-                const vCount = vAgg?.count || 0;
-                const pCount = pAgg?.count || 0;
-                const activePCount = pAgg?.activeCount || 0;
-                const assignedPCount = pAgg?.assignedCount || 0;
+                const isMatch = (item) => {
+                    if (!item || item._id === null || item._id === undefined) return false;
+                    const idStr = String(item._id).toLowerCase();
+                    return idStr === stIdStr.toLowerCase() ||
+                           idStr === stName ||
+                           idStr === stCode ||
+                           idStr === stCustomId;
+                };
+
+                const dAggs = districtCounts.filter(isMatch);
+                const vAggs = divisionCounts.filter(isMatch);
+                const pAggs = pincodeCounts.filter(isMatch);
+
+                const dCount = dAggs.reduce((sum, d) => sum + (d.count || 0), 0);
+                const vCount = vAggs.reduce((sum, v) => sum + (v.count || 0), 0);
+                const pCount = pAggs.reduce((sum, p) => sum + (p.count || 0), 0);
+                const activePCount = pAggs.reduce((sum, p) => sum + (p.activeCount || 0), 0);
+                const assignedPCount = pAggs.reduce((sum, p) => sum + (p.assignedCount || 0), 0);
 
                 totalDistricts += dCount;
                 totalDivisions += vCount;
@@ -438,14 +472,20 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 };
             });
 
+            const dbTotalDistricts = districtCounts.reduce((sum, d) => sum + (d.count || 0), 0);
+            const dbTotalDivisions = divisionCounts.reduce((sum, v) => sum + (v.count || 0), 0);
+            const dbTotalPincodes = pincodeCounts.reduce((sum, p) => sum + (p.count || 0), 0);
+            const dbTotalActivePins = pincodeCounts.reduce((sum, p) => sum + (p.activeCount || 0), 0);
+            const dbTotalAssignedPins = pincodeCounts.reduce((sum, p) => sum + (p.assignedCount || 0), 0);
+
             const hierarchyStats = {
                 totalStates: statesWithTotals.length,
-                totalDistricts,
-                totalDivisions,
-                totalPincodes,
-                activePincodes: totalActivePins,
-                assignedPincodes: totalAssignedPins,
-                availablePincodes: Math.max(0, totalPincodes - totalAssignedPins),
+                totalDistricts: Math.max(totalDistricts, dbTotalDistricts),
+                totalDivisions: Math.max(totalDivisions, dbTotalDivisions),
+                totalPincodes: Math.max(totalPincodes, dbTotalPincodes),
+                activePincodes: Math.max(totalActivePins, dbTotalActivePins),
+                assignedPincodes: Math.max(totalAssignedPins, dbTotalAssignedPins),
+                availablePincodes: Math.max(0, Math.max(totalPincodes, dbTotalPincodes) - Math.max(totalAssignedPins, dbTotalAssignedPins)),
                 activeManagers: agents.length + managers.length
             };
 
@@ -458,9 +498,9 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 rawDivisions: [],
                 rawPincodes: [],
                 totalStates: statesWithTotals.length,
-                totalDistricts,
-                totalDivisions,
-                totalPincodes,
+                totalDistricts: hierarchyStats.totalDistricts,
+                totalDivisions: hierarchyStats.totalDivisions,
+                totalPincodes: hierarchyStats.totalPincodes,
                 totalAgents: agents.length,
                 stats: hierarchyStats
             };

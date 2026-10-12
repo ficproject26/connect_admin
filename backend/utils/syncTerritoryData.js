@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 const mongoose = require('mongoose');
 const State = require('../models/State');
 const District = require('../models/District');
@@ -26,7 +27,7 @@ async function syncTerritoryData(options = { force: false }) {
     console.log(`Current territory counts: States: ${stateCount}, Districts: ${districtCount}, Divisions: ${divisionCount}, Pincodes: ${pincodeCount}`);
 
     // If counts are already complete and not force mode, nothing to do
-    if (!options.force && stateCount >= 3 && districtCount >= 50 && divisionCount >= 300 && pincodeCount >= 600) {
+    if (!options.force && stateCount >= 3 && districtCount >= 58 && divisionCount >= 370 && pincodeCount >= 2000) {
         console.log('✅ Territory data already populated and intact.');
         return { success: true, message: 'Data already intact', counts: { stateCount, districtCount, divisionCount, pincodeCount } };
     }
@@ -420,7 +421,7 @@ async function syncTerritoryData(options = { force: false }) {
             console.log(`Linking ${assignments.length} existing pincode assignments...`);
             for (const a of assignments) {
                 if (a.pincode) {
-                    const updateObj = {};
+                    const updateObj = { isAssigned: true };
                     if (a.assignedAgentId) updateObj.activeAgentId = a.assignedAgentId;
                     if (a.stateId) updateObj.stateId = a.stateId;
                     if (a.districtId) updateObj.districtId = a.districtId;
