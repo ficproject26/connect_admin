@@ -42,7 +42,10 @@ async function getUnifiedRealManagers(territoryFilter = {}, options = {}) {
     const { search, state, district, division, pincode, level, status } = options;
 
     // 1. Fetch from Manager collection
-    const rawFromManager = await Manager.find({})
+    const rawFromManager = await Manager.find({
+        role: { $nin: ['agent', 'Agent', 'admin', 'Admin', 'super-admin', 'superadmin', 'vendor', 'customer'] },
+        registrationId: { $not: { $regex: '^(ADM-|REG-)', $options: 'i' } }
+    })
         .populate('parentAdminId', 'name email adminRole adminLevel')
         .populate('approvedBy', 'name email')
         .lean()
@@ -53,7 +56,9 @@ async function getUnifiedRealManagers(territoryFilter = {}, options = {}) {
         $or: [
             { role: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'] } },
             { adminRole: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager'] } }
-        ]
+        ],
+        role: { $nin: ['agent', 'Agent', 'admin', 'Admin', 'super-admin', 'superadmin', 'vendor', 'customer'] },
+        registrationId: { $not: { $regex: '^(ADM-|REG-)', $options: 'i' } }
     }).lean().catch(() => []);
 
     // 3. Normalize all manager records
@@ -63,6 +68,12 @@ async function getUnifiedRealManagers(territoryFilter = {}, options = {}) {
 
     const normalizeDoc = (doc) => {
         if (!doc) return;
+        const roleLower = String(doc.role || '').toLowerCase();
+        const adminRoleLower = String(doc.adminRole || '').toLowerCase();
+        const regId = String(doc.registrationId || doc.managerId || doc.id || '');
+        if (roleLower === 'agent' || roleLower.includes('admin') || adminRoleLower.includes('admin') || regId.startsWith('ADM-') || regId.startsWith('REG-')) {
+            return;
+        }
         const docId = String(doc._id || doc.id);
         const email = String(doc.email || '').toLowerCase().trim();
 

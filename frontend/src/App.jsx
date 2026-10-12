@@ -1467,8 +1467,24 @@ function App() {
         if (apiCacheRef.current) apiCacheRef.current['agents'] = [];
         return;
       }
+      const isPureAgent = (item) => {
+        if (!item) return false;
+        const ag = item.agent || item;
+        const r = String(ag.role || item.role || '').toLowerCase().trim();
+        const ar = String(ag.adminRole || item.adminRole || '').toLowerCase().trim();
+        const regId = String(ag.registrationId || ag.id || item.registrationId || item.id || '').trim();
+        const idStr = String(ag._id || item._id || '').trim();
+
+        if (regId.startsWith('ADM-') || idStr.startsWith('ADM-')) return false;
+        if (r.includes('admin') || ar.includes('admin')) return false;
+        if (regId.startsWith('usr_mgr') || regId.startsWith('MGR-') || idStr.startsWith('usr_mgr')) return false;
+        if (r.includes('manager') || r.includes('mgr') || ar.includes('manager')) return false;
+        if (['vendor', 'merchant', 'customer'].includes(r)) return false;
+        return true;
+      };
+
       const seen = new Set();
-      const normalized = list.map(item => {
+      const normalized = list.filter(isPureAgent).map(item => {
         if (!item) return null;
         const ag = item.agent || item;
         const metrics = item.metrics || {};

@@ -301,10 +301,19 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
             MembershipPlan.countDocuments({ isActive: true }),
             User.countDocuments({ role: 'admin', adminRole: { $in: ['branch-admin', 'staff'] }, ...(isBranchScoped ? { branchId } : {}) }),
             Branch.find().select('_id name').lean(),
-            User.find({ role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] }, ...(isBranchScoped ? { branchId } : {}) })
+            User.find({
+                role: { $in: ['agent', 'Agent'] },
+                registrationId: { $not: { $regex: '^(ADM-|usr_mgr|MGR-)', $options: 'i' } },
+                ...(isBranchScoped ? { branchId } : {})
+            })
                 .select('_id name fullName email phone altPhone role level agentLevel assignedRole agentType status kycStatus isActive isApproved registrationId branchId createdAt')
                 .lean(),
-            db ? db.collection('agents').find(isBranchScoped ? { branchId } : {}, {
+            db ? db.collection('agents').find({
+                role: { $nin: ['admin', 'super-admin', 'superadmin', 'manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'vendor', 'customer'] },
+                registrationId: { $not: { $regex: '^(ADM-|usr_mgr|MGR-)', $options: 'i' } },
+                _id: { $not: /^usr_mgr/i },
+                ...(isBranchScoped ? { branchId } : {})
+            }, {
                 projection: { _id: 1, name: 1, fullName: 1, email: 1, phone: 1, altPhone: 1, role: 1, level: 1, agentLevel: 1, assignedRole: 1, agentType: 1, status: 1, kycStatus: 1, isActive: 1, isApproved: 1, registrationId: 1, branchId: 1, createdAt: 1 }
             }).toArray().catch(() => []) : [],
             User.find({ role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] }, ...(isBranchScoped ? { branchId } : {}) })
@@ -334,6 +343,11 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         const agentMap = new Map();
         [...(agentsUsers || []), ...(rawAgentsList || [])].forEach(agent => {
             if (!agent) return;
+            const regId = String(agent.registrationId || agent.id || '');
+            const idStr = String(agent._id || '');
+            const r = String(agent.role || '').toLowerCase();
+            const ar = String(agent.adminRole || '').toLowerCase();
+            if (regId.startsWith('ADM-') || idStr.startsWith('ADM-') || regId.startsWith('usr_mgr') || idStr.startsWith('usr_mgr') || r.includes('admin') || r.includes('manager') || ar.includes('admin') || ar.includes('manager') || ['vendor', 'customer'].includes(r)) return;
             const emailKey = (agent.email || '').toLowerCase().trim();
             const phoneKey = (agent.phone || agent.mobile || agent.altPhone || '').replace(/\D/g, '');
             const regKey = (agent.registrationId || agent.id || '').toLowerCase().trim();
@@ -1193,7 +1207,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         // 1. Fetch agents from User collection with high-performance indexed query filter
         const userAgentFilter = {
             $and: [
-                { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] } }
+                { role: { $in: ['agent', 'Agent'] } },
+                { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'District Admin', 'Division Admin', 'Pincode Admin', 'State Admin'] } },
+                { registrationId: { $not: { $regex: '^(ADM-|usr_mgr|MGR-)', $options: 'i' } } }
             ]
         };
 
@@ -1330,10 +1346,18 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
         try {
             if (db) {
+                const rawAgentFilter = {
+                    $and: [
+                        { role: { $nin: ['admin', 'super-admin', 'superadmin', 'manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'vendor', 'customer'] } },
+                        { registrationId: { $not: { $regex: '^(ADM-|usr_mgr|MGR-)', $options: 'i' } } },
+                        { _id: { $not: /^usr_mgr/i } }
+                    ]
+                };
+
                 // Execute all independent database queries in parallel
                 const [uRes, rRes, uvRes, vmRes] = await Promise.allSettled([
                     db.collection('users').find(userAgentFilter, { projection: agentProjection }).sort({ createdAt: -1 }).maxTimeMS(4000).toArray(),
-                    db.collection('agents').find({}, { projection: agentProjection }).maxTimeMS(4000).toArray(),
+                    db.collection('agents').find(rawAgentFilter, { projection: agentProjection }).maxTimeMS(4000).toArray(),
                     db.collection('users').find({ role: { $in: ['Vendor', 'vendor'] } }, { projection: { _id: 1, email: 1, referredBy: 1, agentId: 1, onboardedBy: 1 } }).maxTimeMS(3000).toArray(),
                     db.collection('vendors').find({}, { projection: { _id: 1, agentId: 1, email: 1 } }).maxTimeMS(3000).toArray()
                 ]);
@@ -1347,6 +1371,24 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         } catch (err) {
             console.error("Error parallel querying userAgents:", err.message);
         }
+
+        const isPureAgentRecord = (item) => {
+            if (!item) return false;
+            const r = String(item.role || '').toLowerCase().trim();
+            const ar = String(item.adminRole || '').toLowerCase().trim();
+            const regId = String(item.registrationId || item.id || '').trim();
+            const idStr = String(item._id || '').trim();
+
+            if (regId.startsWith('ADM-') || idStr.startsWith('ADM-')) return false;
+            if (r.includes('admin') || ar.includes('admin')) return false;
+
+            if (regId.startsWith('usr_mgr') || regId.startsWith('MGR-') || idStr.startsWith('usr_mgr')) return false;
+            if (r.includes('manager') || r.includes('mgr') || ar.includes('manager')) return false;
+
+            if (['vendor', 'merchant', 'customer'].includes(r)) return false;
+
+            return true;
+        };
 
         const agentMap = new Map();
 
@@ -1383,6 +1425,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         };
 
         userAgents.forEach(agent => {
+            if (!isPureAgentRecord(agent)) return;
             const cleanLevel = resolveAgentCleanLevel(agent);
             const key = (agent.registrationId || agent.email || (agent._id ? agent._id.toString() : '')).toLowerCase().trim();
             if (key) {
@@ -1463,6 +1506,7 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         });
 
         rawAgents.forEach(raw => {
+            if (!isPureAgentRecord(raw)) return;
             const rawIdStr = raw._id ? raw._id.toString() : '';
             const key = (raw.registrationId || raw.email || rawIdStr).toLowerCase().trim();
             const cleanLevel = resolveAgentCleanLevel(raw);
@@ -1749,6 +1793,20 @@ const findAgentByIdentifier = async (idParam, extraFields = {}) => {
         } catch (e) {}
     }
 
+    if (agent) {
+        const r = String(agent.role || '').toLowerCase().trim();
+        const ar = String(agent.adminRole || '').toLowerCase().trim();
+        const regId = String(agent.registrationId || agent.id || '').trim();
+        const idStr = String(agent._id || '').trim();
+
+        if (regId.startsWith('ADM-') || idStr.startsWith('ADM-')) return null;
+        if (r.includes('admin') || ar.includes('admin')) return null;
+        if (regId.startsWith('usr_mgr') || regId.startsWith('MGR-') || idStr.startsWith('usr_mgr')) return null;
+        if (r.includes('manager') || r.includes('mgr') || ar.includes('manager')) return null;
+        if (['vendor', 'merchant', 'customer'].includes(r)) return null;
+        if (r && r !== 'agent' && !['state', 'district', 'division', 'pincode'].includes(r)) return null;
+    }
+
     return agent;
 };
 
@@ -1766,12 +1824,19 @@ router.get('/agents/:id', [auth, adminAuth], async (req, res) => {
         if (!agent && db) {
             const isValidId = idParam && mongoose.Types.ObjectId.isValid(idParam);
             const rawAgent = await db.collection('agents').findOne({
-                $or: [
-                    ...(isValidId ? [{ _id: new mongoose.Types.ObjectId(idParam) }] : []),
-                    { _id: idParam },
-                    { id: idParam },
-                    { registrationId: idParam },
-                    { email: String(idParam).toLowerCase() }
+                $and: [
+                    { role: { $nin: ['admin', 'super-admin', 'superadmin', 'manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'vendor', 'customer'] } },
+                    { registrationId: { $not: /^ADM-/i, $not: /^usr_mgr/i, $not: /^MGR-/i } },
+                    { _id: { $not: /^usr_mgr/i } },
+                    {
+                        $or: [
+                            ...(isValidId ? [{ _id: new mongoose.Types.ObjectId(idParam) }] : []),
+                            { _id: idParam },
+                            { id: idParam },
+                            { registrationId: idParam },
+                            { email: String(idParam).toLowerCase() }
+                        ]
+                    }
                 ]
             });
             if (rawAgent) agent = rawAgent;
@@ -1844,13 +1909,20 @@ router.get('/agents/:id/scorecard', [auth, adminAuth], async (req, res) => {
         if (!agent && db) {
             const isValidId = idParam && mongoose.Types.ObjectId.isValid(idParam);
             const rawAgent = await db.collection('agents').findOne({
-                $or: [
-                    { _id: idParam },
-                    { id: idParam },
-                    ...(isValidId ? [{ _id: new mongoose.Types.ObjectId(idParam) }] : []),
-                    { email: String(idParam).toLowerCase() },
-                    { registrationId: idParam },
-                    { phone: idParam }
+                $and: [
+                    { role: { $nin: ['admin', 'super-admin', 'superadmin', 'manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'vendor', 'customer'] } },
+                    { registrationId: { $not: /^ADM-/i, $not: /^usr_mgr/i, $not: /^MGR-/i } },
+                    { _id: { $not: /^usr_mgr/i } },
+                    {
+                        $or: [
+                            { _id: idParam },
+                            { id: idParam },
+                            ...(isValidId ? [{ _id: new mongoose.Types.ObjectId(idParam) }] : []),
+                            { email: String(idParam).toLowerCase() },
+                            { registrationId: idParam },
+                            { phone: idParam }
+                        ]
+                    }
                 ]
             });
             if (rawAgent) agent = rawAgent;
@@ -2045,6 +2117,16 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
             const filter = { $or: rawAgentQuery };
             const rawAgent = await db.collection('agents').findOne(filter);
             if (rawAgent) {
+                const isNonAgentDoc = (rawAgent.registrationId && String(rawAgent.registrationId).startsWith('ADM-')) ||
+                    (rawAgent.registrationId && String(rawAgent.registrationId).startsWith('usr_mgr')) ||
+                    (rawAgent.registrationId && String(rawAgent.registrationId).startsWith('MGR-')) ||
+                    (rawAgent._id && String(rawAgent._id).startsWith('usr_mgr')) ||
+                    String(rawAgent.role || '').toLowerCase().includes('admin') ||
+                    String(rawAgent.role || '').toLowerCase().includes('manager');
+                if (isNonAgentDoc) {
+                    return res.status(403).json({ success: false, msg: 'Cannot update non-agent records through agent endpoints.' });
+                }
+
                 const isApprovedVal = (targetStatus === 'approved');
                 const targetActive = typeof body.isActive !== 'undefined' ? !!body.isActive : isApprovedVal;
 
@@ -6220,7 +6302,10 @@ const handleAgentPerformanceOverview = async (req, res) => {
         }
 
         // Base user filter for agents
-        const agentFilter = { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin'] } };
+        const agentFilter = {
+            role: { $in: ['agent', 'Agent'] },
+            registrationId: { $not: { $regex: '^(ADM-|usr_mgr|MGR-)', $options: 'i' } }
+        };
         if (agentType && agentType !== 'all') {
             agentFilter.$or = [
                 { level: new RegExp(agentType, 'i') },
@@ -6372,7 +6457,12 @@ const handleAgentPerformanceOverview = async (req, res) => {
             if (db) {
                 const [uRes, rRes] = await Promise.allSettled([
                     User.find(agentFilter, agentProjection).lean(),
-                    db.collection('agents').find(agentFilter, { projection: agentProjection }).maxTimeMS(4000).toArray()
+                    db.collection('agents').find({
+                        $and: [
+                            agentFilter,
+                            { role: { $nin: ['admin', 'super-admin', 'superadmin', 'manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'vendor', 'customer'] } }
+                        ]
+                    }, { projection: agentProjection }).maxTimeMS(4000).toArray()
                 ]);
                 if (uRes.status === 'fulfilled' && Array.isArray(uRes.value)) userAgents = uRes.value;
                 if (rRes.status === 'fulfilled' && Array.isArray(rRes.value)) rawAgents = rRes.value;
@@ -6382,6 +6472,12 @@ const handleAgentPerformanceOverview = async (req, res) => {
 
             const agentMap = new Map();
             userAgents.forEach(a => {
+                const regId = String(a.registrationId || a.id || '');
+                const idStr = String(a._id || '');
+                const r = String(a.role || '').toLowerCase();
+                const ar = String(a.adminRole || '').toLowerCase();
+                if (regId.startsWith('ADM-') || idStr.startsWith('ADM-') || regId.startsWith('usr_mgr') || idStr.startsWith('usr_mgr') || r.includes('admin') || r.includes('manager') || ar.includes('admin') || ar.includes('manager')) return;
+
                 const key = (a.registrationId || a.email || (a._id ? a._id.toString() : '')).toLowerCase().trim();
                 if (key) {
                     agentMap.set(key, {
@@ -6391,6 +6487,12 @@ const handleAgentPerformanceOverview = async (req, res) => {
                 }
             });
             rawAgents.forEach(raw => {
+                const regId = String(raw.registrationId || raw.id || '');
+                const idStr = String(raw._id || '');
+                const r = String(raw.role || '').toLowerCase();
+                const ar = String(raw.adminRole || '').toLowerCase();
+                if (regId.startsWith('ADM-') || idStr.startsWith('ADM-') || regId.startsWith('usr_mgr') || idStr.startsWith('usr_mgr') || r.includes('admin') || r.includes('manager') || ar.includes('admin') || ar.includes('manager')) return;
+
                 const key = (raw.registrationId || raw.email || (raw._id ? raw._id.toString() : '')).toLowerCase().trim();
                 if (key && !agentMap.has(key)) {
                     agentMap.set(key, {

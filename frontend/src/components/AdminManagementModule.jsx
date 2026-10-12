@@ -210,7 +210,18 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
       if (res.ok) {
         const data = await res.json();
         const adminList = Array.isArray(data) ? data : (data.admins || []);
-        setAdmins(adminList);
+        // Strict role isolation: Exclude agents and managers
+        const filteredAdmins = adminList.filter(item => {
+          if (!item) return false;
+          const regId = String(item.registrationId || item.agentId || item._id || '').trim();
+          const role = String(item.role || item.adminRole || '').toLowerCase().trim();
+          if (regId.startsWith('usr_mgr') || regId.startsWith('MGR-')) return false;
+          if (role.endsWith('_manager') || role === 'manager' || role.includes('manager')) return false;
+          if (regId.startsWith('REG-')) return false;
+          if (role === 'agent') return false;
+          return true;
+        });
+        setAdmins(filteredAdmins);
         setCurrentUserTier(data?.currentUserTier || 'main');
       } else {
         setAdmins([]);

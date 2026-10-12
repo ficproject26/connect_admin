@@ -1198,7 +1198,15 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         status: filterStatus
       });
       const data = await apiFetch(`/admin/manager-directory/managers?${params.toString()}`);
-      const list = data?.managers || (Array.isArray(data) ? data : []);
+      const rawList = data?.managers || (Array.isArray(data) ? data : []);
+      const list = rawList.filter(m => {
+        if (!m) return false;
+        const r = String(m.role || '').toLowerCase();
+        const ar = String(m.adminRole || '').toLowerCase();
+        const regId = String(m.registrationId || m.managerId || m.id || '');
+        if (r === 'agent' || r.includes('admin') || ar.includes('admin') || regId.startsWith('ADM-') || regId.startsWith('REG-')) return false;
+        return true;
+      });
       setFlatManagers(list);
       setFlatTotal(data?.total || list.length);
       setFlatPage(page);

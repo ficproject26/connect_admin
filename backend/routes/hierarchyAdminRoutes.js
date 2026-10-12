@@ -227,7 +227,8 @@ const getHierarchyAdminsHandler = async (req, res) => {
                 { level: { $in: ['state', 'district', 'division', 'pincode', 1, 2, 3, 4, '1', '2', '3', '4'] } }
             ],
             // Exclude purely non-admin accounts
-            role: { $nin: ['Vendor', 'vendor', 'Member', 'member', 'customer', 'Customer', 'agent', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager'] }
+            role: { $nin: ['Vendor', 'vendor', 'Member', 'member', 'customer', 'Customer', 'agent', 'Agent', 'manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager'] },
+            registrationId: { $not: { $regex: '^(usr_mgr|MGR-|REG-)', $options: 'i' } }
         };
 
         // Apply territory isolation filter if not super admin
