@@ -174,7 +174,16 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
               stats: data.stats || {},
               timestamp: Date.now()
             };
-            setHierarchyData(statesList);
+            setHierarchyData(prev => {
+              const prevMap = new Map((prev || []).map(s => [s._id, s]));
+              return statesList.map(st => {
+                const existing = prevMap.get(st._id);
+                if (existing && existing.districts && existing.districts.length > 0 && (!st.districts || st.districts.length === 0)) {
+                  return { ...st, districts: existing.districts };
+                }
+                return st;
+              });
+            });
           } else if (statesSummaryCacheRef.current && statesSummaryCacheRef.current.states?.length > 0) {
             // Preserve valid cache if server temporarily returned empty
             setHierarchyData(statesSummaryCacheRef.current.states);
@@ -197,11 +206,17 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
           }
           setLoadError(null);
 
-          // Synchronize currently selected state if active
+          // Synchronize currently selected state while preserving loaded child districts
           const currentSelected = selectedStateRef.current;
           if (currentSelected) {
             const updatedSt = statesList.find(s => s._id === currentSelected._id);
-            if (updatedSt) setSelectedState(prev => ({ ...prev, ...updatedSt }));
+            if (updatedSt) {
+              setSelectedState(prev => {
+                if (!prev) return updatedSt;
+                const preservedDistricts = (prev.districts && prev.districts.length > 0) ? prev.districts : (updatedSt.districts || []);
+                return { ...prev, ...updatedSt, districts: preservedDistricts };
+              });
+            }
           }
         } else {
           throw new Error(data.msg || 'Failed to retrieve state records');
@@ -279,7 +294,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
 
     try {
       setTreeLoading(true);
-      const res = await fetch(`${API_BASE}/admin/territory/hierarchy`, {
+      const res = await fetch(`${API_BASE}/admin/territory/hierarchy${force ? '?force=true' : ''}`, {
         headers: { 'x-auth-token': token }
       });
       if (!res.ok) {

@@ -63,9 +63,13 @@ async function syncTerritoryData(options = { force: false }) {
     ];
 
     for (const s of statesData) {
+        const { _id: stateDbId, ...stateFields } = s;
         await State.updateOne(
             { $or: [{ _id: s._id }, { name: s.name }, { code: s.code }] },
-            { $set: s },
+            { 
+                $setOnInsert: { _id: stateDbId },
+                $set: stateFields 
+            },
             { upsert: true }
         );
     }
@@ -101,8 +105,8 @@ async function syncTerritoryData(options = { force: false }) {
             updateOne: {
                 filter: { _id: id },
                 update: {
+                    $setOnInsert: { _id: id },
                     $set: {
-                        _id: id,
                         districtId: districtId,
                         stateId: stateId,
                         name: name,
@@ -156,8 +160,8 @@ async function syncTerritoryData(options = { force: false }) {
             updateOne: {
                 filter: { $or: [{ _id: conf.id }, { name: conf.name, stateId: 'state_ka' }] },
                 update: {
+                    $setOnInsert: { _id: conf.id },
                     $set: {
-                        _id: conf.id,
                         districtId: conf.districtId,
                         stateId: 'state_ka',
                         name: conf.name,
@@ -202,8 +206,8 @@ async function syncTerritoryData(options = { force: false }) {
             updateOne: {
                 filter: { _id: id },
                 update: {
+                    $setOnInsert: { _id: id },
                     $set: {
-                        _id: id,
                         divisionId: divisionId,
                         stateId: String(v.stateId?._id || v.stateId || '6aa10f70ca0932e6eaec1f5c'),
                         districtId: String(v.districtId?._id || v.districtId),
@@ -239,8 +243,8 @@ async function syncTerritoryData(options = { force: false }) {
             updateOne: {
                 filter: { $or: [{ _id: id }, { name: name, districtId: districtId }] },
                 update: {
+                    $setOnInsert: { _id: id },
                     $set: {
-                        _id: id,
                         divisionId: divisionId,
                         stateId: 'state_ka',
                         districtId: districtId,
@@ -297,8 +301,8 @@ async function syncTerritoryData(options = { force: false }) {
             updateOne: {
                 filter: { code: code },
                 update: {
+                    $setOnInsert: { _id: `pin_${code}` },
                     $set: {
-                        _id: `pin_${code}`,
                         code: code,
                         pincodeId: `PIN-${code}`,
                         name: p.areaName || `PIN ${code}`,
@@ -332,8 +336,8 @@ async function syncTerritoryData(options = { force: false }) {
             updateOne: {
                 filter: { code: code },
                 update: {
+                    $setOnInsert: { _id: String(p._id || p.id || `pin_${code}`) },
                     $set: {
-                        _id: String(p._id || p.id || `pin_${code}`),
                         code: code,
                         pincodeId: p.pincodeId || `PIN-${code}`,
                         name: p.name || p.areaName || p.area || p.taluk || `PIN ${code}`,
@@ -376,8 +380,8 @@ async function syncTerritoryData(options = { force: false }) {
                     updateOne: {
                         filter: { code: code },
                         update: {
+                            $setOnInsert: { _id: String(p._id || `pin_${code}`) },
                             $set: {
-                                _id: String(p._id || `pin_${code}`),
                                 code: code,
                                 pincodeId: p.pincodeId || `PIN-${code}`,
                                 name: p.name || `PIN ${code}`,

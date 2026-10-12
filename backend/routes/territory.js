@@ -156,15 +156,50 @@ const logAudit = async (req, action, territoryType, territoryId, territoryName, 
     }
 };
 
+// Type-agnostic ID helper: accommodates both BSON ObjectId and custom String IDs (e.g. 'state_ka', 'dist_blr_u', '6aa10...')
+const toIdVariants = (id) => {
+    if (!id) return [];
+    const str = String(id).trim();
+    const variants = [str];
+    if (mongoose.Types.ObjectId.isValid(str) && /^[0-9a-fA-F]{24}$/.test(str)) {
+        try {
+            variants.push(new mongoose.Types.ObjectId(str));
+        } catch (e) {}
+    }
+    return variants;
+};
+
+// Safely query documents by Mixed _id or custom code/ID field
+const findTerritoryById = async (Model, id, customField = null) => {
+    if (!id) return null;
+    const variants = toIdVariants(id);
+    const conditions = [{ _id: { $in: variants } }];
+    if (customField) {
+        conditions.push({ [customField]: String(id).trim() });
+    }
+    return await Model.findOne({ $or: conditions });
+};
+
+// Safely delete documents by Mixed _id or custom code/ID field
+const deleteTerritoryById = async (Model, id, customField = null) => {
+    if (!id) return null;
+    const variants = toIdVariants(id);
+    const conditions = [{ _id: { $in: variants } }];
+    if (customField) {
+        conditions.push({ [customField]: String(id).trim() });
+    }
+    return await Model.findOneAndDelete({ $or: conditions });
+};
+
 // In-memory caching for hierarchy, summary, and drilldown to eliminate heavy database scans and reduce latency to <5ms
 let cachedHierarchyResponse = null;
 let cachedHierarchyTimestamp = 0;
 let cachedSummaryResponse = null;
 let cachedSummaryTimestamp = 0;
 const cachedDrilldownMap = new Map();
-const HIERARCHY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const SUMMARY_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const DRILLDOWN_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const HIERARCHY_CACHE_TTL = 15 * 1000; // 15 seconds real-time TTL
+const SUMMARY_CACHE_TTL = 15 * 1000; // 15 seconds real-time TTL
+const DRILLDOWN_CACHE_TTL = 15 * 1000; // 15 seconds real-time TTL
 
 const invalidateHierarchyCache = () => {
     cachedHierarchyResponse = null;
@@ -204,7 +239,7 @@ const autoSyncExistingPincodes = async (force = false) => {
             const divName = (pin.division || '').trim();
 
             // 1. Ensure State
-            let st = pin.stateId ? await State.findById(pin.stateId) : null;
+            let st = pin.stateId ? await findTerritoryById(State, pin.stateId, 'stateId') : null;
             if (!st) {
                 st = await State.findOne({
                     $or: [
@@ -224,10 +259,10 @@ const autoSyncExistingPincodes = async (force = false) => {
             }
 
             // 2. Ensure District
-            let dist = pin.districtId ? await District.findById(pin.districtId) : null;
+            let dist = pin.districtId ? await findTerritoryById(District, pin.districtId, 'districtId') : null;
             if (!dist && distName) {
                 dist = await District.findOne({
-                    stateId: st._id,
+                    stateId: { $in: toIdVariants(st._id) },
                     $or: [
                         { name: new RegExp(`^${distName}$`, 'i') },
                         { code: distName.substring(0, 4).toUpperCase() }
@@ -246,10 +281,10 @@ const autoSyncExistingPincodes = async (force = false) => {
             }
 
             // 3. Ensure Division
-            let div = pin.divisionId ? await Division.findById(pin.divisionId) : null;
+            let div = pin.divisionId ? await findTerritoryById(Division, pin.divisionId, 'divisionId') : null;
             if (!div && dist) {
                 if (divName && divName !== 'General' && divName !== 'Central') {
-                    div = await Division.findOne({ districtId: dist._id, name: new RegExp(`^${divName}$`, 'i') });
+                    div = await Division.findOne({ districtId: { $in: toIdVariants(dist._id) }, name: new RegExp(`^${divName}$`, 'i') });
                 }
 
                 if (!div) {
@@ -1160,7 +1195,7 @@ router.post('/states', [auth, superAdminAuth], async (req, res) => {
 router.put('/states/:id', [auth, superAdminAuth], async (req, res) => {
     try {
         const { name, code, status, description, logo, notes } = req.body;
-        const state = await State.findById(req.params.id);
+        const state = await findTerritoryById(State, req.params.id, 'stateId');
         if (!state) return res.status(404).json({ msg: 'State not found' });
 
         const prev = state.toObject();
@@ -1174,7 +1209,14 @@ router.put('/states/:id', [auth, superAdminAuth], async (req, res) => {
         state.updatedBy = req.adminUser._id;
 
         await state.save();
+        invalidateHierarchyCache();
         await logAudit(req, 'State Updated', 'State', state.stateId, state.name, prev, state.toObject());
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('state_updated', state);
+            io.emit('territory_updated', { type: 'state', data: state });
+        }
 
         res.json({ success: true, data: state });
     } catch (err) {
@@ -1190,15 +1232,22 @@ router.patch('/states/:id/status', [auth, superAdminAuth], async (req, res) => {
             return res.status(400).json({ msg: 'Invalid status. Must be Active or Inactive' });
         }
 
-        const state = await State.findById(req.params.id);
+        const state = await findTerritoryById(State, req.params.id, 'stateId');
         if (!state) return res.status(404).json({ msg: 'State not found' });
 
         const prevStatus = state.status;
         state.status = status;
         state.updatedBy = req.adminUser._id;
         await state.save();
+        invalidateHierarchyCache();
 
         await logAudit(req, `Territory ${status === 'Active' ? 'Reactivated' : 'Deactivated'}`, 'State', state.stateId, state.name, { status: prevStatus }, { status });
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('state_updated', state);
+            io.emit('territory_updated', { type: 'state', data: state });
+        }
 
         res.json({ success: true, data: state });
     } catch (err) {
@@ -1267,11 +1316,7 @@ router.get('/districts', [optionalAuth], async (req, res) => {
         }
 
         if (targetStateId) {
-            const stCond = [{ stateId: targetStateId }, { stateId: String(targetStateId) }];
-            if (mongoose.Types.ObjectId.isValid(targetStateId)) {
-                stCond.push({ stateId: new mongoose.Types.ObjectId(targetStateId) });
-            }
-            filter.$or = stCond;
+            filter.stateId = { $in: toIdVariants(targetStateId) };
         }
 
         const districts = await District.find(filter).populate('stateId', 'name code').sort({ name: 1 }).lean();
@@ -1323,7 +1368,7 @@ router.post('/districts', [auth, superAdminAuth], async (req, res) => {
         }
 
         // Verify parent state exists
-        const state = await State.findById(stateId);
+        const state = await findTerritoryById(State, stateId, 'stateId');
         if (!state) {
             return res.status(400).json({ msg: 'Parent State does not exist' });
         }
@@ -1334,7 +1379,7 @@ router.post('/districts', [auth, superAdminAuth], async (req, res) => {
 
         // Check uniqueness within the state
         const existing = await District.findOne({
-            stateId,
+            stateId: { $in: toIdVariants(state._id) },
             name: new RegExp(`^${trimmedName}$`, 'i')
         });
         if (existing) {
@@ -1343,7 +1388,7 @@ router.post('/districts', [auth, superAdminAuth], async (req, res) => {
 
         const newDistrict = new District({
             districtId: finalDistId,
-            stateId,
+            stateId: state._id,
             name: trimmedName,
             code: trimmedCode,
             status,
@@ -1355,7 +1400,14 @@ router.post('/districts', [auth, superAdminAuth], async (req, res) => {
         });
 
         await newDistrict.save();
+        invalidateHierarchyCache();
         await logAudit(req, 'District Created', 'District', newDistrict.districtId, newDistrict.name, null, newDistrict.toObject());
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('district_created', newDistrict);
+            io.emit('territory_updated', { type: 'district', data: newDistrict });
+        }
 
         res.status(201).json({ success: true, data: newDistrict });
     } catch (err) {
@@ -1367,7 +1419,7 @@ router.post('/districts', [auth, superAdminAuth], async (req, res) => {
 router.put('/districts/:id', [auth, superAdminAuth], async (req, res) => {
     try {
         const { name, code, status, headquarters, description, notes } = req.body;
-        const district = await District.findById(req.params.id);
+        const district = await findTerritoryById(District, req.params.id, 'districtId');
         if (!district) return res.status(404).json({ msg: 'District not found' });
 
         const prev = district.toObject();
@@ -1380,7 +1432,14 @@ router.put('/districts/:id', [auth, superAdminAuth], async (req, res) => {
         district.updatedBy = req.adminUser._id;
 
         await district.save();
+        invalidateHierarchyCache();
         await logAudit(req, 'District Updated', 'District', district.districtId, district.name, prev, district.toObject());
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('district_updated', district);
+            io.emit('territory_updated', { type: 'district', data: district });
+        }
 
         res.json({ success: true, data: district });
     } catch (err) {
@@ -1391,15 +1450,22 @@ router.put('/districts/:id', [auth, superAdminAuth], async (req, res) => {
 router.patch('/districts/:id/status', [auth, superAdminAuth], async (req, res) => {
     try {
         const { status } = req.body;
-        const district = await District.findById(req.params.id);
+        const district = await findTerritoryById(District, req.params.id, 'districtId');
         if (!district) return res.status(404).json({ msg: 'District not found' });
 
         const prevStatus = district.status;
         district.status = status;
         district.updatedBy = req.adminUser._id;
         await district.save();
+        invalidateHierarchyCache();
 
         await logAudit(req, `Territory ${status === 'Active' ? 'Reactivated' : 'Deactivated'}`, 'District', district.districtId, district.name, { status: prevStatus }, { status });
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('district_updated', district);
+            io.emit('territory_updated', { type: 'district', data: district });
+        }
 
         res.json({ success: true, data: district });
     } catch (err) {
@@ -1409,10 +1475,11 @@ router.patch('/districts/:id/status', [auth, superAdminAuth], async (req, res) =
 
 router.delete('/districts/:id', [auth, superAdminAuth], async (req, res) => {
     try {
-        const district = await District.findById(req.params.id);
+        const district = await findTerritoryById(District, req.params.id, 'districtId');
         if (!district) return res.status(404).json({ success: false, msg: 'District not found' });
 
         // Safe delete validation: check for existing child divisions, pincodes, assigned agents/managers/vendors
+        const distIdVars = toIdVariants(district._id);
         const [
             childDivisionsCount,
             childPincodesCount,
@@ -1420,8 +1487,8 @@ router.delete('/districts/:id', [auth, superAdminAuth], async (req, res) => {
             assignedManagersCount,
             assignedVendorsCount
         ] = await Promise.all([
-            Division.countDocuments({ districtId: district._id }),
-            Pincode.countDocuments({ $or: [{ districtId: district._id }, { district: district.name }] }),
+            Division.countDocuments({ districtId: { $in: distIdVars } }),
+            Pincode.countDocuments({ $or: [{ districtId: { $in: distIdVars } }, { district: district.name }] }),
             User.countDocuments({ role: 'agent', assignedDistrict: { $in: [district.name, district.code] } }),
             User.countDocuments({ role: { $in: ['admin', 'manager', 'sub-admin'] }, assignedDistrict: { $in: [district.name, district.code] } }),
             Vendor.countDocuments({ district: { $regex: new RegExp(`^${district.name}$`, 'i') } })
@@ -1441,8 +1508,15 @@ router.delete('/districts/:id', [auth, superAdminAuth], async (req, res) => {
             });
         }
 
-        await District.findByIdAndDelete(req.params.id);
+        await deleteTerritoryById(District, req.params.id, 'districtId');
+        invalidateHierarchyCache();
         await logAudit(req, 'Territory Deleted', 'District', district.districtId, district.name, district.toObject(), null);
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('district_deleted', { _id: district._id, id: req.params.id });
+            io.emit('territory_updated', { type: 'district', action: 'delete', id: req.params.id });
+        }
 
         res.json({ success: true, msg: `District "${district.name}" deleted successfully` });
     } catch (err) {
@@ -1527,23 +1601,10 @@ router.get('/divisions', [optionalAuth], async (req, res) => {
         }
 
         if (targetDistrictId) {
-            const dstCond = [{ districtId: targetDistrictId }, { districtId: String(targetDistrictId) }];
-            if (mongoose.Types.ObjectId.isValid(targetDistrictId)) {
-                dstCond.push({ districtId: new mongoose.Types.ObjectId(targetDistrictId) });
-            }
-            filter.$or = dstCond;
+            filter.districtId = { $in: toIdVariants(targetDistrictId) };
         }
         if (targetStateId) {
-            const stCond = [{ stateId: targetStateId }, { stateId: String(targetStateId) }];
-            if (mongoose.Types.ObjectId.isValid(targetStateId)) {
-                stCond.push({ stateId: new mongoose.Types.ObjectId(targetStateId) });
-            }
-            if (filter.$or) {
-                filter.$and = [{ $or: filter.$or }, { $or: stCond }];
-                delete filter.$or;
-            } else {
-                filter.$or = stCond;
-            }
+            filter.stateId = { $in: toIdVariants(targetStateId) };
         }
 
         const divisions = await Division.find(filter)
@@ -1583,7 +1644,7 @@ router.post('/divisions', [auth, superAdminAuth], async (req, res) => {
             return res.status(400).json({ msg: 'Division Name is required' });
         }
 
-        const district = await District.findById(districtId);
+        const district = await findTerritoryById(District, districtId, 'districtId');
         if (!district) {
             return res.status(400).json({ msg: 'Parent District does not exist' });
         }
@@ -1595,7 +1656,7 @@ router.post('/divisions', [auth, superAdminAuth], async (req, res) => {
 
         // Check uniqueness within the district
         const existing = await Division.findOne({
-            districtId,
+            districtId: { $in: toIdVariants(district._id) },
             name: new RegExp(`^${trimmedName}$`, 'i')
         });
         if (existing) {
@@ -1605,7 +1666,7 @@ router.post('/divisions', [auth, superAdminAuth], async (req, res) => {
         const newDivision = new Division({
             divisionId: finalDivId,
             stateId: finalStateId,
-            districtId,
+            districtId: district._id,
             name: trimmedName,
             code: trimmedCode,
             divisionType,
@@ -1618,7 +1679,14 @@ router.post('/divisions', [auth, superAdminAuth], async (req, res) => {
         });
 
         await newDivision.save();
+        invalidateHierarchyCache();
         await logAudit(req, 'Division Created', 'Division', newDivision.divisionId, newDivision.name, null, newDivision.toObject());
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('division_created', newDivision);
+            io.emit('territory_updated', { type: 'division', data: newDivision });
+        }
 
         res.status(201).json({ success: true, data: newDivision });
     } catch (err) {
@@ -1630,7 +1698,7 @@ router.post('/divisions', [auth, superAdminAuth], async (req, res) => {
 router.put('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
     try {
         const { name, code, divisionType, status, talukInfo, description, notes } = req.body;
-        const division = await Division.findById(req.params.id);
+        const division = await findTerritoryById(Division, req.params.id, 'divisionId');
         if (!division) return res.status(404).json({ msg: 'Division not found' });
 
         const prev = division.toObject();
@@ -1644,7 +1712,14 @@ router.put('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
         division.updatedBy = req.adminUser._id;
 
         await division.save();
+        invalidateHierarchyCache();
         await logAudit(req, 'Division Updated', 'Division', division.divisionId, division.name, prev, division.toObject());
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('division_updated', division);
+            io.emit('territory_updated', { type: 'division', data: division });
+        }
 
         res.json({ success: true, data: division });
     } catch (err) {
@@ -1655,15 +1730,22 @@ router.put('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
 router.patch('/divisions/:id/status', [auth, superAdminAuth], async (req, res) => {
     try {
         const { status } = req.body;
-        const division = await Division.findById(req.params.id);
+        const division = await findTerritoryById(Division, req.params.id, 'divisionId');
         if (!division) return res.status(404).json({ msg: 'Division not found' });
 
         const prevStatus = division.status;
         division.status = status;
         division.updatedBy = req.adminUser._id;
         await division.save();
+        invalidateHierarchyCache();
 
         await logAudit(req, `Territory ${status === 'Active' ? 'Reactivated' : 'Deactivated'}`, 'Division', division.divisionId, division.name, { status: prevStatus }, { status });
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('division_updated', division);
+            io.emit('territory_updated', { type: 'division', data: division });
+        }
 
         res.json({ success: true, data: division });
     } catch (err) {
@@ -1673,16 +1755,17 @@ router.patch('/divisions/:id/status', [auth, superAdminAuth], async (req, res) =
 
 router.delete('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
     try {
-        const division = await Division.findById(req.params.id);
+        const division = await findTerritoryById(Division, req.params.id, 'divisionId');
         if (!division) return res.status(404).json({ success: false, msg: 'Division not found' });
 
         // Safe delete validation: check for child pincodes and assigned agents/managers
+        const divIdVars = toIdVariants(division._id);
         const [
             childPincodesCount,
             assignedAgentsCount,
             assignedManagersCount
         ] = await Promise.all([
-            Pincode.countDocuments({ $or: [{ divisionId: division._id }, { division: division.name }] }),
+            Pincode.countDocuments({ $or: [{ divisionId: { $in: divIdVars } }, { division: division.name }] }),
             User.countDocuments({
                 role: 'agent',
                 $or: [
@@ -1711,8 +1794,15 @@ router.delete('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
             });
         }
 
-        await Division.findByIdAndDelete(req.params.id);
+        await deleteTerritoryById(Division, req.params.id, 'divisionId');
+        invalidateHierarchyCache();
         await logAudit(req, 'Territory Deleted', 'Division', division.divisionId, division.name, division.toObject(), null);
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('division_deleted', { _id: division._id, id: req.params.id });
+            io.emit('territory_updated', { type: 'division', action: 'delete', id: req.params.id });
+        }
 
         res.json({ success: true, msg: `Division "${division.name}" deleted successfully` });
     } catch (err) {
@@ -1814,15 +1904,15 @@ router.get('/pincodes', [optionalAuth], async (req, res) => {
         }
 
         if (targetDivisionId) {
-            const divConditions = [{ divisionId: targetDivisionId }, { divisionId: String(targetDivisionId) }];
+            const divConditions = [{ divisionId: { $in: toIdVariants(targetDivisionId) } }];
             if (req.query.division && req.query.division.trim()) divConditions.push({ division: req.query.division.trim() });
             filter.$or = divConditions;
         } else if (targetDistrictId) {
-            const dstConditions = [{ districtId: targetDistrictId }, { districtId: String(targetDistrictId) }];
+            const dstConditions = [{ districtId: { $in: toIdVariants(targetDistrictId) } }];
             if (req.query.district && req.query.district.trim()) dstConditions.push({ district: req.query.district.trim() });
             filter.$or = dstConditions;
         } else if (targetStateId) {
-            const stConditions = [{ stateId: targetStateId }, { stateId: String(targetStateId) }];
+            const stConditions = [{ stateId: { $in: toIdVariants(targetStateId) } }];
             if (req.query.state && req.query.state.trim()) stConditions.push({ state: req.query.state.trim() });
             filter.$or = stConditions;
         }
@@ -1866,18 +1956,24 @@ router.post('/pincodes', [auth, superAdminAuth], async (req, res) => {
         let divObj = null;
 
         if (divisionId) {
-            divObj = await Division.findById(divisionId).populate('districtId').populate('stateId');
+            divObj = await findTerritoryById(Division, divisionId, 'divisionId');
             if (divObj) {
-                distObj = divObj.districtId;
-                stateObj = divObj.stateId;
+                if (divObj.districtId) {
+                    distObj = await findTerritoryById(District, divObj.districtId, 'districtId');
+                }
+                if (divObj.stateId || distObj?.stateId) {
+                    stateObj = await findTerritoryById(State, divObj.stateId || distObj?.stateId, 'stateId');
+                }
             }
         }
         if (!distObj && districtId) {
-            distObj = await District.findById(districtId).populate('stateId');
-            if (distObj) stateObj = distObj.stateId;
+            distObj = await findTerritoryById(District, districtId, 'districtId');
+            if (distObj && distObj.stateId) {
+                stateObj = await findTerritoryById(State, distObj.stateId, 'stateId');
+            }
         }
         if (!stateObj && stateId) {
-            stateObj = await State.findById(stateId);
+            stateObj = await findTerritoryById(State, stateId, 'stateId');
         }
 
         // Check if master pincode already exists
@@ -1907,6 +2003,7 @@ router.post('/pincodes', [auth, superAdminAuth], async (req, res) => {
             if (req.body.activeAgentId) existingPin.activeAgentId = req.body.activeAgentId;
             existingPin.status = status || existingPin.status || 'Active';
             await existingPin.save();
+            invalidateHierarchyCache();
 
             // Record Pincode Assignment relationship
             const PincodeAssignment = require('../models/PincodeAssignment');
@@ -1963,7 +2060,14 @@ router.post('/pincodes', [auth, superAdminAuth], async (req, res) => {
         });
 
         await newPincode.save();
+        invalidateHierarchyCache();
         await logAudit(req, 'Pincode Created', 'Pincode', newPincode.pincodeId, newPincode.code, null, newPincode.toObject());
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('pincode_created', newPincode);
+            io.emit('territory_updated', { type: 'pincode', data: newPincode });
+        }
 
         res.status(201).json({ success: true, data: newPincode });
     } catch (err) {
@@ -1975,7 +2079,7 @@ router.post('/pincodes', [auth, superAdminAuth], async (req, res) => {
 router.put('/pincodes/:id', [auth, superAdminAuth], async (req, res) => {
     try {
         const { taluk, area, postOffice, status, description, notes, divisionId } = req.body;
-        const pin = await Pincode.findById(req.params.id);
+        const pin = await findTerritoryById(Pincode, req.params.id, 'pincodeId');
         if (!pin) return res.status(404).json({ msg: 'Pincode not found' });
 
         const prev = pin.toObject();
@@ -1991,23 +2095,36 @@ router.put('/pincodes/:id', [auth, superAdminAuth], async (req, res) => {
         if (notes !== undefined) pin.notes = notes;
 
         if (divisionId && divisionId !== String(pin.divisionId)) {
-            const divObj = await Division.findById(divisionId).populate('districtId').populate('stateId');
+            const divObj = await findTerritoryById(Division, divisionId, 'divisionId');
             if (divObj) {
                 pin.divisionId = divObj._id;
                 pin.division = divObj.name;
                 if (divObj.districtId) {
-                    pin.districtId = divObj.districtId._id;
-                    pin.district = divObj.districtId.name;
+                    const dObj = await findTerritoryById(District, divObj.districtId, 'districtId');
+                    if (dObj) {
+                        pin.districtId = dObj._id;
+                        pin.district = dObj.name;
+                    }
                 }
                 if (divObj.stateId) {
-                    pin.stateId = divObj.stateId._id;
-                    pin.state = divObj.stateId.name;
+                    const sObj = await findTerritoryById(State, divObj.stateId, 'stateId');
+                    if (sObj) {
+                        pin.stateId = sObj._id;
+                        pin.state = sObj.name;
+                    }
                 }
             }
         }
 
         await pin.save();
+        invalidateHierarchyCache();
         await logAudit(req, 'Pincode Updated', 'Pincode', pin.pincodeId || pin.code, pin.code, prev, pin.toObject());
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('pincode_updated', pin);
+            io.emit('territory_updated', { type: 'pincode', data: pin });
+        }
 
         res.json({ success: true, data: pin });
     } catch (err) {
@@ -2018,14 +2135,21 @@ router.put('/pincodes/:id', [auth, superAdminAuth], async (req, res) => {
 router.patch('/pincodes/:id/status', [auth, superAdminAuth], async (req, res) => {
     try {
         const { status } = req.body;
-        const pin = await Pincode.findById(req.params.id);
+        const pin = await findTerritoryById(Pincode, req.params.id, 'pincodeId');
         if (!pin) return res.status(404).json({ msg: 'Pincode not found' });
 
         const prevStatus = pin.status;
         pin.status = status;
         await pin.save();
+        invalidateHierarchyCache();
 
         await logAudit(req, `Territory ${status === 'Active' ? 'Reactivated' : 'Deactivated'}`, 'Pincode', pin.pincodeId || pin.code, pin.code, { status: prevStatus }, { status });
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('pincode_updated', pin);
+            io.emit('territory_updated', { type: 'pincode', data: pin });
+        }
 
         res.json({ success: true, data: pin });
     } catch (err) {
@@ -2035,7 +2159,7 @@ router.patch('/pincodes/:id/status', [auth, superAdminAuth], async (req, res) =>
 
 router.delete('/pincodes/:id', [auth, superAdminAuth], async (req, res) => {
     try {
-        const pin = await Pincode.findById(req.params.id);
+        const pin = await findTerritoryById(Pincode, req.params.id, 'pincodeId');
         if (!pin) return res.status(404).json({ success: false, msg: 'Pincode not found' });
 
         // Safe delete validation: check whether assigned to any agent, manager, or vendor territory
@@ -2066,8 +2190,15 @@ router.delete('/pincodes/:id', [auth, superAdminAuth], async (req, res) => {
             });
         }
 
-        await Pincode.findByIdAndDelete(req.params.id);
+        await deleteTerritoryById(Pincode, req.params.id, 'pincodeId');
+        invalidateHierarchyCache();
         await logAudit(req, 'Territory Deleted', 'Pincode', pin.pincodeId || pin.code, pin.code, pin.toObject(), null);
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('pincode_deleted', { _id: pin._id, code: pin.code, id: req.params.id });
+            io.emit('territory_updated', { type: 'pincode', action: 'delete', id: req.params.id });
+        }
 
         res.json({ success: true, msg: `Pincode ${pin.code} deleted successfully` });
     } catch (err) {
