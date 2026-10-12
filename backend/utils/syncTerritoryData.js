@@ -27,14 +27,14 @@ async function syncTerritoryData(options = { force: false }) {
     console.log(`Current territory counts: States: ${stateCount}, Districts: ${districtCount}, Divisions: ${divisionCount}, Pincodes: ${pincodeCount}`);
 
     // If counts are already complete and not force mode, nothing to do
-    if (!options.force && stateCount >= 3 && districtCount >= 58 && divisionCount >= 370 && pincodeCount >= 2000) {
+    if (!options.force && stateCount >= 4 && districtCount >= 58 && divisionCount >= 370 && pincodeCount >= 2000) {
         console.log('✅ Territory data already populated and intact.');
         return { success: true, message: 'Data already intact', counts: { stateCount, districtCount, divisionCount, pincodeCount } };
     }
 
     console.log('🚀 Restoring canonical territory data...');
 
-    // 1. RESTORE STATES
+    // 1. RESTORE STATES (Karnataka, Tamil Nadu, Pondicherry, Gujarat)
     const statesData = [
         {
             _id: 'state_ka',
@@ -59,6 +59,14 @@ async function syncTerritoryData(options = { force: false }) {
             code: 'PY',
             status: 'Active',
             description: 'Union Territory of Pondicherry'
+        },
+        {
+            _id: '6acc8895488562fc701f6dd5',
+            stateId: 'ST-GJ',
+            name: 'Gujarat',
+            code: 'GJ',
+            status: 'Active',
+            description: 'State of Gujarat'
         }
     ];
 
@@ -73,7 +81,7 @@ async function syncTerritoryData(options = { force: false }) {
             { upsert: true }
         );
     }
-    console.log('✅ States synchronized: Karnataka, Tamil Nadu, Pondicherry');
+    console.log('✅ States synchronized: Karnataka, Tamil Nadu, Pondicherry, Gujarat');
 
     // 2. RESTORE DISTRICTS
     const dataDir = path.join(__dirname, '..', 'data');
@@ -92,12 +100,21 @@ async function syncTerritoryData(options = { force: false }) {
     const districtOps = [];
     const usedDistrictIds = new Set();
 
+    const activeTnDoc = await State.findOne({ $or: [{ name: 'Tamil Nadu' }, { code: 'TN' }] });
+    const activeTnId = String(activeTnDoc ? activeTnDoc._id : '6aa10f70ca0932e6eaec1f5c');
+
+    const gujStateDoc = await State.findOne({ $or: [{ name: 'Gujarat' }, { code: 'GJ' }] });
+    const gujStateId = String(gujStateDoc ? gujStateDoc._id : '6acc8895488562fc701f6dd5');
+
     // 2a. Tamil Nadu & Pondicherry districts from JSON
     for (const d of districtsJson) {
         const id = String(d._id || d.id);
         const name = d.name.trim();
         const code = (d.code || name.substring(0, 4)).trim().toUpperCase();
-        const stateId = String(d.stateId?._id || d.stateId || '6aa10f70ca0932e6eaec1f5c');
+        let stateId = String(d.stateId?._id || d.stateId || '6aa10f70ca0932e6eaec1f5c');
+        if (stateId === '6aa10f70ca0932e6eaec1f5c' && activeTnId) {
+            stateId = activeTnId;
+        }
         const districtId = d.districtId || `DIST-${code}`;
         usedDistrictIds.add(districtId);
 
@@ -122,7 +139,28 @@ async function syncTerritoryData(options = { force: false }) {
         });
     }
 
-    // 2b. Karnataka districts from locationData
+    // 2b. Gujarat district (Ahmedabad) from verified audit log
+    districtOps.push({
+        updateOne: {
+            filter: { $or: [{ _id: '6acc8d72cbff842930bdf7aa' }, { districtId: 'DIST-GUJ-AHMD' }, { name: 'Ahmedabad', stateId: gujStateId }] },
+            update: {
+                $setOnInsert: { _id: '6acc8d72cbff842930bdf7aa' },
+                $set: {
+                    districtId: 'DIST-GUJ-AHMD',
+                    stateId: gujStateId,
+                    name: 'Ahmedabad',
+                    code: 'AHMD',
+                    headquarters: 'Ahmedabad',
+                    description: 'District of Gujarat',
+                    notes: '',
+                    status: 'Active'
+                }
+            },
+            upsert: true
+        }
+    });
+
+    // 2c. Karnataka districts from locationData
     const kaDistrictConfig = {
         'dist_blr_u': { id: 'dist_bengaluru_urban', code: 'BLRU', districtId: 'DIST-KAR-BLRU', name: 'Bengaluru Urban' },
         'dist_blr_r': { id: 'dist_blr_r', code: 'BLRR', districtId: 'DIST-KAR-BLRR', name: 'Bengaluru Rural' },
@@ -190,69 +228,69 @@ async function syncTerritoryData(options = { force: false }) {
 
     const divisionOps = [];
     const usedDivIds = new Set();
+    const usedDivNames = new Set();
 
-    // 3a. Tamil Nadu & Pondicherry divisions from JSON
+    // 3a. Canonical divisions from JSON (covers Tamil Nadu, Pondicherry, and Karnataka)
     for (const v of divisionsJson) {
         const id = String(v._id || v.id);
         const name = v.name.trim();
         const code = (v.code || name.substring(0, 4)).trim().toUpperCase();
         let divisionId = v.divisionId || `DIV-${id}`;
-        if (usedDivIds.has(divisionId)) {
-            divisionId = `${divisionId}-${id.slice(-4)}`;
-        }
-        usedDivIds.add(divisionId);
 
-        divisionOps.push({
-            updateOne: {
-                filter: { _id: id },
-                update: {
-                    $setOnInsert: { _id: id },
-                    $set: {
-                        divisionId: divisionId,
-                        stateId: String(v.stateId?._id || v.stateId || '6aa10f70ca0932e6eaec1f5c'),
-                        districtId: String(v.districtId?._id || v.districtId),
-                        name: name,
-                        code: code,
-                        divisionType: v.divisionType || 'Administrative',
-                        talukInfo: v.talukInfo || name,
-                        description: v.description || '',
-                        notes: v.notes || '',
-                        status: v.status || 'Active'
-                    }
-                },
-                upsert: true
-            }
-        });
+        let divStateId = String(v.stateId?._id || v.stateId || '6aa10f70ca0932e6eaec1f5c');
+        if (divStateId === '6aa10f70ca0932e6eaec1f5c' && activeTnId) {
+            divStateId = activeTnId;
+        }
+        const distId = String(v.districtId?._id || v.districtId);
+        const nameKey = `${distId}_${name.toLowerCase()}`;
+
+        if (!usedDivIds.has(id) && !usedDivNames.has(nameKey)) {
+            usedDivIds.add(id);
+            usedDivNames.add(nameKey);
+            divisionOps.push({
+                updateOne: {
+                    filter: { _id: id },
+                    update: {
+                        $setOnInsert: { _id: id },
+                        $set: {
+                            divisionId: divisionId,
+                            stateId: divStateId,
+                            districtId: distId,
+                            name: name,
+                            code: code,
+                            divisionType: v.divisionType || 'Administrative',
+                            talukInfo: v.talukInfo || name,
+                            description: v.description || '',
+                            notes: v.notes || '',
+                            status: v.status || 'Active'
+                        }
+                    },
+                    upsert: true
+                }
+            });
+        }
     }
 
-    // 3b. Karnataka divisions from locationData
-    const kaDivisions = locationData.divisions.filter(d => d.stateId === 'state_ka');
-    for (const v of kaDivisions) {
-        let rawId = String(v._id || v.id);
-        let id = rawId;
-        if (id === 'div_blr_s') id = 'div_blr_south';
-
-        let districtId = String(v.districtId);
-        if (districtId === 'dist_blr_u') districtId = 'dist_bengaluru_urban';
-
-        const name = v.name.trim();
-        const code = (v.code || name.substring(0, 4)).replace(/\s+/g, '').toUpperCase();
-        const divisionId = `DIV-KA-${id.replace('div_', '').toUpperCase()}`;
-
+    // 3b. Gujarat division (Navrangpura) from verified audit log
+    const navrId = '6acc8d73cbff842930bdf7ac';
+    const navrNameKey = '6acc8d72cbff842930bdf7aa_navrangpura';
+    if (!usedDivIds.has(navrId) && !usedDivNames.has(navrNameKey)) {
+        usedDivIds.add(navrId);
+        usedDivNames.add(navrNameKey);
         divisionOps.push({
             updateOne: {
-                filter: { $or: [{ _id: id }, { name: name, districtId: districtId }] },
+                filter: { _id: navrId },
                 update: {
-                    $setOnInsert: { _id: id },
+                    $setOnInsert: { _id: navrId },
                     $set: {
-                        divisionId: divisionId,
-                        stateId: 'state_ka',
-                        districtId: districtId,
-                        name: name,
-                        code: code,
+                        divisionId: 'DIV-AHMD-NAVR',
+                        stateId: gujStateId,
+                        districtId: '6acc8d72cbff842930bdf7aa',
+                        name: 'Navrangpura',
+                        code: 'NAVR',
                         divisionType: 'Administrative',
-                        talukInfo: name,
-                        description: 'Division in Karnataka',
+                        talukInfo: '',
+                        description: 'Division in Gujarat',
                         notes: '',
                         status: 'Active'
                     }
@@ -273,10 +311,23 @@ async function syncTerritoryData(options = { force: false }) {
         pincodesJson = JSON.parse(fs.readFileSync(path.join(dataDir, 'pincodes.json'), 'utf8'));
     }
 
+    // Fix existing Tamil Nadu pincodes in database with temporary stateId 6accb91c0ae5178fae481dee
+    if (activeTnId) {
+        try {
+            await Pincode.updateMany(
+                { stateId: '6accb91c0ae5178fae481dee' },
+                { $set: { stateId: activeTnId, state: 'Tamil Nadu' } }
+            );
+        } catch (tnErr) {
+            console.warn('TN stateId pincode normalization warning:', tnErr.message);
+        }
+    }
+
     const pincodeOps = [];
     const processedCodes = new Set();
 
     // 4a. Karnataka pincodes from locationData
+    const kaDivisions = locationData.divisions.filter(d => d.stateId === 'state_ka');
     const kaPincodes = locationData.pincodes.filter(p => p.stateId === 'state_ka');
     for (const p of kaPincodes) {
         const code = String(p.code).trim();
@@ -347,7 +398,7 @@ async function syncTerritoryData(options = { force: false }) {
                         district: p.district || '',
                         state: p.state || '',
                         division: p.division || '',
-                        stateId: p.stateId ? String(p.stateId?._id || p.stateId) : null,
+                        stateId: (p.stateId ? String(p.stateId?._id || p.stateId) : null) === '6aa10f70ca0932e6eaec1f5c' && activeTnId ? activeTnId : (p.stateId ? String(p.stateId?._id || p.stateId) : null),
                         districtId: p.districtId ? String(p.districtId?._id || p.districtId) : null,
                         divisionId: p.divisionId ? String(p.divisionId?._id || p.divisionId) : null,
                         status: p.status || 'Active',
@@ -361,7 +412,41 @@ async function syncTerritoryData(options = { force: false }) {
         });
     }
 
-    // 4c. Extra unique pincodes from territoryauditlogs (if available in DB)
+    // 4c. Gujarat Pincode (380009) from verified audit log
+    if (!processedCodes.has('380009')) {
+        processedCodes.add('380009');
+        pincodeOps.push({
+            updateOne: {
+                filter: { code: '380009' },
+                update: {
+                    $setOnInsert: { _id: '6acc8d75cbff842930bdf7ae' },
+                    $set: {
+                        code: '380009',
+                        pincodeId: 'PIN-380009',
+                        name: 'Navrangpura',
+                        postOffice: 'Navrangpura',
+                        taluk: '',
+                        area: 'Navrangpura Post Office',
+                        district: 'Ahmedabad',
+                        state: 'Gujarat',
+                        division: 'Navrangpura',
+                        deliveryStatus: 'Delivery',
+                        status: 'Active',
+                        description: '',
+                        notes: '',
+                        stateId: gujStateId,
+                        districtId: '6acc8d72cbff842930bdf7aa',
+                        divisionId: '6acc8d73cbff842930bdf7ac',
+                        joiningFee: 100000,
+                        isBlocked: false
+                    }
+                },
+                upsert: true
+            }
+        });
+    }
+
+    // 4d. Extra unique pincodes from territoryauditlogs (if available in DB)
     try {
         const db = mongoose.connection.db;
         if (db) {

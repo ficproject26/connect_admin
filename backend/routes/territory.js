@@ -467,13 +467,15 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 const stCode = (st.code || '').toLowerCase();
                 const stCustomId = (st.stateId || '').toLowerCase();
 
+                const isTn = stCode === 'tn' || stName === 'tamil nadu';
                 const isMatch = (item) => {
                     if (!item || item._id === null || item._id === undefined) return false;
                     const idStr = String(item._id).toLowerCase();
                     return idStr === stIdStr.toLowerCase() ||
                            idStr === stName ||
                            idStr === stCode ||
-                           idStr === stCustomId;
+                           idStr === stCustomId ||
+                           (isTn && (idStr === '6aa10f70ca0932e6eaec1f5c' || idStr === '6accb91c0ae5178fae481dee'));
                 };
 
                 const dAggs = districtCounts.filter(isMatch);
@@ -584,7 +586,8 @@ router.get('/hierarchy', [optionalAuth], async (req, res) => {
                 targetState.name,
                 targetState.code,
                 targetState.stateId,
-                ...(mongoose.Types.ObjectId.isValid(stIdStr) ? [new mongoose.Types.ObjectId(stIdStr)] : [])
+                ...(mongoose.Types.ObjectId.isValid(stIdStr) ? [new mongoose.Types.ObjectId(stIdStr)] : []),
+                ...((targetState.code === 'TN' || (targetState.name || '').toLowerCase() === 'tamil nadu') ? ['6aa10f70ca0932e6eaec1f5c', new mongoose.Types.ObjectId('6aa10f70ca0932e6eaec1f5c')] : [])
             ].filter(Boolean);
 
             const childFilter = {

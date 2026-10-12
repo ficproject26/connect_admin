@@ -32,8 +32,8 @@ const clearMockData = async () => {
         });
         console.log(`Deleted users count: ${deleteUsersResult.deletedCount}`);
 
-        // Delete mock collections
-        await Pincode.deleteMany({});
+        // Preserve administrative territory pincodes (do not wipe)
+        console.log('Preserved administrative territory pincodes in Pincode collection.');
         await Vendor.deleteMany({});
         await Customer.deleteMany({});
         await Order.deleteMany({});

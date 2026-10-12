@@ -34,5 +34,20 @@
     "createdAt": "2026-09-29T05:04:01.662Z",
     "updatedAt": "2026-09-29T05:04:01.662Z",
     "__v": 0
+  },
+  {
+    "_id": "6acc8895488562fc701f6dd5",
+    "stateId": "ST-GJ",
+    "name": "Gujarat",
+    "code": "GJ",
+    "status": "Active",
+    "description": "State of Gujarat",
+    "logo": "",
+    "notes": "",
+    "createdBy": "6abc986678d7803cf6a444d9",
+    "updatedBy": "6abc986678d7803cf6a444d9",
+    "createdAt": "2026-10-12T07:13:25.542Z",
+    "updatedAt": "2026-10-12T07:13:25.542Z",
+    "__v": 0
   }
 ]
