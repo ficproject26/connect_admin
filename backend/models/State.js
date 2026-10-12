@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 
 const StateSchema = new mongoose.Schema({
-    _id: { type: mongoose.Schema.Types.Mixed },
+    _id: { 
+        type: mongoose.Schema.Types.Mixed, 
+        default: () => new mongoose.Types.ObjectId() 
+    },
     stateId: { 
         type: String, 
         trim: true,

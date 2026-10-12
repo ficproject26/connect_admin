@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 
 const PincodeSchema = new mongoose.Schema({
-    _id: { type: mongoose.Schema.Types.Mixed },
+    _id: { 
+        type: mongoose.Schema.Types.Mixed, 
+        default: () => new mongoose.Types.ObjectId() 
+    },
     code: { type: String, required: true, unique: true, trim: true },
     pincodeId: { type: String, trim: true },
     name: { type: String, required: true, trim: true },

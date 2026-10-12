@@ -1,7 +1,10 @@
 const mongoose = require('mongoose');
 
 const DivisionSchema = new mongoose.Schema({
-    _id: { type: mongoose.Schema.Types.Mixed },
+    _id: { 
+        type: mongoose.Schema.Types.Mixed, 
+        default: () => new mongoose.Types.ObjectId() 
+    },
     divisionId: { 
         type: String, 
         trim: true,

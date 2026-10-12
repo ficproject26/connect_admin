@@ -1136,12 +1136,19 @@ router.post('/states', [auth, superAdminAuth], async (req, res) => {
             description,
             logo,
             notes,
-            createdBy: req.adminUser._id,
-            updatedBy: req.adminUser._id
+            createdBy: req.adminUser?._id || req.user?.id || req.user?._id || null,
+            updatedBy: req.adminUser?._id || req.user?.id || req.user?._id || null
         });
 
         await newState.save();
+        invalidateHierarchyCache();
         await logAudit(req, 'State Created', 'State', newState.stateId, newState.name, null, newState.toObject());
+
+        const io = req.app.get('io');
+        if (io) {
+            io.emit('state_created', newState);
+            io.emit('territory_updated', { type: 'state', data: newState });
+        }
 
         res.status(201).json({ success: true, data: newState });
     } catch (err) {
@@ -1343,8 +1350,8 @@ router.post('/districts', [auth, superAdminAuth], async (req, res) => {
             headquarters,
             description,
             notes,
-            createdBy: req.adminUser._id,
-            updatedBy: req.adminUser._id
+            createdBy: req.adminUser?._id || req.user?.id || req.user?._id || null,
+            updatedBy: req.adminUser?._id || req.user?.id || req.user?._id || null
         });
 
         await newDistrict.save();
@@ -1606,8 +1613,8 @@ router.post('/divisions', [auth, superAdminAuth], async (req, res) => {
             talukInfo,
             description,
             notes,
-            createdBy: req.adminUser._id,
-            updatedBy: req.adminUser._id
+            createdBy: req.adminUser?._id || req.user?.id || req.user?._id || null,
+            updatedBy: req.adminUser?._id || req.user?.id || req.user?._id || null
         });
 
         await newDivision.save();
