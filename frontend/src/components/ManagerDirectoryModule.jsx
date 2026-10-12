@@ -4,7 +4,8 @@ import {
   Phone, Mail, CheckCircle, XCircle, Clock, Globe, Map, MapPin,
   ArrowRight, Eye, Building2, Layers, Award,
   ChevronLeft, UserCheck, AlertCircle, Plus, List,
-  ShoppingBag, DollarSign, Calendar, TrendingUp, Store
+  ShoppingBag, DollarSign, Calendar, TrendingUp, Store,
+  Landmark, EyeOff, Copy
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────
@@ -276,6 +277,49 @@ const ManagerDrawer = ({ manager, onClose, API_BASE, token }) => {
             )}
           </section>
 
+          {/* Bank Details Section */}
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                <Landmark className="w-3.5 h-3.5 text-primary-500" />
+                Bank Account Details
+              </p>
+              {manager.bankDetails && (
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Registered
+                </span>
+              )}
+            </div>
+            {manager.bankDetails ? (
+              <div className="space-y-2.5 bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400">Account Holder:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{manager.bankDetails.accountHolderName || '—'}</span>
+                </div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400">Bank & Branch:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{manager.bankDetails.bankName || '—'} ({manager.bankDetails.branchName || '—'})</span>
+                </div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400">City / Street:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{manager.bankDetails.city || '—'} {manager.bankDetails.street ? `(${manager.bankDetails.street})` : ''}</span>
+                </div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400">Account Number:</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-200">{manager.bankDetails.accountNumber || '—'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">IFSC Code:</span>
+                  <span className="font-mono font-bold uppercase text-primary-600 dark:text-primary-400">{manager.bankDetails.ifscCode || '—'}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-dashed border-slate-200 dark:border-slate-700 text-center text-xs">
+                <p className="text-slate-500 font-bold">Bank details not provided</p>
+              </div>
+            )}
+          </section>
+
           {/* Contact Details */}
           <section>
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-3">Contact Details</p>
@@ -358,7 +402,7 @@ const ManagerDrawer = ({ manager, onClose, API_BASE, token }) => {
 // ─────────────────────────────────────────────────────────────
 // REQUEST CARD (Admin Onboarding Request Review)
 // ─────────────────────────────────────────────────────────────
-const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => {
+const RequestCard = ({ request, onApprove, onReject, onViewDetails, approving, rejecting }) => {
   const normLevel = normalizeManagerLevel(request.level);
   const limit = MANAGER_LIMITS[normLevel] || 2;
 
@@ -463,6 +507,282 @@ const RequestCard = ({ request, onApprove, onReject, approving, rejecting }) => 
 };
 
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// MANAGER REQUEST DETAILS MODAL (Dedicated Bank Details View)
+// ─────────────────────────────────────────────────────────────
+const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving, rejecting }) => {
+  const [showFullAccount, setShowFullAccount] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
+
+  if (!request) return null;
+
+  const bd = request.bankDetails;
+
+  const handleCopy = (text, fieldName) => {
+    if (!text) return;
+    navigator.clipboard.writeText(String(text));
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const getMaskedAccount = (num) => {
+    if (!num) return '—';
+    const s = String(num);
+    if (s.length <= 4) return s;
+    return `•••• •••• •••• ${s.slice(-4)}`;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
+      <div
+        className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl my-8 max-h-[90vh] overflow-y-auto flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+          <div>
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-[11px] font-mono font-bold text-slate-400">{request.requestId}</span>
+              <LevelBadge level={request.level} />
+              <StatusBadge status={request.status} />
+            </div>
+            <h3 className="text-xl font-black text-slate-900 dark:text-white">{request.name}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Manager Registration & Onboarding Application</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Content Body */}
+        <div className="space-y-5 py-4 overflow-y-auto flex-1 pr-1">
+          {/* Section 1: Contact & Personal */}
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Personal & Contact Details</p>
+            <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 space-y-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400 flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> Mobile:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{request.phone || '—'}</span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400 flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> Email:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 truncate ml-2" title={request.email}>{request.email || '—'}</span>
+                </div>
+              </div>
+              {request.altPhone && (
+                <div className="text-xs flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400">Alternative Phone:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{request.altPhone}</span>
+                </div>
+              )}
+              {request.address && (
+                <div className="text-xs p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400 block text-[10px] mb-0.5">Address:</span>
+                  <span className="font-medium text-slate-700 dark:text-slate-300">{request.address}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Section 2: Assigned Jurisdiction */}
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Requested Jurisdiction Scope</p>
+            <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2 text-xs">
+              {request.assignedState && (
+                <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-xl font-bold border border-emerald-500/20">
+                  State: {request.assignedState}
+                </span>
+              )}
+              {request.assignedDistrict && (
+                <>
+                  <ArrowRight className="w-3 h-3 text-slate-400" />
+                  <span className="bg-blue-500/10 text-blue-600 dark:text-blue-400 px-2.5 py-1 rounded-xl font-bold border border-blue-500/20">
+                    District: {request.assignedDistrict}
+                  </span>
+                </>
+              )}
+              {request.assignedDivision && (
+                <>
+                  <ArrowRight className="w-3 h-3 text-slate-400" />
+                  <span className="bg-purple-500/10 text-purple-600 dark:text-purple-400 px-2.5 py-1 rounded-xl font-bold border border-purple-500/20">
+                    Division: {request.assignedDivision}
+                  </span>
+                </>
+              )}
+              {request.assignedPincode && (
+                <>
+                  <ArrowRight className="w-3 h-3 text-slate-400" />
+                  <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-xl font-bold border border-amber-500/20 font-mono">
+                    PIN: {request.assignedPincode}
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Section 3: Dedicated Bank Details Section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+                <Landmark className="w-3.5 h-3.5 text-primary-500" />
+                Dedicated Bank Details
+              </p>
+              {bd && (
+                <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  Verified Format
+                </span>
+              )}
+            </div>
+
+            {bd ? (
+              <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 space-y-3">
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Account Holder Name</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white">{bd.accountHolderName || '—'}</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Bank Name</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{bd.bankName || '—'}</span>
+                  </div>
+                  <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Branch Name</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{bd.branchName || '—'}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Bank City</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{bd.city || '—'}</span>
+                  </div>
+                  <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Bank Street / Address</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{bd.street || 'Not provided'}</span>
+                  </div>
+                </div>
+
+                {/* Account Number with Mask / Reveal & Copy */}
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Account Number</span>
+                    <span className="text-sm font-black font-mono tracking-wider text-slate-900 dark:text-white">
+                      {showFullAccount ? (bd.accountNumber || '—') : getMaskedAccount(bd.accountNumber)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowFullAccount(!showFullAccount)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      {showFullAccount ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      <span>{showFullAccount ? 'Mask' : 'Reveal'}</span>
+                    </button>
+                    {bd.accountNumber && (
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(bd.accountNumber, 'acc')}
+                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                        title="Copy Account Number"
+                      >
+                        {copiedField === 'acc' ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* IFSC Code with Copy */}
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">IFSC Code</span>
+                    <span className="text-sm font-black font-mono tracking-widest text-primary-600 dark:text-primary-400 uppercase">
+                      {bd.ifscCode || '—'}
+                    </span>
+                  </div>
+                  {bd.ifscCode && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(bd.ifscCode, 'ifsc')}
+                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedField === 'ifsc' ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedField === 'ifsc' ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-6 border border-dashed border-slate-200 dark:border-slate-700 text-center">
+                <Landmark className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-600 dark:text-slate-300">Bank details not provided</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">No banking details were submitted with this application record.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Section 4: Workflow & Review Details */}
+          <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-3.5 border border-slate-100 dark:border-slate-800 text-xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Application Date:</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">
+                {request.createdAt ? new Date(request.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+              </span>
+            </div>
+            {request.requestingAdminName && (
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Requested / Submitted By:</span>
+                <span className="font-bold text-slate-700 dark:text-slate-300">{request.requestingAdminName}</span>
+              </div>
+            )}
+            {request.subadminApprovedByName && (
+              <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+                <span>Stage 1 Territory Approval:</span>
+                <span className="font-bold">{request.subadminApprovedByName}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modal Actions */}
+        <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800 mt-2">
+          {request.status === 'Pending' && (
+            <>
+              <button
+                onClick={() => { onClose(); onApprove(request); }}
+                disabled={approving}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                <CheckCircle className="w-4 h-4" />
+                {approving ? 'Approving…' : request.approvalStage === 'kyc_review' ? 'Approve KYC & Activate' : 'Approve Territory (Stage 1)'}
+              </button>
+              <button
+                onClick={() => { onClose(); onReject(request); }}
+                disabled={rejecting}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-60 text-slate-600 dark:text-slate-300 text-xs font-black rounded-xl transition-all border border-slate-200 dark:border-slate-700 cursor-pointer"
+              >
+                <XCircle className="w-4 h-4" />
+                {rejecting ? 'Rejecting…' : 'Reject'}
+              </button>
+            </>
+          )}
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // NOMINATE / ONBOARD MANAGER MODAL
 // ─────────────────────────────────────────────────────────────
 const NominateModal = ({ territory, onClose, onSubmit, submitting, territoryOptions }) => {
@@ -756,6 +1076,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
 
   // Selected Manager for Performance Drawer
   const [selectedManager, setSelectedManager] = useState(null);
+  const [selectedRequest, setSelectedRequest] = useState(null);
 
   // Nominate / Request Modal
   const [nominateTerritory, setNominateTerritory] = useState(null);
@@ -1868,6 +2189,18 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       )}
 
       {/* ── MANAGER PERFORMANCE & DETAILS DRAWER ── */}
+      {/* ── MANAGER REQUEST DETAILS MODAL ── */}
+      {selectedRequest && (
+        <RequestDetailsModal
+          request={selectedRequest}
+          onClose={() => setSelectedRequest(null)}
+          onApprove={handleApprove}
+          onReject={r => { setSelectedRequest(null); setRejectingRequest(r); setRejectionReason(''); }}
+          approving={actionLoading[selectedRequest._id] === 'approve'}
+          rejecting={actionLoading[selectedRequest._id] === 'reject'}
+        />
+      )}
+
       {selectedManager && (
         <ManagerDrawer
           manager={selectedManager}

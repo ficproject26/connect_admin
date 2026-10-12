@@ -81,6 +81,10 @@ const ManagerSchema = new mongoose.Schema({
     notes: {
         type: String,
         default: ''
+    },
+    bankDetails: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
     }
 }, {
     timestamps: true

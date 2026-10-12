@@ -129,6 +129,10 @@ const ManagerRequestSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.Mixed,
         default: {}
     },
+    bankDetails: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
+    },
     status: {
         type: String,
         enum: ['Pending', 'Approved', 'Rejected'],

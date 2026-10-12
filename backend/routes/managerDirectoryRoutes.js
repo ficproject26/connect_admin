@@ -121,6 +121,7 @@ async function getUnifiedRealManagers(territoryFilter = {}, options = {}) {
             createdByAdmin,
             createdById,
             createdByRole,
+            bankDetails: doc.bankDetails || null,
             createdAt: doc.createdAt || new Date(),
             updatedAt: doc.updatedAt || new Date()
         });
@@ -798,8 +799,12 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
                         status: pu.status === 'rejected' ? 'Rejected' : 'Pending',
                         approvalStage: pu.approvalStage || (pu.status === 'under_review' ? 'subadmin_review' : 'subadmin_review'),
                         documents: pu.documents || pu.kycDocs || {},
+                        bankDetails: pu.bankDetails || null,
                         createdAt: pu.createdAt || new Date()
                     }).catch(() => {});
+                } else if (!existing.bankDetails && pu.bankDetails) {
+                    existing.bankDetails = pu.bankDetails;
+                    await existing.save().catch(() => {});
                 }
             }
         } catch (syncErr) {
@@ -817,12 +822,38 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
             ManagerRequest.countDocuments(query)
         ]);
 
-        const formattedRequests = requests.map(r => ({
-            ...r,
-            phone: r.phone || r.mobile || '',
-            level: normalizeManagerLevelStr(r.level),
-            approvalStage: r.approvalStage || (r.status === 'Approved' ? 'approved' : 'subadmin_review')
-        }));
+        // Populate bankDetails from matching User if absent on ManagerRequest
+        const userIdsToLookup = requests.filter(r => !r.bankDetails && (r.userId || r.email)).map(r => r.userId).filter(Boolean);
+        const userEmailsToLookup = requests.filter(r => !r.bankDetails && r.email).map(r => r.email.toLowerCase().trim()).filter(Boolean);
+        const userBankMap = new Map();
+        if (userIdsToLookup.length > 0 || userEmailsToLookup.length > 0) {
+            const usersWithBank = await User.find({
+                $or: [
+                    { _id: { $in: userIdsToLookup } },
+                    { email: { $in: userEmailsToLookup } }
+                ]
+            }).select('_id email bankDetails').lean().catch(() => []);
+            for (const u of usersWithBank) {
+                if (u.bankDetails) {
+                    if (u._id) userBankMap.set(String(u._id), u.bankDetails);
+                    if (u.email) userBankMap.set(String(u.email).toLowerCase().trim(), u.bankDetails);
+                }
+            }
+        }
+
+        const formattedRequests = requests.map(r => {
+            const resolvedBank = r.bankDetails || 
+                (r.userId && userBankMap.get(String(r.userId))) || 
+                (r.email && userBankMap.get(String(r.email).toLowerCase().trim())) || 
+                null;
+            return {
+                ...r,
+                bankDetails: resolvedBank,
+                phone: r.phone || r.mobile || '',
+                level: normalizeManagerLevelStr(r.level),
+                approvalStage: r.approvalStage || (r.status === 'Approved' ? 'approved' : 'subadmin_review')
+            };
+        });
 
         res.json({
             success: true,
@@ -895,12 +926,16 @@ const handleApproveManagerRequest = async (req, res) => {
                     parentAdminId: mReq.requestedBy || req.user.id,
                     requestedBy: mReq.requestedBy,
                     approvedBy: req.user.id,
+                    bankDetails: mReq.bankDetails || null,
                     status: 'Active'
                 });
                 await newManager.save();
             } else {
                 newManager.status = 'Active';
                 newManager.approvedBy = req.user.id;
+                if (!newManager.bankDetails && mReq.bankDetails) {
+                    newManager.bankDetails = mReq.bankDetails;
+                }
                 await newManager.save();
             }
 
