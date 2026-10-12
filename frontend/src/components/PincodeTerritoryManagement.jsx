@@ -162,6 +162,9 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
         const res = await fetch(`${API_BASE}/admin/territory/hierarchy?summary=true${statusParam}${force ? '&force=true' : ''}`, {
           headers: { 'x-auth-token': token }
         });
+        if (!res.ok) {
+          throw new Error(`Territory service error (HTTP ${res.status}). Verify backend service is running.`);
+        }
         const data = await res.json();
         if (data.success) {
           const statesList = data.states || data.hierarchy || [];
@@ -242,6 +245,9 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
       const res = await fetch(`${API_BASE}/admin/territory/hierarchy?stateId=${encodeURIComponent(targetState._id)}${force ? '&force=true' : ''}`, {
         headers: { 'x-auth-token': token }
       });
+      if (!res.ok) {
+        throw new Error(`Territory drilldown error (HTTP ${res.status})`);
+      }
       const data = await res.json();
       if (data.success && data.state) {
         if (data.state.districts && data.state.districts.length > 0) {
@@ -276,6 +282,9 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
       const res = await fetch(`${API_BASE}/admin/territory/hierarchy`, {
         headers: { 'x-auth-token': token }
       });
+      if (!res.ok) {
+        throw new Error(`Territory tree error (HTTP ${res.status})`);
+      }
       const data = await res.json();
       if (data.success) {
         const fullList = data.hierarchy || data.states || [];
