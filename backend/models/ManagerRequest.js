@@ -96,7 +96,7 @@ const ManagerRequestSchema = new mongoose.Schema({
     },
     approvalStage: {
         type: String,
-        enum: ['subadmin_review', 'kyc_review', 'approved', 'rejected'],
+        enum: ['subadmin_review', 'mainadmin_review', 'kyc_review', 'approved', 'rejected'],
         default: 'subadmin_review'
     },
     subadminApprovedBy: {

@@ -462,36 +462,68 @@ const RequestCard = ({ request, onApprove, onReject, onViewDetails, approving, r
         </p>
       )}
 
-      {/* Approval Stage Indicator */}
-      <div className="mb-3 flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
-        <span className="text-slate-500 font-bold">Workflow Stage:</span>
-        <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
-          request.approvalStage === 'kyc_review'
-            ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
-            : request.status === 'Approved'
-            ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-            : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-        }`}>
-          {request.approvalStage === 'kyc_review' ? 'Stage 2: KYC Review' : request.status === 'Approved' ? 'Active' : 'Stage 1: Territory Review'}
-        </span>
-      </div>
+      {(() => {
+        const isSubAdminApproved = request.approvalStage === 'mainadmin_review' ||
+          request.approvalStage === 'kyc_review' ||
+          request.subAdminApprovalStatus === 'approved' ||
+          Boolean(request.subadminApprovedByName) ||
+          Boolean(request.subAdminApproval && request.subAdminApproval.status === 'approved');
 
-      {request.subadminApprovedByName && (
-        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-2">
-          ✓ Stage 1 Approved by <span className="font-semibold">{request.subadminApprovedByName}</span>
-        </p>
-      )}
+        return (
+          <>
+            {/* Approval Stage Indicator */}
+            <div className="mb-3 flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+              <span className="text-slate-500 font-bold">Workflow Stage:</span>
+              <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase ${
+                request.approvalStage === 'kyc_review'
+                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                  : isSubAdminApproved
+                  ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                  : request.status === 'Approved'
+                  ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+              }`}>
+                {request.approvalStage === 'kyc_review'
+                  ? 'Stage 3: KYC Review'
+                  : isSubAdminApproved
+                  ? 'Stage 2: Main Admin Review'
+                  : request.status === 'Approved'
+                  ? 'Active'
+                  : 'Stage 1: Awaiting Sub-admin'}
+              </span>
+            </div>
 
-      {request.status === 'Pending' && (
-        <div className="flex gap-2 mt-1">
-          <button
-            onClick={() => onApprove(request)}
-            disabled={approving}
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs"
-          >
-            <CheckCircle className="w-4 h-4" />
-            {approving ? 'Approving…' : request.approvalStage === 'kyc_review' ? 'Approve KYC & Activate' : 'Approve Territory (Stage 1)'}
-          </button>
+            {request.subadminApprovedByName ? (
+              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mb-2">
+                ✓ Sub-admin Approved by <span className="font-semibold">{request.subadminApprovedByName}</span>
+              </p>
+            ) : (
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 mb-2">
+                ⏳ Awaiting Territorial Sub-admin Review
+              </p>
+            )}
+
+            {request.status === 'Pending' && (
+              <div className="flex gap-2 mt-1">
+                {isSubAdminApproved ? (
+                  <button
+                    onClick={() => onApprove(request)}
+                    disabled={approving}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {approving ? 'Approving…' : request.approvalStage === 'kyc_review' ? 'Approve KYC & Activate' : 'Approve Application (Forward to KYC)'}
+                  </button>
+                ) : (
+                  <button
+                    disabled={true}
+                    title="Sub-admin territorial approval required before Main Admin can approve"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-100 dark:bg-slate-800/80 text-slate-400 dark:text-slate-500 text-xs font-bold rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700/60"
+                  >
+                    <Clock className="w-4 h-4 text-amber-500" />
+                    Pending Sub-admin Approval
+                  </button>
+                )}
           <button
             onClick={() => onReject(request)}
             disabled={rejecting}
@@ -502,6 +534,9 @@ const RequestCard = ({ request, onApprove, onReject, onViewDetails, approving, r
           </button>
         </div>
       )}
+          </>
+        );
+      })()}
     </div>
   );
 };
@@ -753,14 +788,33 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
         <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800 mt-2">
           {request.status === 'Pending' && (
             <>
-              <button
-                onClick={() => { onClose(); onApprove(request); }}
-                disabled={approving}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs"
-              >
-                <CheckCircle className="w-4 h-4" />
-                {approving ? 'Approving…' : request.approvalStage === 'kyc_review' ? 'Approve KYC & Activate' : 'Approve Territory (Stage 1)'}
-              </button>
+              {(() => {
+                const isSubAdminApproved = request.approvalStage === 'mainadmin_review' ||
+                  request.approvalStage === 'kyc_review' ||
+                  request.subAdminApprovalStatus === 'approved' ||
+                  Boolean(request.subadminApprovedByName) ||
+                  Boolean(request.subAdminApproval && request.subAdminApproval.status === 'approved');
+
+                return isSubAdminApproved ? (
+                  <button
+                    onClick={() => { onClose(); onApprove(request); }}
+                    disabled={approving}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-xs font-black rounded-xl transition-all cursor-pointer shadow-xs"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {approving ? 'Approving…' : request.approvalStage === 'kyc_review' ? 'Approve KYC & Activate' : 'Approve Application (Forward to KYC)'}
+                  </button>
+                ) : (
+                  <button
+                    disabled={true}
+                    title="Sub-admin territorial approval required before Main Admin can approve"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 text-xs font-bold rounded-xl cursor-not-allowed border border-slate-200 dark:border-slate-700"
+                  >
+                    <Clock className="w-4 h-4 text-amber-500" />
+                    Pending Sub-admin Approval
+                  </button>
+                );
+              })()}
               <button
                 onClick={() => { onClose(); onReject(request); }}
                 disabled={rejecting}

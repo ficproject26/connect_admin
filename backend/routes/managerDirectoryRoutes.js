@@ -890,7 +890,6 @@ const handleApproveManagerRequest = async (req, res) => {
         if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already fully approved.' });
         if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request has been rejected.' });
 
-        const isKycStage = req.path.includes('approve-kyc') || req.query.stage === 'kyc' || req.body.stage === 'kyc' || mReq.approvalStage === 'kyc_review' || req.body.directActivate;
         const normLevel = normalizeManagerLevelStr(mReq.level);
 
         // Fetch operator identity
@@ -904,10 +903,38 @@ const handleApproveManagerRequest = async (req, res) => {
             }
         }
 
+        // 1. SUB-ADMIN APPROVAL PREREQUISITE CHECK
+        // Main Admin cannot approve until the designated territorial Sub-admin has approved
+        const isSubAdminApproved = mReq.approvalStage === 'mainadmin_review' ||
+            mReq.approvalStage === 'kyc_review' ||
+            mReq.subAdminApprovalStatus === 'approved' ||
+            Boolean(mReq.subadminApprovedByName) ||
+            Boolean(mReq.subAdminApproval && mReq.subAdminApproval.status === 'approved');
+
+        if (!isSubAdminApproved) {
+            return res.status(400).json({
+                success: false,
+                code: 'SUBADMIN_APPROVAL_REQUIRED',
+                msg: `Cannot approve manager request: Territorial Sub-admin review is pending for ${mReq.name}. Sub-admin approval must be completed before Main Admin approval can be granted.`
+            });
+        }
+
+        const isKycStage = req.path.includes('approve-kyc') || req.query.stage === 'kyc' || req.body.stage === 'kyc' || mReq.approvalStage === 'kyc_review';
+
         if (isKycStage) {
             // =====================================================
-            // STAGE 2: KYC TEAM / FINAL APPROVAL -> ACTIVATE MANAGER
+            // STAGE 3: KYC TEAM CLEARANCE -> ACTIVATE MANAGER
             // =====================================================
+            // Must have both Sub-Admin and Main Admin approval before activating
+            const isMainAdminApproved = mReq.mainAdminApprovalStatus === 'approved' || Boolean(mReq.mainadminApprovedByName) || mReq.approvalStage === 'kyc_review';
+            if (!isMainAdminApproved) {
+                return res.status(400).json({
+                    success: false,
+                    code: 'MAINADMIN_APPROVAL_REQUIRED',
+                    msg: 'Main Admin approval must be completed before KYC clearance and account activation.'
+                });
+            }
+
             const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             const rand = Math.floor(1000 + Math.random() * 9000);
             const managerId = `MGR-${normLevel.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
@@ -952,6 +979,8 @@ const handleApproveManagerRequest = async (req, res) => {
 
             mReq.status = 'Approved';
             mReq.approvalStage = 'approved';
+            mReq.overallRegistrationStatus = 'active';
+            mReq.kycVerificationStatus = 'approved';
             mReq.kycApprovedBy = req.user.id;
             mReq.kycApprovedByName = operatorName;
             mReq.kycApprovedAt = new Date();
@@ -963,6 +992,8 @@ const handleApproveManagerRequest = async (req, res) => {
             const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
             await User.findOneAndUpdate(userFilter, {
                 status: 'active',
+                overallRegistrationStatus: 'active',
+                kycVerificationStatus: 'approved',
                 approvalStage: 'approved',
                 kycStatus: 'Verified',
                 isActive: true,
@@ -994,25 +1025,66 @@ const handleApproveManagerRequest = async (req, res) => {
             });
         } else {
             // =====================================================
-            // STAGE 1: SUB-ADMIN TERRITORY APPROVAL -> KYC REVIEW
+            // STAGE 2: MAIN ADMIN APPROVAL -> FORWARD TO KYC REVIEW
             // =====================================================
             mReq.approvalStage = 'kyc_review';
-            mReq.subadminApprovedBy = req.user.id;
-            mReq.subadminApprovedByName = operatorName;
-            mReq.subadminApprovedAt = new Date();
-            mReq.status = 'Pending'; // Remains Pending until KYC approval
+            mReq.mainAdminApprovalStatus = 'approved';
+            mReq.overallRegistrationStatus = 'PENDING_KYC_VERIFICATION';
+            mReq.kycVerificationStatus = 'pending';
+            mReq.mainadminApprovedBy = req.user.id;
+            mReq.mainadminApprovedByName = operatorName;
+            mReq.mainadminApprovedAt = new Date();
+            mReq.status = 'Pending'; // Remains Pending until KYC clearance
             await mReq.save();
 
             // Update User to KYC review stage
             const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
             await User.findOneAndUpdate(userFilter, {
-                status: 'under_review',
+                status: 'PENDING_KYC_VERIFICATION',
+                overallRegistrationStatus: 'PENDING_KYC_VERIFICATION',
+                mainAdminApprovalStatus: 'approved',
+                kycVerificationStatus: 'pending',
                 approvalStage: 'kyc_review',
                 kycStatus: 'pending_verification',
-                subadminApprovedBy: req.user.id,
-                subadminApprovedByName: operatorName,
-                subadminApprovedAt: new Date()
+                mainadminApprovedBy: req.user.id,
+                mainadminApprovedByName: operatorName,
+                mainadminApprovedAt: new Date()
             });
+
+            // Ensure queued in MongoDB Atlas db.kycRecords
+            try {
+                const kycCollection = mongoose.connection.collection('kycrecords');
+                const mgrIdStr = String(mReq.userId || mReq._id);
+                const kycId = `KYC-MGR-${mgrIdStr}`;
+                const existingKyc = await kycCollection.findOne({ $or: [{ _id: kycId }, { id: kycId }, { managerId: mgrIdStr }] });
+                if (!existingKyc) {
+                    await kycCollection.insertOne({
+                        _id: kycId,
+                        id: kycId,
+                        type: 'Manager',
+                        managerId: mgrIdStr,
+                        name: mReq.name,
+                        vendorName: mReq.name,
+                        category: 'Operations Management',
+                        role: mReq.level ? `${mReq.level}_manager` : 'manager',
+                        phone: mReq.phone,
+                        email: mReq.email,
+                        state: mReq.assignedState,
+                        district: mReq.assignedDistrict,
+                        division: mReq.assignedDivision,
+                        pincode: mReq.assignedPincode,
+                        status: 'Pending',
+                        kycStatus: 'Pending Verification',
+                        submittedDate: new Date().toISOString().split('T')[0],
+                        documents: mReq.documents || {},
+                        notes: `Approved by Sub-admin and Main Admin (${operatorName}). Queued for KYC compliance.`,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    });
+                }
+            } catch (kycErr) {
+                console.error('Error queuing KYC record:', kycErr.message);
+            }
 
             // Emit real-time notification to KYC team and admin
             try {
@@ -1025,10 +1097,10 @@ const handleApproveManagerRequest = async (req, res) => {
                         email: mReq.email,
                         level: normLevel,
                         approvalStage: 'kyc_review',
-                        subadminApprovedByName: operatorName,
+                        mainadminApprovedByName: operatorName,
                         createdAt: new Date()
                     };
-                    io.to('admin').emit('manager_stage1_approved', payload);
+                    io.to('admin').emit('manager_mainadmin_approved', payload);
                     io.to('admin').emit('new_kyc_request', payload);
                 }
             } catch (ioErr) {}
@@ -1036,7 +1108,7 @@ const handleApproveManagerRequest = async (req, res) => {
             return res.json({
                 success: true,
                 stage: 'kyc_review',
-                msg: `Stage 1 territory review approved by ${operatorName}. Sent to KYC Verification team for final review.`,
+                msg: `Main Admin approval granted by ${operatorName}. Application forwarded to KYC Verification team.`,
                 request: mReq
             });
         }
@@ -1060,10 +1132,15 @@ router.put('/manager-directory/requests/:id/reject', auth, async (req, res) => {
         if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already approved. Cannot reject.' });
         if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request is already rejected.' });
 
-        const rejectionReason = (req.body.reason || req.body.rejectionReason || '').trim() || 'Rejected by Administrator';
+        const rejectionReason = (req.body.reason || req.body.rejectionReason || '').trim();
+        if (!rejectionReason) {
+            return res.status(400).json({ success: false, msg: 'A rejection reason is strictly required.' });
+        }
 
         mReq.status = 'Rejected';
         mReq.approvalStage = 'rejected';
+        mReq.overallRegistrationStatus = 'REJECTED_BY_MAIN_ADMIN';
+        mReq.mainAdminApprovalStatus = 'rejected';
         mReq.rejectionReason = rejectionReason;
         mReq.reviewedBy = req.user.id;
         mReq.reviewedAt = new Date();
@@ -1072,7 +1149,9 @@ router.put('/manager-directory/requests/:id/reject', auth, async (req, res) => {
         // Synchronize rejection to User record
         const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
         await User.findOneAndUpdate(userFilter, {
-            status: 'rejected',
+            status: 'REJECTED_BY_MAIN_ADMIN',
+            overallRegistrationStatus: 'REJECTED_BY_MAIN_ADMIN',
+            mainAdminApprovalStatus: 'rejected',
             approvalStage: 'rejected',
             rejectionReason
         });
