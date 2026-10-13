@@ -5,60 +5,73 @@
   <meta charset="UTF-8" />
   <script>
     (function () {
-      const EXTENSION_ERROR_PATTERNS = [
+      var EXTENSION_ERROR_PATTERNS = [
         'a listener indicated an asynchronous response',
         'message channel closed',
         'runtime.lasterror',
         'message channel closed before a response was received',
         'the message channel closed',
         'could not establish connection. receiving end does not exist',
-        'unchecked runtime.lasterror'
+        'unchecked runtime.lasterror',
+        'listener indicated an asynchronous response by returning true'
       ];
 
-      const isExtensionError = (...args) => {
+      function isExtensionError() {
+        var args = Array.prototype.slice.call(arguments);
         if (!args || args.length === 0) return false;
-        return args.some(arg => {
+        return args.some(function(arg) {
           if (!arg) return false;
-          let str = '';
+          var str = '';
           if (typeof arg === 'string') {
             str = arg;
           } else if (arg instanceof Error) {
-            str = `${arg.name || ''} ${arg.message || ''} ${arg.stack || ''}`;
+            str = (arg.name || '') + ' ' + (arg.message || '') + ' ' + (arg.stack || '');
           } else if (typeof arg === 'object') {
-            str = `${arg.message || ''} ${arg.reason || ''} ${arg.error?.message || ''} ${arg.detail || ''} ${String(arg)}`;
+            str = (arg.message || '') + ' ' + (arg.reason || '') + ' ' +
+                  ((arg.error && arg.error.message) || '') + ' ' +
+                  (arg.detail || '') + ' ' + String(arg);
           } else {
             str = String(arg);
           }
-          const lower = str.toLowerCase();
-          return EXTENSION_ERROR_PATTERNS.some(pat => lower.includes(pat));
+          var lower = str.toLowerCase();
+          return EXTENSION_ERROR_PATTERNS.some(function(pat) { return lower.indexOf(pat) !== -1; });
         });
-      };
+      }
+
+      function checkRuntimeLastError() {
+        try {
+          if (typeof window !== 'undefined' && window.chrome && window.chrome.runtime) {
+            void window.chrome.runtime.lastError;
+          }
+        } catch (_) {}
+      }
 
       // Patch window.chrome.runtime to safely absorb dangling message ports
-      const patchRuntime = (runtime) => {
+      function patchRuntime(runtime) {
         if (!runtime || typeof runtime !== 'object') return;
 
-        // 1. Wrap sendMessage
+        // Wrap sendMessage
         if (typeof runtime.sendMessage === 'function' && !runtime._sendMessagePatched) {
-          const origSend = runtime.sendMessage.bind(runtime);
-          runtime.sendMessage = function (...args) {
+          var origSend = runtime.sendMessage.bind(runtime);
+          runtime.sendMessage = function() {
+            var args = Array.prototype.slice.call(arguments);
             try {
-              const lastArg = args[args.length - 1];
+              var lastArg = args[args.length - 1];
               if (typeof lastArg === 'function') {
-                args[args.length - 1] = function (...cbArgs) {
+                args[args.length - 1] = function() {
                   try { void runtime.lastError; } catch (_) {}
-                  return lastArg.apply(this, cbArgs);
+                  return lastArg.apply(this, arguments);
                 };
-                return origSend(...args);
+                return origSend.apply(null, args);
               }
-              const p = origSend(...args);
+              var p = origSend.apply(null, args);
               if (p && typeof p.then === 'function') {
                 return p
-                  .then(res => {
+                  .then(function(res) {
                     try { void runtime.lastError; } catch (_) {}
                     return res;
                   })
-                  .catch(err => {
+                  .catch(function(err) {
                     try { void runtime.lastError; } catch (_) {}
                     if (isExtensionError(err)) return undefined;
                     throw err;
@@ -74,28 +87,30 @@
           runtime._sendMessagePatched = true;
         }
 
-        // 2. Wrap onMessage.addListener
+        // Wrap onMessage.addListener
         if (runtime.onMessage && typeof runtime.onMessage.addListener === 'function' && !runtime._addListenerPatched) {
-          const origAdd = runtime.onMessage.addListener.bind(runtime.onMessage);
-          runtime.onMessage.addListener = function (listener) {
+          var origAdd = runtime.onMessage.addListener.bind(runtime.onMessage);
+          runtime.onMessage.addListener = function(listener) {
             if (typeof listener !== 'function') return origAdd(listener);
-            return origAdd(function (message, sender, sendResponse) {
-              let responded = false;
-              const safeSendResponse = function (...respArgs) {
+            return origAdd(function(message, sender, sendResponse) {
+              var responded = false;
+              var safeSendResponse = function() {
                 if (responded) return;
                 responded = true;
-                try {
-                  sendResponse(...respArgs);
-                } catch (_) {}
+                try { sendResponse.apply(null, arguments); } catch (_) {}
               };
-
               try {
-                const res = listener(message, sender, safeSendResponse);
+                var res = listener(message, sender, safeSendResponse);
                 if (res === true) {
-                  // Safety timer to close channel gracefully if listener never responds
-                  setTimeout(() => {
+                  // Auto-close the channel after 2.5s to prevent the "channel closed" warning
+                  setTimeout(function() {
                     if (!responded) safeSendResponse({ status: 'auto_resolved' });
-                  }, 3000);
+                  }, 2500);
+                  return true;
+                }
+                if (res && typeof res.then === 'function') {
+                  res.then(function(r) { safeSendResponse(r !== undefined ? r : { status: 'resolved' }); })
+                     .catch(function(e) { safeSendResponse({ error: String(e) }); });
                   return true;
                 }
                 return res;
@@ -107,97 +122,78 @@
           };
           runtime._addListenerPatched = true;
         }
-      };
-
-      const checkRuntimeLastError = () => {
-        try {
-          if (typeof window !== 'undefined' && window.chrome?.runtime) {
-            void window.chrome.runtime.lastError;
-          }
-        } catch (_) {}
-      };
+      }
 
       // Watch and auto-patch window.chrome if injected by extensions
       try {
-        let _chrome = window.chrome;
+        var _chrome = window.chrome;
         if (_chrome) patchRuntime(_chrome.runtime);
-
         Object.defineProperty(window, 'chrome', {
           configurable: true,
           enumerable: true,
-          get() { return _chrome; },
-          set(val) {
+          get: function() { return _chrome; },
+          set: function(val) {
             _chrome = val;
             if (_chrome) patchRuntime(_chrome.runtime);
           }
         });
       } catch (_) {}
 
-      // Intercept console.error & console.warn
-      const origConsoleError = console.error;
-      console.error = function (...args) {
-        if (isExtensionError(...args)) {
+      // Intercept console.error & console.warn to silence extension noise
+      var origConsoleError = console.error;
+      console.error = function() {
+        if (isExtensionError.apply(null, arguments)) {
           checkRuntimeLastError();
           return;
         }
-        return origConsoleError.apply(console, args);
+        return origConsoleError.apply(console, arguments);
       };
 
-      const origConsoleWarn = console.warn;
-      console.warn = function (...args) {
-        if (isExtensionError(...args)) {
+      var origConsoleWarn = console.warn;
+      console.warn = function() {
+        if (isExtensionError.apply(null, arguments)) {
           checkRuntimeLastError();
           return;
         }
-        return origConsoleWarn.apply(console, args);
+        return origConsoleWarn.apply(console, arguments);
       };
 
-      // Intercept unhandled promise rejections
-      const handleRejection = function (e) {
+      // Unified rejection handler — registered ONCE in capture phase only
+      function handleRejection(e) {
         if (!e) return;
-        const reason = e.reason || e;
+        var reason = e.reason || e;
         if (isExtensionError(reason, e.message, e)) {
+          // Drain lastError first to prevent Chrome from logging "Unchecked runtime.lastError"
+          checkRuntimeLastError();
           try {
             if (typeof e.preventDefault === 'function') e.preventDefault();
             if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-            if (typeof e.stopPropagation === 'function') e.stopPropagation();
           } catch (_) {}
-          checkRuntimeLastError();
-          return true;
+          return;
         }
-      };
+      }
 
-      window.addEventListener('unhandledrejection', handleRejection, { capture: true, passive: false });
-      window.addEventListener('unhandledrejection', handleRejection, false);
+      // Register ONCE in capture phase (runs before any other handlers)
+      window.addEventListener('unhandledrejection', handleRejection, true);
 
-      const origOnUnhandledRejection = window.onunhandledrejection;
-      window.onunhandledrejection = function (e) {
-        if (handleRejection(e)) return true;
-        if (typeof origOnUnhandledRejection === 'function') {
-          return origOnUnhandledRejection.apply(this, arguments);
-        }
-      };
-
-      // Intercept global errors
-      const handleError = function (e) {
+      // window.onerror for synchronous errors
+      function handleError(e) {
         if (!e) return;
-        const err = e.error || e;
+        var err = e.error || e;
         if (isExtensionError(err, e.message, e.filename, e)) {
+          checkRuntimeLastError();
           try {
             if (typeof e.preventDefault === 'function') e.preventDefault();
             if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
-            if (typeof e.stopPropagation === 'function') e.stopPropagation();
           } catch (_) {}
-          checkRuntimeLastError();
           return true;
         }
-      };
+      }
 
-      window.addEventListener('error', handleError, { capture: true, passive: false });
-      window.addEventListener('error', handleError, false);
+      window.addEventListener('error', handleError, true);
 
-      const origOnError = window.onerror;
-      window.onerror = function (message, source, lineno, colno, error) {
+      var origOnError = window.onerror;
+      window.onerror = function(message, source, lineno, colno, error) {
         if (isExtensionError(message, source, error)) {
           checkRuntimeLastError();
           return true;
