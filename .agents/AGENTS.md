@@ -66,4 +66,36 @@
    - Never repurpose existing database fields, modify existing API response structures, or delete fields relied upon by production workflows. Use isolated extensions or optional properties for new requirements.
 4. **Empirical Verification & Git Checkpoints**:
    - Validate every change with production builds (`npx vite build`) and syntax checks before committing cleanly to Git.- When a suspended business outlet is re-activated by Admin, its listings MUST immediately become visible on the Customer Website again.
-  
+
+## Protected Module — Main Admin PIN Code Management (STRICT PERMANENT WORKFLOW LOCK)
+
+### Mandatory Protected Invariant (NEVER ALTER WITHOUT EXPLICIT USER INSTRUCTION)
+
+1. **Permanently Protected Module**:
+   - The **Main Admin → Pin Code Management** module (`PincodeTerritoryManagement.jsx`, `routes/territory.js`, `routes/pincodes.js`, and associated database models) is **permanently protected**.
+   - Its existing workflow, business logic, database structure, data relationships, UI behavior, and assignment rules MUST remain unchanged unless the USER explicitly authorizes a change.
+
+2. **Absolute Hierarchy & Action Lock**:
+   - The established administrative hierarchy order:
+     $$\mathbf{State} \longrightarrow \mathbf{District} \longrightarrow \mathbf{Division} \longrightarrow \mathbf{Pincode}$$
+     MUST be preserved without exception. Never reorder, skip, merge, or alter hierarchy tiers.
+   - Preserve all existing actions and views exactly as implemented:
+     - **Add, Edit, Remove, and Assign operations**.
+     - **Hierarchy Flow View, Tree View, and Audit Logs**.
+     - **National Overview metrics and States Directory cards**.
+     - **Search, status filtering, drilldown navigation, and refresh behavior**.
+
+3. **No Unauthorized Manual or Automatic Changes**:
+   - Never modify, redesign, replace, simplify, restructure, or automatically alter the workflow when working on another module, fixing a bug, modifying an API, updating a model, or executing an agent task.
+   - Never reset, clear, overwrite, recreate, seed over, or automatically migrate existing pincode data.
+   - Never change existing state, district, division, pincode, or agent-assignment records.
+   - Do not allow changes in other modules or global refactoring to silently alter this module.
+
+4. **Bug-Fix-Only Scope (Zero Workflow Alteration)**:
+   - When a bug fix is requested for Pin Code Management (e.g. data retrieval, query mapping, filtering, or display issues), correct ONLY the verified root cause while keeping the existing workflow, database relationships, and user interface flow 100% unchanged.
+   - A bug fix request does NOT grant permission to redesign or alter the workflow.
+
+5. **Mandatory Pre-Change Protection Protocol**:
+   - Before implementing any task, check whether dependencies, shared APIs, models, or services could directly or indirectly touch Pin Code Management.
+   - If a proposed change could alter this protected module or its data, STOP and do not apply it automatically. Isolate changes to the relevant module.
+   - Only explicit, specific authorization from the USER allows any change to this protected workflow. General prompts (e.g. "fix all", "refactor all") do NOT authorize changes to Pin Code Management.
