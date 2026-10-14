@@ -210,7 +210,13 @@ const classifyVendorRequest = (v) => {
                               ['vendor_website', 'vendor', 'direct'].includes(rOrigin) ||
                               v.isDirectRequest === true;
 
-    if (hasDirectExplicit) {
+    // Backward-compatible metadata verification for direct vendor website registration
+    const isDirectImplicit = !isManager && !isAgent && (
+        String(v.role || '').toLowerCase() === 'vendor' ||
+        Boolean(v.storeName || v.businessName || v.shopName)
+    ) && !v.assignedAgent && !v.agentId && !v.assignedManager && !v.managerId && !v.onboardedBy;
+
+    if (hasDirectExplicit || isDirectImplicit) {
         return { classification: 'direct', isDirect: true, isAgent: false, isManager: false, isBusinessRequest: false };
     }
 
@@ -965,6 +971,8 @@ router.get('/vendors', auth, async (req, res) => {
             const pageNum = Math.max(1, parseInt(page, 10) || 1);
             const limitNum = Math.max(1, parseInt(limit, 10) || 20);
             const total = enriched.length;
+            const activeCount = enriched.filter(v => ['active', 'approved'].includes(String(v.status || '').toLowerCase().trim())).length;
+            const pendingCount = total - activeCount;
             const paginated = (req.query.limit && limitNum < total)
                 ? enriched.slice((pageNum - 1) * limitNum, pageNum * limitNum)
                 : enriched;
@@ -972,6 +980,8 @@ router.get('/vendors', auth, async (req, res) => {
             return res.json({
                 vendors: paginated,
                 total,
+                activeCount,
+                pendingCount,
                 page: pageNum,
                 pages: Math.ceil(total / limitNum) || 1
             });
@@ -1151,15 +1161,34 @@ router.get('/vendors', auth, async (req, res) => {
         if (isDirectRequest === 'true') {
             const handledStatuses = new Set(['approved', 'rejected', 'assigned', 'active', 'suspended']);
             const directMongoQuery = {
-                $or: [
-                    { isDirectRequest: true },
-                    { joiningType: 'direct' },
-                    { createdVia: { $in: ['vendor', 'vendor_website', 'direct', 'website'] } },
-                    { registrationSource: { $in: ['vendor', 'vendor_website', 'direct', 'website'] } },
-                    { requestOrigin: { $in: ['vendor_website', 'vendor', 'direct'] } }
-                ],
-                status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] },
-                requestType: { $ne: 'business_request' }
+                $and: [
+                    {
+                        role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] },
+                        status: { $nin: ['approved', 'Approved', 'APPROVED', 'rejected', 'Rejected', 'REJECTED', 'assigned', 'Assigned', 'ASSIGNED', 'active', 'Active', 'ACTIVE', 'suspended', 'Suspended', 'SUSPENDED'] },
+                        requestType: { $ne: 'business_request' }
+                    },
+                    {
+                        $or: [
+                            { isDirectRequest: true },
+                            { joiningType: 'direct' },
+                            { createdVia: { $in: ['vendor', 'vendor_website', 'direct', 'website'] } },
+                            { registrationSource: { $in: ['vendor', 'vendor_website', 'direct', 'website'] } },
+                            { requestOrigin: { $in: ['vendor_website', 'vendor', 'direct'] } },
+                            {
+                                $and: [
+                                    { joiningType: { $nin: ['agent', 'manager'] } },
+                                    { createdVia: { $nin: ['agent', 'agent_website', 'manager', 'manager_website'] } },
+                                    { registrationSource: { $nin: ['agent', 'agent_website', 'manager', 'manager_website'] } },
+                                    { assignedAgent: null },
+                                    { agentId: null },
+                                    { assignedManager: null },
+                                    { managerId: null },
+                                    { onboardedBy: null }
+                                ]
+                            }
+                        ]
+                    }
+                ]
             };
 
             const [directVendors, directVendorDocs] = await Promise.all([
@@ -2529,23 +2558,60 @@ router.get('/vendors/:id/kyc', auth, async (req, res) => {
                 type: 'image/jpeg'
             });
         }
+        if (v.businessLicense || u.businessLicense) {
+            realDocs.push({
+                name: 'Business License',
+                url: v.businessLicense || u.businessLicense,
+                type: 'document'
+            });
+        }
+        if (v.logo || u.logo) {
+            realDocs.push({
+                name: 'Business Logo',
+                url: v.logo || u.logo,
+                type: 'image/jpeg'
+            });
+        }
+        if (Array.isArray(v.businessImages)) {
+            v.businessImages.forEach((img, idx) => {
+                if (img) {
+                    realDocs.push({
+                        name: `Business Image ${idx + 1}`,
+                        url: img,
+                        type: 'image/jpeg'
+                    });
+                }
+            });
+        }
+        if (Array.isArray(u.businessImages)) {
+            u.businessImages.forEach((img, idx) => {
+                if (img && !realDocs.some(d => d.url === img)) {
+                    realDocs.push({
+                        name: `Business Image ${idx + 1}`,
+                        url: img,
+                        type: 'image/jpeg'
+                    });
+                }
+            });
+        }
 
         const kycPayload = {
             vendorId: v._id || v.id,
             businessName: v.businessName || v.name || 'Vendor Business',
             ownerName: v.name || v.contactPerson || v.ownerName || 'Vendor Partner',
             email: v.email || '',
-            phone: v.phone || v.mobile || '',
+            phone: v.phone || v.mobile || v.mobileNumber || '',
             status: v.status || 'Pending',
             kycStatus: v.kycStatus || (v.isApproved ? 'verified' : 'pending'),
-            panNumber: v.panNumber || rawKycDocs.panNumber || '',
-            gstNumber: v.gstNumber || v.gstin || '',
-            aadhaarNumber: v.aadhaarNumber || rawKycDocs.aadhaarNumber || '',
+            panNumber: v.panNumber || v.panNo || u.panNo || rawKycDocs.panNumber || '',
+            gstNumber: v.gstNumber || v.gstin || u.gstNumber || '',
+            aadhaarNumber: v.aadhaarNumber || v.aadhaarNo || u.aadhaarNo || rawKycDocs.aadhaarNumber || '',
             bankDetails: {
-                accountHolderName: v.accountHolderName || v.bankDetails?.accountHolderName || '',
-                accountNumber: v.accountNumber || v.bankDetails?.accountNumber || '',
-                bankName: v.bankName || v.bankDetails?.bankName || '',
-                ifsc: v.ifsc || v.bankDetails?.ifscCode || v.bankDetails?.ifsc || ''
+                accountHolderName: v.accountHolderName || v.beneficiaryName || u.beneficiaryName || v.bankDetails?.accountHolderName || v.bankDetails?.beneficiaryName || '',
+                accountNumber: v.accountNumber || v.accountNo || u.accountNo || v.bankDetails?.accountNumber || v.bankDetails?.accountNo || '',
+                bankName: v.bankName || u.bankName || v.bankDetails?.bankName || '',
+                ifsc: v.ifsc || v.ifscCode || u.ifscCode || v.bankDetails?.ifscCode || v.bankDetails?.ifsc || '',
+                branchName: v.branchName || u.branchName || v.bankDetails?.branchName || ''
             },
             documents: realDocs,
             category: v.category || v.vendorType || 'Products',

@@ -337,7 +337,11 @@ export const isVendorDirectRequest = (v) => {
     ['vendor', 'vendor_website', 'direct', 'website'].includes(cVia) ||
     ['vendor', 'vendor_website', 'direct', 'website'].includes(rSource) ||
     ['vendor_website', 'vendor', 'direct'].includes(rOrigin) ||
-    v.isDirectRequest === true
+    v.isDirectRequest === true ||
+    Boolean(
+      (String(v.role || '').toLowerCase() === 'vendor' || Boolean(v.storeName || v.businessName || v.shopName)) &&
+      !v.assignedAgent && !v.agentId && !v.assignedManager && !v.managerId && !v.onboardedBy
+    )
   );
 };
 
@@ -907,11 +911,8 @@ export const VendorDirectoryModule = React.memo(({
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           const list = deduplicateVendorsList(data.vendors || []);
-          const pendingOnly = list.filter(v => {
-            const s = (v.status || '').toLowerCase().trim();
-            return isVendorAgentOnboarded(v) && (s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended'));
-          });
-          setAgentOnboardedVendorsList(pendingOnly);
+          const agentOnly = list.filter(v => isVendorAgentOnboarded(v));
+          setAgentOnboardedVendorsList(agentOnly);
         }
       } catch (e) {
         if (e.name !== 'AbortError') console.error('Fetch agent onboarded vendors warning:', e.message);
@@ -1165,7 +1166,7 @@ export const VendorDirectoryModule = React.memo(({
         // Backend confirmed approval -> update states to Active
         const newStatus = 'Active';
         setDirectRequests(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-        setAgentOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setAgentOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: true, isApproved: true } : v));
         setManagerOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
         setManagerSummaryStats(prev => ({
           ...prev,
@@ -1248,7 +1249,7 @@ export const VendorDirectoryModule = React.memo(({
       if (res.ok && data.success) {
         const newStatus = 'Rejected';
         setDirectRequests(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-        setAgentOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setAgentOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: false, isApproved: false } : v));
         setManagerOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
         setManagerSummaryStats(prev => ({
           ...prev,
@@ -1463,7 +1464,7 @@ export const VendorDirectoryModule = React.memo(({
 
     setVendors(prev => prev.map(updateVendorObj));
     setDirectRequests(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
-    setAgentOnboardedVendorsList(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
+    setAgentOnboardedVendorsList(prev => prev.map(updateVendorObj));
     if (!isPendingVendorReview(newStatus)) {
       setManagerOnboardedVendorsList(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
       setManagerSummaryStats(prev => ({
@@ -2281,18 +2282,41 @@ export const VendorDirectoryModule = React.memo(({
                 const isHighlighted = highlightedVendorId && (String(dr._id) === String(highlightedVendorId) || String(dr.registrationId) === String(highlightedVendorId));
                 return (
                 <div key={dr._id} className={`p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 border transition-all ${isHighlighted ? 'bg-amber-500/10 border-amber-500 ring-2 ring-amber-400/40 shadow-md' : 'bg-slate-50 dark:bg-slate-950 border-slate-200/60 dark:border-slate-850'}`}>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-extrabold text-slate-800 dark:text-slate-100 text-sm">{dr.businessName || dr.name}</h4>
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700">
-                        {dr.status || 'Pending Verification'}
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-extrabold text-slate-850 dark:text-slate-100 text-sm">{dr.businessName || dr.name}</h4>
+                      {renderStatusBadge(dr.status || 'Pending Verification')}
+                      <span className="text-[10px] font-mono text-slate-400 font-bold">
+                        {formatVendorId(dr.registrationId || dr.vendorId || dr._id)}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">{dr.contactPerson} • {dr.email} • {dr.phone}</p>
-                    <p className="text-xs text-slate-400 font-mono mt-0.5">Category: {dr.category || dr.vendorType || 'Store'}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                      {dr.contactPerson || dr.name || 'Owner'} &nbsp;•&nbsp; {dr.email} &nbsp;•&nbsp; {getVendorPhone(dr)}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 text-xs pt-0.5">
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        {getVendorCategory(dr)}
+                      </span>
+                      <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        📍 {getVendorAddress(dr)}
+                      </span>
+                      {dr.createdAt && (
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          📅 Registered: {new Date(dr.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenVendorKycModal(dr)}
+                      className="px-3.5 py-2 bg-purple-500/10 hover:bg-purple-600 hover:text-white text-purple-700 dark:text-purple-300 font-extrabold text-xs rounded-xl border border-purple-500/20 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      title="Review submitted vendor application and KYC documents"
+                    >
+                      <Eye className="w-4 h-4" /> Review Application
+                    </button>
                     <button
                       onClick={() => handleApproveVendor(dr)}
                       className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
@@ -2704,10 +2728,7 @@ export const VendorDirectoryModule = React.memo(({
 
       {/* 8. AGENT ONBOARDED VENDORS MODAL */}
       {showAgentOnboardedModal && (() => {
-        const agentVendors = agentOnboardedVendorsList.filter(v => {
-          const s = (v.status || '').toLowerCase().trim();
-          return s === 'pending' || (s !== 'approved' && s !== 'active' && s !== 'rejected' && s !== 'assigned' && s !== 'suspended');
-        });
+        const agentVendors = agentOnboardedVendorsList.filter(v => isVendorAgentOnboarded(v));
         const q = agentOnboardSearch.toLowerCase().trim();
         const filtered = agentVendors.filter(v =>
           !q ||
@@ -2715,7 +2736,9 @@ export const VendorDirectoryModule = React.memo(({
           (v.onboardedByAgent?.name || v.agentName || '').toLowerCase().includes(q) ||
           (v.onboardedByAgent?.registrationId || v.agentRegistrationId || '').toLowerCase().includes(q) ||
           (v.pincode || '').includes(q) ||
-          (v.email || '').toLowerCase().includes(q)
+          (v.email || '').toLowerCase().includes(q) ||
+          (v.phone || '').includes(q) ||
+          (v.category || '').toLowerCase().includes(q)
         );
         return (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
@@ -2730,7 +2753,7 @@ export const VendorDirectoryModule = React.memo(({
                   <div>
                     <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Agent Onboarded Vendors</h3>
                     <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                      {filtered.length} vendor{filtered.length !== 1 ? 's' : ''} onboarded by field agents
+                      {agentVendors.length} vendor{agentVendors.length !== 1 ? 's' : ''} onboarded by field agents
                     </p>
                   </div>
                 </div>
@@ -2771,13 +2794,13 @@ export const VendorDirectoryModule = React.memo(({
                   <div className="bg-emerald-500/8 border border-emerald-500/15 rounded-2xl px-4 py-2.5 text-center">
                     <p className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">Active</p>
                     <p className="text-xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      {agentVendors.filter(v => ['active','approved'].includes((v.status||'').toLowerCase())).length}
+                      {agentVendors.filter(v => ['active','approved'].includes((v.status||'').toLowerCase().trim())).length}
                     </p>
                   </div>
                   <div className="bg-amber-500/8 border border-amber-500/15 rounded-2xl px-4 py-2.5 text-center">
                     <p className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400 tracking-wider">Pending / Others</p>
                     <p className="text-xl font-black text-amber-700 dark:text-amber-300 mt-0.5">
-                      {agentVendors.filter(v => !['active','approved'].includes((v.status||'').toLowerCase())).length}
+                      {agentVendors.filter(v => !['active','approved'].includes((v.status||'').toLowerCase().trim())).length}
                     </p>
                   </div>
                 </div>
