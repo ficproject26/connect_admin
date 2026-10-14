@@ -632,6 +632,7 @@ export const VendorDirectoryModule = React.memo(({
   const [showAgentOnboardedModal, setShowAgentOnboardedModal] = useState(false);
   const [agentOnboardSearch, setAgentOnboardSearch] = useState('');
   const [agentOnboardedVendorsList, setAgentOnboardedVendorsList] = useState([]);
+  const [agentSummaryStats, setAgentSummaryStats] = useState({ total: 0, active: 0, pending: 0 });
   const [directRequests, setDirectRequests] = useState([]);
 
   // Manager Onboarded Vendors Modal
@@ -892,7 +893,7 @@ export const VendorDirectoryModule = React.memo(({
   const fetchAgentOnboardedVendors = async () => {
     try {
       const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
-      const url = `${baseClean}/admin/enterprise/vendors?isAgentOnboarded=true&limit=500`;
+      const url = `${baseClean}/admin/enterprise/vendors?isAgentOnboarded=true&pendingOnly=true&limit=500`;
 
       try {
         const controller = new AbortController();
@@ -911,8 +912,18 @@ export const VendorDirectoryModule = React.memo(({
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
           const list = deduplicateVendorsList(data.vendors || []);
-          const agentOnly = list.filter(v => isVendorAgentOnboarded(v));
-          setAgentOnboardedVendorsList(agentOnly);
+          const pendingOnly = list.filter(v => {
+            if (!isVendorAgentOnboarded(v)) return false;
+            const s = (v.status || '').toLowerCase().trim();
+            const isApprovedOrActive = ['approved', 'active'].includes(s) || v.isActive === true;
+            return !isApprovedOrActive;
+          });
+          setAgentOnboardedVendorsList(pendingOnly);
+          setAgentSummaryStats({
+            total: typeof data.total === 'number' ? data.total : list.length,
+            active: typeof data.activeCount === 'number' ? data.activeCount : 0,
+            pending: typeof data.pendingCount === 'number' ? data.pendingCount : pendingOnly.length
+          });
         }
       } catch (e) {
         if (e.name !== 'AbortError') console.error('Fetch agent onboarded vendors warning:', e.message);
@@ -1166,7 +1177,12 @@ export const VendorDirectoryModule = React.memo(({
         // Backend confirmed approval -> update states to Active
         const newStatus = 'Active';
         setDirectRequests(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-        setAgentOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: true, isApproved: true } : v));
+        setAgentOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setAgentSummaryStats(prev => ({
+          ...prev,
+          active: prev.active + 1,
+          pending: Math.max(0, prev.pending - 1)
+        }));
         setManagerOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
         setManagerSummaryStats(prev => ({
           ...prev,
@@ -1249,7 +1265,11 @@ export const VendorDirectoryModule = React.memo(({
       if (res.ok && data.success) {
         const newStatus = 'Rejected';
         setDirectRequests(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
-        setAgentOnboardedVendorsList(prev => prev.map(v => (v._id === vendorId || v.id === vendorId || (email && (v.email || '').toLowerCase() === email)) ? { ...v, status: newStatus, isActive: false, isApproved: false } : v));
+        setAgentOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
+        setAgentSummaryStats(prev => ({
+          ...prev,
+          pending: Math.max(0, prev.pending - 1)
+        }));
         setManagerOnboardedVendorsList(prev => prev.filter(v => (v._id !== vendorId && v.id !== vendorId) && (!email || (v.email || '').toLowerCase() !== email)));
         setManagerSummaryStats(prev => ({
           ...prev,
@@ -1464,7 +1484,16 @@ export const VendorDirectoryModule = React.memo(({
 
     setVendors(prev => prev.map(updateVendorObj));
     setDirectRequests(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
-    setAgentOnboardedVendorsList(prev => prev.map(updateVendorObj));
+    if (!isPendingVendorReview(newStatus)) {
+      setAgentOnboardedVendorsList(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
+      setAgentSummaryStats(prev => ({
+        ...prev,
+        active: ['Active', 'Approved'].includes(newStatus) ? prev.active + 1 : prev.active,
+        pending: Math.max(0, prev.pending - 1)
+      }));
+    } else {
+      setAgentOnboardedVendorsList(prev => prev.map(updateVendorObj));
+    }
     if (!isPendingVendorReview(newStatus)) {
       setManagerOnboardedVendorsList(prev => prev.filter(v => !(v._id === vendorId || v.registrationId === regId || (email && v.email?.toLowerCase() === email.toLowerCase()))));
       setManagerSummaryStats(prev => ({
@@ -2728,7 +2757,12 @@ export const VendorDirectoryModule = React.memo(({
 
       {/* 8. AGENT ONBOARDED VENDORS MODAL */}
       {showAgentOnboardedModal && (() => {
-        const agentVendors = agentOnboardedVendorsList.filter(v => isVendorAgentOnboarded(v));
+        const agentVendors = agentOnboardedVendorsList.filter(v => {
+          if (!isVendorAgentOnboarded(v)) return false;
+          const s = (v.status || '').toLowerCase().trim();
+          const isApprovedOrActive = ['approved', 'active'].includes(s) || v.isActive === true;
+          return !isApprovedOrActive;
+        });
         const q = agentOnboardSearch.toLowerCase().trim();
         const filtered = agentVendors.filter(v =>
           !q ||
@@ -2740,6 +2774,9 @@ export const VendorDirectoryModule = React.memo(({
           (v.phone || '').includes(q) ||
           (v.category || '').toLowerCase().includes(q)
         );
+        const totalCount = agentSummaryStats.total;
+        const activeCount = agentSummaryStats.active;
+        const pendingCount = agentSummaryStats.pending;
         return (
           <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/65 backdrop-blur-sm p-4 overflow-y-auto">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-4xl rounded-3xl shadow-2xl my-8 flex flex-col">
@@ -2753,7 +2790,7 @@ export const VendorDirectoryModule = React.memo(({
                   <div>
                     <h3 className="text-xl font-black text-slate-800 dark:text-slate-100">Agent Onboarded Vendors</h3>
                     <p className="text-xs text-slate-400 font-semibold mt-0.5">
-                      {agentVendors.length} vendor{agentVendors.length !== 1 ? 's' : ''} onboarded by field agents
+                      {filtered.length} pending request{filtered.length !== 1 ? 's' : ''} awaiting review
                     </p>
                   </div>
                 </div>
@@ -2789,19 +2826,15 @@ export const VendorDirectoryModule = React.memo(({
                 <div className="grid grid-cols-3 gap-3">
                   <div className="bg-purple-500/8 border border-purple-500/15 rounded-2xl px-4 py-2.5 text-center">
                     <p className="text-[10px] font-black uppercase text-purple-700 dark:text-purple-400 tracking-wider">Total Agent Onboarded</p>
-                    <p className="text-xl font-black text-purple-800 dark:text-purple-300 mt-0.5">{agentVendors.length}</p>
+                    <p className="text-xl font-black text-purple-800 dark:text-purple-300 mt-0.5">{totalCount}</p>
                   </div>
                   <div className="bg-emerald-500/8 border border-emerald-500/15 rounded-2xl px-4 py-2.5 text-center">
                     <p className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-400 tracking-wider">Active</p>
-                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
-                      {agentVendors.filter(v => ['active','approved'].includes((v.status||'').toLowerCase().trim())).length}
-                    </p>
+                    <p className="text-xl font-black text-emerald-700 dark:text-emerald-300 mt-0.5">{activeCount}</p>
                   </div>
                   <div className="bg-amber-500/8 border border-amber-500/15 rounded-2xl px-4 py-2.5 text-center">
-                    <p className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400 tracking-wider">Pending / Others</p>
-                    <p className="text-xl font-black text-amber-700 dark:text-amber-300 mt-0.5">
-                      {agentVendors.filter(v => !['active','approved'].includes((v.status||'').toLowerCase().trim())).length}
-                    </p>
+                    <p className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-400 tracking-wider">Pending Requests</p>
+                    <p className="text-xl font-black text-amber-700 dark:text-amber-300 mt-0.5">{pendingCount}</p>
                   </div>
                 </div>
               </div>
@@ -2813,8 +2846,8 @@ export const VendorDirectoryModule = React.memo(({
                     <UserCheck className="w-12 h-12 mx-auto mb-3 opacity-30" />
                     <p className="text-sm font-bold">
                       {agentVendors.length === 0
-                        ? 'No agent-onboarded vendors found in the directory yet.'
-                        : 'No vendors match your search query.'}
+                        ? 'No pending agent-onboarded vendor requests at the moment.'
+                        : 'No vendor requests match your search query.'}
                     </p>
                     <p className="text-xs mt-1 font-medium">Try a different search term.</p>
                   </div>
@@ -2957,7 +2990,7 @@ export const VendorDirectoryModule = React.memo(({
               {/* Modal Footer */}
               <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
                 <span className="text-xs font-semibold text-slate-400">
-                  Showing <strong className="text-slate-600 dark:text-slate-300">{filtered.length}</strong> of <strong className="text-slate-600 dark:text-slate-300">{agentVendors.length}</strong> agent-onboarded vendors
+                  Showing <strong className="text-slate-600 dark:text-slate-300">{filtered.length}</strong> of <strong className="text-slate-600 dark:text-slate-300">{agentVendors.length}</strong> pending agent-onboarded vendor requests
                 </span>
                 <button
                   onClick={() => { setShowAgentOnboardedModal(false); setAgentOnboardSearch(''); }}

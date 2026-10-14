@@ -968,14 +968,34 @@ router.get('/vendors', auth, async (req, res) => {
                 );
             }
 
+            const isApprovedActive = (v) => {
+                const s = String(v.status || '').toLowerCase().trim();
+                return ['active', 'approved'].includes(s) || v.isActive === true;
+            };
+
+            const isPendingAgentRequest = (v) => {
+                const s = String(v.status || '').toLowerCase().trim();
+                if (['active', 'approved', 'rejected', 'suspended'].includes(s) || v.isActive === true) return false;
+                return true;
+            };
+
             const pageNum = Math.max(1, parseInt(page, 10) || 1);
-            const limitNum = Math.max(1, parseInt(limit, 10) || 20);
+            const limitNum = Math.max(1, parseInt(limit, 10) || 500);
             const total = enriched.length;
-            const activeCount = enriched.filter(v => ['active', 'approved'].includes(String(v.status || '').toLowerCase().trim())).length;
-            const pendingCount = total - activeCount;
-            const paginated = (req.query.limit && limitNum < total)
-                ? enriched.slice((pageNum - 1) * limitNum, pageNum * limitNum)
-                : enriched;
+            const activeCount = enriched.filter(isApprovedActive).length;
+            const pendingCount = enriched.filter(isPendingAgentRequest).length;
+
+            let resultVendors = enriched;
+            if (req.query.pendingOnly === 'true' || (status && String(status).toLowerCase().trim() === 'pending')) {
+                resultVendors = enriched.filter(isPendingAgentRequest);
+            } else if (status && status !== 'all') {
+                const s = String(status).toLowerCase().trim();
+                resultVendors = enriched.filter(v => String(v.status || '').toLowerCase().trim() === s);
+            }
+
+            const paginated = (req.query.limit && limitNum < resultVendors.length)
+                ? resultVendors.slice((pageNum - 1) * limitNum, pageNum * limitNum)
+                : resultVendors;
 
             return res.json({
                 vendors: paginated,
@@ -983,7 +1003,7 @@ router.get('/vendors', auth, async (req, res) => {
                 activeCount,
                 pendingCount,
                 page: pageNum,
-                pages: Math.ceil(total / limitNum) || 1
+                pages: Math.ceil(resultVendors.length / limitNum) || 1
             });
         }
 
