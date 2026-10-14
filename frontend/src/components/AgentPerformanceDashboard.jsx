@@ -132,7 +132,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
 
         if (externalSignal) {
           externalSignal.addEventListener('abort', () => controller.abort());
@@ -157,7 +157,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
             : targetUrl.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/');
           try {
             const altController = new AbortController();
-            const altTimeout = setTimeout(() => altController.abort(), 15000);
+            const altTimeout = setTimeout(() => altController.abort(), 30000);
             const altRes = await fetch(alternateUrl, { headers: fetchHeaders, signal: altController.signal });
             clearTimeout(altTimeout);
             if (altRes.ok) {
@@ -177,7 +177,9 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
         if (e.name === 'AbortError' && externalSignal?.aborted) {
           return;
         }
-        if (e.name !== 'AbortError') {
+        if (e.name === 'AbortError') {
+          lastErrorMsg = 'Request timed out. Please click Retry.';
+        } else {
           lastErrorMsg = e.message;
         }
       }
@@ -232,8 +234,12 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
 
   // Trigger fetch with automatic AbortController on filter changes
   useEffect(() => {
-    if (period === 'custom' && ((startDate && !endDate) || (!startDate && endDate))) {
-      return;
+    if (period === 'custom') {
+      if (!startDate || !endDate) return;
+      if (new Date(startDate) > new Date(endDate)) {
+        setError('Start date cannot be after end date.');
+        return;
+      }
     }
     const controller = new AbortController();
     fetchOverview(false, controller.signal);
@@ -256,23 +262,30 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
   // Export handlers
   const exportCSV = () => {
     if (!agentsList || agentsList.length === 0) return;
-    const headers = ['Agent Name', 'Email', 'Role', 'Territory', 'Status', 'Score', 'Rating', 'Registrations', 'Revenue'];
+    const headers = ['Agent Name', 'Email', 'Phone', 'Role', 'Territory', 'Status', 'Score', 'Rating', 'Registrations', 'Membership Sales', 'Vendors Onboarded', 'Orders', 'Revenue (INR)', 'Commission (INR)', 'Calls & Meetings', 'Attendance %'];
     const rows = agentsList.map(a => [
       `"${a.agent?.name || ''}"`,
       `"${a.agent?.email || ''}"`,
+      `"${a.agent?.phone || ''}"`,
       `"${safeAgentLevel(a.agent?.level)}"`,
       `"${a.agent?.assignedArea || ''}"`,
       `"${a.agent?.status || ''}"`,
       a.score || 0,
       `"${a.rating || ''}"`,
       a.metrics?.registrations || 0,
-      a.metrics?.revenue || 0
+      a.metrics?.membershipSales || 0,
+      a.metrics?.vendorOnboarding || 0,
+      a.metrics?.orders || 0,
+      a.metrics?.revenue || 0,
+      a.metrics?.commission || 0,
+      (a.metrics?.callsMade || 0) + (a.metrics?.meetingsConducted || 0),
+      `${a.metrics?.attendancePct || 0}%`
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `agent_performance_${period}.csv`);
+    link.setAttribute('download', `agent_performance_${period}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -335,7 +348,15 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       return <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">0</span>;
     }
     if (isTop || isLowest) {
-      return <span className="block text-lg font-black text-slate-800 dark:text-slate-100 truncate">{val}</span>;
+      return <span className="block text-base font-black text-slate-800 dark:text-slate-100 truncate" title={val}>{val}</span>;
+    }
+    const isTextStatus = typeof val === 'string' && (val.length > 8 || val.toLowerCase().includes('target') || val.toLowerCase().includes('configured'));
+    if (isTextStatus) {
+      return (
+        <span className="block text-xs sm:text-sm font-bold text-slate-500 dark:text-slate-400 truncate" title={val}>
+          {val}
+        </span>
+      );
     }
     return (
       <span className="block text-2xl font-black text-slate-800 dark:text-slate-100">

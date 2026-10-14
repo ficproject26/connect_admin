@@ -6459,7 +6459,7 @@ const handleAgentPerformanceOverview = async (req, res) => {
             vendorsAdded: 1,
             balance: 1,
             commissionEarned: 1,
-            'kyc.selfie': 1,
+            'avatar': 1,
             createdAt: 1,
             registrationId: 1
         };
@@ -6550,6 +6550,15 @@ const handleAgentPerformanceOverview = async (req, res) => {
 
         const objectIdsOnly = matchIds.filter(id => id instanceof mongoose.Types.ObjectId);
         const Task = require('../models/Task');
+        const taskQuery = {
+            status: { $in: ['Assigned', 'In Progress', 'Accepted', 'Pending Acceptance', 'pending', 'assigned', 'in_progress', 'todo', 'open'] }
+        };
+        if (agentType && agentType !== 'all') {
+            taskQuery.$or = [
+                { assignedTo: { $in: objectIdsOnly } },
+                { assignedAgentId: { $in: matchIds } }
+            ];
+        }
 
         // Fetch targets, activities aggregation, and pending tasks in parallel
         const [targets, activityAggregation, pendingTasksCount] = await Promise.all([
@@ -6581,10 +6590,7 @@ const handleAgentPerformanceOverview = async (req, res) => {
                     }
                 }
             ]),
-            Task.countDocuments({
-                assignedTo: { $in: objectIdsOnly },
-                status: 'pending'
-            })
+            Task.countDocuments(taskQuery)
         ]);
 
         const targetMap = {};
@@ -6641,7 +6647,7 @@ const handleAgentPerformanceOverview = async (req, res) => {
                 callsMade: 0,
                 meetingsConducted: 0
             };
-            const tgt = targetMap[agentIdStr] || { targets: { registrations: 100, membershipSales: 50, vendorOnboarding: 25, orders: 500, revenue: 500000 } };
+            const tgt = targetMap[agentIdStr] || null;
 
             const registrations = stat.registrations;
             const membershipSales = stat.membershipSales;
@@ -6655,7 +6661,7 @@ const handleAgentPerformanceOverview = async (req, res) => {
             const callsMade = stat.callsMade;
             const meetingsConducted = stat.meetingsConducted;
 
-            const perfScore = calculateAgentPerformanceScore({ registrations, membershipSales, vendorOnboarding, orders, revenue, attendancePct }, tgt);
+            const perfScore = tgt ? calculateAgentPerformanceScore({ registrations, membershipSales, vendorOnboarding, orders, revenue, attendancePct }, tgt) : { score: 0, rating: 'No Target', colorClass: 'slate' };
 
             return {
                 agent: {
@@ -6669,10 +6675,10 @@ const handleAgentPerformanceOverview = async (req, res) => {
                     assignedPincode: agent.assignedPincode,
                     status: agent.status || 'approved',
                     isActive: agent.isActive !== false,
-                    kyc: agent.kyc,
+                    kyc: agent.kyc ? { status: agent.kyc.status } : undefined,
                     createdAt: agent.createdAt
                 },
-                target: tgt.targets,
+                target: tgt?.targets || null,
                 metrics: {
                     registrations,
                     membershipSales,
@@ -6712,30 +6718,43 @@ const handleAgentPerformanceOverview = async (req, res) => {
         // Aggregated Card Metrics strictly from DB
         const nonRejectedAgents = allAgents.filter(a => (a.status || '').toLowerCase() !== 'rejected');
         const totalAgents = nonRejectedAgents.length;
-        const activeAgents = nonRejectedAgents.filter(a => a.isActive !== false && ((a.status || '').toLowerCase() === 'approved' || !a.status)).length;
-        const inactiveAgents = nonRejectedAgents.filter(a => ['pending', 'suspended', 'under_verification', 'under verification'].includes((a.status || '').toLowerCase())).length;
+        const isAgentActive = (a) => {
+            const st = (a.status || '').toLowerCase().trim();
+            if (st === 'rejected' || a.isActive === false) return false;
+            return st === 'active' || st === 'approved' || !st;
+        };
+        const isAgentInactive = (a) => {
+            const st = (a.status || '').toLowerCase().trim();
+            if (st === 'rejected') return false;
+            return a.isActive === false || ['inactive', 'pending', 'suspended', 'under_verification', 'under verification', 'in_review'].includes(st);
+        };
+        const activeAgents = nonRejectedAgents.filter(isAgentActive).length;
+        const inactiveAgents = nonRejectedAgents.filter(isAgentInactive).length;
         const totalRevenue = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.revenue, 0);
         const totalLeads = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.callsMade + curr.metrics.meetingsConducted, 0);
         const totalRegistrations = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.registrations, 0);
 
         const avgScore = agentMetricsList.length > 0 ? Math.round(agentMetricsList.reduce((acc, c) => acc + c.score, 0) / agentMetricsList.length) : 0;
 
-        const highestAgentName = sortedByScore[0] && sortedByScore[0].score > 0 ? sortedByScore[0].agent?.name : 'N/A';
-        const lowestAgentName = sortedByScore.length > 1 && sortedByScore[sortedByScore.length - 1].score > 0 ? sortedByScore[sortedByScore.length - 1].agent?.name : 'N/A';
+        const highestAgentName = sortedByScore[0] && sortedByScore[0].score > 0 ? sortedByScore[0].agent?.name : 'No Activity Recorded';
+        const lowestAgentName = sortedByScore.length > 1 && sortedByScore[sortedByScore.length - 1].score > 0 ? sortedByScore[sortedByScore.length - 1].agent?.name : (avgScore === 0 ? 'All On Track' : 'N/A');
+
+        const hasConfiguredTargets = targets.length > 0;
+        const targetProgressText = hasConfiguredTargets ? `${avgScore}% Achieved` : 'Target not configured';
 
         const cards = {
             totalAgents,
             registeredAgents: totalAgents,
             activeAgents,
             inactiveAgents,
-            todaysPerformance: `${avgScore}% Achieved`,
-            dailyTargetProgress: `${avgScore}% Achieved`,
-            weeklyPerformance: `${avgScore}% Achieved`,
-            weeklyTargetProgress: `${avgScore}% Achieved`,
-            monthlyPerformance: `${avgScore}% Achieved`,
-            monthlyTargetProgress: `${avgScore}% Achieved`,
-            yearlyPerformance: `${avgScore}% Achieved`,
-            yearlyTargetProgress: `${avgScore}% Achieved`,
+            todaysPerformance: targetProgressText,
+            dailyTargetProgress: targetProgressText,
+            weeklyPerformance: targetProgressText,
+            weeklyTargetProgress: targetProgressText,
+            monthlyPerformance: targetProgressText,
+            monthlyTargetProgress: targetProgressText,
+            yearlyPerformance: targetProgressText,
+            yearlyTargetProgress: targetProgressText,
             highestPerformer: highestAgentName,
             highestScoreAgent: highestAgentName,
             lowestPerformer: lowestAgentName,
