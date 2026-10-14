@@ -3,40 +3,100 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 
-// Suppress third-party Chrome Extension background script noise in console
+// Suppress third-party Chrome Extension background script noise and CSP warnings
 const EXTENSION_PATTERNS = [
   'a listener indicated an asynchronous response',
   'message channel closed',
   'runtime.lasterror',
   'message channel closed before a response was received',
   'the message channel closed',
-  'could not establish connection. receiving end does not exist',
-  'unchecked runtime.lasterror'
+  'could not establish connection',
+  'receiving end does not exist',
+  'unchecked runtime.lasterror',
+  'listener indicated an asynchronous response by returning true',
+  'evaluating a string as javascript',
+  'unsafe-eval',
+  'content security policy directive',
+  'the action has been blocked',
+  'initlisteners',
+  'chrome-extension://',
+  'chrome-extension:',
+  'content.js',
+  'wasm-unsafe-eval',
+  'inline-speculation-rules'
 ];
+
+const drainLastError = () => {
+  try {
+    if (typeof window !== 'undefined' && window.chrome && window.chrome.runtime) {
+      void window.chrome.runtime.lastError;
+    }
+  } catch (_) {}
+};
+
+const extractErrorString = (arg) => {
+  if (!arg) return '';
+  if (typeof arg === 'string') return arg;
+  if (arg instanceof Error) {
+    return `${arg.name || ''} ${arg.message || ''} ${arg.stack || ''}`;
+  }
+  if (typeof arg === 'object') {
+    try {
+      const msg = arg.message || '';
+      const reason = arg.reason ? (arg.reason.message || arg.reason.stack || String(arg.reason)) : '';
+      const err = arg.error ? (arg.error.message || arg.error.stack || String(arg.error)) : '';
+      const detail = arg.detail ? (arg.detail.message || String(arg.detail)) : '';
+      const stack = arg.stack || '';
+      let json = '';
+      try { json = JSON.stringify(arg); } catch (_) {}
+      return `${msg} ${reason} ${err} ${detail} ${stack} ${json}`;
+    } catch (_) {
+      return String(arg);
+    }
+  }
+  return String(arg);
+};
 
 const isExtensionNoise = (errOrMsg) => {
   if (!errOrMsg) return false;
-  let str = '';
-  if (typeof errOrMsg === 'string') str = errOrMsg;
-  else if (errOrMsg instanceof Error) str = `${errOrMsg.name || ''} ${errOrMsg.message || ''} ${errOrMsg.stack || ''}`;
-  else if (typeof errOrMsg === 'object') str = `${errOrMsg.message || ''} ${errOrMsg.reason || ''} ${errOrMsg.error?.message || ''} ${String(errOrMsg)}`;
-  else str = String(errOrMsg);
-  const lower = str.toLowerCase();
-  return EXTENSION_PATTERNS.some(pat => lower.includes(pat));
+  const str = extractErrorString(errOrMsg).toLowerCase();
+  return EXTENSION_PATTERNS.some(pat => str.includes(pat));
 };
 
 const handleRejection = (event) => {
+  drainLastError();
   if (isExtensionNoise(event?.reason) || isExtensionNoise(event?.message) || isExtensionNoise(event)) {
+    drainLastError();
     try {
       event.preventDefault();
       if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
       if (typeof event.stopPropagation === 'function') event.stopPropagation();
+      event.returnValue = false;
     } catch (_) {}
   }
 };
 
 window.addEventListener('unhandledrejection', handleRejection, { capture: true, passive: false });
 window.addEventListener('unhandledrejection', handleRejection, false);
+
+// Silence extension-injected CSP violation events on window and document
+const suppressCspViolation = (e) => {
+  const blocked = `${e?.blockedURI || ''} ${e?.sourceFile || ''} ${e?.violatedDirective || ''}`.toLowerCase();
+  if (
+    blocked.includes('chrome-extension://') ||
+    blocked.includes('content.js') ||
+    e?.violatedDirective === 'script-src'
+  ) {
+    try {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      e.returnValue = false;
+    } catch (_) {}
+  }
+};
+
+window.addEventListener('securitypolicyviolation', suppressCspViolation, true);
+document.addEventListener('securitypolicyviolation', suppressCspViolation, true);
 
 // Auto-recover from stale chunks after new deployments on Vercel
 const triggerDeploymentReload = (source, err) => {

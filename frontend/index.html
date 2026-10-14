@@ -11,46 +11,85 @@
         'runtime.lasterror',
         'message channel closed before a response was received',
         'the message channel closed',
-        'could not establish connection. receiving end does not exist',
+        'could not establish connection',
+        'receiving end does not exist',
         'unchecked runtime.lasterror',
         'listener indicated an asynchronous response by returning true',
-        'evaluating a string as javascript violates',
+        'evaluating a string as javascript',
         'unsafe-eval',
         'content security policy directive',
         'the action has been blocked',
         'initlisteners',
-        'chrome-extension://'
+        'chrome-extension://',
+        'chrome-extension:',
+        'content.js',
+        'wasm-unsafe-eval',
+        'inline-speculation-rules'
       ];
+
+      function extractErrorString(arg) {
+        if (!arg) return '';
+        if (typeof arg === 'string') return arg;
+        if (arg instanceof Error) {
+          return (arg.name || '') + ' ' + (arg.message || '') + ' ' + (arg.stack || '');
+        }
+        if (typeof arg === 'object') {
+          try {
+            var msg = arg.message || '';
+            var reason = arg.reason ? (arg.reason.message || arg.reason.stack || String(arg.reason)) : '';
+            var err = arg.error ? (arg.error.message || arg.error.stack || String(arg.error)) : '';
+            var detail = arg.detail ? (arg.detail.message || String(arg.detail)) : '';
+            var stack = arg.stack || '';
+            var json = '';
+            try { json = JSON.stringify(arg); } catch (_) {}
+            return msg + ' ' + reason + ' ' + err + ' ' + detail + ' ' + stack + ' ' + json;
+          } catch (_) {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }
 
       function isExtensionError() {
         var args = Array.prototype.slice.call(arguments);
         if (!args || args.length === 0) return false;
         return args.some(function(arg) {
           if (!arg) return false;
-          var str = '';
-          if (typeof arg === 'string') {
-            str = arg;
-          } else if (arg instanceof Error) {
-            str = (arg.name || '') + ' ' + (arg.message || '') + ' ' + (arg.stack || '');
-          } else if (typeof arg === 'object') {
-            str = (arg.message || '') + ' ' + (arg.reason || '') + ' ' +
-                  ((arg.error && arg.error.message) || '') + ' ' +
-                  (arg.detail || '') + ' ' + String(arg);
-          } else {
-            str = String(arg);
-          }
+          var str = extractErrorString(arg);
           var lower = str.toLowerCase();
           return EXTENSION_ERROR_PATTERNS.some(function(pat) { return lower.indexOf(pat) !== -1; });
         });
       }
 
-      function checkRuntimeLastError() {
+      function drainLastError() {
         try {
           if (typeof window !== 'undefined' && window.chrome && window.chrome.runtime) {
             void window.chrome.runtime.lastError;
           }
         } catch (_) {}
       }
+
+      // Proactively drain lastError every 50ms so Chromium never logs it as unchecked
+      if (typeof window !== 'undefined') {
+        setInterval(drainLastError, 50);
+        drainLastError();
+      }
+
+      // Proactively patch lastError getter on window.chrome.runtime if present
+      try {
+        if (typeof window !== 'undefined' && window.chrome && window.chrome.runtime) {
+          var _rt = window.chrome.runtime;
+          var _desc = Object.getOwnPropertyDescriptor(_rt, 'lastError');
+          if (!_desc || _desc.configurable) {
+            Object.defineProperty(_rt, 'lastError', {
+              configurable: true,
+              enumerable: true,
+              get: function() { return undefined; },
+              set: function() {}
+            });
+          }
+        }
+      } catch (_) {}
 
       // Patch window.chrome.runtime to safely absorb dangling message ports
       function patchRuntime(runtime) {
@@ -65,7 +104,7 @@
               var lastArg = args[args.length - 1];
               if (typeof lastArg === 'function') {
                 args[args.length - 1] = function() {
-                  try { void runtime.lastError; } catch (_) {}
+                  drainLastError();
                   return lastArg.apply(this, arguments);
                 };
                 return origSend.apply(null, args);
@@ -74,18 +113,18 @@
               if (p && typeof p.then === 'function') {
                 return p
                   .then(function(res) {
-                    try { void runtime.lastError; } catch (_) {}
+                    drainLastError();
                     return res;
                   })
                   .catch(function(err) {
-                    try { void runtime.lastError; } catch (_) {}
+                    drainLastError();
                     if (isExtensionError(err)) return undefined;
                     throw err;
                   });
               }
               return p;
             } catch (err) {
-              try { void runtime.lastError; } catch (_) {}
+              drainLastError();
               if (isExtensionError(err)) return Promise.resolve(undefined);
               throw err;
             }
@@ -108,7 +147,6 @@
               try {
                 var res = listener(message, sender, safeSendResponse);
                 if (res === true) {
-                  // Auto-close the channel after 2.5s to prevent the "channel closed" warning
                   setTimeout(function() {
                     if (!responded) safeSendResponse({ status: 'auto_resolved' });
                   }, 2500);
@@ -130,26 +168,16 @@
         }
       }
 
-      // Watch and auto-patch window.chrome if injected by extensions
       try {
         var _chrome = window.chrome;
         if (_chrome) patchRuntime(_chrome.runtime);
-        Object.defineProperty(window, 'chrome', {
-          configurable: true,
-          enumerable: true,
-          get: function() { return _chrome; },
-          set: function(val) {
-            _chrome = val;
-            if (_chrome) patchRuntime(_chrome.runtime);
-          }
-        });
       } catch (_) {}
 
       // Intercept console.error & console.warn to silence extension noise
       var origConsoleError = console.error;
       console.error = function() {
+        drainLastError();
         if (isExtensionError.apply(null, arguments)) {
-          checkRuntimeLastError();
           return;
         }
         return origConsoleError.apply(console, arguments);
@@ -157,40 +185,58 @@
 
       var origConsoleWarn = console.warn;
       console.warn = function() {
+        drainLastError();
         if (isExtensionError.apply(null, arguments)) {
-          checkRuntimeLastError();
           return;
         }
         return origConsoleWarn.apply(console, arguments);
       };
 
-      // Unified rejection handler — registered ONCE in capture phase only
+      // Unified rejection handler — registered in capture phase with preventDefault & returnValue cancellation
       function handleRejection(e) {
+        drainLastError();
         if (!e) return;
         var reason = e.reason || e;
         if (isExtensionError(reason, e.message, e)) {
-          // Drain lastError first to prevent Chrome from logging "Unchecked runtime.lastError"
-          checkRuntimeLastError();
+          drainLastError();
           try {
             if (typeof e.preventDefault === 'function') e.preventDefault();
             if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+            if (typeof e.stopPropagation === 'function') e.stopPropagation();
+            e.returnValue = false;
           } catch (_) {}
-          return;
+          return false;
         }
       }
 
-      // Register ONCE in capture phase (runs before any other handlers)
       window.addEventListener('unhandledrejection', handleRejection, true);
+      window.addEventListener('unhandledrejection', handleRejection, false);
 
-      // window.onerror for synchronous errors
-      function handleError(e) {
-        if (!e) return;
-        var err = e.error || e;
-        if (isExtensionError(err, e.message, e.filename, e)) {
-          checkRuntimeLastError();
+      var origUnhandled = window.onunhandledrejection;
+      window.onunhandledrejection = function(e) {
+        drainLastError();
+        if (e && isExtensionError(e.reason || e, e.message, e)) {
           try {
             if (typeof e.preventDefault === 'function') e.preventDefault();
             if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+            e.returnValue = false;
+          } catch (_) {}
+          return true;
+        }
+        if (typeof origUnhandled === 'function') return origUnhandled.apply(this, arguments);
+      };
+
+      // window.onerror for synchronous errors
+      function handleError(e) {
+        drainLastError();
+        if (!e) return;
+        var err = e.error || e;
+        if (isExtensionError(err, e.message, e.filename, e)) {
+          drainLastError();
+          try {
+            if (typeof e.preventDefault === 'function') e.preventDefault();
+            if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+            e.returnValue = false;
           } catch (_) {}
           return true;
         }
@@ -200,8 +246,8 @@
 
       var origOnError = window.onerror;
       window.onerror = function(message, source, lineno, colno, error) {
+        drainLastError();
         if (isExtensionError(message, source, error)) {
-          checkRuntimeLastError();
           return true;
         }
         if (typeof origOnError === 'function') {
@@ -209,20 +255,25 @@
         }
       };
 
-      // Silence extension-injected CSP violation events
-      window.addEventListener('securitypolicyviolation', function(e) {
+      // Silence extension-injected CSP violation events on window and document
+      var suppressCspViolation = function(e) {
         var blocked = ((e && e.blockedURI) || '') + ' ' + ((e && e.sourceFile) || '') + ' ' + ((e && e.violatedDirective) || '');
+        var lower = blocked.toLowerCase();
         if (
-          blocked.indexOf('chrome-extension://') !== -1 ||
-          blocked.indexOf('content.js') !== -1 ||
+          lower.indexOf('chrome-extension://') !== -1 ||
+          lower.indexOf('content.js') !== -1 ||
           (e && e.violatedDirective === 'script-src')
         ) {
           try {
             if (typeof e.preventDefault === 'function') e.preventDefault();
-            if (typeof e.stopPropagation === 'function') e.stopPropagation();
+            if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+            e.returnValue = false;
           } catch (_) {}
         }
-      }, true);
+      };
+
+      window.addEventListener('securitypolicyviolation', suppressCspViolation, true);
+      document.addEventListener('securitypolicyviolation', suppressCspViolation, true);
     })();
   </script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
