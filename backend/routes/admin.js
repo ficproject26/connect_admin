@@ -135,35 +135,50 @@ const filterActiveVendorItems = async (items) => {
     }
 };
 
-// HELPER: Deterministic Canonical Customer ID Generator (Matches Customer Portal FIC-CUST-XXXXXX)
-function getCanonicalCustomerId(userOrId) {
-    if (!userOrId) return 'FIC-CUST-100000';
+// HELPER: Deterministic Canonical Customer ID Generator (Canonical FIC-CUS-MMM-YYYY-NNNNNN)
+const MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+function isValidCustomerId(id) {
+    if (!id || typeof id !== 'string') return false;
+    return /^FIC-CUS-(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)-[0-9]{4}-[0-9]{6}$/.test(id.trim());
+}
+
+function getCanonicalCustomerId(userOrId, date = new Date()) {
+    if (!userOrId) return 'FIC-CUS-OCT-2026-000001';
     if (typeof userOrId === 'object' && userOrId !== null) {
-        // If it's a Mongoose ObjectId, BSON ObjectId, or has toHexString
-        if (userOrId._bsontype === 'ObjectID' || (mongoose.Types.ObjectId && userOrId instanceof mongoose.Types.ObjectId) || typeof userOrId.toHexString === 'function') {
+        if (userOrId._bsontype === 'ObjectID' || (mongoose.Types && mongoose.Types.ObjectId && userOrId instanceof mongoose.Types.ObjectId) || typeof userOrId.toHexString === 'function') {
             return getCanonicalCustomerId(userOrId.toString());
         }
-        if (userOrId.customerId && !['FIC-CUST-750684', 'FIC-CUST-849201', 'FIC-CUST-100000'].includes(userOrId.customerId) && String(userOrId.customerId).startsWith('FIC-CUST-')) {
+        if (userOrId.customerId && isValidCustomerId(userOrId.customerId)) {
             return String(userOrId.customerId);
         }
-        if (userOrId.registrationId && !['FIC-CUST-750684', 'FIC-CUST-849201', 'FIC-CUST-100000'].includes(userOrId.registrationId) && String(userOrId.registrationId).startsWith('FIC-CUST-')) {
+        if (userOrId.registrationId && isValidCustomerId(userOrId.registrationId)) {
+            return String(userOrId.registrationId);
+        }
+        if (userOrId.customerId && !String(userOrId.customerId).startsWith('FIC-CUST-')) {
+            return String(userOrId.customerId);
+        }
+        if (userOrId.registrationId && !String(userOrId.registrationId).startsWith('FIC-CUST-')) {
             return String(userOrId.registrationId);
         }
         const target = userOrId.email || userOrId.phone || userOrId.mobileNumber || userOrId.mobile || userOrId.name || userOrId.username || (userOrId._id ? String(userOrId._id) : (userOrId.id ? String(userOrId.id) : ''));
-        return getCanonicalCustomerId(String(target || ''));
+        const regDate = userOrId.createdAt || userOrId.created_at ? new Date(userOrId.createdAt || userOrId.created_at) : date;
+        return getCanonicalCustomerId(String(target || ''), regDate);
     }
-    const clean = String(userOrId).trim().toLowerCase();
-    if (!clean) return 'FIC-CUST-100000';
-    if (clean.startsWith('fic-cust-') && !['fic-cust-750684', 'fic-cust-849201', 'fic-cust-100000'].includes(clean)) {
-        return clean.toUpperCase();
+    const clean = String(userOrId).trim();
+    if (isValidCustomerId(clean)) {
+        return clean;
     }
+    const d = date instanceof Date && !isNaN(date.getTime()) ? date : new Date();
+    const mmm = MONTH_NAMES[d.getMonth()];
+    const yyyy = d.getFullYear();
     let hash = 0;
     for (let i = 0; i < clean.length; i++) {
         hash = ((hash << 5) - hash) + clean.charCodeAt(i);
         hash |= 0;
     }
-    const num = Math.abs(hash % 900000) + 100000;
-    return `FIC-CUST-${num}`;
+    const seq = String((Math.abs(hash) % 900000) + 1).padStart(6, '0');
+    return `FIC-CUS-${mmm}-${yyyy}-${seq}`;
 }
 
 // HELPER: Deep sanitize heavy fields while preserving usable document URLs (HTTP, local paths, and valid data URIs)
@@ -4570,7 +4585,7 @@ const resolveVendorAndCustomer = async (items) => {
         const phoneVal = (customerObj ? (customerObj.phone || customerObj.mobile || customerObj.mobileNumber || customerObj.contactNumber) : null) || doc.customer_phone || doc.customerPhone || doc.phone || doc.mobile || '—';
         const nameVal = (customerObj ? customerObj.name : null) || doc.memberName || doc.customer_name || doc.customer?.name || 'Customer';
         const emailVal = (customerObj ? customerObj.email : null) || custEmailKey || '—';
-        const custCanonicalId = customerObj?.customerId || customerObj?.registrationId || (cKey && cKey.startsWith('FIC-CUST-') ? cKey : getCanonicalCustomerId(customerObj || doc));
+        const custCanonicalId = customerObj?.customerId || customerObj?.registrationId || (cKey && (cKey.startsWith('FIC-CUS-') || cKey.startsWith('FIC-CUST-')) ? cKey : getCanonicalCustomerId(customerObj || doc));
 
         const customer = {
             ...(customerObj || {}),
@@ -5071,7 +5086,7 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
 
         const mappedDbJobs = dbJobs.map((j) => {
             const obj = j.toObject ? j.toObject() : j;
-            const custIdVal = (obj.customerId && String(obj.customerId).startsWith('FIC-CUST-')) ? obj.customerId : getCanonicalCustomerId(obj);
+            const custIdVal = (obj.customerId && (String(obj.customerId).startsWith('FIC-CUS-') || String(obj.customerId).startsWith('FIC-CUST-'))) ? obj.customerId : getCanonicalCustomerId(obj);
             const posVal = obj.position || obj.title || obj.jobTitle || '—';
             const compVal = obj.companyName || obj.vendorName || obj.businessName || '—';
             const hrVal = obj.hrName || obj.contactPerson || obj.hr || '—';
@@ -5092,7 +5107,7 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
 
         const mappedCustomJobs = resolvedCustomJobs.map((order) => {
             const appId = order.applicationId || order.order_number || order.id || (order._id ? 'APP-' + String(order._id).substring(18, 24).toUpperCase() : '—');
-            const custIdVal = (order.customerId && (order.customerId.customerId || order.customerId.registrationId)) || (order.customerId && String(order.customerId).startsWith('FIC-CUST-') ? order.customerId : getCanonicalCustomerId(order.customerId || order));
+            const custIdVal = (order.customerId && (order.customerId.customerId || order.customerId.registrationId)) || (order.customerId && (String(order.customerId).startsWith('FIC-CUS-') || String(order.customerId).startsWith('FIC-CUST-')) ? order.customerId : getCanonicalCustomerId(order.customerId || order));
             const companyName = (order.vendorId && (order.vendorId.businessName || order.vendorId.name)) || order.companyName || order.vendorName || '—';
             const hrName = (order.vendorId && (order.vendorId.contactPerson || order.vendorId.name)) || order.hrName || '—';
             const posVal = order.jobTitle || (order.items && order.items[0]?.name) || order.product_details || order.position || order.title || 'Job Role';
