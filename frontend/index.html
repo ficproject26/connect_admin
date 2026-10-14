@@ -24,7 +24,15 @@
         'chrome-extension:',
         'content.js',
         'wasm-unsafe-eval',
-        'inline-speculation-rules'
+        'inline-speculation-rules',
+        'the deferred dom node could not be resolved',
+        'the deferred dom node',
+        'deferred dom node',
+        'deferred dom',
+        'could not be resolved to a valid node',
+        'nmigaijibiabddkkmjhlehchpmgbokfj',
+        '1af9505a-5825-464e-acf3-5ad9367aeb9d',
+        'volume-booster'
       ];
 
       function extractErrorString(arg) {
@@ -68,6 +76,27 @@
           }
         } catch (_) {}
       }
+
+      // Neutralize third-party extension calls to setTimeout/setInterval with undefined or string handlers that trigger CSP unsafe-eval violations
+      var _origSetTimeout = window.setTimeout;
+      window.setTimeout = function (handler, timeout) {
+        if (typeof handler !== 'function') {
+          if (!handler || handler === 'undefined' || handler === 'null') {
+            return -1;
+          }
+        }
+        return _origSetTimeout.apply(this, arguments);
+      };
+
+      var _origSetInterval = window.setInterval;
+      window.setInterval = function (handler, timeout) {
+        if (typeof handler !== 'function') {
+          if (!handler || handler === 'undefined' || handler === 'null') {
+            return -1;
+          }
+        }
+        return _origSetInterval.apply(this, arguments);
+      };
 
       // Proactively drain lastError every 50ms so Chromium never logs it as unchecked
       if (typeof window !== 'undefined') {
@@ -173,24 +202,19 @@
         if (_chrome) patchRuntime(_chrome.runtime);
       } catch (_) {}
 
-      // Intercept console.error & console.warn to silence extension noise
-      var origConsoleError = console.error;
-      console.error = function() {
-        drainLastError();
-        if (isExtensionError.apply(null, arguments)) {
-          return;
+      // Intercept console methods to silence extension noise and deferred DOM node warnings
+      ['error', 'warn', 'info', 'log', 'debug'].forEach(function(method) {
+        var origMethod = console[method];
+        if (typeof origMethod === 'function') {
+          console[method] = function() {
+            drainLastError();
+            if (isExtensionError.apply(null, arguments)) {
+              return;
+            }
+            return origMethod.apply(console, arguments);
+          };
         }
-        return origConsoleError.apply(console, arguments);
-      };
-
-      var origConsoleWarn = console.warn;
-      console.warn = function() {
-        drainLastError();
-        if (isExtensionError.apply(null, arguments)) {
-          return;
-        }
-        return origConsoleWarn.apply(console, arguments);
-      };
+      });
 
       // Unified rejection handler — registered in capture phase with preventDefault & returnValue cancellation
       function handleRejection(e) {

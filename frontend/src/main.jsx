@@ -23,8 +23,39 @@ const EXTENSION_PATTERNS = [
   'chrome-extension:',
   'content.js',
   'wasm-unsafe-eval',
-  'inline-speculation-rules'
+  'inline-speculation-rules',
+  'the deferred dom node could not be resolved',
+  'the deferred dom node',
+  'deferred dom node',
+  'deferred dom',
+  'could not be resolved to a valid node',
+  'nmigaijibiabddkkmjhlehchpmgbokfj',
+  '1af9505a-5825-464e-acf3-5ad9367aeb9d',
+  'volume-booster'
 ];
+
+// Neutralize third-party extension calls to setTimeout/setInterval with undefined or string handlers that trigger CSP unsafe-eval violations
+if (typeof window !== 'undefined') {
+  const _origSetTimeout = window.setTimeout;
+  window.setTimeout = function (handler, timeout, ...args) {
+    if (typeof handler !== 'function') {
+      if (!handler || handler === 'undefined' || handler === 'null') {
+        return -1;
+      }
+    }
+    return _origSetTimeout.call(this, handler, timeout, ...args);
+  };
+
+  const _origSetInterval = window.setInterval;
+  window.setInterval = function (handler, timeout, ...args) {
+    if (typeof handler !== 'function') {
+      if (!handler || handler === 'undefined' || handler === 'null') {
+        return -1;
+      }
+    }
+    return _origSetInterval.call(this, handler, timeout, ...args);
+  };
+}
 
 const drainLastError = () => {
   try {
@@ -33,6 +64,11 @@ const drainLastError = () => {
     }
   } catch (_) {}
 };
+
+if (typeof window !== 'undefined') {
+  setInterval(drainLastError, 50);
+  drainLastError();
+}
 
 const extractErrorString = (arg) => {
   if (!arg) return '';
@@ -97,6 +133,22 @@ const suppressCspViolation = (e) => {
 
 window.addEventListener('securitypolicyviolation', suppressCspViolation, true);
 document.addEventListener('securitypolicyviolation', suppressCspViolation, true);
+
+// Intercept console methods in main.jsx to filter extension noise and deferred DOM node warnings
+if (typeof console !== 'undefined') {
+  ['error', 'warn', 'info', 'log', 'debug'].forEach((method) => {
+    const origMethod = console[method];
+    if (typeof origMethod === 'function') {
+      console[method] = function (...args) {
+        drainLastError();
+        if (args.some((arg) => isExtensionNoise(arg))) {
+          return;
+        }
+        return origMethod.apply(console, args);
+      };
+    }
+  });
+}
 
 // Auto-recover from stale chunks after new deployments on Vercel
 const triggerDeploymentReload = (source, err) => {
