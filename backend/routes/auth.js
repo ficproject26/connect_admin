@@ -11,6 +11,12 @@ const SecuritySession = require('../models/SecuritySession');
 const SecurityLog = require('../models/SecurityLog');
 const { parseDeviceInfo } = require('../middleware/security');
 const { validateIndianMobile } = require('../utils/inputValidator');
+const {
+    getApplicationContext,
+    isRoleAuthorizedForApp,
+    isAccountApprovedAndActive
+} = require('../config/appRoles');
+
 
 // Password Strength & Policy Validator
 const validatePasswordPolicy = (password) => {
@@ -992,6 +998,52 @@ router.post('/login', async (req, res) => {
             }
         }
 
+        // Strict Role Isolation Enforcement for the current application context
+        if (!isRoleAuthorizedForApp(user.role, user.adminRole, user)) {
+            await AuditLog.create({
+                userId: user._id,
+                userEmail: user.email,
+                userRole: user.role,
+                action: 'login_rejected_cross_role',
+                ipAddress: clientIp,
+                userAgent,
+                status: 'blocked',
+                details: `Login rejected: Role '${user.role}' is not authorized for ${getApplicationContext()} application context.`
+            }).catch(() => {});
+
+            return res.status(403).json({
+                status: 'error',
+                error: 'Access Denied',
+                msg: 'Access denied: This portal is restricted to authorized administrative users only. Accounts registered for other roles must access their respective portals.',
+                message: 'Access denied: This portal is restricted to authorized administrative users only. Accounts registered for other roles must access their respective portals.',
+                code: 'ROLE_NOT_AUTHORIZED'
+            });
+        }
+
+        // Strict Account Status & Mandatory Approval Enforcement (Fail closed)
+        const approvalCheck = isAccountApprovedAndActive(user);
+        if (!approvalCheck.authorized) {
+            await AuditLog.create({
+                userId: user._id,
+                userEmail: user.email,
+                userRole: user.role,
+                action: 'login_rejected_unapproved',
+                ipAddress: clientIp,
+                userAgent,
+                status: 'blocked',
+                details: `Login rejected: Account status '${user.status}' is not approved for login.`
+            }).catch(() => {});
+
+            return res.status(403).json({
+                status: 'error',
+                error: approvalCheck.code === 'ACCOUNT_PENDING_APPROVAL' ? 'Account Pending Approval' : 'Access Denied',
+                msg: approvalCheck.message,
+                message: approvalCheck.message,
+                code: approvalCheck.code,
+                status: approvalCheck.status
+            });
+        }
+
         // Successful Login -> Reset Failure Counter
         user.failedLoginAttempts = 0;
         user.lockUntil = null;
@@ -1012,6 +1064,7 @@ router.post('/login', async (req, res) => {
             userId: user._id,
             userEmail: user.email,
             userRole: user.role,
+
             action: 'login_success',
             ipAddress: clientIp,
             userAgent,
@@ -1152,10 +1205,34 @@ router.post('/verify-otp', async (req, res) => {
         const user = await User.findOne({ $or: [{ email: identifier }, { phone: identifier }] });
         if (!user) return res.status(404).json({ msg: 'User profile not found' });
 
+        // Strict Role Isolation Enforcement for OTP Login
+        if (!isRoleAuthorizedForApp(user.role, user.adminRole, user)) {
+            return res.status(403).json({
+                status: 'error',
+                error: 'Access Denied',
+                msg: 'Access denied: This portal is restricted to authorized administrative users only. Accounts registered for other roles must access their respective portals.',
+                message: 'Access denied: This portal is restricted to authorized administrative users only. Accounts registered for other roles must access their respective portals.',
+                code: 'ROLE_NOT_AUTHORIZED'
+            });
+        }
+
+        // Strict Account Status & Approval Gating
+        const approvalCheck = isAccountApprovedAndActive(user);
+        if (!approvalCheck.authorized) {
+            return res.status(403).json({
+                status: 'error',
+                error: approvalCheck.code === 'ACCOUNT_PENDING_APPROVAL' ? 'Account Pending Approval' : 'Access Denied',
+                msg: approvalCheck.message,
+                message: approvalCheck.message,
+                code: approvalCheck.code,
+                status: approvalCheck.status
+            });
+        }
+
         const secret = process.env.JWT_SECRET;
         if (!secret) return res.status(500).json({ msg: 'Server configuration error' });
 
-        const payload = { user: { id: user.id, role: user.role } };
+        const payload = { user: { id: user.id, role: user.role, adminRole: user.adminRole } };
         const token = jwt.sign(payload, secret, { expiresIn: '7d' });
 
         await createSecuritySession(user._id, token, req);
@@ -1250,75 +1327,36 @@ router.get('/me', async (req, res) => {
         if (!userId) return res.status(401).json({ message: 'Invalid token payload' });
 
         const user = await User.findById(userId).select('-password');
-        if (!user) return res.status(404).json({ message: 'User not found' });
+        if (!user) return res.status(404).json({ message: 'User not found', msg: 'User not found' });
 
-        if (user.role === 'agent' || user.role === 'Agent') {
-            const uStatus = (user.status || '').toLowerCase();
-            if (uStatus === 'revoked') {
-                return res.status(403).json({
-                    title: 'Access Revoked',
-                    message: 'Your agent access has been revoked. Please contact the administrator.',
-                    msg: 'Your agent access has been revoked. Please contact the administrator.',
-                    error: 'Access Revoked',
-                    status: 'revoked',
-                    isRevoked: true
-                });
-            }
-            if (uStatus === 'suspended' || (!user.isActive && uStatus !== 'approved' && uStatus !== 'active')) {
-                return res.status(403).json({
-                    title: 'Account Suspended',
-                    message: 'Your account has been suspended. Please contact the administrator.',
-                    msg: 'Your account has been suspended. Please contact the administrator.',
-                    error: 'Account Suspended',
-                    status: 'suspended',
-                    isSuspended: true
-                });
-            }
-            if (uStatus === 'pending' || uStatus === 'pending_approval' || uStatus === 'under_verification' || (!user.isActive && uStatus !== 'approved')) {
-                return res.status(403).json({
-                    title: 'YOUR REQUEST IS UNDER REVIEW',
-                    heading: 'YOUR REQUEST IS UNDER REVIEW',
-                    message: 'Your agent registration request has been successfully submitted.\n\nYour request is currently under review by the administration.\n\nPlease contact the administration for further assistance.',
-                    status: 'pending',
-                    approvalStatus: 'PENDING',
-                    registrationId: user.registrationId || 'N/A'
-                });
-            }
-            if (uStatus === 'rejected') {
-                return res.status(403).json({
-                    title: 'APPLICATION REJECTED',
-                    heading: 'APPLICATION REJECTED',
-                    message: 'Your agent registration request has been rejected by the administration. Please contact support for further assistance.',
-                    status: 'rejected',
-                    approvalStatus: 'REJECTED',
-                    registrationId: user.registrationId || 'N/A'
-                });
-            }
-
-            const agent = {
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone || '',
-                role: user.level || 'pincode',
-                level: user.level || 'pincode',
-                registrationId: user.registrationId || '',
-                kycStatus: user.status === 'approved' ? 'approved' : user.status || 'pending',
-                territory: { state: user.assignedArea || '' },
-                kyc: user.kyc || {},
-                registrationFeePaid: user.isActive || false,
-                performanceScore: 0,
-                status: user.status,
-                isActive: user.isActive,
-                createdAt: user.createdAt
-            };
-            return res.json({ agent });
+        // Strict Role Isolation Enforcement
+        if (!isRoleAuthorizedForApp(user.role, user.adminRole, user)) {
+            return res.status(403).json({
+                status: 'error',
+                error: 'Access Denied',
+                msg: `Access denied: Role is not authorized for the ${getApplicationContext()} portal.`,
+                message: `Access denied: Role is not authorized for the ${getApplicationContext()} portal.`,
+                code: 'ROLE_NOT_AUTHORIZED'
+            });
         }
 
-        return res.json({ user });
+        // Strict Account Status & Approval Gating
+        const approvalCheck = isAccountApprovedAndActive(user);
+        if (!approvalCheck.authorized) {
+            return res.status(403).json({
+                status: 'error',
+                error: approvalCheck.code === 'ACCOUNT_PENDING_APPROVAL' ? 'Account Pending Approval' : 'Access Denied',
+                msg: approvalCheck.message,
+                message: approvalCheck.message,
+                code: approvalCheck.code,
+                status: approvalCheck.status
+            });
+        }
+
+        return res.json({ user, status: 'success' });
     } catch (err) {
         console.error('GET /auth/me error:', err.message);
-        return res.status(401).json({ message: 'Token is not valid' });
+        return res.status(401).json({ message: 'Token is not valid', msg: 'Token is not valid' });
     }
 });
 

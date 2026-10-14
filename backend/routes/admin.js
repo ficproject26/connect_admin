@@ -50,6 +50,9 @@ const adminAuth = async (req, res, next) => {
         if (!user || !isAdmin) {
             return res.status(403).json({ msg: 'Access denied. Administrative privilege required.' });
         }
+        if (user.isActive === false || ['suspended', 'revoked', 'rejected', 'inactive'].includes((user.status || '').toLowerCase().trim())) {
+            return res.status(403).json({ msg: 'Access denied. Account is inactive, suspended, or revoked.' });
+        }
         if (roleVal === 'super-admin' || adminRoleVal === 'super-admin') {
             user.adminRole = 'super-admin';
             user.role = 'super-admin';

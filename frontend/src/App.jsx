@@ -686,6 +686,13 @@ function App() {
   const [token, setToken] = useState(() => getSafeLocalStorageItem('token', ''));
   const [user, setUser] = useState(() => getSafeParsedLocalStorageItem('user', null));
   const isSuperAdmin = Boolean(user && (user.adminRole === 'super-admin' || user.role === 'super-admin'));
+  const [isVerifyingAuth, setIsVerifyingAuth] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const storedToken = localStorage.getItem('token');
+      return Boolean(storedToken);
+    }
+    return false;
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [authError, setAuthError] = useState('');
@@ -1280,10 +1287,79 @@ function App() {
       }
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      sessionStorage.removeItem('token');
+      sessionStorage.removeItem('user');
     } catch (e) { }
+    if (apiCacheRef && apiCacheRef.current) {
+      apiCacheRef.current = {};
+    }
     setToken('');
     setUser(null);
+    setIsVerifyingAuth(false);
   }, []);
+
+  // Server-Authoritative Session & Role Verification on Startup / Mount
+  useEffect(() => {
+    let isMounted = true;
+    const verifySessionOnMount = async () => {
+      const storedToken = typeof localStorage !== 'undefined' ? localStorage.getItem('token') : null;
+      if (!storedToken) {
+        if (isMounted) setIsVerifyingAuth(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: {
+            'x-auth-token': storedToken,
+            'Authorization': `Bearer ${storedToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!isMounted) return;
+
+        if (res.ok) {
+          const data = await res.json();
+          const authoritativeUser = data.user || data;
+          const uRole = (authoritativeUser.role || '').toLowerCase().trim();
+          const uAdminRole = (authoritativeUser.adminRole || '').toLowerCase().trim();
+          const isAuthorizedAdmin = 
+            uRole === 'super-admin' || uRole === 'admin' || 
+            uAdminRole === 'super-admin' || uAdminRole.includes('admin') ||
+            ['state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'].includes(uAdminRole) ||
+            ['state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'].includes(uRole);
+
+          if (!isAuthorizedAdmin) {
+            console.warn('[Security Gate] Session role is not authorized for Admin Portal.');
+            handleLogout();
+            setAuthError('Access denied: Your account role is not authorized for this administrative portal.');
+          } else {
+            setUser(authoritativeUser);
+            try {
+              localStorage.setItem('user', JSON.stringify(authoritativeUser));
+            } catch (e) {}
+          }
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          console.warn('[Security Gate] Server rejected stored session token:', errData);
+          handleLogout();
+          if (res.status === 403) {
+            setAuthError(errData.msg || errData.message || 'Access denied: Account is not authorized or approval is pending.');
+          } else if (res.status === 401) {
+            setAuthError('Your session has expired or is invalid. Please sign in again.');
+          }
+        }
+      } catch (err) {
+        console.warn('[Security Gate] Session verification notice:', err.message);
+      } finally {
+        if (isMounted) setIsVerifyingAuth(false);
+      }
+    };
+
+    verifySessionOnMount();
+    return () => { isMounted = false; };
+  }, [API_BASE, handleLogout]);
 
   useEffect(() => {
     const onAuthExpired = () => {
@@ -1799,9 +1875,13 @@ function App() {
       const userRole = (data.user?.role || '').toLowerCase().trim();
       const userAdminRole = (data.user?.adminRole || '').toLowerCase().trim();
       const isSuperAdminUser = userRole === 'super-admin' || userAdminRole === 'super-admin' || userRole === 'admin';
+      const isAuthorizedAdmin = 
+        isSuperAdminUser ||
+        ['state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'].includes(userAdminRole) ||
+        ['state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'].includes(userRole);
 
-      if (!isSuperAdminUser) {
-        throw new Error('Access denied. Super Admin portal only.');
+      if (!isAuthorizedAdmin) {
+        throw new Error('Access denied: Your account role is not authorized for this administrative portal.');
       }
       try {
         localStorage.setItem('token', data.token);
@@ -2058,7 +2138,23 @@ function App() {
     addToast(`Generating and downloading ${reportType}_report.${format} ...`, 'info');
   };
 
-  if (!user) {
+  if (isVerifyingAuth) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white p-6 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-96 h-96 bg-primary-600 rounded-full filter blur-[150px] opacity-20 pointer-events-none"></div>
+        <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-600 rounded-full filter blur-[150px] opacity-20 pointer-events-none"></div>
+        <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-2xl mb-6 overflow-hidden relative z-10 animate-pulse">
+          <img src="/logo.jpg" alt="Logo" className="w-full h-full object-cover" />
+        </div>
+        <div className="flex items-center gap-3 text-slate-300 text-sm font-medium relative z-10 bg-slate-800/60 border border-slate-700/60 px-5 py-2.5 rounded-full backdrop-blur-md shadow-lg">
+          <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+          <span>Verifying security authorization...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || !token) {
     // LOGIN SCREEN (Rich styling with Harmony palette, modern cards, and shadow styling)
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-6 relative overflow-hidden">

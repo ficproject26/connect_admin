@@ -26,20 +26,6 @@ const territoryScope = async (req, res, next) => {
             .lean();
 
         if (!user) {
-            const Manager = require('../models/Manager');
-            const mgr = await Manager.findById(userId).lean();
-            if (mgr) {
-                user = {
-                    ...mgr,
-                    role: `${mgr.level}_manager`,
-                    adminRole: `${mgr.level}-admin`,
-                    adminLevel: mgr.level,
-                    isActive: mgr.status === 'Active'
-                };
-            }
-        }
-
-        if (!user) {
             return res.status(401).json({ msg: 'User account not found', message: 'User not found' });
         }
 
@@ -83,29 +69,27 @@ const territoryScope = async (req, res, next) => {
             return next();
         }
 
-        // Determine Lower Tier Admin or Manager
+        // Determine Lower Tier Admin (Strict Administrative Hierarchy only)
         let adminTier = 'unknown';
-        if (adminRoleNormalized === 'state-admin' || roleNormalized === 'state-admin' || roleNormalized === 'state-manager' || adminLevelLower === 'state') {
+        if (adminRoleNormalized === 'state-admin' || roleNormalized === 'state-admin' || adminLevelLower === 'state') {
             adminTier = 'state';
-        } else if (adminRoleNormalized === 'district-admin' || adminRoleNormalized === 'branch-admin' || roleNormalized === 'district-admin' || roleNormalized === 'district-manager' || adminLevelLower === 'district') {
+        } else if (adminRoleNormalized === 'district-admin' || adminRoleNormalized === 'branch-admin' || roleNormalized === 'district-admin' || adminLevelLower === 'district') {
             adminTier = 'district';
-        } else if (adminRoleNormalized === 'division-admin' || roleNormalized === 'division-admin' || roleNormalized === 'division-manager' || adminLevelLower === 'division') {
+        } else if (adminRoleNormalized === 'division-admin' || roleNormalized === 'division-admin' || adminLevelLower === 'division') {
             adminTier = 'division';
-        } else if (adminRoleNormalized === 'pincode-admin' || roleNormalized === 'pincode-admin' || roleNormalized === 'pincode-manager' || adminLevelLower === 'pincode') {
+        } else if (adminRoleNormalized === 'pincode-admin' || roleNormalized === 'pincode-admin' || adminLevelLower === 'pincode') {
             adminTier = 'pincode';
         }
 
-        // Verify that the user has admin or manager privileges
+        // Verify that the user has verified administrative privileges
         const isAdmin = 
             isMainAdmin ||
-            adminTier !== 'unknown' ||
-            roleNormalized.includes('admin') || 
-            roleNormalized.includes('manager') ||
-            adminRoleNormalized.includes('admin');
+            (adminTier !== 'unknown' && (adminRoleNormalized.includes('admin') || roleNormalized.includes('admin')));
 
-        if (!isAdmin && adminTier === 'unknown') {
+        if (!isAdmin || adminTier === 'unknown') {
             return res.status(403).json({ msg: 'Access denied. Administrator privileges required.', message: 'Unauthorized access' });
         }
+
 
         const userState = (user.assignedState || user.territory?.state || user.state || '').trim();
         const userDistrict = (user.assignedDistrict || user.territory?.district || user.district || '').trim();
