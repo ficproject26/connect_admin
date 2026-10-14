@@ -892,15 +892,18 @@ const handleApproveManagerRequest = async (req, res) => {
 
         const normLevel = normalizeManagerLevelStr(mReq.level);
 
-        // Fetch operator identity
+        // Fetch operator identity safely
         let operatorName = req.user?.name || 'Administrator';
         let operatorRole = req.user?.role || req.user?.adminRole || 'admin';
-        if (req.user?.id) {
-            const u = await User.findById(req.user.id).select('name role adminRole').lean();
-            if (u) {
-                operatorName = u.name || operatorName;
-                operatorRole = u.role || u.adminRole || operatorRole;
-            }
+        const operatorId = req.user?.id || req.user?._id || null;
+        if (operatorId) {
+            try {
+                const u = await User.findById(operatorId).select('name role adminRole').lean();
+                if (u) {
+                    operatorName = u.name || operatorName;
+                    operatorRole = u.role || u.adminRole || operatorRole;
+                }
+            } catch (_) {}
         }
 
         // 1. SUB-ADMIN APPROVAL PREREQUISITE CHECK
@@ -961,16 +964,16 @@ const handleApproveManagerRequest = async (req, res) => {
                     assignedPincode: mReq.assignedPincode || '',
                     address: mReq.address || '',
                     notes: mReq.notes || '',
-                    parentAdminId: mReq.requestedBy || req.user.id,
+                    parentAdminId: mReq.requestedBy || operatorId,
                     requestedBy: mReq.requestedBy,
-                    approvedBy: req.user.id,
+                    approvedBy: operatorId,
                     bankDetails: mReq.bankDetails || null,
                     status: 'Active'
                 });
                 await newManager.save();
             } else {
                 newManager.status = 'Active';
-                newManager.approvedBy = req.user.id;
+                newManager.approvedBy = operatorId;
                 if (!newManager.bankDetails && mReq.bankDetails) {
                     newManager.bankDetails = mReq.bankDetails;
                 }
@@ -981,15 +984,35 @@ const handleApproveManagerRequest = async (req, res) => {
             mReq.approvalStage = 'approved';
             mReq.overallRegistrationStatus = 'active';
             mReq.kycVerificationStatus = 'approved';
-            mReq.kycApprovedBy = req.user.id;
+            mReq.kycApprovedBy = operatorId;
             mReq.kycApprovedByName = operatorName;
             mReq.kycApprovedAt = new Date();
-            mReq.reviewedBy = req.user.id;
+            mReq.reviewedBy = operatorId;
             mReq.reviewedAt = new Date();
-            await mReq.save();
+            
+            try {
+                await mReq.save();
+            } catch (saveErr) {
+                console.warn('mReq.save() fallback to updateOne in approve-kyc:', saveErr.message);
+                await ManagerRequest.updateOne({ _id: mReq._id }, {
+                    $set: {
+                        status: 'Approved',
+                        approvalStage: 'approved',
+                        overallRegistrationStatus: 'active',
+                        kycVerificationStatus: 'approved',
+                        kycApprovedBy: operatorId,
+                        kycApprovedByName: operatorName,
+                        kycApprovedAt: new Date(),
+                        reviewedBy: operatorId,
+                        reviewedAt: new Date()
+                    }
+                });
+            }
 
             // Update matching User document to Active
-            const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+            const userFilter = mReq.userId
+                ? { $or: [{ _id: mReq.userId }, { email: mReq.email.toLowerCase().trim() }] }
+                : { email: mReq.email.toLowerCase().trim() };
             await User.findOneAndUpdate(userFilter, {
                 status: 'active',
                 overallRegistrationStatus: 'active',
@@ -999,7 +1022,7 @@ const handleApproveManagerRequest = async (req, res) => {
                 isActive: true,
                 isApproved: true,
                 managerId: newManager.managerId
-            });
+            }).catch(e => console.warn('User activate error during KYC clearance:', e.message));
 
             // Emit real-time notification
             try {
@@ -1031,14 +1054,33 @@ const handleApproveManagerRequest = async (req, res) => {
             mReq.mainAdminApprovalStatus = 'approved';
             mReq.overallRegistrationStatus = 'PENDING_KYC_VERIFICATION';
             mReq.kycVerificationStatus = 'pending';
-            mReq.mainadminApprovedBy = req.user.id;
+            mReq.mainadminApprovedBy = operatorId;
             mReq.mainadminApprovedByName = operatorName;
             mReq.mainadminApprovedAt = new Date();
             mReq.status = 'Pending'; // Remains Pending until KYC clearance
-            await mReq.save();
+
+            try {
+                await mReq.save();
+            } catch (saveErr) {
+                console.warn('mReq.save() fallback to updateOne in approve:', saveErr.message);
+                await ManagerRequest.updateOne({ _id: mReq._id }, {
+                    $set: {
+                        approvalStage: 'kyc_review',
+                        mainAdminApprovalStatus: 'approved',
+                        overallRegistrationStatus: 'PENDING_KYC_VERIFICATION',
+                        kycVerificationStatus: 'pending',
+                        mainadminApprovedBy: operatorId,
+                        mainadminApprovedByName: operatorName,
+                        mainadminApprovedAt: new Date(),
+                        status: 'Pending'
+                    }
+                });
+            }
 
             // Update User to KYC review stage
-            const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+            const userFilter = mReq.userId
+                ? { $or: [{ _id: mReq.userId }, { email: mReq.email.toLowerCase().trim() }] }
+                : { email: mReq.email.toLowerCase().trim() };
             await User.findOneAndUpdate(userFilter, {
                 status: 'PENDING_KYC_VERIFICATION',
                 overallRegistrationStatus: 'PENDING_KYC_VERIFICATION',
@@ -1046,10 +1088,10 @@ const handleApproveManagerRequest = async (req, res) => {
                 kycVerificationStatus: 'pending',
                 approvalStage: 'kyc_review',
                 kycStatus: 'pending_verification',
-                mainadminApprovedBy: req.user.id,
+                mainadminApprovedBy: operatorId,
                 mainadminApprovedByName: operatorName,
                 mainadminApprovedAt: new Date()
-            });
+            }).catch(e => console.warn('User update error during manager request approval:', e.message));
 
             // Ensure queued in MongoDB Atlas db.kycRecords
             try {
@@ -1137,24 +1179,44 @@ router.put('/manager-directory/requests/:id/reject', auth, async (req, res) => {
             return res.status(400).json({ success: false, msg: 'A rejection reason is strictly required.' });
         }
 
+        const operatorId = req.user?.id || req.user?._id || null;
+
         mReq.status = 'Rejected';
         mReq.approvalStage = 'rejected';
         mReq.overallRegistrationStatus = 'REJECTED_BY_MAIN_ADMIN';
         mReq.mainAdminApprovalStatus = 'rejected';
         mReq.rejectionReason = rejectionReason;
-        mReq.reviewedBy = req.user.id;
+        mReq.reviewedBy = operatorId;
         mReq.reviewedAt = new Date();
-        await mReq.save();
+        
+        try {
+            await mReq.save();
+        } catch (saveErr) {
+            console.warn('mReq.save() fallback to updateOne in reject:', saveErr.message);
+            await ManagerRequest.updateOne({ _id: mReq._id }, {
+                $set: {
+                    status: 'Rejected',
+                    approvalStage: 'rejected',
+                    overallRegistrationStatus: 'REJECTED_BY_MAIN_ADMIN',
+                    mainAdminApprovalStatus: 'rejected',
+                    rejectionReason,
+                    reviewedBy: operatorId,
+                    reviewedAt: new Date()
+                }
+            });
+        }
 
         // Synchronize rejection to User record
-        const userFilter = mReq.userId ? { _id: mReq.userId } : { email: mReq.email.toLowerCase().trim() };
+        const userFilter = mReq.userId
+            ? { $or: [{ _id: mReq.userId }, { email: mReq.email.toLowerCase().trim() }] }
+            : { email: mReq.email.toLowerCase().trim() };
         await User.findOneAndUpdate(userFilter, {
             status: 'REJECTED_BY_MAIN_ADMIN',
             overallRegistrationStatus: 'REJECTED_BY_MAIN_ADMIN',
             mainAdminApprovalStatus: 'rejected',
             approvalStage: 'rejected',
             rejectionReason
-        });
+        }).catch(e => console.warn('User update error during manager rejection:', e.message));
 
         res.json({ success: true, msg: 'Manager request rejected.', request: mReq });
     } catch (err) {

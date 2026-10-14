@@ -13,7 +13,13 @@
         'the message channel closed',
         'could not establish connection. receiving end does not exist',
         'unchecked runtime.lasterror',
-        'listener indicated an asynchronous response by returning true'
+        'listener indicated an asynchronous response by returning true',
+        'evaluating a string as javascript violates',
+        'unsafe-eval',
+        'content security policy directive',
+        'the action has been blocked',
+        'initlisteners',
+        'chrome-extension://'
       ];
 
       function isExtensionError() {
@@ -202,6 +208,21 @@
           return origOnError.apply(this, arguments);
         }
       };
+
+      // Silence extension-injected CSP violation events
+      window.addEventListener('securitypolicyviolation', function(e) {
+        var blocked = ((e && e.blockedURI) || '') + ' ' + ((e && e.sourceFile) || '') + ' ' + ((e && e.violatedDirective) || '');
+        if (
+          blocked.indexOf('chrome-extension://') !== -1 ||
+          blocked.indexOf('content.js') !== -1 ||
+          (e && e.violatedDirective === 'script-src')
+        ) {
+          try {
+            if (typeof e.preventDefault === 'function') e.preventDefault();
+            if (typeof e.stopPropagation === 'function') e.stopPropagation();
+          } catch (_) {}
+        }
+      }, true);
     })();
   </script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

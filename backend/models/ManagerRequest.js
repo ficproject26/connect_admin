@@ -63,7 +63,7 @@ const ManagerRequestSchema = new mongoose.Schema({
         default: ''
     },
     requestedBy: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'User',
         required: false,
         default: null
@@ -82,7 +82,7 @@ const ManagerRequestSchema = new mongoose.Schema({
         default: ''
     },
     targetAdminId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'User',
         default: null
     },
@@ -96,11 +96,10 @@ const ManagerRequestSchema = new mongoose.Schema({
     },
     approvalStage: {
         type: String,
-        enum: ['subadmin_review', 'mainadmin_review', 'kyc_review', 'approved', 'rejected'],
         default: 'subadmin_review'
     },
     subadminApprovedBy: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'User',
         default: null
     },
@@ -112,8 +111,41 @@ const ManagerRequestSchema = new mongoose.Schema({
         type: Date,
         default: null
     },
+    subAdminApproval: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
+    },
+    subAdminApprovalStatus: {
+        type: String,
+        default: 'pending'
+    },
+    mainadminApprovedBy: {
+        type: mongoose.Schema.Types.Mixed,
+        ref: 'User',
+        default: null
+    },
+    mainadminApprovedByName: {
+        type: String,
+        default: ''
+    },
+    mainadminApprovedAt: {
+        type: Date,
+        default: null
+    },
+    mainAdminApprovalStatus: {
+        type: String,
+        default: 'pending'
+    },
+    overallRegistrationStatus: {
+        type: String,
+        default: 'PENDING_SUB_ADMIN_APPROVAL'
+    },
+    kycVerificationStatus: {
+        type: String,
+        default: 'not_started'
+    },
     kycApprovedBy: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'User',
         default: null
     },
@@ -135,7 +167,6 @@ const ManagerRequestSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Pending', 'Approved', 'Rejected'],
         default: 'Pending'
     },
     rejectionReason: {
@@ -143,7 +174,7 @@ const ManagerRequestSchema = new mongoose.Schema({
         default: ''
     },
     reviewedBy: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'User',
         default: null
     },

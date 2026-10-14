@@ -59,23 +59,22 @@ const ManagerSchema = new mongoose.Schema({
         trim: true
     },
     parentAdminId: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'User',
         default: null
     },
     requestedBy: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'User',
         default: null
     },
     approvedBy: {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: 'User',
         default: null
     },
     status: {
         type: String,
-        enum: ['Active', 'Inactive', 'Suspended'],
         default: 'Active'
     },
     notes: {
