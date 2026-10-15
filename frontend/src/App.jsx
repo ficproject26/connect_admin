@@ -3679,8 +3679,31 @@ function App() {
                           <div key={agent._id} className="py-5 space-y-4">
                             <div className="flex justify-between items-start">
                               <div>
-                                <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{agent.name}</span>
-                                <span className="block text-xs text-slate-400">Agent • {agent.email} • {agent.phone}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{agent.name}</span>
+                                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                                    {agent.level || 'Pincode'} Agent
+                                  </span>
+                                </div>
+                                <span className="block text-xs text-slate-400 mt-0.5">
+                                  {agent.email} • {agent.phone} • Territory: {[agent.assignedState, agent.assignedDistrict, agent.assignedDivision, agent.assignedPincode].filter(Boolean).join(' / ') || agent.state || 'General Territory'}
+                                </span>
+                                <div className="flex items-center gap-2 flex-wrap mt-1">
+                                  {agent.onboardingSource === 'ADMIN_INITIATED' || agent.createdByName ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                                      🛡️ Admin Onboarded by {agent.createdByName || 'Territory Admin'} ({agent.createdByRole || 'Admin'})
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                                      ✓ Direct Onboarded (Self-registered)
+                                    </span>
+                                  )}
+                                  {agent.subadminApprovedByName && (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                      ✓ Stage 1 Approved by {agent.subadminApprovedByName}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${agent.status === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
                                   agent.status === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
@@ -3816,8 +3839,35 @@ function App() {
                           <div key={vendor._id} className="py-5 space-y-4">
                             <div className="flex justify-between items-start">
                               <div>
-                                <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{vendor.businessName || vendor.name}</span>
-                                <span className="block text-xs text-slate-400">Vendor ({vendor.category || 'Store'}) • {vendor.contactName || vendor.contactPerson || vendor.name} • {vendor.email} • {vendor.phone}</span>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{vendor.businessName || vendor.name}</span>
+                                  <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                                    {vendor.category || 'Store'}
+                                  </span>
+                                </div>
+                                <span className="block text-xs text-slate-400 mt-0.5">
+                                  Contact: {vendor.contactName || vendor.contactPerson || vendor.name} • {vendor.email} • {vendor.phone} • Territory: {[vendor.assignedState, vendor.assignedDistrict, vendor.assignedDivision, vendor.assignedPincode].filter(Boolean).join(' / ') || vendor.state || 'General Territory'}
+                                </span>
+                                <div className="flex items-center gap-2 flex-wrap mt-1">
+                                  {vendor.onboardingSource === 'AGENT_INITIATED' || vendor.createdVia === 'agent' || vendor.agentId || vendor.onboardedBy ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-800">
+                                      👤 Agent Onboarded {vendor.agentName || vendor.onboardedByName ? `by ${vendor.agentName || vendor.onboardedByName}` : ''}
+                                    </span>
+                                  ) : vendor.onboardingSource === 'MANAGER_INITIATED' || vendor.createdVia === 'manager' || vendor.managerId ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800">
+                                      💼 Manager Onboarded {vendor.managerName || vendor.onboardedByName ? `by ${vendor.managerName || vendor.onboardedByName}` : ''}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                                      ✓ Direct Onboarded (Self-registered)
+                                    </span>
+                                  )}
+                                  {vendor.subadminApprovedByName && (
+                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                      ✓ Stage 1 Approved by {vendor.subadminApprovedByName}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                               <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${(vendor.status || '').toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
                                   (vendor.status || '').toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
@@ -3994,11 +4044,22 @@ function App() {
                                   <span className="block text-xs text-slate-400 mt-0.5">
                                     {mgr.email} • {mgr.phone} • Territory: {[mgr.assignedState, mgr.assignedDistrict, mgr.assignedDivision, mgr.assignedPincode].filter(Boolean).join(' / ') || 'General Territory'}
                                   </span>
-                                  {mgr.subadminApprovedByName && (
-                                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-                                      ✓ Stage 1 Approved by Territory Administrator: {mgr.subadminApprovedByName}
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2 flex-wrap mt-1">
+                                    {mgr.onboardingSource === 'ADMIN_INITIATED' || mgr.createdVia === 'admin' || mgr.requestingAdminName ? (
+                                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800">
+                                        🛡️ Admin Onboarded {mgr.requestingAdminName || mgr.createdByName ? `by ${mgr.requestingAdminName || mgr.createdByName}` : ''}
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800">
+                                        ✓ Direct Onboarded (Self-registered)
+                                      </span>
+                                    )}
+                                    {mgr.subadminApprovedByName && (
+                                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                                        ✓ Stage 1 Approved by {mgr.subadminApprovedByName}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
                                   (mgr.status || '').toLowerCase() === 'approved' || mgr.approvalStage === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :

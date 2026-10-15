@@ -3,7 +3,7 @@ import {
   Users, Search, RefreshCw, Plus, UserCheck, ChevronRight, ChevronDown,
   MapPin, Phone, Mail, Award, AlertTriangle, XCircle, Grid, List, Layers,
   CheckCircle, Clock, Eye, Globe2, Building2, Navigation, Hash, User,
-  CalendarDays, BadgeCheck, ShieldOff, Ban, LayoutGrid, ArrowRight
+  CalendarDays, BadgeCheck, ShieldOff, Ban, LayoutGrid, ArrowRight, ShieldCheck
 } from 'lucide-react';
 
 // Module-level in-memory cache
@@ -1256,17 +1256,50 @@ export default function AgentDirectoryModule({
             <div className="space-y-4">
               {agents.filter(isPendingAgent).map((pAgent) => {
                 const terr = extractAgentTerritory(pAgent);
+                const isAdminOnboarded = (pAgent.onboardingSource === 'ADMIN_INITIATED') ||
+                  (pAgent.createdVia === 'admin') ||
+                  Boolean(pAgent.createdBy && pAgent.createdBy !== pAgent._id && pAgent.createdByName) ||
+                  Boolean(pAgent.onboardedBy && pAgent.onboardedByName);
+
+                const adminName = pAgent.createdByName || pAgent.onboardedByName || pAgent.adminName;
+                const adminRole = pAgent.createdByRole || pAgent.onboardedByRole || pAgent.adminRole || 'Territory Admin';
+                const adminTerritory = pAgent.createdByTerritory || pAgent.onboardedByTerritory || pAgent.adminTerritory || [pAgent.assignedState, pAgent.assignedDistrict].filter(Boolean).join(', ');
+
                 return (
                   <div key={pAgent._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div className="space-y-1">
+                    <div className="space-y-1.5 flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-800 dark:text-slate-100 text-base">{pAgent.name}</span>
                         <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-500 border border-purple-500/20">{pAgent.level || 'Pincode'} Agent</span>
                         <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-500 capitalize">{pAgent.status || pAgent.kycStatus || 'Pending Review'}</span>
                       </div>
                       <p className="text-xs text-slate-400">{pAgent.email || 'No email'} &#8226; {pAgent.phone || 'No phone'}</p>
-                      <p className="text-xs text-slate-500 font-semibold flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-amber-500" />Territory: {terr.state} &#8594; {terr.district} &#8594; {terr.division} &#8594; {terr.pincode}</p>
+                      <p className="text-xs text-slate-500 font-semibold flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />Territory: {terr.state} &#8594; {terr.district} &#8594; {terr.division} &#8594; {terr.pincode}</p>
                       <p className="text-[11px] font-mono text-slate-400">REG ID: {pAgent.registrationId} | Applied: {new Date(pAgent.createdAt).toLocaleDateString()}</p>
+
+                      {/* Onboarding Source Details */}
+                      {isAdminOnboarded ? (
+                        <div className="mt-2 p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold text-indigo-700 dark:text-indigo-300">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Admin Onboarded</span>
+                          </div>
+                          <p className="text-[11px] text-slate-600 dark:text-slate-300">
+                            Initiated by <strong className="text-slate-800 dark:text-slate-100">{adminName || 'Authorized Admin'}</strong>
+                            {adminRole ? ` (${adminRole})` : ''}
+                            {adminTerritory ? ` • Territory: ${adminTerritory}` : ''}
+                          </p>
+                          <p className="text-[10px] text-slate-400">Onboarded on {new Date(pAgent.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      ) : (
+                        <div className="mt-2 p-2 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 text-xs flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-300">
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            <span>Direct Onboarded</span>
+                          </div>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Self-registered via Website</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-2 shrink-0 flex-wrap">
                       <button type="button" disabled={refreshing} onClick={async (e) => { const b = e.currentTarget; b.disabled = true; try { const h = { 'x-auth-token': token, 'Content-Type': 'application/json' }; const body = JSON.stringify({ status: 'rejected', agentId: pAgent._id, email: pAgent.email, phone: pAgent.phone, registrationId: pAgent.registrationId }); const bc = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api'); try { await fetch(`${bc}/admin/approve-agent/${pAgent._id}`, { method: 'PUT', headers: h, body }); } catch(e) {} loadAgentData(true); } catch(err) {} finally { b.disabled = false; } }} className="bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400 text-xs font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer disabled:opacity-50">Reject</button>

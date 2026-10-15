@@ -94,6 +94,31 @@ const ManagerRequestSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    onboardingSource: {
+        type: String,
+        enum: ['DIRECT', 'ADMIN_INITIATED', 'AGENT_INITIATED', 'MANAGER_INITIATED', 'LEGACY'],
+        default: 'DIRECT'
+    },
+    initiatedByUserId: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
+    },
+    initiatedByRole: {
+        type: String,
+        default: ''
+    },
+    initiatedByName: {
+        type: String,
+        default: ''
+    },
+    initiatedByTerritory: {
+        type: mongoose.Schema.Types.Mixed,
+        default: null
+    },
+    subadminApprovedTerritory: {
+        type: String,
+        default: ''
+    },
     approvalStage: {
         type: String,
         default: 'subadmin_review'

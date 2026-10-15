@@ -18,6 +18,8 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   const [error, setError] = useState(null);
   const [admins, setAdmins] = useState([]);
   const [requests, setRequests] = useState([]);
+  const [requestCategoryFilter, setRequestCategoryFilter] = useState('all');
+  const [requestCounts, setRequestCounts] = useState({ all: 0, vendor: 0, agent: 0, manager: 0, subadmin: 0 });
   const [activityLogs, setActivityLogs] = useState([]);
   const [currentUserTier, setCurrentUserTier] = useState('main');
 
@@ -232,16 +234,29 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
     }
   };
 
-  const fetchRequests = async () => {
-    // Graceful baseline for onboarding requests
+  const fetchRequests = async (cat = requestCategoryFilter) => {
+    // Multi-category onboarding request loader
     try {
       const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
-      const res = await fetch(`${API_BASE}/admin/admins/requests`, {
+      const catParam = cat && cat !== 'all' ? `?category=${encodeURIComponent(cat)}` : '';
+      const res = await fetch(`${API_BASE}/admin/admins/requests${catParam}`, {
         headers: { 'x-auth-token': activeToken, Authorization: `Bearer ${activeToken}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setRequests(Array.isArray(data) ? data : (data.requests || []));
+        const list = Array.isArray(data) ? data : (data.requests || []);
+        setRequests(list);
+        if (data?.counts) {
+          setRequestCounts(data.counts);
+        } else {
+          setRequestCounts({
+            all: list.length,
+            vendor: list.filter(r => r.category === 'vendor').length,
+            agent: list.filter(r => r.category === 'agent').length,
+            manager: list.filter(r => r.category === 'manager').length,
+            subadmin: list.filter(r => r.category === 'subadmin').length
+          });
+        }
       } else {
         setRequests([]);
       }
@@ -1360,11 +1375,11 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
       )}
 
       {/* ========================================================= */}
-      {/* TAB 2: ONBOARDING REQUESTS TAB (Section 7) */}
+      {/* TAB 2: CENTRAL ONBOARDING REQUESTS TAB */}
       {/* ========================================================= */}
       {activeTab === 'requests' && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-xs space-y-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
             <div>
               <button
                 onClick={() => setActiveTab('hierarchy')}
@@ -1372,86 +1387,196 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
               >
                 <ChevronLeft className="w-4 h-4" /> Back to Admin Hierarchy
               </button>
-              <h3 className="text-base font-black text-slate-800 dark:text-slate-100">Administrator Onboarding Requests</h3>
-              <p className="text-xs text-slate-400">Incoming requests submitted by territory sub-admins requiring Main Admin verification.</p>
+              <h3 className="text-lg font-black text-slate-850 dark:text-slate-100">Central Onboarding Requests</h3>
+              <p className="text-xs text-slate-400 mt-0.5">Territorial onboarding requests across Vendors, Agents, Managers & Sub-Admins awaiting verification.</p>
             </div>
-            <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-primary-50 dark:bg-primary-950/50 text-primary-600">
-              {requests.length} Total Requests
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => fetchRequests(requestCategoryFilter)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Refresh
+              </button>
+              <span className="text-xs font-extrabold px-3 py-1.5 rounded-xl bg-primary-50 dark:bg-primary-950/50 text-primary-600 border border-primary-200 dark:border-primary-800/40">
+                {requestCounts.all || requests.length} Total
+              </span>
+            </div>
+          </div>
+
+          {/* Category Filter Pills */}
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              { key: 'all', label: 'All Requests', count: requestCounts.all ?? requests.length },
+              { key: 'vendor', label: 'Vendors', count: requestCounts.vendor ?? 0 },
+              { key: 'agent', label: 'Agents', count: requestCounts.agent ?? 0 },
+              { key: 'manager', label: 'Managers', count: requestCounts.manager ?? 0 },
+              { key: 'subadmin', label: 'Sub-Admins', count: requestCounts.subadmin ?? 0 }
+            ].map(({ key, label, count }) => {
+              const isSelected = requestCategoryFilter === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setRequestCategoryFilter(key);
+                    fetchRequests(key);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                    isSelected
+                      ? 'bg-primary-600 text-white shadow-sm shadow-primary-600/20'
+                      : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
+                  }`}
+                >
+                  <span>{label}</span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-extrabold ${
+                    isSelected
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                  }`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {requests.length === 0 ? (
-            <div className="py-12 text-center space-y-2">
-              <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto" />
-              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">All Requests Processed</h4>
-              <p className="text-xs text-slate-400">No pending administrator onboarding requests at this time.</p>
+            <div className="py-16 text-center space-y-2">
+              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto opacity-80" />
+              <h4 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Pending Requests</h4>
+              <p className="text-xs text-slate-400">There are no pending requests under the selected category for your territorial jurisdiction.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase text-slate-400 tracking-wider">
-                    <th className="py-3 px-3">Request Type</th>
-                    <th className="py-3 px-3">Requested By</th>
-                    <th className="py-3 px-3">Candidate</th>
+                    <th className="py-3 px-3">Type</th>
+                    <th className="py-3 px-3">Applicant / Business</th>
                     <th className="py-3 px-3">Role</th>
                     <th className="py-3 px-3">Territory</th>
-                    <th className="py-3 px-3">Date</th>
+                    <th className="py-3 px-3">Onboarding Source</th>
+                    <th className="py-3 px-3">Applied</th>
                     <th className="py-3 px-3">Status</th>
                     <th className="py-3 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-850">
-                  {requests.map(reqItem => (
-                    <tr key={reqItem._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/50 transition-colors">
-                      <td className="py-3 px-3 font-semibold text-slate-700 dark:text-slate-300">
-                        {reqItem.requestType || 'New Onboarding'}
-                      </td>
-                      <td className="py-3 px-3">
-                        <strong className="text-slate-800 dark:text-slate-100 block">{reqItem.requestedBy?.name || 'Territory Admin'}</strong>
-                        <span className="text-[10px] text-slate-400">{reqItem.requestedBy?.role || 'Admin'}</span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <strong className="text-slate-800 dark:text-slate-100 block">{reqItem.name}</strong>
-                        <span className="text-[10px] text-slate-400">{(reqItem.phone && reqItem.phone !== '—') ? reqItem.phone : (reqItem.mobile && reqItem.mobile !== '—' ? reqItem.mobile : '—')} • {reqItem.email || '—'}</span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${getRoleBadge(reqItem.requestedRole || reqItem.role)}`}>
-                          {reqItem.requestedRole || reqItem.role || 'Admin'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-slate-600 dark:text-slate-400">
-                        <strong>{reqItem.state || reqItem.assignedState || '—'}</strong>
-                        {(reqItem.district || reqItem.assignedDistrict) && <span className="block text-[10px]">Dist: {reqItem.district || reqItem.assignedDistrict}</span>}
-                        {(reqItem.division || reqItem.assignedDivision) && <span className="block text-[10px]">Div: {reqItem.division || reqItem.assignedDivision}</span>}
-                        {(reqItem.pincode || reqItem.assignedPincode) && <span className="block text-[10px] font-mono">Pin: {reqItem.pincode || reqItem.assignedPincode}</span>}
-                      </td>
-                      <td className="py-3 px-3 text-slate-400 text-[11px]">
-                        {new Date(reqItem.createdAt || Date.now()).toLocaleDateString()}
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${reqItem.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-600' : reqItem.status === 'Rejected' ? 'bg-rose-500/10 text-rose-600' : 'bg-amber-500/10 text-amber-600 animate-pulse'}`}>
-                          {reqItem.status || 'Pending Approval'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleApproveRequest(reqItem)}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition-all cursor-pointer"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => { setRejectingRequest(reqItem); setRejectionReason(''); }}
-                            className="bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[10px] px-2.5 py-1 rounded-lg transition-all cursor-pointer border border-rose-200"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {requests.map(reqItem => {
+                    const srcLabel = reqItem.onboardingSourceLabel || (
+                      reqItem.onboardingSource === 'ADMIN_INITIATED' ? 'Admin Onboarded' :
+                      reqItem.onboardingSource === 'AGENT_INITIATED' ? 'Agent Onboarded' :
+                      reqItem.onboardingSource === 'MANAGER_INITIATED' ? 'Manager Onboarded' :
+                      'Direct Onboarded'
+                    );
+                    const isDirect = srcLabel === 'Direct Onboarded';
+                    const initiatorName = reqItem.initiator?.name || reqItem.requestedBy?.name;
+                    const initiatorRole = reqItem.initiator?.role || reqItem.requestedBy?.role;
+                    const initiatorTerr = reqItem.initiator?.territory || reqItem.requestedBy?.territory;
+
+                    return (
+                      <tr key={reqItem._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/50 transition-colors">
+                        <td className="py-3.5 px-3">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                            reqItem.category === 'vendor' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' :
+                            reqItem.category === 'agent' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20' :
+                            reqItem.category === 'manager' ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20' :
+                            'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                          }`}>
+                            {reqItem.category === 'vendor' ? <Store className="w-3 h-3" /> :
+                             reqItem.category === 'agent' ? <UserCheck className="w-3 h-3" /> :
+                             reqItem.category === 'manager' ? <Briefcase className="w-3 h-3" /> :
+                             <Shield className="w-3 h-3" />}
+                            {reqItem.category || reqItem.requestType || 'Request'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <strong className="text-slate-850 dark:text-slate-100 block text-xs">
+                            {reqItem.businessName ? `${reqItem.businessName} (${reqItem.name})` : reqItem.name}
+                          </strong>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            {reqItem.email || '—'} • {reqItem.phone || reqItem.mobile || '—'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${getRoleBadge(reqItem.requestedRole || reqItem.role || reqItem.level)}`}>
+                            {reqItem.requestedRole || reqItem.role || reqItem.level || 'Admin'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-slate-600 dark:text-slate-400">
+                          <strong>{reqItem.state || reqItem.assignedState || '—'}</strong>
+                          {(reqItem.district || reqItem.assignedDistrict) && <span className="block text-[10px] text-slate-500">Dist: {reqItem.district || reqItem.assignedDistrict}</span>}
+                          {(reqItem.division || reqItem.assignedDivision) && <span className="block text-[10px] text-slate-500">Div: {reqItem.division || reqItem.assignedDivision}</span>}
+                          {(reqItem.pincode || reqItem.assignedPincode) && <span className="block text-[10px] font-mono text-slate-500">Pin: {reqItem.pincode || reqItem.assignedPincode}</span>}
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <div className="space-y-0.5">
+                            <span className={`inline-flex items-center gap-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                              isDirect
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                : srcLabel === 'Admin Onboarded'
+                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
+                                : srcLabel === 'Agent Onboarded'
+                                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
+                            }`}>
+                              {srcLabel}
+                            </span>
+                            {!isDirect && initiatorName && (
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-tight">
+                                By <span className="font-semibold text-slate-700 dark:text-slate-300">{initiatorName}</span>
+                                {initiatorRole ? ` (${initiatorRole})` : ''}
+                                {initiatorTerr ? ` • ${initiatorTerr}` : ''}
+                              </p>
+                            )}
+                            {isDirect && (
+                              <p className="text-[10px] text-slate-400 leading-tight">Self Registration</p>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-3 text-slate-400 text-[11px] whitespace-nowrap">
+                          {new Date(reqItem.createdAt || Date.now()).toLocaleDateString()}
+                        </td>
+                        <td className="py-3.5 px-3">
+                          <span className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full ${
+                            reqItem.status === 'Approved' ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20' :
+                            reqItem.status === 'Rejected' ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20' :
+                            'bg-amber-500/10 text-amber-600 border border-amber-500/20 animate-pulse'
+                          }`}>
+                            {reqItem.status || 'Pending Approval'}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setViewingRequest(reqItem)}
+                              className="bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                              title="View Details"
+                            >
+                              <Eye className="w-3 h-3" /> Details
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleApproveRequest(reqItem)}
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition-all cursor-pointer shadow-xs"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setRejectingRequest(reqItem); setRejectionReason(''); }}
+                              className="bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 text-rose-600 font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition-all cursor-pointer border border-rose-200 dark:border-rose-900/40"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2033,6 +2158,174 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Request Details Modal */}
+      {viewingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="text-lg font-black text-slate-850 dark:text-slate-100">
+                    {viewingRequest.businessName ? `${viewingRequest.businessName} (${viewingRequest.name})` : viewingRequest.name}
+                  </h3>
+                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${getRoleBadge(viewingRequest.requestedRole || viewingRequest.role || viewingRequest.level)}`}>
+                    {viewingRequest.requestedRole || viewingRequest.role || viewingRequest.level || 'Applicant'}
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    ID: {viewingRequest.registrationId || viewingRequest.id || viewingRequest._id?.toString().slice(-6)}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Category: <strong className="capitalize text-slate-600 dark:text-slate-300">{viewingRequest.category || viewingRequest.requestType}</strong> • Applied: {new Date(viewingRequest.createdAt || Date.now()).toLocaleDateString()}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingRequest(null)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Applicant Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Contact Details</span>
+                <p className="font-semibold text-slate-700 dark:text-slate-300">Name: {viewingRequest.name}</p>
+                <p className="text-slate-600 dark:text-slate-400">Email: {viewingRequest.email || '—'}</p>
+                <p className="text-slate-600 dark:text-slate-400">Phone: {viewingRequest.phone || viewingRequest.mobile || '—'}</p>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Territory Assignment</span>
+                <p className="text-slate-700 dark:text-slate-300">State: <strong>{viewingRequest.state || viewingRequest.assignedState || '—'}</strong></p>
+                <p className="text-slate-700 dark:text-slate-300">District: <strong>{viewingRequest.district || viewingRequest.assignedDistrict || '—'}</strong></p>
+                <p className="text-slate-700 dark:text-slate-300">Division: <strong>{viewingRequest.division || viewingRequest.assignedDivision || '—'}</strong></p>
+                <p className="text-slate-700 dark:text-slate-300">Pincode: <strong>{viewingRequest.pincode || viewingRequest.assignedPincode || '—'}</strong></p>
+              </div>
+            </div>
+
+            {/* Onboarding Source Section */}
+            <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                  Onboarding Source & Attribution
+                </span>
+                <span className={`text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full ${
+                  viewingRequest.onboardingSource === 'ADMIN_INITIATED' ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20' :
+                  viewingRequest.onboardingSource === 'AGENT_INITIATED' ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20' :
+                  viewingRequest.onboardingSource === 'MANAGER_INITIATED' ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20' :
+                  'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                }`}>
+                  {viewingRequest.onboardingSourceLabel || (viewingRequest.onboardingSource === 'ADMIN_INITIATED' ? 'Admin Onboarded' : 'Direct Onboarded')}
+                </span>
+              </div>
+
+              {viewingRequest.onboardingSource === 'ADMIN_INITIATED' || viewingRequest.initiator?.name || viewingRequest.requestedBy?.name ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs pt-1">
+                  <div>
+                    <span className="block text-[10px] text-slate-400 font-medium">Initiating Admin</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                      {viewingRequest.initiator?.name || viewingRequest.requestedBy?.name || 'Authorized Admin'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 font-medium">Admin Role</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {viewingRequest.initiator?.role || viewingRequest.requestedBy?.role || 'Territory Admin'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] text-slate-400 font-medium">Authorized Territory</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">
+                      {viewingRequest.initiator?.territory || viewingRequest.requestedBy?.territory || viewingRequest.state || 'Assigned Scope'}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-600 dark:text-slate-400">
+                  Direct onboarding application submitted by candidate through the public registration portal. No intermediate agent or manager involved.
+                </p>
+              )}
+            </div>
+
+            {/* KYC Documents Section */}
+            {(viewingRequest.kycDocs || viewingRequest.kyc || viewingRequest.documents) && (
+              <div className="space-y-2">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Submitted KYC Records</span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  {(() => {
+                    const docs = viewingRequest.kycDocs || viewingRequest.kyc || {};
+                    const aadhaar = docs.aadhaarImage || docs.aadharUrl || viewingRequest.aadhaarNumber;
+                    const pan = docs.panImage || docs.panUrl || viewingRequest.panNumber;
+                    const selfie = docs.selfie || docs.photo;
+                    const proof = docs.businessProofImage || docs.bankProof || docs.license;
+                    return (
+                      <>
+                        <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">Aadhaar</span>
+                          <span className="text-[10px] font-mono text-slate-700 dark:text-slate-300">{viewingRequest.aadhaarNumber || (aadhaar ? 'Uploaded' : 'Pending')}</span>
+                        </div>
+                        <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">PAN</span>
+                          <span className="text-[10px] font-mono text-slate-700 dark:text-slate-300">{viewingRequest.panNumber || (pan ? 'Uploaded' : 'Pending')}</span>
+                        </div>
+                        <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">Photo / Selfie</span>
+                          <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">{selfie ? 'Provided' : 'Standard ID'}</span>
+                        </div>
+                        <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 text-center">
+                          <span className="block text-[10px] font-bold text-slate-500 mb-1">Business / Bank</span>
+                          <span className="text-[10px] font-semibold text-slate-700 dark:text-slate-300">{proof ? 'Document Attached' : 'Not Required'}</span>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setViewingRequest(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const r = viewingRequest;
+                    setViewingRequest(null);
+                    setRejectingRequest(r);
+                    setRejectionReason('');
+                  }}
+                  className="px-4 py-2 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 text-rose-600 font-bold text-xs rounded-xl border border-rose-200 dark:border-rose-900/40 transition-colors cursor-pointer"
+                >
+                  Reject Request
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const r = viewingRequest;
+                    setViewingRequest(null);
+                    handleApproveRequest(r);
+                  }}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition-all shadow-xs cursor-pointer"
+                >
+                  Approve Application
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -450,11 +450,44 @@ const RequestCard = ({ request, onApprove, onReject, onViewDetails, approving, r
         </div>
       </div>
 
-      {request.requestingAdminName && (
-        <p className="text-[11px] text-slate-400 mb-3">
-          Requested by <span className="text-slate-600 dark:text-slate-300 font-semibold">{request.requestingAdminName}</span>
-        </p>
-      )}
+      {/* Onboarding Source */}
+      {(() => {
+        const isAdminOnboarded = request.onboardingSource === 'ADMIN_INITIATED' ||
+          request.createdVia === 'admin' ||
+          Boolean(request.requestingAdminName);
+
+        const adminName = request.requestingAdminName || request.createdByName || 'Authorized Administrator';
+        const adminRole = request.requestingAdminRole || request.createdByRole || 'Territory Admin';
+        const adminTerr = request.requestingAdminTerritory || request.createdByTerritory || [request.assignedState, request.assignedDistrict].filter(Boolean).join(', ');
+
+        return (
+          <div className="mb-3">
+            {isAdminOnboarded ? (
+              <div className="p-2.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/40 text-xs">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-extrabold text-[10px] uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                    Admin Onboarded
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono">
+                    {new Date(request.createdAt).toLocaleDateString()}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-tight">
+                  Initiated by <strong className="text-slate-800 dark:text-slate-100">{adminName}</strong> ({adminRole})
+                  {adminTerr ? ` • ${adminTerr}` : ''}
+                </p>
+              </div>
+            ) : (
+              <div className="p-2 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 text-xs flex items-center justify-between">
+                <span className="font-extrabold text-[10px] uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                  Direct Onboarded
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">Direct Portal Registration</span>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {request.status === 'Rejected' && request.rejectionReason && (
         <p className="text-[11px] text-red-500 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2 mb-3">
@@ -657,6 +690,53 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
                 </>
               )}
             </div>
+          </div>
+
+          {/* Section 2.5: Onboarding Source & Initiator Audit */}
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Onboarding Source & Attribution</p>
+            {(() => {
+              const isAdmin = request.onboardingSource === 'ADMIN_INITIATED' ||
+                request.createdVia === 'admin' ||
+                Boolean(request.requestingAdminName);
+
+              const adminName = request.requestingAdminName || request.createdByName || 'Authorized Administrator';
+              const adminRole = request.requestingAdminRole || request.createdByRole || 'Territory Admin';
+              const adminTerr = request.requestingAdminTerritory || request.createdByTerritory || [request.assignedState, request.assignedDistrict].filter(Boolean).join(', ');
+
+              return isAdmin ? (
+                <div className="bg-indigo-50/70 dark:bg-indigo-950/30 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold uppercase text-[10px] text-indigo-700 dark:text-indigo-300">
+                      Admin Onboarded
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Applied: {new Date(request.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Initiating Admin</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{adminName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Role & Territory</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{adminRole} {adminTerr ? `• ${adminTerr}` : ''}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-900/40 text-xs flex items-center justify-between">
+                  <div>
+                    <span className="font-extrabold uppercase text-[10px] text-emerald-700 dark:text-emerald-300 block">
+                      Direct Onboarded
+                    </span>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">Self-registered directly through Manager registration portal.</p>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">{new Date(request.createdAt).toLocaleDateString()}</span>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Section 3: Dedicated Bank Details Section */}

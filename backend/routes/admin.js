@@ -4482,6 +4482,13 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
             assignedPincode = pinDoc._id;
         }
 
+        const adminCreatorId = (req.adminUser && req.adminUser._id) || (req.user && (req.user._id || req.user.id)) || null;
+        const adminCreatorName = (req.adminUser && req.adminUser.name) || (req.user && req.user.name) || 'Administrator';
+        const adminCreatorRole = (req.adminUser && (req.adminUser.adminRole || `${req.adminUser.adminTier}-admin`)) || (req.user && (req.user.adminRole || req.user.role)) || 'Admin';
+        const adminCreatorTerritory = (req.adminUser && [req.adminUser.assignedState, req.adminUser.assignedDistrict, req.adminUser.assignedDivision, req.adminUser.assignedPincode].filter(Boolean).join(', ')) || (req.user && [req.user.assignedState, req.user.assignedDistrict, req.user.assignedDivision, req.user.assignedPincode].filter(Boolean).join(', ')) || (req.user && req.user.assignedState) || '';
+
+        const agentRegId = req.body.registrationId || `REG-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+
         user = new User({
             name,
             email: lowerEmail,
@@ -4491,9 +4498,20 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
             level: level || 'pincode',
             assignedArea,
             assignedPincode,
+            registrationId: agentRegId,
+            onboardingSource: 'ADMIN_INITIATED',
+            initiatedByUserId: adminCreatorId,
+            initiatedByName: adminCreatorName,
+            initiatedByRole: adminCreatorRole,
+            initiatedByTerritory: adminCreatorTerritory,
+            parentAdminId: adminCreatorId,
+            createdBy: adminCreatorId,
             status: status || 'approved',
             isActive: status === 'approved',
-            bankDetails
+            approvalStage: status === 'approved' ? 'approved' : 'subadmin_review',
+            subAdminApprovalStatus: status === 'approved' ? 'approved' : 'pending',
+            bankDetails,
+            createdAt: new Date()
         });
 
         const salt = await bcrypt.genSalt(10);
