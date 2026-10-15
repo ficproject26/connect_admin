@@ -4095,9 +4095,95 @@ router.put('/activate-agent/:id', [auth, adminAuth], async (req, res) => {
     }
 });
 
+// Delete All Agents Handler
+const deleteAllAgentsHandler = async (req, res) => {
+    try {
+        const db = mongoose.connection.db;
+
+        // Explicit filter matching all pure agents across the system
+        // Strictly protects admin, super-admin, manager, vendor, customer roles
+        const userAgentFilter = {
+            $and: [
+                {
+                    $or: [
+                        { role: { $in: ['agent', 'Agent', 'state_agent', 'district_agent', 'division_agent', 'pincode_agent'] } },
+                        { level: { $in: ['state', 'district', 'division', 'pincode'] } },
+                        { registrationId: { $regex: '^(AG-|REG-)', $options: 'i' } }
+                    ]
+                },
+                { role: { $nin: ['Vendor', 'vendor', 'Customer', 'customer', 'Admin', 'admin', 'super-admin', 'superadmin', 'manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'District Admin', 'Division Admin', 'Pincode Admin', 'State Admin'] } },
+                { registrationId: { $not: { $regex: '^(ADM-|usr_mgr|MGR-|VEN-|CUST-)', $options: 'i' } } }
+            ]
+        };
+
+        // 1. Release active agent assignments from Pincodes
+        try {
+            await Pincode.updateMany({ activeAgentId: { $ne: null } }, { $set: { activeAgentId: null } });
+        } catch (pErr) {
+            console.warn('[deleteAllAgents] Pincode assignment reset warning:', pErr.message);
+        }
+
+        // 2. Delete all agent users from User collection
+        const userDelResult = await User.deleteMany(userAgentFilter);
+        const userDeletedCount = userDelResult?.deletedCount || 0;
+
+        // 3. Delete from raw collections if MongoDB db handle is available
+        let rawDeletedCount = 0;
+        if (db) {
+            await db.collection('users').deleteMany(userAgentFilter).catch(() => {});
+            const rawDelResult = await db.collection('agents').deleteMany({}).catch(() => ({ deletedCount: 0 }));
+            rawDeletedCount = rawDelResult?.deletedCount || 0;
+
+            // Clear any agent activities or targets
+            await db.collection('agenttargets').deleteMany({}).catch(() => {});
+            await db.collection('agentactivities').deleteMany({}).catch(() => {});
+            await db.collection('tasks').deleteMany({ assignedRole: 'agent' }).catch(() => {});
+        }
+
+        // 4. Invalidate agent and dashboard caches
+        try {
+            await cacheService.delPattern('admin_agents_*');
+            await cacheService.del('dashboard_stats');
+            await cacheService.del('admin_dashboard_stats');
+        } catch (cErr) {}
+
+        // 5. Broadcast real-time Socket.IO notification to sync client UIs immediately
+        try {
+            const io = req.app.get('io');
+            if (io) {
+                io.emit('agents_updated', { total: 0 });
+                io.emit('agent_deleted', { all: true });
+                io.emit('agents_cleared');
+            }
+        } catch (ioErr) {}
+
+        console.log(`[deleteAllAgents] Successfully deleted ${userDeletedCount} user agents, ${rawDeletedCount} raw agents.`);
+
+        return res.json({
+            success: true,
+            msg: `All agents deleted successfully from database (${userDeletedCount} user records, ${rawDeletedCount} directory records cleared).`,
+            message: `All agents deleted successfully from database (${userDeletedCount} user records, ${rawDeletedCount} directory records cleared).`,
+            deletedCount: userDeletedCount + rawDeletedCount,
+            userDeletedCount,
+            rawDeletedCount
+        });
+    } catch (err) {
+        console.error('[deleteAllAgents] Error:', err);
+        return res.status(500).json({ msg: 'Failed to delete all agents: ' + err.message, error: err.message });
+    }
+};
+
+router.delete('/agents/all', [auth, adminAuth], deleteAllAgentsHandler);
+router.delete('/agent/all', [auth, adminAuth], deleteAllAgentsHandler);
+router.delete('/agents-all', [auth, adminAuth], deleteAllAgentsHandler);
+router.delete('/all', [auth, adminAuth], deleteAllAgentsHandler);
+
 // Delete Agent
 router.delete('/agent/:id', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.params.id === 'all') {
+            return deleteAllAgentsHandler(req, res);
+        }
         const agent = await findAgentByIdentifier(req.params.id);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 
@@ -4141,6 +4227,9 @@ router.delete('/agent/:id', [auth, adminAuth], async (req, res) => {
 
 router.delete('/agents/:id', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.params.id === 'all') {
+            return deleteAllAgentsHandler(req, res);
+        }
         const agent = await findAgentByIdentifier(req.params.id);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 

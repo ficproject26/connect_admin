@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Users, Search, RefreshCw, Plus, UserCheck, ChevronRight, ChevronDown,
+  Users, Search, RefreshCw, Plus, UserCheck, Trash2, ChevronRight, ChevronDown,
   MapPin, Phone, Mail, Award, AlertTriangle, XCircle, Grid, List, Layers,
   CheckCircle, Clock, Eye, Globe2, Building2, Navigation, Hash, User,
   CalendarDays, BadgeCheck, ShieldOff, Ban, LayoutGrid, ArrowRight
@@ -67,6 +67,7 @@ export default function AgentDirectoryModule({
   const [scorecardData, setScorecardData] = useState(null);
   const [scorecardError, setScorecardError] = useState(null);
   const [actionConfirmModal, setActionConfirmModal] = useState({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null });
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const openAgentScorecard = useCallback(async (agentObj) => {
     if (!agentObj) return;
@@ -246,6 +247,69 @@ export default function AgentDirectoryModule({
   }, [safeFetchAgents, normalizeAgentList, onAgentsUpdated]);
 
   useEffect(() => { loadAgentData(false); }, [loadAgentData]);
+
+  const handleDeleteAllAgents = useCallback(async () => {
+    const totalCount = agents.length;
+    const confirmDelete = window.confirm(
+      `⚠️ WARNING: Are you sure you want to delete ALL agents from the database?\n\nThis will permanently remove all agent records (${totalCount} agents) across all states, districts, divisions, and pincodes.\n\nThis action cannot be undone. Click OK to proceed.`
+    );
+    if (!confirmDelete) return;
+
+    setDeletingAll(true);
+    try {
+      const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('admin_token') || '') : '');
+      const headers = {
+        'x-auth-token': activeToken,
+        'Authorization': `Bearer ${activeToken}`,
+        'Content-Type': 'application/json'
+      };
+
+      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
+      const candidates = [
+        `${baseClean}/admin/agents/all`,
+        `${baseClean}/agents/all`,
+        `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents/all`,
+        `${baseClean.replace(/\/admin-api$/, '')}/admin-api/agents/all`,
+        ...(typeof window !== 'undefined' && window.location.origin.includes('localhost') ? ['/admin-api/admin/agents/all', '/api/admin/agents/all', '/admin-api/agents/all'] : [])
+      ];
+
+      const urls = Array.from(new Set(candidates.map(u => u.replace(/([^:])\/\//g, '$1/').replace(/\/admin-api\/admin-api\//g, '/admin-api/'))));
+      let success = false;
+      let responseData = null;
+
+      for (const u of urls) {
+        try {
+          const res = await fetch(u, { method: 'DELETE', headers });
+          if (res.ok) {
+            responseData = await res.json().catch(() => ({}));
+            success = true;
+            break;
+          }
+        } catch (e) {
+          console.warn('[handleDeleteAllAgents] attempt warning:', u, e.message);
+        }
+      }
+
+      if (success) {
+        MEMORY_AGENT_CACHE = [];
+        try { sessionStorage.removeItem('connect_agent_directory_cache'); } catch (e) {}
+        setAgents([]);
+        setCachedAgents([]);
+        if (typeof onAgentsUpdated === 'function') {
+          onAgentsUpdated([]);
+        }
+        alert(responseData?.message || responseData?.msg || 'All agents have been successfully deleted from the database.');
+        await loadAgentData(true);
+      } else {
+        alert('Failed to delete all agents. Please verify your connection and permissions, then try again.');
+      }
+    } catch (err) {
+      console.error('[handleDeleteAllAgents] Error:', err);
+      alert('Error deleting all agents: ' + err.message);
+    } finally {
+      setDeletingAll(false);
+    }
+  }, [agents.length, token, API_BASE, onAgentsUpdated, loadAgentData]);
 
   const handleOpenActionConfirm = useCallback((agent, action) => {
     setActionConfirmModal({ isOpen: true, agent, action, reason: '', loading: false, error: null });
@@ -483,6 +547,12 @@ export default function AgentDirectoryModule({
           </button>
           <button type="button" onClick={onOpenAddAgentModal} className="h-9 bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer">
             <Plus className="w-4 h-4" /> Add Agent
+          </button>
+          <button type="button" onClick={handleDeleteAllAgents} disabled={deletingAll || refreshing}
+            className="h-9 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            title="Delete all agents from database">
+            <Trash2 className={`w-4 h-4 ${deletingAll ? 'animate-spin' : ''}`} />
+            {deletingAll ? 'Deleting All...' : 'Delete All'}
           </button>
         </div>
       </div>
