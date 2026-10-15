@@ -81,7 +81,7 @@
       var _origSetTimeout = window.setTimeout;
       window.setTimeout = function (handler, timeout) {
         if (typeof handler !== 'function') {
-          if (!handler || handler === 'undefined' || handler === 'null') {
+          if (!handler || handler === 'undefined' || handler === 'null' || typeof handler === 'string') {
             return -1;
           }
         }
@@ -91,7 +91,7 @@
       var _origSetInterval = window.setInterval;
       window.setInterval = function (handler, timeout) {
         if (typeof handler !== 'function') {
-          if (!handler || handler === 'undefined' || handler === 'null') {
+          if (!handler || handler === 'undefined' || handler === 'null' || typeof handler === 'string') {
             return -1;
           }
         }

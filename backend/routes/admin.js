@@ -4177,11 +4177,15 @@ router.delete('/agents/all', [auth, adminAuth], deleteAllAgentsHandler);
 router.delete('/agent/all', [auth, adminAuth], deleteAllAgentsHandler);
 router.delete('/agents-all', [auth, adminAuth], deleteAllAgentsHandler);
 router.delete('/all', [auth, adminAuth], deleteAllAgentsHandler);
+router.delete('/agents', [auth, adminAuth], deleteAllAgentsHandler);
+router.post('/agents/delete-all', [auth, adminAuth], deleteAllAgentsHandler);
+router.post('/agent/delete-all', [auth, adminAuth], deleteAllAgentsHandler);
+router.post('/agents/all', [auth, adminAuth], deleteAllAgentsHandler);
 
 // Delete Agent
 router.delete('/agent/:id', [auth, adminAuth], async (req, res) => {
     try {
-        if (req.params.id === 'all') {
+        if (req.params.id === 'all' || req.params.id === 'delete-all') {
             return deleteAllAgentsHandler(req, res);
         }
         const agent = await findAgentByIdentifier(req.params.id);
@@ -4227,7 +4231,7 @@ router.delete('/agent/:id', [auth, adminAuth], async (req, res) => {
 
 router.delete('/agents/:id', [auth, adminAuth], async (req, res) => {
     try {
-        if (req.params.id === 'all') {
+        if (req.params.id === 'all' || req.params.id === 'delete-all') {
             return deleteAllAgentsHandler(req, res);
         }
         const agent = await findAgentByIdentifier(req.params.id);

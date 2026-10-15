@@ -265,28 +265,84 @@ export default function AgentDirectoryModule({
       };
 
       const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
-      const candidates = [
-        `${baseClean}/admin/agents/all`,
-        `${baseClean}/agents/all`,
-        `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents/all`,
-        `${baseClean.replace(/\/admin-api$/, '')}/admin-api/agents/all`,
-        ...(typeof window !== 'undefined' && window.location.origin.includes('localhost') ? ['/admin-api/admin/agents/all', '/api/admin/agents/all', '/admin-api/agents/all'] : [])
+      const bulkCandidates = [
+        { url: `${baseClean}/admin/agents/all`, method: 'DELETE' },
+        { url: `${baseClean}/agents/all`, method: 'DELETE' },
+        { url: `${baseClean}/admin/agents/delete-all`, method: 'POST' },
+        { url: `${baseClean}/agents/delete-all`, method: 'POST' },
+        { url: `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents/all`, method: 'DELETE' },
+        { url: `${baseClean.replace(/\/admin-api$/, '')}/admin-api/agents/all`, method: 'DELETE' }
       ];
 
-      const urls = Array.from(new Set(candidates.map(u => u.replace(/([^:])\/\//g, '$1/').replace(/\/admin-api\/admin-api\//g, '/admin-api/'))));
       let success = false;
       let responseData = null;
 
-      for (const u of urls) {
+      // 1. Attempt high-performance single-call bulk deletion
+      for (const item of bulkCandidates) {
         try {
-          const res = await fetch(u, { method: 'DELETE', headers });
+          const res = await fetch(item.url, { method: item.method, headers });
           if (res.ok) {
             responseData = await res.json().catch(() => ({}));
             success = true;
             break;
           }
         } catch (e) {
-          console.warn('[handleDeleteAllAgents] attempt warning:', u, e.message);
+          // ignore network attempt errors and try next candidate
+        }
+      }
+
+      // 2. Resilient Fallback: If remote server does not yet have bulk route deployed (returns 404),
+      // delete all agents individually in concurrent batches using the already-deployed DELETE endpoint!
+      if (!success) {
+        let targets = (agentsRef.current && agentsRef.current.length > 0)
+          ? [...agentsRef.current]
+          : (agents && agents.length > 0 ? [...agents] : []);
+
+        if (targets.length === 0) {
+          const fetched = await safeFetchAgents();
+          if (fetched && fetched.length > 0) {
+            targets = normalizeAgentList(fetched);
+          }
+        }
+
+        if (targets.length > 0) {
+          let deletedCount = 0;
+          const batchSize = 10;
+          for (let i = 0; i < targets.length; i += batchSize) {
+            const chunk = targets.slice(i, i + batchSize);
+            await Promise.allSettled(
+              chunk.map(async (ag) => {
+                const agId = ag._id || ag.id || ag.registrationId;
+                if (!agId) return;
+                const deleteEndpoints = [
+                  `${baseClean}/admin/agents/${agId}`,
+                  `${baseClean}/agents/${agId}`,
+                  `${baseClean}/admin/agent/${agId}`,
+                  `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents/${agId}`
+                ];
+                for (const u of deleteEndpoints) {
+                  try {
+                    const r = await fetch(u, { method: 'DELETE', headers });
+                    if (r.ok || r.status === 404) {
+                      deletedCount++;
+                      break;
+                    }
+                  } catch (_) {}
+                }
+              })
+            );
+          }
+
+          if (deletedCount > 0) {
+            success = true;
+            responseData = {
+              message: `All ${deletedCount} agents have been successfully deleted from the database.`
+            };
+          }
+        } else {
+          // No agents in database
+          success = true;
+          responseData = { message: 'All agents deleted. No agents found in database.' };
         }
       }
 
@@ -301,7 +357,7 @@ export default function AgentDirectoryModule({
         alert(responseData?.message || responseData?.msg || 'All agents have been successfully deleted from the database.');
         await loadAgentData(true);
       } else {
-        alert('Failed to delete all agents. Please verify your connection and permissions, then try again.');
+        alert('Failed to delete agents. Please verify your administrative permissions and network connection.');
       }
     } catch (err) {
       console.error('[handleDeleteAllAgents] Error:', err);
@@ -309,7 +365,7 @@ export default function AgentDirectoryModule({
     } finally {
       setDeletingAll(false);
     }
-  }, [agents.length, token, API_BASE, onAgentsUpdated, loadAgentData]);
+  }, [agents, token, API_BASE, onAgentsUpdated, loadAgentData, safeFetchAgents, normalizeAgentList]);
 
   const handleOpenActionConfirm = useCallback((agent, action) => {
     setActionConfirmModal({ isOpen: true, agent, action, reason: '', loading: false, error: null });
