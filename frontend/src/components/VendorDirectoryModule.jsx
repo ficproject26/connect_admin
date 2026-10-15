@@ -3902,7 +3902,10 @@ export const VendorDirectoryModule = React.memo(({
                         </span>
                       </div>
                       <span className="text-xs text-slate-500 dark:text-slate-400">
-                        Owner: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.ownerName || '—'}</strong> • Phone: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.phone || '—'}</strong> • Email: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.email || '—'}</strong>
+                        Owner: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.ownerName || '—'}</strong> • Phone: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.phone || '—'}</strong>{vendorKycModal.data.alternatePhone ? <> • Alt: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.alternatePhone}</strong></> : null} • Email: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.email || '—'}</strong>
+                      </span>
+                      <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Category: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.category || '—'}</strong> • Registered: <strong className="text-slate-700 dark:text-slate-300">{vendorKycModal.data.createdAt ? new Date(vendorKycModal.data.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Not Available'}</strong>
                       </span>
                     </div>
                     <div className="flex flex-col items-start md:items-end gap-1">
@@ -3920,6 +3923,43 @@ export const VendorDirectoryModule = React.memo(({
                     </div>
                   </div>
 
+                  {/* Onboarding Source & Initiating Representative */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col gap-3 text-xs">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                        <UserCog className="w-4 h-4 text-purple-500" /> Onboarding Source & Initiation Details
+                      </h4>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20">
+                        {vendorKycModal.data.onboardingSourceLabel || 'Direct Registration'}
+                      </span>
+                    </div>
+                    {vendorKycModal.data.initiatorDetails ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-purple-500/5 p-3 rounded-xl border border-purple-500/10">
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Initiated By</span>
+                          <strong className="text-slate-800 dark:text-slate-200">{vendorKycModal.data.initiatorDetails.name}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Role</span>
+                          <strong className="text-slate-800 dark:text-slate-200 capitalize">{vendorKycModal.data.initiatorDetails.role}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Identifier</span>
+                          <strong className="text-slate-800 dark:text-slate-200 font-mono text-[11px]">{vendorKycModal.data.initiatorDetails.registrationId || '—'}</strong>
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Authorized Territory</span>
+                          <strong className="text-slate-800 dark:text-slate-200 text-[11px] truncate block" title={vendorKycModal.data.initiatorDetails.territory}>{vendorKycModal.data.initiatorDetails.territory || '—'}</strong>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span>Direct applicant self-onboarding submitted through Connect Vendor Registration Portal.</span>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Authentic Documents & Photos */}
                   <div className="flex flex-col gap-3">
                     <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
@@ -3928,9 +3968,18 @@ export const VendorDirectoryModule = React.memo(({
                     {Array.isArray(vendorKycModal.data.documents) && vendorKycModal.data.documents.length > 0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                         {vendorKycModal.data.documents.map((doc, idx) => {
-                          const isImg = doc.url && (
-                            doc.url.startsWith('data:image') ||
-                            /\.(jpe?g|png|webp|gif)($|\?)/i.test(doc.url) ||
+                          const resolveDocUrl = (url) => {
+                            if (!url || typeof url !== 'string') return '';
+                            if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+                            const cleanOrigin = (API_BASE || '').replace(/\/admin-api\/?$/, '').replace(/\/api\/?$/, '').replace(/\/+$/, '');
+                            const cleanPath = url.startsWith('/') ? url : `/${url}`;
+                            return cleanOrigin ? `${cleanOrigin}${cleanPath}` : url;
+                          };
+                          const rawUrl = doc.url || doc.path || doc.fileUrl || '';
+                          const resolvedUrl = resolveDocUrl(rawUrl);
+                          const isImg = rawUrl && (
+                            rawUrl.startsWith('data:image') ||
+                            /\.(jpe?g|png|webp|gif)($|\?)/i.test(rawUrl) ||
                             doc.type === 'image' ||
                             doc.documentType === 'storefront' ||
                             doc.documentType === 'photo'
@@ -3951,13 +4000,13 @@ export const VendorDirectoryModule = React.memo(({
                                 )}
                               </div>
 
-                              {isImg ? (
+                              {isImg && resolvedUrl ? (
                                 <div
-                                  onClick={() => setPreviewZoomImage(doc.url)}
+                                  onClick={() => setPreviewZoomImage(resolvedUrl)}
                                   className="relative h-36 rounded-xl overflow-hidden bg-slate-200 dark:bg-slate-700 cursor-pointer group-hover:opacity-95 transition-all"
                                 >
                                   <img
-                                    src={doc.url}
+                                    src={resolvedUrl}
                                     alt={doc.title || 'Storefront Photo'}
                                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                   />
@@ -3973,9 +4022,9 @@ export const VendorDirectoryModule = React.memo(({
                                   <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 line-clamp-2">
                                     {doc.fileName || doc.title || 'Document File'}
                                   </span>
-                                  {doc.url && (
+                                  {resolvedUrl && (
                                     <a
-                                      href={doc.url}
+                                      href={resolvedUrl}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="text-[11px] font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
@@ -4067,15 +4116,34 @@ export const VendorDirectoryModule = React.memo(({
                     </div>
                   </div>
 
-                  {/* Registered Location */}
-                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-                    <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Registered Store Address</span>
-                      <strong className="text-slate-800 dark:text-slate-200">{vendorKycModal.data.address || 'Address not specified'}</strong>
+                  {/* Registered Location & Territory Hierarchy */}
+                  <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 flex flex-col gap-3 text-xs">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-amber-500" /> Registered Location & Territory Hierarchy
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">State</span>
+                        <strong className="text-slate-800 dark:text-slate-200">{vendorKycModal.data.state || '—'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">District</span>
+                        <strong className="text-slate-800 dark:text-slate-200">{vendorKycModal.data.district || '—'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Division / Area</span>
+                        <strong className="text-slate-800 dark:text-slate-200">{vendorKycModal.data.division || vendorKycModal.data.assignedArea || '—'}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Postal PIN Code</span>
+                        <strong className="font-mono text-amber-600 dark:text-amber-400 text-sm">{vendorKycModal.data.pincode || '—'}</strong>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Postal PIN</span>
-                      <strong className="font-mono text-amber-600 dark:text-amber-400">{vendorKycModal.data.pincode || '—'}</strong>
+                    <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Full Physical Street Address</span>
+                        <strong className="text-slate-800 dark:text-slate-200">{vendorKycModal.data.address || 'Address not specified'}</strong>
+                      </div>
                     </div>
                   </div>
                 </>

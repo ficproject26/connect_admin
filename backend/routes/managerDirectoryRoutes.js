@@ -833,36 +833,52 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
             ManagerRequest.countDocuments(query)
         ]);
 
-        // Populate bankDetails from matching User if absent on ManagerRequest
-        const userIdsToLookup = requests.filter(r => !r.bankDetails && (r.userId || r.email)).map(r => r.userId).filter(Boolean);
-        const userEmailsToLookup = requests.filter(r => !r.bankDetails && r.email).map(r => r.email.toLowerCase().trim()).filter(Boolean);
-        const userBankMap = new Map();
+        // Look up corresponding User records by userId or email to merge full profile & KYC data
+        const userIdsToLookup = requests.map(r => r.userId).filter(Boolean);
+        const userEmailsToLookup = requests.map(r => (r.email || '').toLowerCase().trim()).filter(Boolean);
+        const userMap = new Map();
         if (userIdsToLookup.length > 0 || userEmailsToLookup.length > 0) {
-            const usersWithBank = await User.find({
+            const usersWithProfile = await User.find({
                 $or: [
                     { _id: { $in: userIdsToLookup } },
                     { email: { $in: userEmailsToLookup } }
                 ]
-            }).select('_id email bankDetails').lean().catch(() => []);
-            for (const u of usersWithBank) {
-                if (u.bankDetails) {
-                    if (u._id) userBankMap.set(String(u._id), u.bankDetails);
-                    if (u.email) userBankMap.set(String(u.email).toLowerCase().trim(), u.bankDetails);
-                }
+            }).select('-password -passwordHash').lean().catch(() => []);
+            for (const u of usersWithProfile) {
+                if (u._id) userMap.set(String(u._id), u);
+                if (u.email) userMap.set(String(u.email).toLowerCase().trim(), u);
             }
         }
 
         const formattedRequests = requests.map(r => {
-            const resolvedBank = r.bankDetails || 
-                (r.userId && userBankMap.get(String(r.userId))) || 
-                (r.email && userBankMap.get(String(r.email).toLowerCase().trim())) || 
-                null;
+            const matchedUser = (r.userId && userMap.get(String(r.userId))) || 
+                                (r.email && userMap.get(String(r.email).toLowerCase().trim())) || 
+                                {};
+            
+            const resolvedBank = r.bankDetails || matchedUser.bankDetails || null;
+            const resolvedKyc = matchedUser.kyc || {};
+            const resolvedDocs = (r.documents && Object.keys(r.documents).length > 0) 
+                ? r.documents 
+                : (matchedUser.documents || matchedUser.kycDocs || resolvedKyc || {});
+
             return {
                 ...r,
+                dob: r.dob || matchedUser.dob || null,
+                gender: r.gender || matchedUser.gender || '',
+                altPhone: r.altPhone || matchedUser.altPhone || '',
+                panNumber: r.panNumber || matchedUser.panNumber || matchedUser.panNo || resolvedKyc.panNumber || '',
+                aadhaarNumber: r.aadhaarNumber || matchedUser.aadhaarNumber || matchedUser.aadhaarNo || resolvedKyc.aadhaarNumber || '',
+                qualification: r.qualification || matchedUser.qualification || matchedUser.highestQualification || '',
+                experience: r.experience || matchedUser.experience || matchedUser.experienceYears || matchedUser.experienceLevel || '',
+                previousCompany: r.previousCompany || matchedUser.previousCompany || '',
+                address: r.address || matchedUser.address || matchedUser.fullAddress || '',
+                documents: resolvedDocs,
+                kyc: resolvedKyc,
                 bankDetails: resolvedBank,
-                phone: r.phone || r.mobile || '',
+                phone: r.phone || r.mobile || matchedUser.phone || matchedUser.mobile || '',
                 level: normalizeManagerLevelStr(r.level),
-                approvalStage: r.approvalStage || (r.status === 'Approved' ? 'approved' : 'subadmin_review')
+                approvalStage: r.approvalStage || (r.status === 'Approved' ? 'approved' : 'subadmin_review'),
+                rejectionReason: r.rejectionReason || matchedUser.rejectionReason || ''
             };
         });
 

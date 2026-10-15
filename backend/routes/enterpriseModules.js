@@ -2632,30 +2632,125 @@ router.get('/vendors/:id/kyc', auth, async (req, res) => {
             });
         }
 
+        // 1. Resolve Location & Territory (from direct fields or pincodes collection)
+        let pincodeVal = (v.pincode || u.pincode || u.postalCode || '').trim();
+        let stateVal = (v.state || v.assignedState || u.state || u.assignedState || '').trim();
+        let districtVal = (v.district || v.assignedDistrict || u.district || u.assignedDistrict || '').trim();
+        let divisionVal = (v.division || v.assignedDivision || u.division || u.assignedDivision || '').trim();
+        let addressVal = (v.address || v.fullAddress || u.address || u.fullAddress || '').trim();
+
+        const pinLookupId = v.pincodeId || u.pincodeId;
+        if (pinLookupId && mongoose.connection.db) {
+            try {
+                const pinDoc = await mongoose.connection.db.collection('pincodes').findOne({
+                    $or: [
+                        mongoose.Types.ObjectId.isValid(pinLookupId) ? { _id: new mongoose.Types.ObjectId(pinLookupId) } : null,
+                        { id: String(pinLookupId) },
+                        { code: String(pinLookupId) }
+                    ].filter(Boolean)
+                });
+                if (pinDoc) {
+                    if (!pincodeVal || pincodeVal === '—') pincodeVal = pinDoc.code || '';
+                    if (!stateVal || stateVal === '—') stateVal = pinDoc.state || '';
+                    if (!districtVal || districtVal === '—') districtVal = pinDoc.district || '';
+                    if (!divisionVal || divisionVal === '—') divisionVal = pinDoc.division || pinDoc.taluk || '';
+                    if (!addressVal || addressVal === '—') {
+                        addressVal = [v.street || u.street, pinDoc.area, pinDoc.division || pinDoc.taluk, pinDoc.district, pinDoc.state, pinDoc.code].filter(Boolean).join(', ');
+                    }
+                }
+            } catch (e) {}
+        }
+
+        // 2. Resolve Initiator / Onboarding Source
+        let initiatorDetails = null;
+        let onboardingSourceLabel = 'Direct Registration';
+        const initiatorId = v.createdBy || v.agentId || v.onboardedBy || v.assignedAgent || u.createdBy || u.agentId || u.onboardedBy || u.assignedAgent;
+        if (initiatorId && mongoose.connection.db) {
+            try {
+                const initUser = await mongoose.connection.db.collection('users').findOne({
+                    $or: [
+                        { _id: initiatorId },
+                        { id: initiatorId },
+                        { registrationId: initiatorId },
+                        mongoose.Types.ObjectId.isValid(initiatorId) ? { _id: new mongoose.Types.ObjectId(initiatorId) } : null
+                    ].filter(Boolean)
+                }) || await mongoose.connection.db.collection('managers').findOne({
+                    $or: [
+                        { _id: initiatorId },
+                        { id: initiatorId },
+                        { registrationId: initiatorId }
+                    ]
+                }) || await mongoose.connection.db.collection('agents').findOne({
+                    $or: [
+                        { _id: initiatorId },
+                        { id: initiatorId },
+                        { registrationId: initiatorId }
+                    ]
+                });
+
+                if (initUser) {
+                    const iRole = String(initUser.role || initUser.adminRole || '').toLowerCase();
+                    const iName = initUser.name || initUser.fullName || 'Authorized Admin';
+                    const iRegId = initUser.registrationId || initUser.managerId || initUser.agentId || initUser.id || '';
+                    const iTerr = [initUser.assignedState || initUser.state, initUser.assignedDistrict || initUser.district, initUser.assignedDivision || initUser.division, initUser.assignedPincode || initUser.pincode].filter(Boolean).join(' → ');
+                    initiatorDetails = {
+                        name: iName,
+                        role: initUser.role || initUser.adminRole || 'Territory Representative',
+                        registrationId: iRegId,
+                        territory: iTerr,
+                        email: initUser.email || '',
+                        phone: initUser.phone || initUser.mobile || ''
+                    };
+                    if (iRole.includes('agent')) onboardingSourceLabel = 'Agent-Assisted Onboarding';
+                    else if (iRole.includes('manager')) onboardingSourceLabel = 'Manager-Assisted Onboarding';
+                    else onboardingSourceLabel = 'Admin-Assisted Onboarding';
+                }
+            } catch (e) {}
+        } else if (v.joiningType === 'agent' || v.createdVia === 'agent' || v.registrationSource === 'agent') {
+            onboardingSourceLabel = 'Agent-Assisted Onboarding';
+        } else if (v.joiningType === 'manager' || v.createdVia === 'manager' || v.registrationSource === 'manager') {
+            onboardingSourceLabel = 'Manager-Assisted Onboarding';
+        }
+
+        const panVal = v.panNumber || v.panNo || u.panNo || u.panNumber || rawKycDocs.panNumber || '';
+        const gstVal = v.gstNumber || v.gstin || u.gstNumber || u.gstin || v.gst || '';
+        const aadhaarVal = v.aadhaarNumber || v.aadhaarNo || u.aadhaarNo || u.aadhaarNumber || rawKycDocs.aadhaarNumber || '';
+        const bankHolderVal = v.accountHolderName || u.accountHolderName || v.beneficiaryName || u.beneficiaryName || v.bankDetails?.accountHolderName || u.bankDetails?.accountHolderName || '';
+        const bankAccVal = v.accountNumber || u.accountNo || u.accountNumber || v.accountNo || v.bankDetails?.accountNumber || u.bankDetails?.accountNumber || '';
+        const bankNameVal = v.bankName || u.bankName || v.bankDetails?.bankName || u.bankDetails?.bankName || '';
+        const bankIfscVal = v.ifsc || v.ifscCode || u.ifscCode || u.ifsc || v.bankDetails?.ifscCode || v.bankDetails?.ifsc || u.bankDetails?.ifscCode || '';
+        const bankBranchVal = v.branchName || v.bankBranch || u.bankBranch || u.branchName || v.bankDetails?.branchName || '';
+
         const kycPayload = {
             vendorId: v._id || v.id,
-            businessName: v.businessName || v.name || 'Vendor Business',
-            ownerName: v.name || v.contactPerson || v.ownerName || 'Vendor Partner',
-            email: v.email || '',
-            phone: v.phone || v.mobile || v.mobileNumber || '',
-            status: v.status || 'Pending',
-            kycStatus: v.kycStatus || (v.isApproved ? 'verified' : 'pending'),
-            panNumber: v.panNumber || v.panNo || u.panNo || rawKycDocs.panNumber || '',
-            gstNumber: v.gstNumber || v.gstin || u.gstNumber || '',
-            aadhaarNumber: v.aadhaarNumber || v.aadhaarNo || u.aadhaarNo || rawKycDocs.aadhaarNumber || '',
+            businessName: v.businessName || v.name || u.businessName || u.name || 'Vendor Business',
+            ownerName: v.name || v.contactPerson || v.ownerName || u.contactPerson || u.ownerName || u.name || 'Vendor Partner',
+            email: v.email || u.email || '',
+            phone: v.phone || v.mobile || v.mobileNumber || u.mobileNumber || u.phone || '',
+            alternatePhone: v.alternatePhone || v.alternateNumber || u.alternateNumber || u.alternatePhone || '',
+            status: v.status || u.status || 'Pending',
+            kycStatus: v.kycStatus || u.kycStatus || (v.isApproved ? 'verified' : 'pending'),
+            panNumber: panVal,
+            gstNumber: gstVal,
+            aadhaarNumber: aadhaarVal,
             bankDetails: {
-                accountHolderName: v.accountHolderName || v.beneficiaryName || u.beneficiaryName || v.bankDetails?.accountHolderName || v.bankDetails?.beneficiaryName || '',
-                accountNumber: v.accountNumber || v.accountNo || u.accountNo || v.bankDetails?.accountNumber || v.bankDetails?.accountNo || '',
-                bankName: v.bankName || u.bankName || v.bankDetails?.bankName || '',
-                ifsc: v.ifsc || v.ifscCode || u.ifscCode || v.bankDetails?.ifscCode || v.bankDetails?.ifsc || '',
-                branchName: v.branchName || u.branchName || v.bankDetails?.branchName || ''
+                accountHolderName: bankHolderVal,
+                accountNumber: bankAccVal,
+                bankName: bankNameVal,
+                ifsc: bankIfscVal,
+                branchName: bankBranchVal
             },
             documents: realDocs,
-            category: v.category || v.vendorType || 'Products',
-            address: v.address || v.fullAddress || '',
-            pincode: v.pincode || '',
-            createdAt: v.createdAt || new Date(),
-            onboardedBy: v.onboardedByManager || v.onboardedByAgent || v.createdBy || null
+            category: v.category || u.category || v.vendorType || u.vendorType || 'Products',
+            address: addressVal || 'Address not specified',
+            pincode: pincodeVal || '—',
+            state: stateVal || '',
+            district: districtVal || '',
+            division: divisionVal || '',
+            createdAt: v.createdAt || u.createdAt || new Date(),
+            onboardedBy: v.onboardedByManager || v.onboardedByAgent || v.createdBy || u.createdBy || null,
+            onboardingSourceLabel,
+            initiatorDetails
         };
 
         return res.json({

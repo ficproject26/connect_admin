@@ -1715,6 +1715,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             };
         });
 
+        // Ensure requests and directory agents are strictly sorted newest to oldest
+        enrichedAgents.sort((a, b) => new Date(b.createdAt || b.created_at || 0) - new Date(a.createdAt || a.created_at || 0));
+
         res.setHeader('Content-Type', 'application/json');
 
         const page = parseInt(req.query.page, 10);

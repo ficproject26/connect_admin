@@ -1254,7 +1254,7 @@ export default function AgentDirectoryModule({
               </div>
             </div>
             <div className="space-y-4">
-              {agents.filter(isPendingAgent).map((pAgent) => {
+              {agents.filter(isPendingAgent).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).map((pAgent) => {
                 const terr = extractAgentTerritory(pAgent);
                 const isAdminOnboarded = (pAgent.onboardingSource === 'ADMIN_INITIATED') ||
                   (pAgent.createdVia === 'admin') ||
@@ -1275,7 +1275,13 @@ export default function AgentDirectoryModule({
                       </div>
                       <p className="text-xs text-slate-400">{pAgent.email || 'No email'} &#8226; {pAgent.phone || 'No phone'}</p>
                       <p className="text-xs text-slate-500 font-semibold flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-amber-500 shrink-0" />Territory: {terr.state} &#8594; {terr.district} &#8594; {terr.division} &#8594; {terr.pincode}</p>
-                      <p className="text-[11px] font-mono text-slate-400">REG ID: {pAgent.registrationId} | Applied: {new Date(pAgent.createdAt).toLocaleDateString()}</p>
+                      <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                        <span className="text-slate-400 font-semibold">Registration Date:</span>
+                        <strong className="text-slate-700 dark:text-slate-300">
+                          {pAgent.createdAt ? new Date(pAgent.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Not Available'}
+                        </strong>
+                      </p>
+                      <p className="text-[11px] font-mono text-slate-400">REG ID: {pAgent.registrationId || '—'}</p>
 
                       {/* Onboarding Source Details */}
                       {isAdminOnboarded ? (
@@ -1289,7 +1295,7 @@ export default function AgentDirectoryModule({
                             {adminRole ? ` (${adminRole})` : ''}
                             {adminTerritory ? ` • Territory: ${adminTerritory}` : ''}
                           </p>
-                          <p className="text-[10px] text-slate-400">Onboarded on {new Date(pAgent.createdAt).toLocaleDateString()}</p>
+                          <p className="text-[10px] text-slate-400">Onboarded on {pAgent.createdAt ? new Date(pAgent.createdAt).toLocaleDateString() : 'Not Available'}</p>
                         </div>
                       ) : (
                         <div className="mt-2 p-2 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-100 dark:border-emerald-900/40 text-xs flex items-center justify-between">

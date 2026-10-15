@@ -1604,6 +1604,7 @@ function App() {
           isApproved: isApprovedVal,
           assignedArea: ag.assignedArea || item.assignedArea || (ag.territory ? Object.values(ag.territory).filter(Boolean).join(' / ') : ''),
           territory: ag.territory || item.territory || {},
+          createdAt: ag.createdAt || item.createdAt || ag.registeredAt || item.registeredAt || null,
           balance: (ag.balance !== undefined && ag.balance > 0) ? ag.balance : (item.balance || metrics.revenue || 0),
           commissionEarned: (ag.commissionEarned !== undefined && ag.commissionEarned > 0) ? ag.commissionEarned : (item.commissionEarned || metrics.commission || 0),
           vendorsAdded: ag.vendorsAdded || item.vendorsAdded || metrics.vendorOnboarding || 0
@@ -1626,6 +1627,7 @@ function App() {
       });
 
       if (uniqueList.length > 0) {
+        uniqueList.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
         setAgents(uniqueList);
         apiCacheRef.current['agents'] = uniqueList;
       }
@@ -5079,7 +5081,7 @@ function App() {
               }
 
               return matchesSearch && matchesStatus && matchesProduct && matchesDate;
-            });
+            }).sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
 
             return (
               <div className="space-y-6">
@@ -5160,6 +5162,7 @@ function App() {
                     <table className="w-full text-left text-sm">
                       <thead>
                         <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Sl. No.</th>
                           <th className="px-6 py-4">Order Number</th>
                           <th className="px-6 py-4">Vendor</th>
                           <th className="px-6 py-4">Customer</th>
@@ -5171,7 +5174,7 @@ function App() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
-                        {filteredOrders.map((order) => {
+                        {filteredOrders.map((order, idx) => {
                           const vName = order.vendorId?.businessName || order.vendorName || order.vendor_name || order.vendorId?.name || 'Vendor unavailable';
                           const vEmail = order.vendorId?.email || order.vendorEmail || '—';
                           const pDetails = order.serviceName || order.service || order.productDetails || order.product_details || order.productName || order.title || '—';
@@ -5179,6 +5182,7 @@ function App() {
                           const custPhone = order.customerId?.phone || order.customerId?.mobile || order.customerId?.mobileNumber || order.customerId?.contactNumber || order.customer_phone || order.customerPhone || order.phone || order.mobile || '—';
                           return (
                             <tr key={order._id}>
+                              <td className="px-6 py-4 font-bold text-slate-500 font-mono text-xs">{idx + 1}</td>
                               <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-200">{order.order_number || order.id || (order._id ? 'ORD-' + String(order._id).substring(18, 24).toUpperCase() : '—')}</td>
                               <td className="px-6 py-4">
                                 <span className="block font-semibold text-slate-850 dark:text-slate-100">{vName}</span>
@@ -5206,7 +5210,7 @@ function App() {
                         })}
                         {filteredOrders.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="text-center py-8 text-slate-400 text-sm">
+                            <td colSpan={9} className="text-center py-8 text-slate-400 text-sm">
                               No orders found matching search and filters.
                             </td>
                           </tr>
@@ -5252,7 +5256,7 @@ function App() {
               }
 
               return isServiceOrBooking && matchesSearch && matchesStatus && matchesDate;
-            });
+            }).sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
 
             return (
               <div className="space-y-6">
@@ -5322,6 +5326,7 @@ function App() {
                     <table className="w-full text-left text-sm">
                       <thead>
                         <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Sl. No.</th>
                           <th className="px-6 py-4">Vendor</th>
                           <th className="px-6 py-4">Customer</th>
                           <th className="px-6 py-4">Service</th>
@@ -5344,6 +5349,7 @@ function App() {
                           const slotVal = booking.appointmentTimeSlot || 'Standard Slot';
                           return (
                             <tr key={booking._id}>
+                              <td className="px-6 py-4 font-bold text-slate-500 font-mono text-xs">{idx + 1}</td>
                               <td className="px-6 py-4">
                                 <span className="block font-semibold text-slate-850 dark:text-slate-100">{vName}</span>
                                 <span className="text-xs text-slate-400">{vEmail}</span>
@@ -5374,7 +5380,7 @@ function App() {
                         })}
                         {filteredBookings.length === 0 && (
                           <tr>
-                            <td colSpan={8} className="text-center py-8 text-slate-400 text-sm">
+                            <td colSpan={9} className="text-center py-8 text-slate-400 text-sm">
                               No bookings found matching search and filters.
                             </td>
                           </tr>
@@ -5411,7 +5417,7 @@ function App() {
                 (jobStatusFilter === 'rejected' && st === 'rejected');
 
               return matchesSearch && matchesStatus;
-            });
+            }).sort((a, b) => new Date(b.createdAt || b.appliedAt || b.appliedDate || b.date || 0) - new Date(a.createdAt || a.appliedAt || a.appliedDate || a.date || 0));
 
             return (
               <div className="space-y-6">
@@ -5510,6 +5516,7 @@ function App() {
                     <table className="w-full text-left text-sm">
                       <thead>
                         <tr className="bg-slate-50 dark:bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-200 dark:border-slate-800">
+                          <th className="px-6 py-4">Sl. No.</th>
                           <th className="px-6 py-4">App ID</th>
                           <th className="px-6 py-4">Candidate & Cust ID</th>
                           <th className="px-6 py-4">Position & Company (HR)</th>
@@ -5529,6 +5536,7 @@ function App() {
 
                           return (
                             <tr key={job._id}>
+                              <td className="px-6 py-4 font-bold text-slate-500 font-mono text-xs">{idx + 1}</td>
                               <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">
                                 #{String(job.applicationId || job._id).substring(0, 8).toUpperCase()}
                               </td>
@@ -5580,7 +5588,7 @@ function App() {
                         })}
                         {filteredJobs.length === 0 && (
                           <tr>
-                            <td colSpan={6} className="text-center py-8 text-slate-400 text-sm">
+                            <td colSpan={7} className="text-center py-8 text-slate-400 text-sm">
                               No job applications found matching search and filters.
                             </td>
                           </tr>
@@ -9164,13 +9172,23 @@ function App() {
                   <div className="flex justify-between"><span className="text-slate-400">Status:</span><span className="font-semibold capitalize">{modalData.status}</span></div>
                 </div>
 
-                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Contact Information</h4>
+                <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Contact & Location</h4>
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
-                  <div className="flex justify-between"><span className="text-slate-400">Contact Person:</span><span className="font-semibold">{modalData.contactName}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-semibold">{modalData.phone}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-semibold truncate max-w-[200px]">{modalData.email}</span></div>
-                  {modalData.address && (
-                    <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-semibold text-right max-w-[200px] break-words">{modalData.address}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Contact Person:</span><span className="font-semibold">{modalData.contactName || modalData.name || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-semibold">{modalData.phone || modalData.mobile || '—'}</span></div>
+                  {modalData.alternatePhone && <div className="flex justify-between"><span className="text-slate-400">Alt Phone:</span><span className="font-semibold">{modalData.alternatePhone}</span></div>}
+                  <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-semibold truncate max-w-[200px]">{modalData.email || '—'}</span></div>
+                  {(modalData.state || modalData.assignedState) && (
+                    <div className="flex justify-between"><span className="text-slate-400">State:</span><span className="font-semibold">{modalData.state || modalData.assignedState}</span></div>
+                  )}
+                  {(modalData.district || modalData.assignedDistrict) && (
+                    <div className="flex justify-between"><span className="text-slate-400">District:</span><span className="font-semibold">{modalData.district || modalData.assignedDistrict}</span></div>
+                  )}
+                  {(modalData.pincode || modalData.postalCode) && (
+                    <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-semibold font-mono text-amber-500">{modalData.pincode || modalData.postalCode}</span></div>
+                  )}
+                  {(modalData.address || modalData.fullAddress) && (
+                    <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-semibold text-right max-w-[200px] break-words">{modalData.address || modalData.fullAddress}</span></div>
                   )}
                 </div>
 
@@ -9185,72 +9203,94 @@ function App() {
               <div className="space-y-4">
                 <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">KYC Documents & Verification</h4>
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-3">
-                  <div className="flex justify-between"><span className="text-slate-400">KYC Status:</span><span className="font-bold capitalize">{modalData.kycStatus}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">KYC Status:</span><span className="font-bold capitalize">{modalData.kycStatus || 'pending'}</span></div>
 
-                  {modalData.kycDocs && (
-                    <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
-                      {modalData.kycDocs.aadhaarNumber && (
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="text-slate-400">Aadhaar:</span>
-                          <span className="font-semibold">{modalData.kycDocs.aadhaarNumber}</span>
-                        </div>
-                      )}
-                      {modalData.kycDocs.aadhaarImage && (
-                        <button
-                          onClick={() => setKycPreviewImage(modalData.kycDocs.aadhaarImage)}
-                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
-                        >
-                          View Aadhaar Document
-                        </button>
-                      )}
+                  {(() => {
+                    const panVal = modalData.panNumber || modalData.kycDocs?.panNumber || modalData.kyc?.panNumber;
+                    const aadhaarVal = modalData.aadhaarNumber || modalData.kycDocs?.aadhaarNumber || modalData.kyc?.aadhaarNumber;
+                    const gstVal = modalData.gstNumber || modalData.gstin || modalData.gst;
+                    const aadhaarImg = modalData.kycDocs?.aadhaarImage || modalData.kyc?.aadhaarImage;
+                    const panImg = modalData.kycDocs?.panImage || modalData.kyc?.panImage;
+                    const selfieImg = modalData.kycDocs?.selfie || modalData.kyc?.selfie;
+                    const bizProofImg = modalData.kycDocs?.businessProofImage || modalData.kyc?.businessProofImage;
 
-                      {modalData.kycDocs.panNumber && (
-                        <div className="flex justify-between items-center text-xs pt-2">
-                          <span className="text-slate-400">PAN:</span>
-                          <span className="font-semibold">{modalData.kycDocs.panNumber}</span>
-                        </div>
-                      )}
-                      {modalData.kycDocs.panImage && (
-                        <button
-                          onClick={() => setKycPreviewImage(modalData.kycDocs.panImage)}
-                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
-                        >
-                          View PAN Document
-                        </button>
-                      )}
+                    return (
+                      <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+                        {aadhaarVal && (
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="text-slate-400">Aadhaar:</span>
+                            <span className="font-semibold">{aadhaarVal}</span>
+                          </div>
+                        )}
+                        {aadhaarImg && (
+                          <button
+                            onClick={() => setKycPreviewImage(aadhaarImg)}
+                            className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block cursor-pointer"
+                          >
+                            View Aadhaar Document
+                          </button>
+                        )}
 
-                      {modalData.kycDocs.selfie && (
-                        <button
-                          onClick={() => setKycPreviewImage(modalData.kycDocs.selfie)}
-                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
-                        >
-                          View Selfie Profile
-                        </button>
-                      )}
+                        {panVal && (
+                          <div className="flex justify-between items-center text-xs pt-2">
+                            <span className="text-slate-400">PAN:</span>
+                            <span className="font-semibold">{panVal}</span>
+                          </div>
+                        )}
+                        {panImg && (
+                          <button
+                            onClick={() => setKycPreviewImage(panImg)}
+                            className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block cursor-pointer"
+                          >
+                            View PAN Document
+                          </button>
+                        )}
 
-                      {modalData.kycDocs.businessProofImage && (
-                        <button
-                          onClick={() => setKycPreviewImage(modalData.kycDocs.businessProofImage)}
-                          className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block"
-                        >
-                          View Business Proof Document
-                        </button>
-                      )}
-                    </div>
-                  )}
+                        {gstVal && (
+                          <div className="flex justify-between items-center text-xs pt-2">
+                            <span className="text-slate-400">GSTIN:</span>
+                            <span className="font-semibold">{gstVal}</span>
+                          </div>
+                        )}
+
+                        {selfieImg && (
+                          <button
+                            onClick={() => setKycPreviewImage(selfieImg)}
+                            className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block cursor-pointer"
+                          >
+                            View Selfie Profile
+                          </button>
+                        )}
+
+                        {bizProofImg && (
+                          <button
+                            onClick={() => setKycPreviewImage(bizProofImg)}
+                            className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block cursor-pointer"
+                          >
+                            View Business Proof Document
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
-                {modalData.bankDetails && (
-                  <>
-                    <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Payment & Bank Details</h4>
-                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
-                      {modalData.bankDetails.upiId && <div className="flex justify-between text-xs"><span className="text-slate-400">UPI ID:</span><span className="font-semibold">{modalData.bankDetails.upiId}</span></div>}
-                      {modalData.bankDetails.bankName && <div className="flex justify-between text-xs"><span className="text-slate-400">Bank Name:</span><span className="font-semibold">{modalData.bankDetails.bankName}</span></div>}
-                      {modalData.bankDetails.accountNumber && <div className="flex justify-between text-xs"><span className="text-slate-400">Account Number:</span><span className="font-semibold">{modalData.bankDetails.accountNumber}</span></div>}
-                      {modalData.bankDetails.ifscCode && <div className="flex justify-between text-xs"><span className="text-slate-400">IFSC Code:</span><span className="font-semibold">{modalData.bankDetails.ifscCode}</span></div>}
-                    </div>
-                  </>
-                )}
+                {(() => {
+                  const b = modalData.bankDetails || modalData.bank;
+                  if (!b) return null;
+                  return (
+                    <>
+                      <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Payment & Bank Details</h4>
+                      <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
+                        {(b.accountHolderName || b.beneficiaryName) && <div className="flex justify-between text-xs"><span className="text-slate-400">Account Holder:</span><span className="font-semibold">{b.accountHolderName || b.beneficiaryName}</span></div>}
+                        {b.bankName && <div className="flex justify-between text-xs"><span className="text-slate-400">Bank Name:</span><span className="font-semibold">{b.bankName}</span></div>}
+                        {(b.accountNumber || b.accountNo) && <div className="flex justify-between text-xs"><span className="text-slate-400">Account Number:</span><span className="font-semibold">{b.accountNumber || b.accountNo}</span></div>}
+                        {(b.ifscCode || b.ifsc) && <div className="flex justify-between text-xs"><span className="text-slate-400">IFSC Code:</span><span className="font-semibold">{b.ifscCode || b.ifsc}</span></div>}
+                        {b.upiId && <div className="flex justify-between text-xs"><span className="text-slate-400">UPI ID:</span><span className="font-semibold">{b.upiId}</span></div>}
+                      </div>
+                    </>
+                  );
+                })()}
 
                 <h4 className="font-bold text-primary-500 uppercase text-xs tracking-wider">Membership & Referral</h4>
                 <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-850 space-y-2">
@@ -9535,22 +9575,10 @@ function App() {
               })()}
             </div>
 
-            {/* STEP 3: PROFESSIONAL BACKGROUND */}
+            {/* STEP 3: AGENT UPLOADED DOCUMENTS & DECLARATIONS */}
             <div className="space-y-3">
               <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Briefcase className="w-4 h-4" /> Step 3: Professional Background
-              </h4>
-              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                <div><span className="text-slate-400 block font-semibold">Highest Qualification:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.qualification || modalData.highestQualification || 'Not Provided'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">Experience Level:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.experience || modalData.experienceLevel || 'Not Provided'}</strong></div>
-                <div><span className="text-slate-400 block font-semibold">Previous Company / Org:</span><strong className="text-slate-800 dark:text-slate-200">{modalData.previousCompany || modalData.previousOrg || 'Not Provided'}</strong></div>
-              </div>
-            </div>
-
-            {/* STEP 4: DOCUMENT UPLOADS & DECLARATIONS */}
-            <div className="space-y-3">
-              <h4 className="font-black text-xs text-[#864f19] dark:text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
-                <FileText className="w-4 h-4" /> Step 4: Agent Uploaded Documents & Declarations
+                <FileText className="w-4 h-4" /> Step 3: Agent Uploaded Documents & Declarations
               </h4>
               <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 space-y-4 text-xs">
                 {(() => {
@@ -10089,7 +10117,7 @@ function App() {
             </div>
 
             <div className="space-y-4">
-              {agents.filter(isPendingAgent).map((pAgent) => (
+              {agents.filter(isPendingAgent).sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)).map((pAgent) => (
                 <div key={pAgent._id} className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -10103,6 +10131,12 @@ function App() {
                     </div>
                     <p className="text-xs text-slate-400">{pAgent.email} • {pAgent.phone}</p>
                     <p className="text-xs text-slate-500 font-semibold">Territory/Area: {getFormattedTerritory(pAgent)}</p>
+                    <p className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+                      <span className="text-slate-400 font-semibold">Registration Date:</span>
+                      <strong className="text-slate-700 dark:text-slate-300">
+                        {pAgent.createdAt ? new Date(pAgent.createdAt).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Not Available'}
+                      </strong>
+                    </p>
                   </div>
 
                   <div className="flex gap-2 shrink-0 flex-wrap">

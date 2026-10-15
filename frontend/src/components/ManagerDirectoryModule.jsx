@@ -5,7 +5,7 @@ import {
   ArrowRight, Eye, Building2, Layers, Award,
   ChevronLeft, UserCheck, AlertCircle, Plus, List,
   ShoppingBag, DollarSign, Calendar, TrendingUp, Store,
-  Landmark, EyeOff, Copy
+  Landmark, EyeOff, Copy, FileText, CreditCard, GraduationCap, Briefcase, ExternalLink, ZoomIn, Check, ShieldCheck, UserCog
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────
@@ -536,6 +536,15 @@ const RequestCard = ({ request, onApprove, onReject, onViewDetails, approving, r
               </p>
             )}
 
+            {/* View Details Action */}
+            <button
+              type="button"
+              onClick={() => onViewDetails && onViewDetails(request)}
+              className="w-full flex items-center justify-center gap-1.5 py-2 mb-2 bg-indigo-50/80 hover:bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/60 dark:text-indigo-300 text-xs font-black rounded-xl border border-indigo-200 dark:border-indigo-800/60 transition-all cursor-pointer shadow-xs active:scale-98"
+            >
+              <Eye className="w-4 h-4" /> View Details
+            </button>
+
             {request.status === 'Pending' && (
               <div className="flex gap-2 mt-1">
                 {isSubAdminApproved ? (
@@ -576,11 +585,14 @@ const RequestCard = ({ request, onApprove, onReject, onViewDetails, approving, r
 
 // ─────────────────────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────
-// MANAGER REQUEST DETAILS MODAL (Dedicated Bank Details View)
+// MANAGER REQUEST DETAILS MODAL (Comprehensive Registration View)
 // ─────────────────────────────────────────────────────────────
-const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving, rejecting }) => {
+const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving, rejecting, API_BASE }) => {
   const [showFullAccount, setShowFullAccount] = useState(false);
+  const [showFullPan, setShowFullPan] = useState(false);
+  const [showFullAadhaar, setShowFullAadhaar] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
+  const [previewZoomDoc, setPreviewZoomDoc] = useState(null);
 
   if (!request) return null;
 
@@ -600,10 +612,99 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
     return `•••• •••• •••• ${s.slice(-4)}`;
   };
 
+  const getMaskedPan = (pan) => {
+    if (!pan) return '—';
+    const s = String(pan).trim();
+    if (s.length <= 4) return s;
+    return `••••••${s.slice(-4)}`;
+  };
+
+  const getMaskedAadhaar = (aadhaar) => {
+    if (!aadhaar) return '—';
+    const s = String(aadhaar).replace(/\s+/g, '');
+    if (s.length <= 4) return s;
+    return `•••• •••• ${s.slice(-4)}`;
+  };
+
+  const resolveDocUrl = (url) => {
+    if (!url || typeof url !== 'string') return '';
+    if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) return url;
+    const cleanOrigin = (API_BASE || '').replace(/\/admin-api\/?$/, '').replace(/\/api\/?$/, '').replace(/\/+$/, '');
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    return cleanOrigin ? `${cleanOrigin}${cleanPath}` : url;
+  };
+
+  // Build uniform document list from request.documents and request.kyc
+  const docList = [];
+  const rawDocs = request.documents || {};
+  const rawKyc = request.kyc || {};
+
+  if (Array.isArray(rawDocs)) {
+    rawDocs.forEach((d, idx) => {
+      if (d && (d.url || d.path || d.fileUrl)) {
+        docList.push({
+          title: d.title || d.name || d.documentType || `Document #${idx + 1}`,
+          url: resolveDocUrl(d.url || d.path || d.fileUrl),
+          type: d.type || d.documentType || 'Identity'
+        });
+      }
+    });
+  } else if (typeof rawDocs === 'object') {
+    if (rawDocs.aadhaarFront || rawDocs.aadhaarImage || rawKyc.aadhaarImage) {
+      docList.push({
+        title: 'Aadhaar Card',
+        url: resolveDocUrl(rawDocs.aadhaarFront || rawDocs.aadhaarImage || rawKyc.aadhaarImage),
+        type: 'Aadhaar'
+      });
+    }
+    if (rawDocs.aadhaarBack) {
+      docList.push({
+        title: 'Aadhaar Card (Back)',
+        url: resolveDocUrl(rawDocs.aadhaarBack),
+        type: 'Aadhaar'
+      });
+    }
+    if (rawDocs.panImage || rawKyc.panImage || rawDocs.pan) {
+      docList.push({
+        title: 'PAN Card',
+        url: resolveDocUrl(rawDocs.panImage || rawKyc.panImage || rawDocs.pan),
+        type: 'PAN'
+      });
+    }
+    if (rawDocs.selfie || rawKyc.selfie || rawDocs.photo || rawDocs.profilePhoto) {
+      docList.push({
+        title: 'Passport Photo / Selfie',
+        url: resolveDocUrl(rawDocs.selfie || rawKyc.selfie || rawDocs.photo || rawDocs.profilePhoto),
+        type: 'Photo'
+      });
+    }
+    if (rawDocs.cancelledCheque || rawKyc.cancelledCheque || rawDocs.passbook || rawDocs.bankProof) {
+      docList.push({
+        title: 'Bank Passbook / Cheque',
+        url: resolveDocUrl(rawDocs.cancelledCheque || rawKyc.cancelledCheque || rawDocs.passbook || rawDocs.bankProof),
+        type: 'Bank'
+      });
+    }
+    if (rawDocs.educationalCertificates || rawKyc.educationalCertificates || rawDocs.certificate || rawDocs.degreeCertificate) {
+      docList.push({
+        title: 'Educational Certificates',
+        url: resolveDocUrl(rawDocs.educationalCertificates || rawKyc.educationalCertificates || rawDocs.certificate || rawDocs.degreeCertificate),
+        type: 'Education'
+      });
+    }
+    if (rawDocs.signature) {
+      docList.push({
+        title: 'Applicant Signature',
+        url: resolveDocUrl(rawDocs.signature),
+        type: 'Signature'
+      });
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto" onClick={onClose}>
       <div
-        className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-2xl shadow-2xl my-8 max-h-[90vh] overflow-y-auto flex flex-col"
+        className="relative bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 w-full max-w-3xl shadow-2xl my-8 max-h-[90vh] overflow-y-auto flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -615,7 +716,7 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
               <StatusBadge status={request.status} />
             </div>
             <h3 className="text-xl font-black text-slate-900 dark:text-white">{request.name}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">Manager Registration & Onboarding Application</p>
+            <p className="text-xs text-slate-400 mt-0.5">Manager Registration & Onboarding Application Details</p>
           </div>
           <button
             onClick={onClose}
@@ -641,22 +742,30 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
                   <span className="font-bold text-slate-800 dark:text-slate-200 truncate ml-2" title={request.email}>{request.email || '—'}</span>
                 </div>
               </div>
-              {request.altPhone && (
-                <div className="text-xs flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
-                  <span className="text-slate-400">Alternative Phone:</span>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">{request.altPhone}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400">Alt Phone:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">{request.altPhone || '—'}</span>
                 </div>
-              )}
-              {request.address && (
-                <div className="text-xs p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
-                  <span className="text-slate-400 block text-[10px] mb-0.5">Address:</span>
-                  <span className="font-medium text-slate-700 dark:text-slate-300">{request.address}</span>
+                <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400">Date of Birth:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    {request.dob ? new Date(request.dob).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}
+                  </span>
                 </div>
-              )}
+                <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                  <span className="text-slate-400">Gender:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">{request.gender || '—'}</span>
+                </div>
+              </div>
+              <div className="text-xs p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
+                <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Residential / Postal Address</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">{request.address || 'Address not specified'}</span>
+              </div>
             </div>
           </div>
 
-          {/* Section 2: Assigned Jurisdiction */}
+          {/* Section 2: Assigned Jurisdiction Scope */}
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Requested Jurisdiction Scope</p>
             <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2 text-xs">
@@ -692,54 +801,96 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
             </div>
           </div>
 
-          {/* Section 2.5: Onboarding Source & Initiator Audit */}
+          {/* Section 3: Government Identifiers (Masked with Reveal) */}
           <div>
-            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Onboarding Source & Attribution</p>
-            {(() => {
-              const isAdmin = request.onboardingSource === 'ADMIN_INITIATED' ||
-                request.createdVia === 'admin' ||
-                Boolean(request.requestingAdminName);
-
-              const adminName = request.requestingAdminName || request.createdByName || 'Authorized Administrator';
-              const adminRole = request.requestingAdminRole || request.createdByRole || 'Territory Admin';
-              const adminTerr = request.requestingAdminTerritory || request.createdByTerritory || [request.assignedState, request.assignedDistrict].filter(Boolean).join(', ');
-
-              return isAdmin ? (
-                <div className="bg-indigo-50/70 dark:bg-indigo-950/30 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-extrabold uppercase text-[10px] text-indigo-700 dark:text-indigo-300">
-                      Admin Onboarded
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      Applied: {new Date(request.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">Initiating Admin</span>
-                      <span className="font-bold text-slate-800 dark:text-slate-200">{adminName}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[10px]">Role & Territory</span>
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">{adminRole} {adminTerr ? `• ${adminTerr}` : ''}</span>
-                    </div>
-                  </div>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
+              <CreditCard className="w-3.5 h-3.5 text-emerald-500" /> Government & Identity Proofs
+            </p>
+            <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              {/* PAN */}
+              <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">PAN Card Number</span>
+                  <span className="text-xs font-black font-mono text-slate-900 dark:text-white">
+                    {showFullPan ? (request.panNumber || '—') : getMaskedPan(request.panNumber)}
+                  </span>
                 </div>
-              ) : (
-                <div className="bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-900/40 text-xs flex items-center justify-between">
-                  <div>
-                    <span className="font-extrabold uppercase text-[10px] text-emerald-700 dark:text-emerald-300 block">
-                      Direct Onboarded
-                    </span>
-                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">Self-registered directly through Manager registration portal.</p>
+                {request.panNumber && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowFullPan(!showFullPan)}
+                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      {showFullPan ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      <span>{showFullPan ? 'Mask' : 'Reveal'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(request.panNumber, 'pan')}
+                      className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 cursor-pointer"
+                      title="Copy PAN"
+                    >
+                      {copiedField === 'pan' ? <CheckCircle className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    </button>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono">{new Date(request.createdAt).toLocaleDateString()}</span>
+                )}
+              </div>
+
+              {/* Aadhaar */}
+              <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-2">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Aadhaar / National ID</span>
+                  <span className="text-xs font-black font-mono text-slate-900 dark:text-white">
+                    {showFullAadhaar ? (request.aadhaarNumber || '—') : getMaskedAadhaar(request.aadhaarNumber)}
+                  </span>
                 </div>
-              );
-            })()}
+                {request.aadhaarNumber && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowFullAadhaar(!showFullAadhaar)}
+                      className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      {showFullAadhaar ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                      <span>{showFullAadhaar ? 'Mask' : 'Reveal'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(request.aadhaarNumber, 'aadhaar')}
+                      className="p-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-600 dark:text-slate-300 cursor-pointer"
+                      title="Copy Aadhaar"
+                    >
+                      {copiedField === 'aadhaar' ? <CheckCircle className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Section 3: Dedicated Bank Details Section */}
+          {/* Section 4: Education & Experience */}
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
+              <GraduationCap className="w-3.5 h-3.5 text-blue-500" /> Education & Professional Background
+            </p>
+            <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Highest Qualification</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{request.qualification || 'Not Specified'}</span>
+              </div>
+              <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Total Experience</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{request.experience || 'Not Specified'}</span>
+              </div>
+              <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/60 dark:border-slate-800">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block mb-0.5">Previous Company</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{request.previousCompany || 'Not Specified'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 5: Dedicated Bank Details */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
@@ -841,7 +992,125 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
             )}
           </div>
 
-          {/* Section 4: Workflow & Review Details */}
+          {/* Section 6: Uploaded KYC & Supporting Documents */}
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5 text-indigo-500" /> Uploaded KYC & Identity Documents
+            </p>
+            {docList.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {docList.map((doc, idx) => {
+                  const isImg = doc.url && (
+                    doc.url.startsWith('data:image') ||
+                    /\.(jpe?g|png|webp|gif)($|\?)/i.test(doc.url) ||
+                    doc.type === 'Photo' || doc.type === 'Signature'
+                  );
+
+                  return (
+                    <div
+                      key={idx}
+                      className="group rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/40 p-3 flex flex-col gap-2 hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-700 dark:text-slate-200 truncate">
+                          {doc.title}
+                        </span>
+                        <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                          {doc.type}
+                        </span>
+                      </div>
+
+                      {isImg ? (
+                        <div
+                          onClick={() => setPreviewZoomDoc(doc.url)}
+                          className="relative h-28 rounded-xl overflow-hidden bg-slate-200 dark:bg-slate-700 cursor-pointer group-hover:opacity-95 transition-all"
+                        >
+                          <img
+                            src={doc.url}
+                            alt={doc.title}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <span className="px-2.5 py-1 rounded-lg bg-white/90 text-slate-900 text-[10px] font-black flex items-center gap-1 shadow-lg">
+                              <ZoomIn className="w-3.5 h-3.5" /> Zoom
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-28 rounded-xl bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center gap-1.5 p-2 text-center border border-dashed border-slate-300 dark:border-slate-700">
+                          <FileText className="w-6 h-6 text-slate-400" />
+                          <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 line-clamp-1">{doc.title}</span>
+                          <a
+                            href={doc.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="w-3 h-3" /> View Document
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-6 border border-dashed border-slate-200 dark:border-slate-700 text-center">
+                <FileText className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+                <p className="text-xs font-bold text-slate-600 dark:text-slate-300">No documents submitted</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">No scanned KYC or identity documents attached to this manager application.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Section 7: Onboarding Source & Initiator Audit */}
+          <div>
+            <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">Onboarding Source & Attribution</p>
+            {(() => {
+              const isAdmin = request.onboardingSource === 'ADMIN_INITIATED' ||
+                request.createdVia === 'admin' ||
+                Boolean(request.requestingAdminName);
+
+              const adminName = request.requestingAdminName || request.createdByName || 'Authorized Administrator';
+              const adminRole = request.requestingAdminRole || request.createdByRole || 'Territory Admin';
+              const adminTerr = request.requestingAdminTerritory || request.createdByTerritory || [request.assignedState, request.assignedDistrict].filter(Boolean).join(', ');
+
+              return isAdmin ? (
+                <div className="bg-indigo-50/70 dark:bg-indigo-950/30 rounded-2xl p-4 border border-indigo-100 dark:border-indigo-900/40 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold uppercase text-[10px] text-indigo-700 dark:text-indigo-300">
+                      Admin Onboarded
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-mono">
+                      Applied: {request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '—'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Initiating Admin</span>
+                      <span className="font-bold text-slate-800 dark:text-slate-200">{adminName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">Role & Territory</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{adminRole} {adminTerr ? `• ${adminTerr}` : ''}</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-900/40 text-xs flex items-center justify-between">
+                  <div>
+                    <span className="font-extrabold uppercase text-[10px] text-emerald-700 dark:text-emerald-300 block">
+                      Direct Onboarded
+                    </span>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">Self-registered directly through Manager registration portal.</p>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono">{request.createdAt ? new Date(request.createdAt).toLocaleDateString() : '—'}</span>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Section 8: Workflow & Review Details */}
           <div className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-3.5 border border-slate-100 dark:border-slate-800 text-xs space-y-1.5">
             <div className="flex items-center justify-between">
               <span className="text-slate-400">Application Date:</span>
@@ -861,10 +1130,22 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
                 <span className="font-bold">{request.subadminApprovedByName}</span>
               </div>
             )}
+            {request.mainadminApprovedByName && (
+              <div className="flex items-center justify-between text-blue-600 dark:text-blue-400">
+                <span>Main Admin Approval:</span>
+                <span className="font-bold">{request.mainadminApprovedByName}</span>
+              </div>
+            )}
+            {request.rejectionReason && (
+              <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 mt-2">
+                <span className="font-bold block text-[10px] uppercase mb-0.5">Application Rejection Reason:</span>
+                <p className="text-xs">{request.rejectionReason}</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Modal Actions */}
+        {/* Modal Actions Footer */}
         <div className="flex items-center gap-2 pt-4 border-t border-slate-100 dark:border-slate-800 mt-2">
           {request.status === 'Pending' && (
             <>
@@ -913,6 +1194,29 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
           </button>
         </div>
       </div>
+
+      {/* Lightbox zoom for manager documents */}
+      {previewZoomDoc && (
+        <div
+          onClick={() => setPreviewZoomDoc(null)}
+          className="fixed inset-0 z-70 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 cursor-zoom-out animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center">
+            <button
+              onClick={() => setPreviewZoomDoc(null)}
+              className="absolute -top-12 right-0 p-2 text-white/80 hover:text-white rounded-full bg-white/10 hover:bg-white/20 transition-all cursor-pointer"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img
+              src={previewZoomDoc}
+              alt="Zoomed document"
+              className="max-h-[85vh] max-w-full rounded-2xl shadow-2xl object-contain border border-white/20"
+              onClick={e => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2319,6 +2623,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                 <RequestCard
                   key={req._id}
                   request={req}
+                  onViewDetails={r => setSelectedRequest(r)}
                   onApprove={handleApprove}
                   onReject={r => { setRejectingRequest(r); setRejectionReason(''); }}
                   approving={actionLoading[req._id] === 'approve'}
@@ -2335,6 +2640,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
       {selectedRequest && (
         <RequestDetailsModal
           request={selectedRequest}
+          API_BASE={API_BASE}
           onClose={() => setSelectedRequest(null)}
           onApprove={handleApprove}
           onReject={r => { setSelectedRequest(null); setRejectingRequest(r); setRejectionReason(''); }}
