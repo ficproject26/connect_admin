@@ -3,7 +3,8 @@ import {
   Users, Search, RefreshCw, Plus, UserCheck, ChevronRight, ChevronDown,
   MapPin, Phone, Mail, Award, AlertTriangle, XCircle, Grid, List, Layers,
   CheckCircle, Clock, Eye, Globe2, Building2, Navigation, Hash, User,
-  CalendarDays, BadgeCheck, ShieldOff, Ban, LayoutGrid, ArrowRight, ShieldCheck
+  CalendarDays, BadgeCheck, ShieldOff, Ban, LayoutGrid, ArrowRight, ShieldCheck,
+  Copy, Check, ExternalLink, EyeOff, CreditCard, FileText
 } from 'lucide-react';
 
 // Module-level in-memory cache
@@ -67,22 +68,58 @@ export default function AgentDirectoryModule({
   const [scorecardData, setScorecardData] = useState(null);
   const [scorecardError, setScorecardError] = useState(null);
   const [actionConfirmModal, setActionConfirmModal] = useState({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null });
+  const [unmaskedBankAcc, setUnmaskedBankAcc] = useState(false);
+  const [unmaskedGovtId, setUnmaskedGovtId] = useState(false);
+  const [previewDocModal, setPreviewDocModal] = useState(null);
+  const [copiedKey, setCopiedKey] = useState(null);
+
+  const handleCopyText = (key, text) => {
+    if (!text || text === 'Not Provided' || text === '—') return;
+    try {
+      navigator.clipboard?.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    } catch (e) {}
+  };
 
   const openAgentScorecard = useCallback(async (agentObj) => {
     if (!agentObj) return;
-    setSelectedScorecardAgent(agentObj); setScorecardLoading(true); setScorecardError(null); setScorecardData(null);
+    setSelectedScorecardAgent(agentObj);
+    setScorecardLoading(true);
+    setScorecardError(null);
+    setScorecardData(null);
+    setUnmaskedBankAcc(false);
+    setUnmaskedGovtId(false);
     const agId = agentObj._id || agentObj.id || agentObj.registrationId;
     if (!token || !agId) { setScorecardLoading(false); return; }
     const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-    const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
+    const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '');
+    const candidateEndpoints = [
+      `${baseClean}/admin/agents/${agId}/scorecard`,
+      `${baseClean}/agents/${agId}/scorecard`,
+      `${baseClean.replace(/\/admin-api$/, '/api/admin')}/agents/${agId}/scorecard`,
+      `${baseClean}/admin/agents/${agId}`,
+      `${baseClean}/agents/${agId}`
+    ];
     let fetched = false;
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(`${baseClean}/admin/agents/${agId}/scorecard`, { headers, signal: controller.signal });
-      clearTimeout(timeoutId);
-      if (res.ok) { const data = await res.json(); if (data && data.success) { setScorecardData(data); fetched = true; } }
-    } catch (e) { if (e.name !== 'AbortError') console.warn('Fetch scorecard warning:', e.message); }
+    for (const url of candidateEndpoints) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
+        const res = await fetch(url, { headers, signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && (data.success || data.agent)) {
+            setScorecardData(data.agent ? data : { success: true, agent: data });
+            fetched = true;
+            break;
+          }
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') console.warn('Fetch scorecard candidate warning:', e.message);
+      }
+    }
     if (!fetched) setScorecardError('Unable to load real-time agent details from server.');
     setScorecardLoading(false);
   }, [token, API_BASE]);
@@ -256,27 +293,88 @@ export default function AgentDirectoryModule({
     if (!agent || !agent._id) return;
     setActionConfirmModal(prev => ({ ...prev, loading: true, error: null }));
     try {
-      let endpoint = '', targetStatus = '';
-      if (action === 'suspend') { endpoint = `/api/admin/agents/${agent._id}/suspend`; targetStatus = 'suspended'; }
-      else if (action === 'revoke') { endpoint = `/api/admin/agents/${agent._id}/revoke`; targetStatus = 'revoked'; }
-      else if (action === 'reactivate') { endpoint = `/api/admin/agents/${agent._id}/approve`; targetStatus = 'approved'; }
+      const targetStatus = action === 'suspend' ? 'suspended' : (action === 'revoke' ? 'revoked' : 'approved');
+      const actionName = action === 'reactivate' ? 'approve' : action;
       const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
-      const body = JSON.stringify({ status: targetStatus, agentId: agent._id, reason: reason || `${action} by administrator`, rejectionReason: reason || `${action} by administrator` });
-      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
-      const url = `${baseClean}${endpoint.startsWith('/api') ? endpoint.slice(4) : endpoint}`;
-      let resSuccess = false, errMsg = '';
-      try { const res = await fetch(url, { method: 'PUT', headers, body }); const rd = await res.json().catch(() => ({})); if (res.ok) resSuccess = true; else errMsg = rd.msg || rd.message || 'Action failed'; } catch (e) { errMsg = e.message; }
-      if (!resSuccess) { setActionConfirmModal(prev => ({ ...prev, loading: false, error: errMsg || 'Failed to update agent status' })); return; }
-      setAgents(prev => {
-        const updated = prev.map(a => a._id === agent._id || (a.registrationId && a.registrationId === agent.registrationId)
-          ? { ...a, status: targetStatus, kycStatus: targetStatus, isActive: targetStatus === 'approved', isApproved: targetStatus === 'approved', assignedArea: targetStatus === 'revoked' ? null : a.assignedArea, assignedPincode: targetStatus === 'revoked' ? null : a.assignedPincode }
-          : a);
-        setCachedAgents(updated); if (typeof onAgentsUpdated === 'function') onAgentsUpdated(updated); return updated;
+      const body = JSON.stringify({
+        status: targetStatus,
+        agentId: agent._id,
+        reason: reason || `${action} by administrator`,
+        rejectionReason: reason || `${action} by administrator`
       });
+
+      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '');
+      const candidateUrls = [
+        `${baseClean}/agents/${agent._id}/${actionName}`,
+        `${baseClean}/admin/agents/${agent._id}/${actionName}`,
+        `${baseClean.replace(/\/admin-api$/, '/api/admin')}/agents/${agent._id}/${actionName}`,
+        `${baseClean}/agents/${agent._id}/status`,
+        `${baseClean}/admin/agents/${agent._id}/status`
+      ];
+
+      let resSuccess = false;
+      let errMsg = '';
+
+      for (const u of candidateUrls) {
+        try {
+          const res = await fetch(u, { method: 'PUT', headers, body });
+          if (res.ok) {
+            resSuccess = true;
+            break;
+          }
+          if (res.status === 404 || res.status === 405) {
+            const pRes = await fetch(u, { method: 'POST', headers, body });
+            if (pRes.ok) {
+              resSuccess = true;
+              break;
+            }
+          }
+          const rd = await res.json().catch(() => ({}));
+          errMsg = rd.msg || rd.message || `Action failed with status ${res.status}`;
+        } catch (e) {
+          errMsg = e.message;
+        }
+      }
+
+      if (!resSuccess) {
+        setActionConfirmModal(prev => ({ ...prev, loading: false, error: errMsg || 'Failed to update agent access status' }));
+        return;
+      }
+
+      setAgents(prev => {
+        const updated = prev.map(a => (a._id === agent._id || (a.registrationId && a.registrationId === agent.registrationId))
+          ? {
+              ...a,
+              status: targetStatus,
+              kycStatus: targetStatus,
+              isActive: targetStatus === 'approved',
+              isApproved: targetStatus === 'approved',
+              isRevoked: targetStatus === 'revoked',
+              isSuspended: targetStatus === 'suspended',
+              assignedArea: targetStatus === 'revoked' ? null : a.assignedArea,
+              assignedPincode: targetStatus === 'revoked' ? null : a.assignedPincode,
+              assignedState: targetStatus === 'revoked' ? null : a.assignedState,
+              assignedDistrict: targetStatus === 'revoked' ? null : a.assignedDistrict,
+              assignedDivision: targetStatus === 'revoked' ? null : a.assignedDivision,
+              revokedAt: targetStatus === 'revoked' ? new Date().toISOString() : a.revokedAt,
+              revocationReason: targetStatus === 'revoked' ? reason : a.revocationReason,
+              suspendedAt: targetStatus === 'suspended' ? new Date().toISOString() : a.suspendedAt,
+              suspensionReason: targetStatus === 'suspended' ? reason : a.suspensionReason
+            }
+          : a);
+        setCachedAgents(updated);
+        if (typeof onAgentsUpdated === 'function') onAgentsUpdated(updated);
+        return updated;
+      });
+
       setActionConfirmModal({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null });
-      if (selectedScorecardAgent && (selectedScorecardAgent._id === agent._id || selectedScorecardAgent.registrationId === agent.registrationId)) setSelectedScorecardAgent(null);
+      if (selectedScorecardAgent && (selectedScorecardAgent._id === agent._id || selectedScorecardAgent.registrationId === agent.registrationId)) {
+        setSelectedScorecardAgent(null);
+      }
       loadAgentData(true);
-    } catch (err) { setActionConfirmModal(prev => ({ ...prev, loading: false, error: err.message })); }
+    } catch (err) {
+      setActionConfirmModal(prev => ({ ...prev, loading: false, error: err.message }));
+    }
   }, [actionConfirmModal, token, API_BASE, loadAgentData, onAgentsUpdated, selectedScorecardAgent]);
 
   const isApprovedAgent = (agent) => {
@@ -480,9 +578,6 @@ export default function AgentDirectoryModule({
             className="h-9 bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-3.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer">
             <UserCheck className="w-4 h-4" />Onboarding Requests
             {pendingCount > 0 && <span className="bg-white text-amber-900 text-[10px] font-black px-1.5 py-0 rounded-full">{pendingCount}</span>}
-          </button>
-          <button type="button" onClick={onOpenAddAgentModal} className="h-9 bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer">
-            <Plus className="w-4 h-4" /> Add Agent
           </button>
         </div>
       </div>
@@ -1322,124 +1417,913 @@ export default function AgentDirectoryModule({
         </div>
       )}
 
-      {/* SCORECARD MODAL */}
+      {/* COMPREHENSIVE AGENT INSPECT & SCORECARD MODAL */}
       {selectedScorecardAgent && (() => {
         const ag = scorecardData?.agent || selectedScorecardAgent;
-        const metrics = scorecardData?.metrics || { tieupsToday: 0, tieupsYesterday: 0, totalTieups: 0, totalShops: 0, totalRevenue: ag.revenue || ag.balance || 0, performanceScore: 0, regFeeStatus: (ag.isPaid || ag.status === 'approved') ? 'PAID' : 'UNPAID' };
-        const downstream = scorecardData?.downstream || { districtAgents: 0, divisionAgents: 0, pincodeAgents: 0 };
-        const isApproved = (ag.status === 'approved' || ag.kycStatus === 'approved' || ag.isApproved);
+        const metrics = scorecardData?.metrics || {
+          tieupsToday: ag.metrics?.tieupsToday || 0,
+          tieupsYesterday: ag.metrics?.tieupsYesterday || 0,
+          totalTieups: ag.metrics?.totalTieups || ag.totalTieups || 0,
+          totalShops: ag.metrics?.totalShops || ag.totalShops || 0,
+          totalRevenue: ag.revenue || ag.balance || ag.commissionEarned || 0,
+          performanceScore: ag.performanceScore || 0,
+          regFeeStatus: (ag.isPaid || ag.status === 'approved') ? 'PAID' : 'UNPAID'
+        };
+        const downstream = scorecardData?.downstream || {
+          districtAgents: 0,
+          divisionAgents: 0,
+          pincodeAgents: 0
+        };
+        const statusClean = String(ag.status || '').toLowerCase().trim();
+        const isApproved = statusClean === 'approved' || statusClean === 'active';
+        const isSuspended = statusClean === 'suspended';
+        const isRevoked = statusClean === 'revoked';
         const lvl = (ag.level || 'pincode').toLowerCase();
         const cfg = LEVEL_CONFIG[lvl] || LEVEL_CONFIG.pincode;
-        const stateName = ag.assignedState || ag.state || ag.territory?.state || '';
-        const districtName = ag.assignedDistrict || ag.district || ag.territory?.district || '';
-        const divisionName = ag.assignedDivision || ag.division || ag.territory?.division || '';
-        const pincodeCode = ag.assignedPincode?.code || ag.assignedPincode || ag.pincode || ag.territory?.pincode || '';
-        const locationParts = [stateName && `State: ${stateName}`, districtName && `District: ${districtName}`, divisionName && `Division: ${divisionName}`, pincodeCode && `PIN: ${pincodeCode}`].filter(Boolean);
-        const locationStr = locationParts.length > 0 ? locationParts.join(' \u203a ') : 'General Territory';
+        const stateName = ag.assignedState && ag.assignedState !== 'N/A' ? ag.assignedState : (ag.state || ag.territory?.state || '');
+        const districtName = ag.assignedDistrict && ag.assignedDistrict !== 'N/A' ? ag.assignedDistrict : (ag.district || ag.territory?.district || '');
+        const divisionName = ag.assignedDivision && ag.assignedDivision !== 'N/A' ? ag.assignedDivision : (ag.division || ag.territory?.division || '');
+        const pincodeCode = ag.assignedPincode?.code || (ag.assignedPincode !== 'N/A' ? ag.assignedPincode : '') || ag.pincode || ag.territory?.pincode || '';
+        const territoryHierarchyParts = [
+          stateName && `State: ${stateName}`,
+          districtName && `District: ${districtName}`,
+          divisionName && `Division: ${divisionName}`,
+          pincodeCode && `PIN: ${pincodeCode}`
+        ].filter(Boolean);
+        const hierarchyDisplay = territoryHierarchyParts.length > 0 ? territoryHierarchyParts.join(' \u203a ') : 'General Territory';
+        const formattedRegId = ag.registrationId || (ag._id ? `REG-${String(ag._id).substring(18, 24).toUpperCase()}` : 'REG-N/A');
+
+        const bank = ag.bankDetails || {};
+        const rawBankAcc = bank.accountNumber || ag.accountNumber || ag.accountNo || '';
+        const bankName = bank.bankName || ag.bankName || '';
+        const accountHolder = bank.accountHolderName || ag.accountHolderName || ag.name || '';
+        const ifsc = (bank.ifsc || ag.ifsc || '').toUpperCase().trim();
+        const branchName = bank.branchName || ag.branchName || '';
+        const bankStatus = bank.verificationStatus || (rawBankAcc ? 'Verified' : 'Pending Setup');
+
+        const aadhaarNum = ag.aadhaarNumber || ag.documents?.aadhaarNumber || '';
+        const panNum = (ag.panNumber || ag.documents?.panNumber || '').toUpperCase().trim();
+
+        const docs = ag.documents || ag.kycDocs || {};
+        const docList = [
+          { key: 'profilePhoto', label: 'Profile Photo / Selfie', url: docs.profilePhoto || ag.profilePhoto },
+          { key: 'aadhaarCard', label: 'Aadhaar Card', url: docs.aadhaarCard || ag.aadhaarCard },
+          { key: 'panCard', label: 'PAN Card', url: docs.panCard || ag.panCard },
+          { key: 'addressProof', label: 'Address Proof', url: docs.addressProof || ag.addressProof },
+          { key: 'educationalCertificates', label: 'Educational Certificates', url: docs.educationalCertificates || ag.educationalCertificates }
+        ].filter(d => Boolean(d.url) && d.url !== '[Uploaded Document]' && d.url !== '[Binary Document]');
+
         return (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 overflow-y-auto">
-            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl relative my-auto">
-              <div className="flex items-start justify-between gap-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 w-full max-w-4xl rounded-3xl p-6 md:p-8 space-y-6 shadow-2xl relative my-auto max-h-[90vh] overflow-y-auto">
+              
+              {/* Header */}
+              <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-4">
-                  <div className={`w-14 h-14 rounded-2xl ${cfg.bg} ${cfg.text} font-extrabold text-2xl flex items-center justify-center border ${cfg.border} shrink-0`}>{(ag.name || 'A')[0].toUpperCase()}</div>
+                  {ag.profilePhoto && (ag.profilePhoto.startsWith('http') || ag.profilePhoto.startsWith('data:') || ag.profilePhoto.startsWith('/')) ? (
+                    <img
+                      src={ag.profilePhoto}
+                      alt={ag.name}
+                      className="w-16 h-16 rounded-2xl object-cover border-2 border-slate-200 dark:border-slate-700 shadow-sm shrink-0"
+                    />
+                  ) : (
+                    <div className={`w-16 h-16 rounded-2xl ${cfg.bg} ${cfg.text} font-black text-2xl flex items-center justify-center border ${cfg.border} shadow-sm shrink-0`}>
+                      {(ag.name || 'A')[0].toUpperCase()}
+                    </div>
+                  )}
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-[10px] font-black tracking-wider uppercase px-2.5 py-0.5 rounded-md ${cfg.badge}`}>{lvl.toUpperCase()} AGENT</span>
-                      {isApproved
-                        ? <span className="border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Approved</span>
-                        : <span className="border border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-amber-500" /> Pending KYC</span>}
+                      <span className={`text-[10px] font-black tracking-wider uppercase px-2.5 py-0.5 rounded-md ${cfg.badge}`}>
+                        {lvl.toUpperCase()} AGENT
+                      </span>
+                      {isRevoked ? (
+                        <span className="border border-rose-500/40 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/50 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <XCircle className="w-3.5 h-3.5 text-rose-500" /> Revoked
+                        </span>
+                      ) : isSuspended ? (
+                        <span className="border border-amber-500/40 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500" /> Suspended
+                        </span>
+                      ) : isApproved ? (
+                        <span className="border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Active &amp; Approved
+                        </span>
+                      ) : (
+                        <span className="border border-blue-500/40 text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 text-[11px] font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5 text-blue-500" /> Pending Verification
+                        </span>
+                      )}
                     </div>
-                    <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">{ag.name}</h3>
-                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 font-mono">{ag.email || 'N/A'} &#8226; {ag.phone || 'N/A'}</p>
+                    <h3 className="text-xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+                      {ag.name || ag.fullName || 'Agent Partner'}
+                    </h3>
+                    <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-mono flex-wrap">
+                      <span className="flex items-center gap-1 font-bold text-slate-700 dark:text-slate-300">
+                        {formattedRegId}
+                        <button
+                          type="button"
+                          onClick={() => handleCopyText('regId', formattedRegId)}
+                          className="hover:text-primary-600 p-0.5 cursor-pointer"
+                          title="Copy Registration ID"
+                        >
+                          {copiedKey === 'regId' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </span>
+                      <span>&#8226;</span>
+                      <span>Joined: {ag.createdAt ? new Date(ag.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}</span>
+                    </div>
                   </div>
                 </div>
-                <button type="button" onClick={() => setSelectedScorecardAgent(null)} className="w-8 h-8 rounded-full border border-slate-300 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center text-sm font-bold transition-all cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0">&#10005;</button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedScorecardAgent(null)}
+                  className="w-8 h-8 rounded-full border border-slate-300 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center text-sm font-bold transition-all cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                >
+                  &#10005;
+                </button>
               </div>
-              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3.5 flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <MapPin className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" /><span>{locationStr}</span>
+
+              {/* Status & Revocation Audit Banner */}
+              {isRevoked && (
+                <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 space-y-1.5 text-xs text-rose-800 dark:text-rose-200">
+                  <div className="flex items-center gap-2 font-bold text-rose-700 dark:text-rose-300 text-sm">
+                    <XCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                    <span>Access Revoked &amp; Territory Released</span>
+                  </div>
+                  <p className="opacity-90">
+                    Revoked on <strong className="font-semibold">{ag.revokedAt ? new Date(ag.revokedAt).toLocaleString('en-IN') : 'Recently'}</strong>
+                    {ag.revokedByName ? ` by ${ag.revokedByName}` : ' by Super Admin'}.
+                    {ag.revocationReason ? ` Reason: "${ag.revocationReason}"` : ''}
+                  </p>
+                  <p className="text-[11px] text-rose-600 dark:text-rose-400 font-medium">
+                    All active security sessions and tokens have been terminated. The agent cannot log in, and their territory slot has been vacated.
+                  </p>
+                </div>
+              )}
+
+              {isSuspended && (
+                <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 space-y-1.5 text-xs text-amber-800 dark:text-amber-200">
+                  <div className="flex items-center gap-2 font-bold text-amber-700 dark:text-amber-300 text-sm">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                    <span>Account Temporarily Suspended</span>
+                  </div>
+                  <p className="opacity-90">
+                    Suspended on <strong className="font-semibold">{ag.suspendedAt ? new Date(ag.suspendedAt).toLocaleString('en-IN') : 'Recently'}</strong>
+                    {ag.suspendedByName ? ` by ${ag.suspendedByName}` : ' by Super Admin'}.
+                    {ag.suspensionReason ? ` Reason: "${ag.suspensionReason}"` : ''}
+                  </p>
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                    The agent is temporarily blocked from accessing the portal. Territory assignment is retained and can be reactivated by Admin.
+                  </p>
+                </div>
+              )}
+
+              {/* Territory Hierarchy Flow Header */}
+              <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 flex items-center gap-2.5 text-xs font-bold text-slate-700 dark:text-slate-300">
+                <MapPin className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <span className="font-semibold text-slate-500">Jurisdiction:</span>
+                <span className="font-mono text-slate-800 dark:text-slate-200">{hierarchyDisplay}</span>
               </div>
-              {scorecardLoading ? (<div className="text-center py-8 space-y-2"><RefreshCw className="w-6 h-6 animate-spin text-amber-600 mx-auto" /><p className="text-xs font-bold text-slate-500">Loading Agent Scorecard...</p></div>) : (
-                <>
-                  {scorecardError && <div className="bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center justify-between"><span>{scorecardError}</span><button type="button" onClick={() => openAgentScorecard(selectedScorecardAgent)} className="underline text-rose-700 font-bold ml-2 cursor-pointer">Retry</button></div>}
-                  <div><h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">MERCHANT TIE-UPS STATUS</h4>
+
+              {scorecardLoading ? (
+                <div className="text-center py-12 space-y-2">
+                  <RefreshCw className="w-8 h-8 animate-spin text-amber-600 mx-auto" />
+                  <p className="text-xs font-bold text-slate-500">Loading Agent Profile &amp; Scorecard Details...</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {scorecardError && (
+                    <div className="bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center justify-between">
+                      <span>{scorecardError}</span>
+                      <button
+                        type="button"
+                        onClick={() => openAgentScorecard(selectedScorecardAgent)}
+                        className="underline text-rose-700 font-bold ml-2 cursor-pointer"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 2-Column Grid for Profile Details Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    {/* Card 1: Personal & Contact Information */}
+                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-800 space-y-2.5 text-xs">
+                      <div className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-200 pb-2 border-b border-slate-200/70 dark:border-slate-850">
+                        <User className="w-4 h-4 text-blue-500" />
+                        <span>Personal &amp; Contact Information</span>
+                      </div>
+                      <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Full Name:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{ag.name || ag.fullName || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Mobile Phone:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{ag.phone || ag.mobile || '—'}</span>
+                            {ag.phone && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText('phone', ag.phone)}
+                                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                                title="Copy Phone"
+                              >
+                                {copiedKey === 'phone' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Alternate Phone:</span>
+                          <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{ag.altPhone || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Email Address:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-100 truncate max-w-[180px]" title={ag.email}>{ag.email || '—'}</span>
+                            {ag.email && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText('email', ag.email)}
+                                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                                title="Copy Email"
+                              >
+                                {copiedKey === 'email' ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Date of Birth:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{ag.dob ? new Date(ag.dob).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Gender:</span>
+                          <span className="font-bold capitalize text-slate-800 dark:text-slate-100">{ag.gender || '—'}</span>
+                        </div>
+                        {ag.bloodGroup && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-slate-400">Blood Group:</span>
+                            <span className="font-bold text-slate-800 dark:text-slate-100">{ag.bloodGroup}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Card 2: Assigned Territory & Physical Address */}
+                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-800 space-y-2.5 text-xs">
+                      <div className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-200 pb-2 border-b border-slate-200/70 dark:border-slate-850">
+                        <MapPin className="w-4 h-4 text-amber-500" />
+                        <span>Territory &amp; Physical Address</span>
+                      </div>
+                      <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Assigned State:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{stateName || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Assigned District:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{districtName || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Assigned Division:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{divisionName || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Assigned PIN Code:</span>
+                          <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{pincodeCode || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Post Office:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{ag.postOffice || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-start pt-1">
+                          <span className="text-slate-400 shrink-0">Address:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100 text-right leading-tight max-w-[200px]">{ag.fullAddress || ag.address || '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card 3: Clearly Labeled Bank & Payment Details */}
+                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-800 space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200/70 dark:border-slate-850">
+                        <div className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-200">
+                          <CreditCard className="w-4 h-4 text-emerald-500" />
+                          <span>Bank &amp; Payment Details</span>
+                        </div>
+                        {bankStatus && (
+                          <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                            String(bankStatus).toLowerCase().includes('verif')
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                              : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                          }`}>
+                            {bankStatus}
+                          </span>
+                        )}
+                      </div>
+                      <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Bank Name:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{bankName || 'Not Provided'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Account Holder:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{accountHolder || 'Not Provided'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Account Number:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
+                              {rawBankAcc ? (unmaskedBankAcc ? rawBankAcc : `••••••••${rawBankAcc.slice(-4)}`) : 'Not Provided'}
+                            </span>
+                            {rawBankAcc && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setUnmaskedBankAcc(prev => !prev)}
+                                  className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                                  title={unmaskedBankAcc ? 'Hide Account Number' : 'Show Account Number'}
+                                >
+                                  {unmaskedBankAcc ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyText('bankAcc', rawBankAcc)}
+                                  className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                                  title="Copy Account Number"
+                                >
+                                  {copiedKey === 'bankAcc' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">IFSC Code:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{ifsc || 'Not Provided'}</span>
+                            {ifsc && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText('ifsc', ifsc)}
+                                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                                title="Copy IFSC"
+                              >
+                                {copiedKey === 'ifsc' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Branch Name:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{branchName || 'Not Provided'}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Card 4: KYC & Government Identification */}
+                    <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-800 space-y-2.5 text-xs">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-200/70 dark:border-slate-850">
+                        <div className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-200">
+                          <ShieldCheck className="w-4 h-4 text-indigo-500" />
+                          <span>KYC &amp; Government IDs</span>
+                        </div>
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                          String(ag.kycStatus).toLowerCase() === 'approved' || isApproved
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                            : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                        }`}>
+                          {ag.kycStatus || 'Pending'}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Aadhaar Number:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
+                              {aadhaarNum ? (unmaskedGovtId ? aadhaarNum : `••••••••${aadhaarNum.slice(-4)}`) : 'Not Provided'}
+                            </span>
+                            {aadhaarNum && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => setUnmaskedGovtId(prev => !prev)}
+                                  className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                                  title={unmaskedGovtId ? 'Hide Aadhaar' : 'Show Aadhaar'}
+                                >
+                                  {unmaskedGovtId ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyText('aadhaar', aadhaarNum)}
+                                  className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                                  title="Copy Aadhaar"
+                                >
+                                  {copiedKey === 'aadhaar' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">PAN Number:</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
+                              {panNum ? (unmaskedGovtId ? panNum : `••••••${panNum.slice(-4)}`) : 'Not Provided'}
+                            </span>
+                            {panNum && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopyText('pan', panNum)}
+                                className="text-slate-400 hover:text-slate-700 p-0.5 cursor-pointer"
+                                title="Copy PAN"
+                              >
+                                {copiedKey === 'pan' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Declaration:</span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            {ag.declarationAccepted ? '✓ Confirmed & Signed' : 'Pending Confirmation'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Uploaded Documents List */}
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-800 space-y-3 text-xs">
+                    <div className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-200 pb-2 border-b border-slate-200/70 dark:border-slate-850">
+                      <FileText className="w-4 h-4 text-violet-500" />
+                      <span>Uploaded KYC Documents &amp; Certificates ({docList.length})</span>
+                    </div>
+                    {docList.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {docList.map(doc => (
+                          <div key={doc.key} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-xl flex items-center justify-between gap-2 shadow-xs">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+                              <span className="font-bold text-slate-700 dark:text-slate-200 truncate" title={doc.label}>{doc.label}</span>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewDocModal({ title: doc.label, url: doc.url })}
+                                className="px-2 py-1 text-[11px] font-bold text-primary-600 bg-primary-50 dark:bg-primary-950/40 rounded-lg hover:bg-primary-100 transition-colors cursor-pointer"
+                              >
+                                View
+                              </button>
+                              <a
+                                href={doc.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+                                title="Open in new window"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-slate-400 italic">No document attachments uploaded.</p>
+                    )}
+                  </div>
+
+                  {/* Card 5: Professional Background & Onboarding Attribution */}
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-800 space-y-3 text-xs">
+                    <div className="flex items-center gap-2 font-extrabold text-slate-800 dark:text-slate-200 pb-2 border-b border-slate-200/70 dark:border-slate-850">
+                      <Layers className="w-4 h-4 text-cyan-500" />
+                      <span>Professional Background &amp; Onboarding Source</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-1.5 font-medium text-slate-600 dark:text-slate-400">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Highest Qualification:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{ag.qualification || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Total Experience:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{ag.experience || '—'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-400">Previous Company:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">{ag.previousCompany || '—'}</span>
+                        </div>
+                      </div>
+                      <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400 font-medium">Onboarding Source:</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100">
+                            {ag.onboardingSource === 'ADMIN_INITIATED' || ag.initiatorDetails ? 'Admin Initiated' : 'Direct Self-Registration'}
+                          </span>
+                        </div>
+                        {ag.initiatorDetails && (
+                          <p className="text-[11px] text-slate-500 leading-tight">
+                            Initiated by <strong className="text-slate-700 dark:text-slate-200">{ag.initiatorDetails.name}</strong> ({ag.initiatorDetails.role})
+                            {ag.initiatorDetails.territory ? ` • ${ag.initiatorDetails.territory}` : ''}
+                          </p>
+                        )}
+                        <p className="text-[10px] text-slate-400">
+                          Registered: {ag.createdAt ? new Date(ag.createdAt).toLocaleString('en-IN') : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 6: Merchant Tie-ups & Performance Scorecard */}
+                  <div>
+                    <h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">
+                      MERCHANT TIE-UPS STATUS
+                    </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {[{l:'TIEUPS TODAY',v:`${metrics.tieupsToday||0} Shops`,c:'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400'},{l:'TIEUPS YESTERDAY',v:`${metrics.tieupsYesterday||0} Shops`,c:'bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-400'},{l:'TOTAL TIEUPS',v:`${metrics.totalTieups||0} Total`,c:'bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-400'}].map(m=>(
-                        <div key={m.l} className={`${m.c} border rounded-2xl p-4 space-y-1`}><span className="text-[10px] font-extrabold uppercase tracking-wider block">{m.l}</span><span className="text-xl font-extrabold font-mono block">{m.v}</span></div>
+                      {[
+                        { l: 'TIEUPS TODAY', v: `${metrics.tieupsToday || 0} Shops`, c: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-400' },
+                        { l: 'TIEUPS YESTERDAY', v: `${metrics.tieupsYesterday || 0} Shops`, c: 'bg-blue-500/10 border-blue-500/20 text-blue-700 dark:text-blue-400' },
+                        { l: 'TOTAL TIEUPS', v: `${metrics.totalTieups || 0} Total`, c: 'bg-amber-500/10 border-amber-500/20 text-amber-800 dark:text-amber-400' }
+                      ].map(m => (
+                        <div key={m.l} className={`${m.c} border rounded-2xl p-4 space-y-1`}>
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider block">{m.l}</span>
+                          <span className="text-xl font-extrabold font-mono block">{m.v}</span>
+                        </div>
                       ))}
                     </div>
                   </div>
-                  <div><h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">REVENUE &amp; PERFORMANCE</h4>
+
+                  <div>
+                    <h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">
+                      REVENUE &amp; PERFORMANCE
+                    </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1"><span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">TOTAL REVENUE</span><span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono block">&#8377;{metrics.totalRevenue||0}</span></div>
-                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1"><span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">PERFORMANCE SCORE</span><span className="text-xl font-extrabold text-amber-700 dark:text-amber-400 font-mono block">{metrics.performanceScore||0}%</span></div>
-                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1"><span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">REG. FEE</span><span className={`text-sm font-extrabold uppercase flex items-center gap-1 ${metrics.regFeeStatus==='PAID'?'text-emerald-600 dark:text-emerald-400':'text-rose-600 dark:text-rose-400'}`}>{metrics.regFeeStatus==='PAID'?'&#10003; PAID':'&#10005; UNPAID'}</span></div>
+                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">TOTAL EARNINGS</span>
+                        <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 font-mono block">&#8377;{metrics.totalRevenue || 0}</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">PERFORMANCE SCORE</span>
+                        <span className="text-xl font-extrabold text-amber-700 dark:text-amber-400 font-mono block">{metrics.performanceScore || 0}%</span>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1">
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">REG. FEE</span>
+                        <span className={`text-sm font-extrabold uppercase flex items-center gap-1 ${metrics.regFeeStatus === 'PAID' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          {metrics.regFeeStatus === 'PAID' ? '✓ PAID' : '✕ UNPAID'}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div><h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">DOWNSTREAM AGENTS COUNT</h4>
+
+                  <div>
+                    <h4 className="text-xs font-extrabold tracking-wider text-amber-900 dark:text-amber-400 uppercase mb-2.5">
+                      DOWNSTREAM AGENTS COUNT
+                    </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {lvl==='state'&&<><div className="bg-violet-500/10 border border-violet-500/20 rounded-2xl p-4 space-y-1"><span className="text-[10px] font-extrabold uppercase tracking-wider text-violet-700 dark:text-violet-400 block">DISTRICT AGENTS</span><span className="text-xl font-extrabold text-violet-800 dark:text-violet-300 block">{downstream.districtAgents||0} Agents</span></div><div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 space-y-1"><span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 block">DIVISION MANAGERS</span><span className="text-xl font-extrabold text-amber-800 dark:text-amber-300 block">{downstream.divisionAgents||0} Agents</span></div><div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-1"><span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span><span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents||0} Agents</span></div></>}
-                      {lvl==='district'&&<><div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 space-y-1"><span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 block">DIVISION MANAGERS</span><span className="text-xl font-extrabold text-amber-800 dark:text-amber-300 block">{downstream.divisionAgents||0} Agents</span></div><div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-1"><span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span><span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents||0} Agents</span></div></>}
-                      {lvl==='division'&&<div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-1 col-span-2"><span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span><span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents||0} Agents</span></div>}
-                      {lvl==='pincode'&&<div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1 col-span-2"><span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">DOWNSTREAM AGENTS</span><span className="text-xl font-extrabold text-slate-700 dark:text-slate-300 block">0 Agents</span></div>}
+                      {lvl === 'state' && (
+                        <>
+                          <div className="bg-violet-500/10 border border-violet-500/20 rounded-2xl p-4 space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-violet-700 dark:text-violet-400 block">DISTRICT AGENTS</span>
+                            <span className="text-xl font-extrabold text-violet-800 dark:text-violet-300 block">{downstream.districtAgents || 0} Agents</span>
+                          </div>
+                          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 block">DIVISION MANAGERS</span>
+                            <span className="text-xl font-extrabold text-amber-800 dark:text-amber-300 block">{downstream.divisionAgents || 0} Agents</span>
+                          </div>
+                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span>
+                            <span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents || 0} Agents</span>
+                          </div>
+                        </>
+                      )}
+                      {lvl === 'district' && (
+                        <>
+                          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-400 block">DIVISION MANAGERS</span>
+                            <span className="text-xl font-extrabold text-amber-800 dark:text-amber-300 block">{downstream.divisionAgents || 0} Agents</span>
+                          </div>
+                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-1">
+                            <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span>
+                            <span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents || 0} Agents</span>
+                          </div>
+                        </>
+                      )}
+                      {lvl === 'division' && (
+                        <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-1 col-span-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-blue-700 dark:text-blue-400 block">PINCODE AGENTS</span>
+                          <span className="text-xl font-extrabold text-blue-800 dark:text-blue-300 block">{downstream.pincodeAgents || 0} Agents</span>
+                        </div>
+                      )}
+                      {lvl === 'pincode' && (
+                        <div className="bg-slate-50 dark:bg-slate-950 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-1 col-span-2">
+                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">DOWNSTREAM AGENTS</span>
+                          <span className="text-xl font-extrabold text-slate-700 dark:text-slate-300 block">0 Agents</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </>
+                </div>
               )}
+
+              {/* Modal Footer Actions */}
               <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2 flex-wrap">
-                  {!['suspended','revoked'].includes((selectedScorecardAgent.status||'').toLowerCase())&&<>
-                    <button type="button" onClick={()=>handleOpenActionConfirm(selectedScorecardAgent,'suspend')} className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5" /> Suspend Agent</button>
-                    <button type="button" onClick={()=>handleOpenActionConfirm(selectedScorecardAgent,'revoke')} className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5" /> Revoke Agent</button>
-                  </>}
-                  {(selectedScorecardAgent.status||'').toLowerCase()==='suspended'&&<>
-                    <button type="button" onClick={()=>handleOpenActionConfirm(selectedScorecardAgent,'reactivate')} className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5" /> Reactivate Agent</button>
-                    <button type="button" onClick={()=>handleOpenActionConfirm(selectedScorecardAgent,'revoke')} className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5" /> Revoke Agent</button>
-                  </>}
-                  {(selectedScorecardAgent.status||'').toLowerCase()==='revoked'&&<span className="px-3 py-1.5 bg-rose-500/10 text-rose-600 border border-rose-500/20 font-extrabold text-xs rounded-xl flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5" /> Access Revoked (Territory Released)</span>}
+                  {!isRevoked && !isSuspended && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenActionConfirm(selectedScorecardAgent, 'suspend')}
+                        className="px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" /> Suspend Agent
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenActionConfirm(selectedScorecardAgent, 'revoke')}
+                        className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Revoke Agent
+                      </button>
+                    </>
+                  )}
+                  {isSuspended && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenActionConfirm(selectedScorecardAgent, 'reactivate')}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" /> Reactivate Agent
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenActionConfirm(selectedScorecardAgent, 'revoke')}
+                        className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Revoke Agent
+                      </button>
+                    </>
+                  )}
+                  {isRevoked && (
+                    <span className="px-3 py-1.5 bg-rose-500/10 text-rose-600 border border-rose-500/20 font-extrabold text-xs rounded-xl flex items-center gap-1.5">
+                      <XCircle className="w-3.5 h-3.5" /> Access Revoked (Territory Released)
+                    </span>
+                  )}
                 </div>
-                <button type="button" onClick={()=>setSelectedScorecardAgent(null)} className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer">Close Scorecard</button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedScorecardAgent(null)}
+                  className="bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl transition-all active:scale-95 cursor-pointer"
+                >
+                  Close Details
+                </button>
               </div>
+
             </div>
           </div>
         );
       })()}
 
       {/* ACTION CONFIRM MODAL */}
-      {actionConfirmModal.isOpen && actionConfirmModal.agent && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${actionConfirmModal.action==='revoke'?'bg-rose-500/10 text-rose-600 border border-rose-500/20':actionConfirmModal.action==='suspend'?'bg-amber-500/10 text-amber-600 border border-amber-500/20':'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'}`}>
-                  {actionConfirmModal.action==='revoke'?<XCircle className="w-5 h-5"/>:actionConfirmModal.action==='suspend'?<AlertTriangle className="w-5 h-5"/>:<CheckCircle className="w-5 h-5"/>}
+      {actionConfirmModal.isOpen && actionConfirmModal.agent && (() => {
+        const ag = actionConfirmModal.agent;
+        const stateName = ag.assignedState && ag.assignedState !== 'N/A' ? ag.assignedState : (ag.state || ag.territory?.state || '');
+        const districtName = ag.assignedDistrict && ag.assignedDistrict !== 'N/A' ? ag.assignedDistrict : (ag.district || ag.territory?.district || '');
+        const divisionName = ag.assignedDivision && ag.assignedDivision !== 'N/A' ? ag.assignedDivision : (ag.division || ag.territory?.division || '');
+        const pincodeCode = ag.assignedPincode?.code || (ag.assignedPincode !== 'N/A' ? ag.assignedPincode : '') || ag.pincode || ag.territory?.pincode || '';
+        const fullTerritory = [
+          stateName && `State: ${stateName}`,
+          districtName && `District: ${districtName}`,
+          divisionName && `Division: ${divisionName}`,
+          pincodeCode && `PIN: ${pincodeCode}`
+        ].filter(Boolean).join(' → ') || 'General Territory';
+        const formattedRegId = ag.registrationId || (ag._id ? `REG-${String(ag._id).substring(18, 24).toUpperCase()}` : 'REG-N/A');
+
+        return (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-lg rounded-3xl p-6 space-y-5 shadow-2xl">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                    actionConfirmModal.action === 'revoke'
+                      ? 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                      : actionConfirmModal.action === 'suspend'
+                      ? 'bg-amber-500/10 text-amber-600 border border-amber-500/20'
+                      : 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
+                  }`}>
+                    {actionConfirmModal.action === 'revoke' ? (
+                      <XCircle className="w-5 h-5" />
+                    ) : actionConfirmModal.action === 'suspend' ? (
+                      <AlertTriangle className="w-5 h-5" />
+                    ) : (
+                      <CheckCircle className="w-5 h-5" />
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">
+                      {actionConfirmModal.action === 'revoke'
+                        ? 'Revoke Agent Access'
+                        : actionConfirmModal.action === 'suspend'
+                        ? 'Suspend Agent Account'
+                        : 'Reactivate Agent Account'}
+                    </h3>
+                    <p className="text-xs text-slate-400 font-semibold">
+                      Target: {ag.name || ag.fullName} ({(ag.level || 'pincode').toUpperCase()} AGENT)
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-lg font-black text-slate-800 dark:text-slate-100">{actionConfirmModal.action==='revoke'?'Revoke Agent Access':actionConfirmModal.action==='suspend'?'Suspend Agent Account':'Reactivate Agent Account'}</h3>
-                  <p className="text-xs text-slate-400 font-semibold">Target: {actionConfirmModal.agent.name} ({actionConfirmModal.agent.level?.toUpperCase()} AGENT)</p>
+                <button
+                  type="button"
+                  onClick={() => setActionConfirmModal({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null })}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg cursor-pointer"
+                >
+                  &#10005;
+                </button>
+              </div>
+
+              {/* Warning Box */}
+              <div className={`p-4 rounded-2xl text-xs font-semibold space-y-1.5 ${
+                actionConfirmModal.action === 'revoke'
+                  ? 'bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300'
+                  : actionConfirmModal.action === 'suspend'
+                  ? 'bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300'
+                  : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
+              }`}>
+                {actionConfirmModal.action === 'revoke' ? (
+                  <>
+                    <p className="font-bold text-sm flex items-center gap-1.5">
+                      <XCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                      CRITICAL: Territory Slot Release &amp; Session Invalidation
+                    </p>
+                    <p className="text-[11px] opacity-90 leading-relaxed">
+                      1. All active sessions &amp; authentication tokens will be immediately destroyed.<br />
+                      2. Agent status will be changed to <strong>Revoked</strong> and future login permanently blocked.<br />
+                      3. Assigned territory slot (<strong>{fullTerritory}</strong>) will be <strong>RELEASED IMMEDIATELY</strong>.<br />
+                      4. Complete audit log will be recorded with your administrator identity.
+                    </p>
+                  </>
+                ) : actionConfirmModal.action === 'suspend' ? (
+                  <>
+                    <p className="font-bold text-sm flex items-center gap-1.5">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                      Temporary Access Block
+                    </p>
+                    <p className="text-[11px] opacity-90 leading-relaxed">
+                      1. The agent will be immediately logged out and blocked from access.<br />
+                      2. Territory slot is <strong>RETAINED</strong> and held reserved for this agent.<br />
+                      3. Account can be reactivated at any time by Admin.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-bold text-sm flex items-center gap-1.5">
+                      <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+                      Restore Active Access
+                    </p>
+                    <p className="text-[11px] opacity-90 leading-relaxed">
+                      The agent account will be restored to Approved/Active. The agent will regain full portal login capabilities.
+                    </p>
+                  </>
+                )}
+              </div>
+
+              {/* Verified Agent & Territory Details Card */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Agent Name:</span>
+                  <span className="font-bold text-slate-800 dark:text-slate-100">{ag.name || ag.fullName}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Registration ID:</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{formattedRegId}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Level / Role:</span>
+                  <span className="font-bold uppercase text-slate-800 dark:text-slate-100">{(ag.level || 'pincode')} AGENT</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Email:</span>
+                  <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{ag.email || 'N/A'}</span>
+                </div>
+                <div className="flex justify-between items-start pt-1 border-t border-slate-200/60 dark:border-slate-850">
+                  <span className="text-slate-400 shrink-0">Assigned Territory:</span>
+                  <span className="font-bold text-right text-slate-800 dark:text-slate-100 leading-tight max-w-[260px]">{fullTerritory}</span>
                 </div>
               </div>
-              <button type="button" onClick={()=>setActionConfirmModal({isOpen:false,agent:null,action:null,reason:'',loading:false,error:null})} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg font-bold p-1 rounded-lg cursor-pointer">&#10005;</button>
+
+              {/* Administrative Reason Input */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Administrative Reason (Recorded in Permanent Audit History):
+                </label>
+                <textarea
+                  rows={2}
+                  value={actionConfirmModal.reason}
+                  onChange={e => setActionConfirmModal(prev => ({ ...prev, reason: e.target.value }))}
+                  placeholder={
+                    actionConfirmModal.action === 'revoke'
+                      ? 'Enter required reason for territory slot release...'
+                      : actionConfirmModal.action === 'suspend'
+                      ? 'Enter reason for temporary suspension...'
+                      : 'Reason for reactivation...'
+                  }
+                  className="w-full text-xs p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 resize-none"
+                />
+              </div>
+
+              {actionConfirmModal.error && (
+                <div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-bold rounded-xl">
+                  {actionConfirmModal.error}
+                </div>
+              )}
+
+              {/* Confirmation Buttons */}
+              <div className="flex justify-end items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  disabled={actionConfirmModal.loading}
+                  onClick={() => setActionConfirmModal({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null })}
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={actionConfirmModal.loading}
+                  onClick={handleExecuteAgentAction}
+                  className={`px-5 py-2.5 rounded-xl text-xs font-extrabold text-white shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 ${
+                    actionConfirmModal.action === 'revoke'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : actionConfirmModal.action === 'suspend'
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  {actionConfirmModal.loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                  {actionConfirmModal.action === 'revoke'
+                    ? 'Confirm Revoke & Release'
+                    : actionConfirmModal.action === 'suspend'
+                    ? 'Confirm Suspend'
+                    : 'Confirm Reactivation'}
+                </button>
+              </div>
+
             </div>
-            <div className={`p-4 rounded-2xl text-xs font-semibold space-y-1.5 ${actionConfirmModal.action==='revoke'?'bg-rose-500/10 border border-rose-500/20 text-rose-700 dark:text-rose-300':actionConfirmModal.action==='suspend'?'bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-300':'bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300'}`}>
-              {actionConfirmModal.action==='revoke'?<><p className="font-bold">&#9888;&#65039; CRITICAL: Territory Slot Release &amp; Permanent Access Removal</p><p className="text-[11px] opacity-90">1. The agent will lose access immediately.<br/>2. Territory assignment will be RELEASED IMMEDIATELY.<br/>3. Historical records remain preserved in database.</p></>
-              :actionConfirmModal.action==='suspend'?<><p className="font-bold">&#9888;&#65039; Temporary Access Block</p><p className="text-[11px] opacity-90">1. The agent will be immediately logged out and blocked.<br/>2. Territory assignment is RETAINED.<br/>3. Account can be reactivated at any time by Admin.</p></>
-              :<><p className="font-bold">&#10003; Restore Active Access</p><p className="text-[11px] opacity-90">The agent account will be restored to Approved/Active. The agent can log in and access the portal normally.</p></>}
+          </div>
+        );
+      })()}
+
+      {/* DOCUMENT PREVIEW LIGHTBOX MODAL */}
+      {previewDocModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 w-full max-w-2xl rounded-3xl p-6 space-y-4 shadow-2xl relative my-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-violet-500" />
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-slate-100">
+                  {previewDocModal.title || 'Document Preview'}
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={previewDocModal.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                  title="Open Original"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setPreviewDocModal(null)}
+                  className="w-7 h-7 rounded-full border border-slate-300 dark:border-slate-700 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center justify-center text-sm font-bold transition-all cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  &#10005;
+                </button>
+              </div>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-950 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 text-xs space-y-1">
-              <div className="flex justify-between"><span className="text-slate-400">Agent ID:</span><span className="font-mono font-bold">{actionConfirmModal.agent.registrationId||actionConfirmModal.agent._id}</span></div>
-              <div className="flex justify-between"><span className="text-slate-400">Email:</span><span className="font-bold">{actionConfirmModal.agent.email||'N/A'}</span></div>
-              <div className="flex justify-between"><span className="text-slate-400">Territory:</span><span className="font-bold">{(actionConfirmModal.agent.assignedState||actionConfirmModal.agent.territory?.state||'N/A')} / {(actionConfirmModal.agent.assignedDistrict||actionConfirmModal.agent.territory?.district||'N/A')}</span></div>
+            <div className="max-h-[70vh] overflow-auto flex items-center justify-center bg-slate-100 dark:bg-slate-950 rounded-2xl p-4 border border-slate-200/80 dark:border-slate-800">
+              {previewDocModal.url && (previewDocModal.url.endsWith('.pdf') || previewDocModal.url.startsWith('data:application/pdf')) ? (
+                <iframe src={previewDocModal.url} title="PDF Preview" className="w-full h-[60vh] rounded-xl" />
+              ) : (
+                <img
+                  src={previewDocModal.url}
+                  alt={previewDocModal.title}
+                  className="max-h-[60vh] max-w-full rounded-xl object-contain shadow-md"
+                />
+              )}
             </div>
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-600 dark:text-slate-400">Administrative Reason (Recorded in Audit History):</label>
-              <textarea rows={2} value={actionConfirmModal.reason} onChange={e=>setActionConfirmModal(prev=>({...prev,reason:e.target.value}))} placeholder={actionConfirmModal.action==='revoke'?'Enter reason for territory release...':actionConfirmModal.action==='suspend'?'Enter reason for temporary suspension...':'Reason for reactivation...'} className="w-full text-xs p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary-500/20 resize-none" />
-            </div>
-            {actionConfirmModal.error&&<div className="p-3 bg-rose-500/10 border border-rose-500/20 text-rose-600 text-xs font-bold rounded-xl">{actionConfirmModal.error}</div>}
-            <div className="flex justify-end items-center gap-3 pt-1">
-              <button type="button" disabled={actionConfirmModal.loading} onClick={()=>setActionConfirmModal({isOpen:false,agent:null,action:null,reason:'',loading:false,error:null})} className="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer disabled:opacity-50">Cancel</button>
-              <button type="button" disabled={actionConfirmModal.loading} onClick={handleExecuteAgentAction} className={`px-5 py-2.5 rounded-xl text-xs font-extrabold text-white shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 ${actionConfirmModal.action==='revoke'?'bg-rose-600 hover:bg-rose-700':actionConfirmModal.action==='suspend'?'bg-amber-600 hover:bg-amber-700':'bg-emerald-600 hover:bg-emerald-700'}`}>
-                {actionConfirmModal.loading&&<RefreshCw className="w-3.5 h-3.5 animate-spin"/>}
-                {actionConfirmModal.action==='revoke'?'Confirm Revoke & Release':actionConfirmModal.action==='suspend'?'Confirm Suspend':'Confirm Reactivation'}
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setPreviewDocModal(null)}
+                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 transition-all cursor-pointer"
+              >
+                Close Preview
               </button>
             </div>
           </div>

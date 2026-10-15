@@ -682,6 +682,30 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
             }
         }
     }
+
+    const rawBank = vObj.bankDetails || vObj.bank || vObj.bankingDetails || {};
+    const firstBizBank = (Array.isArray(vObj.businesses) && vObj.businesses.find(b => b.bankDetails || b.accountNumber))?.bankDetails || {};
+
+    const vBankName = vObj.bankName || rawBank.bankName || firstBizBank.bankName || '';
+    const vBankHolder = vObj.accountHolderName || vObj.accountHolder || rawBank.accountHolderName || rawBank.accountHolder || vObj.beneficiaryName || firstBizBank.accountHolderName || firstBizBank.accountHolder || '';
+    const vBankAcc = vObj.accountNumber || vObj.accountNo || rawBank.accountNumber || rawBank.accountNo || firstBizBank.accountNumber || firstBizBank.accountNo || '';
+    const vBankIfsc = vObj.ifsc || vObj.ifscCode || rawBank.ifsc || rawBank.ifscCode || firstBizBank.ifsc || firstBizBank.ifscCode || '';
+    const vBankBranch = vObj.branchName || vObj.branch || vObj.bankBranch || rawBank.branchName || rawBank.branch || firstBizBank.branchName || firstBizBank.branch || '';
+
+    vObj.bankDetails = {
+        bankName: vBankName || '',
+        accountHolderName: vBankHolder || '',
+        accountNumber: vBankAcc || '',
+        ifsc: vBankIfsc || '',
+        branchName: vBankBranch || '',
+        verificationStatus: vBankAcc ? (rawBank.verificationStatus || 'Verified') : 'Not Provided'
+    };
+    vObj.accountNumber = vBankAcc;
+    vObj.bankName = vBankName;
+    vObj.ifsc = vBankIfsc;
+    vObj.branchName = vBankBranch;
+    vObj.accountHolderName = vBankHolder;
+
     return sanitizeVendorPayload(vObj);
 };
 
@@ -884,6 +908,12 @@ const deduplicateVendorsList = (list = []) => {
             if (!existing.pincode && v.pincode) existing.pincode = v.pincode;
             if (!existing.state && v.state) existing.state = v.state;
             if (!existing.district && v.district) existing.district = v.district;
+            if (!existing.bankDetails && v.bankDetails) existing.bankDetails = v.bankDetails;
+            if (!existing.accountNumber && (v.accountNumber || v.accountNo)) existing.accountNumber = v.accountNumber || v.accountNo;
+            if (!existing.bankName && v.bankName) existing.bankName = v.bankName;
+            if (!existing.accountHolderName && (v.accountHolderName || v.accountHolder || v.beneficiaryName)) existing.accountHolderName = v.accountHolderName || v.accountHolder || v.beneficiaryName;
+            if (!existing.ifsc && (v.ifsc || v.ifscCode)) existing.ifsc = v.ifsc || v.ifscCode;
+            if (!existing.branchName && (v.branchName || v.branch || v.bankBranch)) existing.branchName = v.branchName || v.branch || v.bankBranch;
 
             // Update cross-reference indexes
             if (regId && !regMap.has(regId)) regMap.set(regId, existing);

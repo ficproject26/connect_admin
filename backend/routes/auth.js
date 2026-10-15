@@ -855,13 +855,33 @@ router.post('/login', async (req, res) => {
                     });
                     if (rawAgent) {
                         const rawStatus = (rawAgent.status || rawAgent.kycStatus || '').toLowerCase();
-                        if (rawStatus === 'approved' || rawAgent.isApproved) {
+                        const isRevokedAccount = (user.status || '').toLowerCase() === 'revoked' || user.isRevoked === true || rawStatus === 'revoked' || rawAgent.isRevoked === true;
+                        const isSuspendedAccount = (user.status || '').toLowerCase() === 'suspended' || user.isSuspended === true || rawStatus === 'suspended' || rawAgent.isSuspended === true;
+
+                        if (isRevokedAccount) {
+                            user.status = 'revoked';
+                            user.kycStatus = 'revoked';
+                            user.isActive = false;
+                            user.isApproved = false;
+                            user.isRevoked = true;
+                            user.isSuspended = false;
+                            await user.save().catch(() => {});
+                            await db.collection('agents').updateOne({ _id: rawAgent._id }, { $set: { status: 'revoked', kycStatus: 'revoked', isActive: false, isApproved: false, isRevoked: true, isSuspended: false } }).catch(() => {});
+                        } else if (isSuspendedAccount) {
+                            user.status = 'suspended';
+                            user.kycStatus = 'suspended';
+                            user.isActive = false;
+                            user.isApproved = false;
+                            user.isSuspended = true;
+                            await user.save().catch(() => {});
+                            await db.collection('agents').updateOne({ _id: rawAgent._id }, { $set: { status: 'suspended', kycStatus: 'suspended', isActive: false, isApproved: false, isSuspended: true } }).catch(() => {});
+                        } else if (rawStatus === 'approved' || rawAgent.isApproved) {
                             if (user.status !== 'approved' || user.kycStatus !== 'approved' || !user.isActive || !user.isApproved) {
                                 user.status = 'approved';
                                 user.kycStatus = 'approved';
                                 user.isActive = true;
                                 user.isApproved = true;
-                                await user.save();
+                                await user.save().catch(() => {});
                             }
                         }
                     }
@@ -871,7 +891,7 @@ router.post('/login', async (req, res) => {
             }
 
             const userStatus = (user.status || 'pending').toLowerCase();
-            if (userStatus === 'revoked') {
+            if (userStatus === 'revoked' || user.isRevoked === true) {
                 return res.status(403).json({
                     title: 'Access Revoked',
                     message: 'Your agent access has been revoked. Please contact the administrator.',

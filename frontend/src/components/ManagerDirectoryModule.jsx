@@ -1830,12 +1830,6 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </button>
-          <button
-            onClick={() => setNominateTerritory({ level: 'state', state: '', currentCount: 0 })}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-primary-600 hover:bg-primary-500 text-white font-black text-xs rounded-xl shadow-xs transition-colors cursor-pointer shrink-0"
-          >
-            <Plus className="w-4 h-4" /> Request Manager
-          </button>
         </div>
       </div>
 
@@ -2017,12 +2011,6 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
                   ? 'No manager records match your selected territory or filters.'
                   : 'No manager records currently exist in the database. When new managers are onboarded by Sub-Admins, they will appear here in their assigned geographic hierarchy.'}
               </p>
-              <button
-                onClick={() => setNominateTerritory({ level: 'state', state: '', currentCount: 0 })}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-primary-600 hover:bg-primary-500 text-white rounded-xl text-xs font-black transition-all shadow-sm cursor-pointer"
-              >
-                <Plus className="w-4 h-4" /> Request Manager
-              </button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -2658,16 +2646,7 @@ const ManagerDirectoryModule = ({ token, API_BASE, onToast }) => {
         />
       )}
 
-      {/* ── NOMINATE / ONBOARD MANAGER MODAL ── */}
-      {nominateTerritory && (
-        <NominateModal
-          territory={nominateTerritory}
-          onClose={() => setNominateTerritory(null)}
-          onSubmit={handleNominateSubmit}
-          submitting={submittingNomination}
-          territoryOptions={territoryOptions}
-        />
-      )}
+
 
       {/* ── REJECTION REASON MODAL ── */}
       {rejectingRequest && (

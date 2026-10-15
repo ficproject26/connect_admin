@@ -30,6 +30,8 @@ const Category = require('../models/Category');
 const Product = require('../models/Product');
 const TerritoryAuditLog = require('../models/TerritoryAuditLog');
 const AuditLog = require('../models/AuditLog');
+const SecuritySession = require('../models/SecuritySession');
+const UserSession = require('../models/UserSession');
 const { validateIndianMobile } = require('../utils/inputValidator');
 const cacheService = require('../utils/cacheService');
 
@@ -1348,13 +1350,17 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
         const agentProjection = {
             _id: 1, name: 1, fullName: 1, email: 1, phone: 1, altPhone: 1, mobile: 1,
             role: 1, level: 1, agentLevel: 1, assignedRole: 1, agentType: 1, type: 1,
-            status: 1, kycStatus: 1, isActive: 1, isApproved: 1, registrationId: 1, id: 1,
+            status: 1, kycStatus: 1, isActive: 1, isApproved: 1, isRevoked: 1, isSuspended: 1, registrationId: 1, id: 1,
             state: 1, district: 1, division: 1, pincode: 1,
             assignedState: 1, assignedDistrict: 1, assignedDivision: 1, assignedPincode: 1, assignedArea: 1, territory: 1,
             balance: 1, commissionEarned: 1, wallet: 1, totalEarnings: 1, pendingPayout: 1, vendorsAdded: 1,
             dob: 1, dateOfBirth: 1, gender: 1, qualification: 1, experience: 1, previousCompany: 1,
             postOffice: 1, address: 1, fullAddress: 1, aadhaarNumber: 1, panNumber: 1,
-            createdAt: 1, created_at: 1
+            bankDetails: 1, bankName: 1, accountHolderName: 1, accountNumber: 1, ifsc: 1, ifscCode: 1, branchName: 1, bankVerificationStatus: 1,
+            documents: 1, kycDocs: 1, profilePhoto: 1, onboardingSource: 1, initiatedBy: 1, createdVia: 1, createdBy: 1, createdByName: 1, createdByRole: 1,
+            revokedAt: 1, revokedBy: 1, revokedByName: 1, revocationReason: 1,
+            suspendedAt: 1, suspendedBy: 1, suspendedByName: 1, suspensionReason: 1,
+            reviewHistory: 1, createdAt: 1, created_at: 1
         };
 
         let userAgents = [];
@@ -1459,7 +1465,17 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                 let isActiveVal = false;
                 let isApprovedVal = false;
 
-                if (statusLower === 'rejected' || kycLower === 'rejected') {
+                if (statusLower === 'revoked' || kycLower === 'revoked' || agent.isRevoked === true) {
+                    statusVal = 'revoked';
+                    kycStatusVal = 'revoked';
+                    isActiveVal = false;
+                    isApprovedVal = false;
+                } else if (statusLower === 'suspended' || kycLower === 'suspended' || agent.isSuspended === true) {
+                    statusVal = 'suspended';
+                    kycStatusVal = 'suspended';
+                    isActiveVal = false;
+                    isApprovedVal = false;
+                } else if (statusLower === 'rejected' || kycLower === 'rejected') {
                     statusVal = 'rejected';
                     kycStatusVal = 'rejected';
                     isActiveVal = false;
@@ -1481,7 +1497,22 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     aadhaarNumber: agent.aadhaarNumber || '',
                     panNumber: agent.panNumber || ''
                 };
-                const kycDocsObj = kycObj;
+                const userBank = agent.bankDetails || agent.bank || {};
+                const userBankHolder = agent.accountHolderName || agent.accountHolder || userBank.accountHolder || userBank.accountHolderName || agent.beneficiaryName || '';
+                const userBankAcc = agent.accountNumber || agent.accountNo || userBank.accountNumber || userBank.accountNo || '';
+                const userBankName = agent.bankName || userBank.bankName || '';
+                const userBankIfsc = agent.ifsc || agent.ifscCode || userBank.ifscCode || userBank.ifsc || '';
+                const userBankBranch = agent.branchName || agent.bankBranch || userBank.branchName || '';
+                const userBankStatus = agent.bankVerificationStatus || userBank.verificationStatus || (userBankAcc ? 'Verified' : 'Pending Verification');
+                const userResolvedBank = {
+                    bankName: userBankName,
+                    accountHolderName: userBankHolder,
+                    accountNumber: userBankAcc,
+                    ifsc: userBankIfsc,
+                    branchName: userBankBranch,
+                    verificationStatus: userBankStatus
+                };
+                const userDocs = agent.documents || agent.kycDocs || agent.kyc || {};
 
                 agentMap.set(key, {
                     ...agent,
@@ -1493,6 +1524,8 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     kycStatus: kycStatusVal,
                     isActive: isActiveVal,
                     isApproved: isApprovedVal,
+                    isRevoked: statusVal === 'revoked',
+                    isSuspended: statusVal === 'suspended',
                     altPhone: agent.altPhone || agent.alternativePhone || agent.secondaryPhone || '',
                     dob: agent.dob || agent.dateOfBirth || '',
                     gender: agent.gender || '',
@@ -1515,10 +1548,23 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     postOffice: agent.postOffice || agent.postOfficeBranch || '',
                     address: agent.address || agent.fullAddress || '',
                     fullAddress: agent.fullAddress || agent.address || '',
-                    aadhaarNumber: agent.aadhaarNumber || kycObj.aadhaarNumber || kycDocsObj.aadhaarNumber || '',
-                    panNumber: agent.panNumber || kycObj.panNumber || kycDocsObj.panNumber || '',
+                    aadhaarNumber: agent.aadhaarNumber || kycObj.aadhaarNumber || '',
+                    panNumber: agent.panNumber || kycObj.panNumber || '',
                     kyc: kycObj,
-                    kycDocs: kycDocsObj
+                    kycDocs: userDocs,
+                    documents: userDocs,
+                    profilePhoto: agent.profilePhoto || agent.selfie || userDocs.profilePhoto || '',
+                    bankDetails: userResolvedBank,
+                    onboardingSource: agent.onboardingSource || (agent.createdVia === 'admin' ? 'ADMIN_INITIATED' : 'DIRECT'),
+                    revokedAt: agent.revokedAt || null,
+                    revokedBy: agent.revokedBy || null,
+                    revokedByName: agent.revokedByName || null,
+                    revocationReason: agent.revocationReason || '',
+                    suspendedAt: agent.suspendedAt || null,
+                    suspendedBy: agent.suspendedBy || null,
+                    suspendedByName: agent.suspendedByName || null,
+                    suspensionReason: agent.suspensionReason || '',
+                    reviewHistory: agent.reviewHistory || []
                 });
             }
         });
@@ -1540,7 +1586,17 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             let rawIsActive = false;
             let rawIsApproved = false;
 
-            if (rawStatusLower === 'rejected' || rawKycLower === 'rejected') {
+            if (rawStatusLower === 'revoked' || rawKycLower === 'revoked' || raw.isRevoked === true) {
+                rawStatus = 'revoked';
+                rawKycStatus = 'revoked';
+                rawIsActive = false;
+                rawIsApproved = false;
+            } else if (rawStatusLower === 'suspended' || rawKycLower === 'suspended' || raw.isSuspended === true) {
+                rawStatus = 'suspended';
+                rawKycStatus = 'suspended';
+                rawIsActive = false;
+                rawIsApproved = false;
+            } else if (rawStatusLower === 'rejected' || rawKycLower === 'rejected') {
                 rawStatus = 'rejected';
                 rawKycStatus = 'rejected';
                 rawIsActive = false;
@@ -1564,6 +1620,23 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
             };
             const rawKyc = rawKycDocs;
 
+            const rawBank = raw.bankDetails || raw.bank || {};
+            const rawBankHolder = raw.accountHolderName || raw.accountHolder || rawBank.accountHolder || rawBank.accountHolderName || raw.beneficiaryName || '';
+            const rawBankAcc = raw.accountNumber || raw.accountNo || rawBank.accountNumber || rawBank.accountNo || '';
+            const rawBankName = raw.bankName || rawBank.bankName || '';
+            const rawBankIfsc = raw.ifsc || raw.ifscCode || rawBank.ifscCode || rawBank.ifsc || '';
+            const rawBankBranch = raw.branchName || raw.bankBranch || rawBank.branchName || '';
+            const rawBankStatus = raw.bankVerificationStatus || rawBank.verificationStatus || (rawBankAcc ? 'Verified' : 'Pending Verification');
+            const resolvedBankDetails = {
+                bankName: rawBankName,
+                accountHolderName: rawBankHolder,
+                accountNumber: rawBankAcc,
+                ifsc: rawBankIfsc,
+                branchName: rawBankBranch,
+                verificationStatus: rawBankStatus
+            };
+            const rawDocs = raw.documents || raw.kycDocs || raw.kyc || {};
+
             if (key) {
                 if (!agentMap.has(key)) {
                     agentMap.set(key, {
@@ -1584,6 +1657,8 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                         kycStatus: rawKycStatus,
                         isActive: rawIsActive,
                         isApproved: rawIsActive,
+                        isRevoked: rawStatus === 'revoked',
+                        isSuspended: rawStatus === 'suspended',
                         registrationId: raw.registrationId || '',
                         territory: {
                             state: rawTerritory.state || raw.assignedState || raw.state || '',
@@ -1604,8 +1679,20 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                         fullAddress: raw.fullAddress || raw.address || '',
                         aadhaarNumber: raw.aadhaarNumber || rawKyc.aadhaarNumber || rawKycDocs.aadhaarNumber || '',
                         panNumber: raw.panNumber || rawKyc.panNumber || rawKycDocs.panNumber || '',
-                        kycDocs: rawKycDocs,
-                        kyc: rawKyc,
+                        kycDocs: rawDocs,
+                        documents: rawDocs,
+                        profilePhoto: raw.profilePhoto || raw.selfie || rawDocs.profilePhoto || '',
+                        bankDetails: resolvedBankDetails,
+                        onboardingSource: raw.onboardingSource || (raw.createdVia === 'admin' ? 'ADMIN_INITIATED' : 'DIRECT'),
+                        revokedAt: raw.revokedAt || null,
+                        revokedBy: raw.revokedBy || null,
+                        revokedByName: raw.revokedByName || null,
+                        revocationReason: raw.revocationReason || '',
+                        suspendedAt: raw.suspendedAt || null,
+                        suspendedBy: raw.suspendedBy || null,
+                        suspendedByName: raw.suspendedByName || null,
+                        suspensionReason: raw.suspensionReason || '',
+                        reviewHistory: raw.reviewHistory || [],
                         createdAt: raw.createdAt || new Date()
                     });
                 } else {
@@ -1613,7 +1700,19 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     if (!existing.level || existing.level === 'pincode') {
                         existing.level = cleanLevel;
                     }
-                    if (rawStatus === 'approved' || rawKycStatus === 'approved' || raw.isApproved || raw.isActive) {
+                    if (existing.status === 'revoked' || rawStatus === 'revoked' || existing.isRevoked || raw.isRevoked) {
+                        existing.status = 'revoked';
+                        existing.kycStatus = 'revoked';
+                        existing.isApproved = false;
+                        existing.isActive = false;
+                        existing.isRevoked = true;
+                    } else if (existing.status === 'suspended' || rawStatus === 'suspended' || existing.isSuspended || raw.isSuspended) {
+                        existing.status = 'suspended';
+                        existing.kycStatus = 'suspended';
+                        existing.isApproved = false;
+                        existing.isActive = false;
+                        existing.isSuspended = true;
+                    } else if (rawStatus === 'approved' || rawKycStatus === 'approved' || raw.isApproved || raw.isActive) {
                         existing.status = 'approved';
                         existing.kycStatus = 'approved';
                         existing.isApproved = true;
@@ -1651,6 +1750,28 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
                     existing.aadhaarNumber = existing.aadhaarNumber || existing.kyc?.aadhaarNumber || existing.kycDocs?.aadhaarNumber || raw.aadhaarNumber || '';
                     existing.panNumber = existing.panNumber || existing.kyc?.panNumber || existing.kycDocs?.panNumber || raw.panNumber || '';
+                    if (rawBankAcc && !existing.bankDetails?.accountNumber) {
+                        existing.bankDetails = resolvedBankDetails;
+                    }
+                    if (Object.keys(rawDocs).length > 0 && (!existing.documents || Object.keys(existing.documents).length === 0)) {
+                        existing.documents = rawDocs;
+                        existing.kycDocs = rawDocs;
+                    }
+                    if (raw.profilePhoto && !existing.profilePhoto) {
+                        existing.profilePhoto = raw.profilePhoto;
+                    }
+                    if (raw.revokedAt && !existing.revokedAt) {
+                        existing.revokedAt = raw.revokedAt;
+                        existing.revokedBy = raw.revokedBy;
+                        existing.revokedByName = raw.revokedByName;
+                        existing.revocationReason = raw.revocationReason;
+                    }
+                    if (raw.suspendedAt && !existing.suspendedAt) {
+                        existing.suspendedAt = raw.suspendedAt;
+                        existing.suspendedBy = raw.suspendedBy;
+                        existing.suspendedByName = raw.suspendedByName;
+                        existing.suspensionReason = raw.suspensionReason;
+                    }
                 }
             }
         });
@@ -1831,10 +1952,159 @@ const findAgentByIdentifier = async (idParam, extraFields = {}) => {
     return agent;
 };
 
+const enrichCompleteAgentDetails = async (agent, db) => {
+    if (!agent) return null;
+    if (agent.toObject) agent = agent.toObject();
+
+    // Check counterpart in raw agents or users
+    if (db && agent.email) {
+        try {
+            const counterpart = await db.collection('agents').findOne({ email: String(agent.email).toLowerCase() }) ||
+                                await db.collection('users').findOne({ email: String(agent.email).toLowerCase() });
+            if (counterpart) {
+                agent = {
+                    ...counterpart,
+                    ...agent,
+                    kyc: { ...(counterpart.kyc || {}), ...(agent.kyc || {}) },
+                    kycDocs: { ...(counterpart.kycDocs || {}), ...(agent.kycDocs || {}) }
+                };
+            }
+        } catch (e) {}
+    }
+
+    delete agent.password;
+    delete agent.passwordHash;
+    delete agent.__v;
+
+    const rawBank = agent.bankDetails || agent.bank || {};
+    const rawBankHolder = agent.accountHolderName || agent.accountHolder || rawBank.accountHolder || rawBank.accountHolderName || agent.beneficiaryName || '';
+    const rawBankAcc = agent.accountNumber || agent.accountNo || rawBank.accountNumber || rawBank.accountNo || '';
+    const rawBankName = agent.bankName || rawBank.bankName || '';
+    const rawBankIfsc = agent.ifsc || agent.ifscCode || rawBank.ifscCode || rawBank.ifsc || '';
+    const rawBankBranch = agent.branchName || agent.bankBranch || rawBank.branchName || '';
+    const rawBankStatus = agent.bankVerificationStatus || rawBank.verificationStatus || (rawBankAcc ? 'Verified' : 'Pending Verification');
+    const resolvedBankDetails = {
+        bankName: rawBankName,
+        accountHolderName: rawBankHolder,
+        accountNumber: rawBankAcc,
+        ifsc: rawBankIfsc,
+        branchName: rawBankBranch,
+        verificationStatus: rawBankStatus
+    };
+
+    const rawDocs = agent.documents || agent.kycDocs || agent.kyc || {};
+    const resolvedDocs = {
+        profilePhoto: rawDocs.profilePhoto || rawDocs.selfie || agent.profilePhoto || agent.selfie || agent.avatar || '',
+        panCard: rawDocs.panCard || rawDocs.panImage || agent.panCard || agent.panImage || '',
+        aadhaarCard: rawDocs.aadhaarCard || rawDocs.aadhaarImage || rawDocs.addressProof || agent.aadhaarCard || agent.aadhaarImage || '',
+        addressProof: rawDocs.addressProof || agent.addressProof || '',
+        educationalCertificates: rawDocs.educationalCertificates || rawDocs.educationCertificate || agent.educationalCertificates || ''
+    };
+
+    const rawLvlStr = (agent.level || agent.agentLevel || agent.role || 'pincode').toString().toLowerCase().trim();
+    let lvl = 'pincode';
+    if (rawLvlStr.includes('state')) lvl = 'state';
+    else if (rawLvlStr.includes('district') || rawLvlStr.includes('dist')) lvl = 'district';
+    else if (rawLvlStr.includes('divis') || rawLvlStr.includes('division')) lvl = 'division';
+    else if (rawLvlStr.includes('pincode') || rawLvlStr.includes('pin')) lvl = 'pincode';
+
+    const stateName = (agent.assignedState || agent.state || agent.territory?.state || '').trim();
+    const districtName = (agent.assignedDistrict || agent.district || agent.territory?.district || '').trim();
+    const divisionName = (agent.assignedDivision || agent.division || agent.territory?.division || '').trim();
+    const pinCodeVal = (agent.assignedPincode?.code || agent.assignedPincode || agent.pincode || agent.territory?.pincode || '').trim();
+
+    const streetVal = [agent.buildingNo || agent.doorNo, agent.streetName || agent.street].filter(Boolean).join(', ');
+    const resolvedAddress = agent.address || agent.fullAddress || [streetVal, agent.postOffice, divisionName, districtName, stateName, pinCodeVal].filter(Boolean).join(', ');
+
+    let initiatorDetails = null;
+    let onboardingSource = agent.onboardingSource || (agent.createdVia === 'admin' ? 'ADMIN_INITIATED' : 'DIRECT');
+    const initiatorId = agent.onboardedBy || agent.createdBy || agent.assignedAgent || agent.requestingAdminId;
+    if (initiatorId && db) {
+        try {
+            const initUser = await db.collection('users').findOne({
+                $or: [
+                    { _id: initiatorId },
+                    { id: initiatorId },
+                    { registrationId: initiatorId },
+                    mongoose.Types.ObjectId.isValid(initiatorId) ? { _id: new mongoose.Types.ObjectId(initiatorId) } : null
+                ].filter(Boolean)
+            });
+            if (initUser) {
+                initiatorDetails = {
+                    name: initUser.name || initUser.fullName || 'Authorized Admin',
+                    role: initUser.adminRole || initUser.role || 'Territory Administrator',
+                    registrationId: initUser.registrationId || '',
+                    territory: [initUser.assignedState || initUser.state, initUser.assignedDistrict || initUser.district].filter(Boolean).join(' → ')
+                };
+                onboardingSource = 'ADMIN_INITIATED';
+            }
+        } catch (e) {}
+    }
+
+    return {
+        ...agent,
+        _id: agent._id,
+        name: agent.name || agent.fullName || 'Agent Partner',
+        fullName: agent.fullName || agent.name || 'Agent Partner',
+        email: agent.email || '',
+        phone: agent.phone || agent.mobile || '',
+        altPhone: agent.altPhone || agent.alternativePhone || agent.secondaryPhone || '',
+        dob: agent.dob || agent.dateOfBirth || '',
+        gender: agent.gender || '',
+        bloodGroup: agent.bloodGroup || '',
+        preferredLanguage: agent.preferredLanguage || 'English',
+        role: 'agent',
+        level: lvl,
+        status: agent.status || 'pending',
+        kycStatus: agent.kycStatus || agent.status || 'pending',
+        isActive: !!agent.isActive,
+        isApproved: !!agent.isApproved,
+        registrationId: agent.registrationId || (agent._id ? `REG-${String(agent._id).substring(18, 24).toUpperCase()}` : 'N/A'),
+        assignedState: stateName || 'N/A',
+        assignedDistrict: districtName || 'N/A',
+        assignedDivision: divisionName || 'N/A',
+        assignedPincode: pinCodeVal || 'N/A',
+        assignedArea: agent.assignedArea || (Object.values({ stateName, districtName, divisionName, pinCodeVal }).filter(Boolean).join(' / ')),
+        previousAssignedState: agent.previousAssignedState || '',
+        previousAssignedDistrict: agent.previousAssignedDistrict || '',
+        previousAssignedDivision: agent.previousAssignedDivision || '',
+        previousAssignedPincode: agent.previousAssignedPincode || '',
+        previousAssignedArea: agent.previousAssignedArea || '',
+        address: resolvedAddress,
+        fullAddress: resolvedAddress,
+        buildingNo: agent.buildingNo || agent.doorNo || '',
+        streetName: agent.streetName || agent.street || '',
+        postOffice: agent.postOffice || agent.postOfficeBranch || '',
+        aadhaarNumber: agent.aadhaarNumber || rawDocs.aadhaarNumber || '',
+        panNumber: agent.panNumber || rawDocs.panNumber || '',
+        qualification: agent.qualification || agent.highestQualification || '',
+        experience: agent.experience || agent.experienceLevel || '',
+        previousCompany: agent.previousCompany || agent.previousOrg || '',
+        profilePhoto: resolvedDocs.profilePhoto,
+        documents: resolvedDocs,
+        kycDocs: resolvedDocs,
+        declarationAccepted: !!agent.declarationAccepted || !!agent.declaration,
+        bankDetails: resolvedBankDetails,
+        onboardingSource,
+        initiatorDetails,
+        revokedAt: agent.revokedAt || null,
+        revokedBy: agent.revokedBy || null,
+        revokedByName: agent.revokedByName || null,
+        revocationReason: agent.revocationReason || '',
+        suspendedAt: agent.suspendedAt || null,
+        suspendedBy: agent.suspendedBy || null,
+        suspendedByName: agent.suspendedByName || null,
+        suspensionReason: agent.suspensionReason || '',
+        reviewHistory: agent.reviewHistory || [],
+        createdAt: agent.createdAt || new Date(),
+        updatedAt: agent.updatedAt || new Date()
+    };
+};
+
 // @route    GET api/admin/agents/:id
-// @desc     Fetch full agent details including complete kycDocs and verification history
+// @desc     Fetch full agent details including complete kycDocs, bank details, and verification history
 // @access   Private (Admin)
-router.get('/agents/:id', [auth, adminAuth], async (req, res) => {
+router.get(['/agents/:id', '/admin/agents/:id'], [auth, adminAuth], async (req, res) => {
     try {
         const idParam = req.params.id;
         const db = mongoose.connection.db;
@@ -1863,52 +2133,11 @@ router.get('/agents/:id', [auth, adminAuth], async (req, res) => {
             if (rawAgent) agent = rawAgent;
         }
 
-        // Also check if raw agent collection has documents that User might lack
-        if (agent && agent.email && db) {
-            try {
-                const counterpart = await db.collection('agents').findOne({ email: String(agent.email).toLowerCase() });
-                if (counterpart) {
-                    agent = {
-                        ...counterpart,
-                        ...agent,
-                        kyc: { ...(counterpart.kyc || {}), ...(agent.kyc || {}) },
-                        kycDocs: { ...(counterpart.kycDocs || {}), ...(agent.kycDocs || {}) }
-                    };
-                }
-            } catch (mergeErr) {}
-        }
-
         if (!agent) {
             return res.status(404).json({ success: false, message: 'Agent not found' });
         }
 
-        // Remove passwords
-        delete agent.password;
-        delete agent.passwordHash;
-        delete agent.__v;
-
-        const kycObj = agent.kyc || agent.kycDocs || {};
-        const kycDocsObj = agent.kycDocs || agent.kyc || {};
-        const territoryObj = agent.territory || {};
-
-        const fullAgent = sanitizeHeavyFields({
-            ...agent,
-            name: agent.name || agent.fullName || 'Agent Partner',
-            fullName: agent.fullName || agent.name || 'Agent Partner',
-            territory: {
-                state: territoryObj.state || agent.assignedState || agent.state || '',
-                district: territoryObj.district || agent.assignedDistrict || agent.district || '',
-                division: territoryObj.division || agent.assignedDivision || agent.division || '',
-                pincode: territoryObj.pincode || agent.pincode || ''
-            },
-            assignedState: agent.assignedState || agent.state || territoryObj.state || '',
-            assignedDistrict: agent.assignedDistrict || agent.district || territoryObj.district || '',
-            assignedDivision: agent.assignedDivision || agent.division || territoryObj.division || '',
-            pincode: agent.pincode || territoryObj.pincode || '',
-            kyc: kycObj,
-            kycDocs: kycDocsObj
-        });
-
+        const fullAgent = await enrichCompleteAgentDetails(agent, db);
         res.json({ success: true, agent: fullAgent, data: fullAgent });
     } catch (err) {
         console.error('Error fetching agent details:', err);
@@ -1917,9 +2146,9 @@ router.get('/agents/:id', [auth, adminAuth], async (req, res) => {
 });
 
 // @route    GET api/admin/agents/:id/scorecard
-// @desc     Fetch real-time agent scorecard, territory metrics & downstream agent counts
+// @desc     Fetch real-time agent scorecard, territory metrics, full details & downstream agent counts
 // @access   Private (Admin)
-router.get('/agents/:id/scorecard', [auth, adminAuth], async (req, res) => {
+router.get(['/agents/:id/scorecard', '/admin/agents/:id/scorecard'], [auth, adminAuth], async (req, res) => {
     try {
         const idParam = req.params.id;
         const db = mongoose.connection.db;
@@ -1953,17 +2182,12 @@ router.get('/agents/:id/scorecard', [auth, adminAuth], async (req, res) => {
             return res.status(404).json({ success: false, msg: 'Agent not found' });
         }
 
-        const rawLvlStr = (agent.level || agent.agentLevel || agent.role || 'pincode').toString().toLowerCase().trim();
-        let lvl = 'pincode';
-        if (rawLvlStr.includes('state')) lvl = 'state';
-        else if (rawLvlStr.includes('district') || rawLvlStr.includes('dist')) lvl = 'district';
-        else if (rawLvlStr.includes('divis') || rawLvlStr.includes('division')) lvl = 'division';
-        else if (rawLvlStr.includes('pincode') || rawLvlStr.includes('pin')) lvl = 'pincode';
+        const fullAgent = await enrichCompleteAgentDetails(agent, db);
 
-        const stateName = (agent.assignedState || agent.state || agent.territory?.state || '').trim();
-        const districtName = (agent.assignedDistrict || agent.district || agent.territory?.district || '').trim();
-        const divisionName = (agent.assignedDivision || agent.division || agent.territory?.division || '').trim();
-        const pinCodeVal = (agent.assignedPincode?.code || agent.assignedPincode || agent.pincode || agent.territory?.pincode || '').trim();
+        const lvl = fullAgent.level || 'pincode';
+        const stateName = fullAgent.assignedState !== 'N/A' ? fullAgent.assignedState : '';
+        const districtName = fullAgent.assignedDistrict !== 'N/A' ? fullAgent.assignedDistrict : '';
+        const divisionName = fullAgent.assignedDivision !== 'N/A' ? fullAgent.assignedDivision : '';
 
         const baseApprovedAgentQuery = {
             role: { $in: ['agent', 'Agent', 'state', 'district', 'division', 'pincode'] },
@@ -2033,22 +2257,8 @@ router.get('/agents/:id/scorecard', [auth, adminAuth], async (req, res) => {
             return res.json({
                 success: true,
                 agent: {
-                    _id: agent._id,
-                    name: agent.name || 'Agent Partner',
-                    email: agent.email || '',
-                    phone: agent.phone || agent.mobile || '',
-                    role: agent.role || 'agent',
-                    level: lvl,
-                    status: agent.status || 'pending',
-                    kycStatus: agent.kycStatus || agent.status || 'pending',
-                    registrationId: agent.registrationId || (agent._id ? `REG-${String(agent._id).substring(18, 24).toUpperCase()}` : 'N/A'),
-                    assignedState: stateName || 'N/A',
-                    assignedDistrict: districtName || 'N/A',
-                    assignedDivision: divisionName || 'N/A',
-                    assignedPincode: pinCodeVal || 'N/A',
-                    assignedArea: agent.assignedArea || '',
-                    isPaid: isPaidVal,
-                    createdAt: agent.createdAt || new Date()
+                    ...fullAgent,
+                    isPaid: isPaidVal
                 },
                 metrics: {
                     tieupsToday,
@@ -2238,6 +2448,8 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
         };
 
         if (isRevoked) {
+            agent.isRevoked = true;
+            agent.isSuspended = false;
             // Preserve historical territory for audit/history
             agent.previousAssignedArea = prevArea;
             agent.previousAssignedPincode = prevPincode;
@@ -2253,8 +2465,11 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
             agent.assignedDivision = null;
             agent.revokedAt = new Date();
             agent.revokedBy = req.user?.id || 'admin';
+            agent.revokedByName = req.user?.name || 'Super Admin';
             agent.revocationReason = body.reason || rejectionReason || 'Revoked by administrator';
 
+            updateSet.isRevoked = true;
+            updateSet.isSuspended = false;
             updateSet.previousAssignedArea = prevArea;
             updateSet.previousAssignedPincode = prevPincode;
             updateSet.previousAssignedState = agent.previousAssignedState;
@@ -2267,15 +2482,47 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
             updateSet.assignedDivision = null;
             updateSet.revokedAt = agent.revokedAt;
             updateSet.revokedBy = agent.revokedBy;
+            updateSet.revokedByName = agent.revokedByName;
             updateSet.revocationReason = agent.revocationReason;
         } else if (isSuspended) {
+            agent.isSuspended = true;
             agent.suspendedAt = new Date();
             agent.suspendedBy = req.user?.id || 'admin';
+            agent.suspendedByName = req.user?.name || 'Super Admin';
             agent.suspensionReason = body.reason || 'Suspended by administrator';
+            updateSet.isSuspended = true;
             updateSet.suspendedAt = agent.suspendedAt;
             updateSet.suspendedBy = agent.suspendedBy;
+            updateSet.suspendedByName = agent.suspendedByName;
             updateSet.suspensionReason = agent.suspensionReason;
             // Note: For suspended agents, territory assignment is retained as per requirement
+        } else if (isApprovedVal) {
+            agent.isRevoked = false;
+            agent.isSuspended = false;
+            updateSet.isRevoked = false;
+            updateSet.isSuspended = false;
+        }
+
+        // Active Session & Token Invalidation for Revoked or Suspended agents
+        if (isRevoked || isSuspended) {
+            try {
+                const userQueryIds = [agent._id, String(agent._id)];
+                if (mongoose.Types.ObjectId.isValid(agent._id)) userQueryIds.push(new mongoose.Types.ObjectId(agent._id));
+                const sessionFilter = {
+                    $or: [
+                        { userId: { $in: userQueryIds } },
+                        ...(agent.email ? [{ email: agent.email.toLowerCase() }] : [])
+                    ]
+                };
+                await Promise.allSettled([
+                    SecuritySession.deleteMany(sessionFilter),
+                    SecuritySession.updateMany(sessionFilter, { $set: { isActive: false, isRevoked: true } }),
+                    UserSession.deleteMany(sessionFilter),
+                    UserSession.updateMany(sessionFilter, { $set: { isActive: false, isRevoked: true } })
+                ]);
+            } catch (sessErr) {
+                console.warn('Session invalidation warning:', sessErr.message);
+            }
         }
 
         await agent.save().catch(async (saveErr) => {
@@ -2376,12 +2623,34 @@ const handleAgentStatusUpdate = async (req, res, defaultStatus = null) => {
     }
 };
 
-router.put('/agents/:id/status', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res));
-router.put('/approve-agent/:id', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'approved'));
-router.put('/agents/:id/approve', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'approved'));
-router.put('/agents/:id/suspend', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'suspended'));
-router.put('/agents/:id/revoke', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'revoked'));
-router.put('/agents/:id/reject', [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, 'rejected'));
+const agentActionRoutes = [
+    { path: '/agents/:id/status', method: 'put', action: null },
+    { path: '/agents/:id/status', method: 'post', action: null },
+    { path: '/admin/agents/:id/status', method: 'put', action: null },
+    { path: '/admin/agents/:id/status', method: 'post', action: null },
+    { path: '/approve-agent/:id', method: 'put', action: 'approved' },
+    { path: '/approve-agent/:id', method: 'post', action: 'approved' },
+    { path: '/agents/:id/approve', method: 'put', action: 'approved' },
+    { path: '/agents/:id/approve', method: 'post', action: 'approved' },
+    { path: '/admin/agents/:id/approve', method: 'put', action: 'approved' },
+    { path: '/admin/agents/:id/approve', method: 'post', action: 'approved' },
+    { path: '/agents/:id/suspend', method: 'put', action: 'suspended' },
+    { path: '/agents/:id/suspend', method: 'post', action: 'suspended' },
+    { path: '/admin/agents/:id/suspend', method: 'put', action: 'suspended' },
+    { path: '/admin/agents/:id/suspend', method: 'post', action: 'suspended' },
+    { path: '/agents/:id/revoke', method: 'put', action: 'revoked' },
+    { path: '/agents/:id/revoke', method: 'post', action: 'revoked' },
+    { path: '/admin/agents/:id/revoke', method: 'put', action: 'revoked' },
+    { path: '/admin/agents/:id/revoke', method: 'post', action: 'revoked' },
+    { path: '/agents/:id/reject', method: 'put', action: 'rejected' },
+    { path: '/agents/:id/reject', method: 'post', action: 'rejected' },
+    { path: '/admin/agents/:id/reject', method: 'put', action: 'rejected' },
+    { path: '/admin/agents/:id/reject', method: 'post', action: 'rejected' }
+];
+
+agentActionRoutes.forEach(({ path, method, action }) => {
+    router[method](path, [auth, adminAuth], (req, res) => handleAgentStatusUpdate(req, res, action));
+});
 
 // ==========================================
 // 5. PINCODE MANAGEMENT
@@ -2492,6 +2761,28 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
             if (u.managerId) managerMap.set(String(u.managerId), u);
         });
 
+        const resolveVendorBankDetails = (v) => {
+            if (!v) return null;
+            const rawBank = v.bankDetails || v.bank || v.bankingDetails || {};
+            const firstBizBank = (Array.isArray(v.businesses) && v.businesses.find(b => b.bankDetails || b.accountNumber))?.bankDetails || {};
+
+            const bankName = v.bankName || rawBank.bankName || firstBizBank.bankName || '';
+            const accountHolderName = v.accountHolderName || v.accountHolder || rawBank.accountHolderName || rawBank.accountHolder || v.beneficiaryName || firstBizBank.accountHolderName || firstBizBank.accountHolder || '';
+            const accountNumber = v.accountNumber || v.accountNo || rawBank.accountNumber || rawBank.accountNo || firstBizBank.accountNumber || firstBizBank.accountNo || '';
+            const ifsc = v.ifsc || v.ifscCode || rawBank.ifsc || rawBank.ifscCode || firstBizBank.ifsc || firstBizBank.ifscCode || '';
+            const branchName = v.branchName || v.branch || v.bankBranch || rawBank.branchName || rawBank.branch || firstBizBank.branchName || firstBizBank.branch || '';
+            const verificationStatus = v.bankVerificationStatus || rawBank.verificationStatus || (accountNumber ? 'Verified' : 'Pending Verification');
+
+            return {
+                bankName: bankName || '',
+                accountHolderName: accountHolderName || '',
+                accountNumber: accountNumber || '',
+                ifsc: ifsc || '',
+                branchName: branchName || '',
+                verificationStatus: accountNumber ? (rawBank.verificationStatus || 'Verified') : 'Not Provided'
+            };
+        };
+
         const formattedUserVendors = (usersVendors || []).map((v, idx) => {
             if (!v) return null;
             const vId = formatVId(v, idx);
@@ -2528,7 +2819,7 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
                 assignedState: v.assignedState || v.state || '',
                 assignedDistrict: v.assignedDistrict || v.district || '',
                 assignedDivision: v.assignedDivision || v.division || '',
-                bankDetails: v.bankDetails || null,
+                bankDetails: resolveVendorBankDetails(v),
                 paymentOptions: v.paymentOptions || null,
                 joiningType: isCreatedByMgr ? 'manager' : (v.joiningType || (v.createdVia === 'agent' ? 'agent' : (v.createdVia === 'vendor_website' ? 'direct' : 'ambiguous'))),
                 createdVia: isCreatedByMgr ? 'manager_website' : (v.createdVia || ''),
@@ -2581,6 +2872,7 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
                 assignedState: v.assignedState || v.state || '',
                 assignedDistrict: v.assignedDistrict || v.district || '',
                 assignedDivision: v.assignedDivision || v.division || '',
+                bankDetails: resolveVendorBankDetails(v),
                 joiningType: isCreatedByMgr ? 'manager' : (v.joiningType || (v.createdVia === 'agent' ? 'agent' : (v.createdVia === 'vendor_website' ? 'direct' : 'ambiguous'))),
                 createdVia: isCreatedByMgr ? 'manager_website' : (v.createdVia || ''),
                 registrationSource: isCreatedByMgr ? 'manager_website' : (v.registrationSource || ''),

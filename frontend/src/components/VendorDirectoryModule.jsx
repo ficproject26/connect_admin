@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Store, LayoutGrid, List, Search, Filter, Download, ArrowUpRight, CheckCircle,
   XCircle, Clock, MapPin, UserCheck, ShieldAlert, AlertCircle, AlertTriangle, RefreshCw, X, ChevronRight, Trash2,
-  Eye, Building, Building2, Phone, Mail, FileText, CreditCard, ShieldCheck, User, Globe, Tag, Calendar, Layers, UserCog,
-  ZoomIn, ExternalLink, Check, Loader2
+  Eye, EyeOff, Building, Building2, Phone, Mail, FileText, CreditCard, ShieldCheck, User, Globe, Tag, Calendar, Layers, UserCog,
+  ZoomIn, ExternalLink, Check, Copy, Loader2
 } from 'lucide-react';
 
 const formatVendorId = (rawId, index = 0) => {
@@ -695,6 +695,17 @@ export const VendorDirectoryModule = React.memo(({
 
   // Full Vendor Details Profile Modal
   const [selectedVendorDetails, setSelectedVendorDetails] = useState(null);
+  const [unmaskedVendorBankAcc, setUnmaskedVendorBankAcc] = useState(false);
+  const [vendorBankCopiedKey, setVendorBankCopiedKey] = useState(null);
+
+  const handleVendorBankCopy = useCallback((key, text) => {
+    if (!text || text === 'Not Provided' || text === '—') return;
+    try {
+      navigator.clipboard?.writeText(text);
+      setVendorBankCopiedKey(key);
+      setTimeout(() => setVendorBankCopiedKey(null), 2000);
+    } catch (e) {}
+  }, []);
 
   // Highlight state for notification-driven deep-link
   const [highlightedVendorId, setHighlightedVendorId] = useState(highlightVendorId || null);
@@ -2679,6 +2690,99 @@ export const VendorDirectoryModule = React.memo(({
                   <div className="flex justify-between"><span className="text-slate-400">MSME Status:</span><span className="font-bold text-slate-800 dark:text-slate-200">{selectedVendorDetails.msmeStatus || 'Non-MSME'}</span></div>
                 </div>
               </div>
+
+              {/* 5. Bank Settlement Information */}
+              {(() => {
+                const b = selectedVendorDetails.bankDetails || selectedVendorDetails.bank_details || selectedVendorDetails.bankAccount || selectedVendorDetails.settlementAccount || {};
+                const bName = b.bankName || b.bank_name || selectedVendorDetails.bankName || selectedVendorDetails.bank_name || '';
+                const bHolder = b.accountHolderName || b.account_holder_name || b.accountName || b.beneficiaryName || selectedVendorDetails.accountHolderName || selectedVendorDetails.accountName || selectedVendorDetails.beneficiaryName || selectedVendorDetails.contactPerson || selectedVendorDetails.ownerName || '';
+                const bAcc = b.accountNumber || b.account_number || b.accountNo || b.bankAccountNumber || selectedVendorDetails.accountNumber || selectedVendorDetails.bankAccountNumber || selectedVendorDetails.accountNo || '';
+                const bIfsc = (b.ifsc || b.ifscCode || b.ifsc_code || selectedVendorDetails.ifsc || selectedVendorDetails.ifscCode || selectedVendorDetails.ifsc_code || '').toUpperCase().trim();
+                const bBranch = b.branchName || b.branch_name || b.branch || selectedVendorDetails.branchName || selectedVendorDetails.branch_name || selectedVendorDetails.branch || '';
+                const bStatus = b.verificationStatus || b.status || b.bankVerificationStatus || (bAcc ? 'Verified' : null);
+
+                return (
+                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5 sm:col-span-2">
+                    <div className="flex items-center justify-between pb-2 border-b border-slate-200/60 dark:border-slate-850">
+                      <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-extrabold">
+                        <CreditCard className="w-4 h-4 text-emerald-500" />
+                        <span>Bank Settlement Information</span>
+                      </div>
+                      {bStatus ? (
+                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${
+                          String(bStatus).toLowerCase() === 'verified'
+                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                            : 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                        }`}>
+                          {bStatus}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                          Pending Setup
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 font-medium text-slate-600 dark:text-slate-400 text-xs">
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-slate-400">Bank Name:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-100">{bName || 'Not Provided'}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-slate-400">Account Holder:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-100">{bHolder || 'Not Provided'}</span>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-slate-400">Account Number:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
+                            {bAcc ? (unmaskedVendorBankAcc ? bAcc : `••••••••${bAcc.slice(-4)}`) : 'Not Provided'}
+                          </span>
+                          {bAcc && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => setUnmaskedVendorBankAcc(prev => !prev)}
+                                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                                title={unmaskedVendorBankAcc ? 'Hide Account Number' : 'Show Account Number'}
+                              >
+                                {unmaskedVendorBankAcc ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleVendorBankCopy('acc', bAcc)}
+                                className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                                title="Copy Account Number"
+                              >
+                                {vendorBankCopiedKey === 'acc' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5">
+                        <span className="text-slate-400">IFSC Code:</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono font-bold text-slate-800 dark:text-slate-100">{bIfsc || 'Not Provided'}</span>
+                          {bIfsc && (
+                            <button
+                              type="button"
+                              onClick={() => handleVendorBankCopy('ifsc', bIfsc)}
+                              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 p-0.5 rounded cursor-pointer"
+                              title="Copy IFSC Code"
+                            >
+                              {vendorBankCopiedKey === 'ifsc' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center py-0.5 sm:col-span-2">
+                        <span className="text-slate-400">Branch Name:</span>
+                        <span className="font-bold text-slate-800 dark:text-slate-100">{bBranch || 'Not Provided'}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
             </div>
 
