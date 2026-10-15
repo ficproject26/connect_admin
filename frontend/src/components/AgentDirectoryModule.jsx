@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  Users, Search, RefreshCw, Plus, UserCheck, Trash2, ChevronRight, ChevronDown,
+  Users, Search, RefreshCw, Plus, UserCheck, ChevronRight, ChevronDown,
   MapPin, Phone, Mail, Award, AlertTriangle, XCircle, Grid, List, Layers,
   CheckCircle, Clock, Eye, Globe2, Building2, Navigation, Hash, User,
   CalendarDays, BadgeCheck, ShieldOff, Ban, LayoutGrid, ArrowRight
@@ -67,7 +67,6 @@ export default function AgentDirectoryModule({
   const [scorecardData, setScorecardData] = useState(null);
   const [scorecardError, setScorecardError] = useState(null);
   const [actionConfirmModal, setActionConfirmModal] = useState({ isOpen: false, agent: null, action: null, reason: '', loading: false, error: null });
-  const [deletingAll, setDeletingAll] = useState(false);
 
   const openAgentScorecard = useCallback(async (agentObj) => {
     if (!agentObj) return;
@@ -247,125 +246,6 @@ export default function AgentDirectoryModule({
   }, [safeFetchAgents, normalizeAgentList, onAgentsUpdated]);
 
   useEffect(() => { loadAgentData(false); }, [loadAgentData]);
-
-  const handleDeleteAllAgents = useCallback(async () => {
-    const totalCount = agents.length;
-    const confirmDelete = window.confirm(
-      `⚠️ WARNING: Are you sure you want to delete ALL agents from the database?\n\nThis will permanently remove all agent records (${totalCount} agents) across all states, districts, divisions, and pincodes.\n\nThis action cannot be undone. Click OK to proceed.`
-    );
-    if (!confirmDelete) return;
-
-    setDeletingAll(true);
-    try {
-      const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('admin_token') || '') : '');
-      const headers = {
-        'x-auth-token': activeToken,
-        'Authorization': `Bearer ${activeToken}`,
-        'Content-Type': 'application/json'
-      };
-
-      const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
-      const bulkCandidates = [
-        { url: `${baseClean}/admin/agents/all`, method: 'DELETE' },
-        { url: `${baseClean}/agents/all`, method: 'DELETE' },
-        { url: `${baseClean}/admin/agents/delete-all`, method: 'POST' },
-        { url: `${baseClean}/agents/delete-all`, method: 'POST' },
-        { url: `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents/all`, method: 'DELETE' },
-        { url: `${baseClean.replace(/\/admin-api$/, '')}/admin-api/agents/all`, method: 'DELETE' }
-      ];
-
-      let success = false;
-      let responseData = null;
-
-      // 1. Attempt high-performance single-call bulk deletion
-      for (const item of bulkCandidates) {
-        try {
-          const res = await fetch(item.url, { method: item.method, headers });
-          if (res.ok) {
-            responseData = await res.json().catch(() => ({}));
-            success = true;
-            break;
-          }
-        } catch (e) {
-          // ignore network attempt errors and try next candidate
-        }
-      }
-
-      // 2. Resilient Fallback: If remote server does not yet have bulk route deployed (returns 404),
-      // delete all agents individually in concurrent batches using the already-deployed DELETE endpoint!
-      if (!success) {
-        let targets = (agentsRef.current && agentsRef.current.length > 0)
-          ? [...agentsRef.current]
-          : (agents && agents.length > 0 ? [...agents] : []);
-
-        if (targets.length === 0) {
-          const fetched = await safeFetchAgents();
-          if (fetched && fetched.length > 0) {
-            targets = normalizeAgentList(fetched);
-          }
-        }
-
-        if (targets.length > 0) {
-          let deletedCount = 0;
-          const batchSize = 10;
-          for (let i = 0; i < targets.length; i += batchSize) {
-            const chunk = targets.slice(i, i + batchSize);
-            await Promise.allSettled(
-              chunk.map(async (ag) => {
-                const agId = ag._id || ag.id || ag.registrationId;
-                if (!agId) return;
-                const deleteEndpoints = [
-                  `${baseClean}/admin/agents/${agId}`,
-                  `${baseClean}/agents/${agId}`,
-                  `${baseClean}/admin/agent/${agId}`,
-                  `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents/${agId}`
-                ];
-                for (const u of deleteEndpoints) {
-                  try {
-                    const r = await fetch(u, { method: 'DELETE', headers });
-                    if (r.ok || r.status === 404) {
-                      deletedCount++;
-                      break;
-                    }
-                  } catch (_) {}
-                }
-              })
-            );
-          }
-
-          if (deletedCount > 0) {
-            success = true;
-            responseData = {
-              message: `All ${deletedCount} agents have been successfully deleted from the database.`
-            };
-          }
-        } else {
-          // No agents in database
-          success = true;
-          responseData = { message: 'All agents deleted. No agents found in database.' };
-        }
-      }
-
-      if (success) {
-        MEMORY_AGENT_CACHE = [];
-        try { sessionStorage.removeItem('connect_agent_directory_cache'); } catch (e) {}
-        setAgents([]);
-        setCachedAgents([]);
-        if (typeof onAgentsUpdated === 'function') {
-          onAgentsUpdated([]);
-        }
-        alert(responseData?.message || responseData?.msg || 'All agents have been successfully deleted from the database.');
-        await loadAgentData(true);
-      } else {
-        alert('Failed to delete agents. Please verify your administrative permissions and network connection.');
-      }
-    } catch (err) {
-      console.error('[handleDeleteAllAgents] Error:', err);
-      alert('Error deleting all agents: ' + err.message);
-    } finally {
-      setDeletingAll(false);
-    }
-  }, [agents, token, API_BASE, onAgentsUpdated, loadAgentData, safeFetchAgents, normalizeAgentList]);
 
   const handleOpenActionConfirm = useCallback((agent, action) => {
     setActionConfirmModal({ isOpen: true, agent, action, reason: '', loading: false, error: null });
@@ -603,12 +483,6 @@ export default function AgentDirectoryModule({
           </button>
           <button type="button" onClick={onOpenAddAgentModal} className="h-9 bg-primary-600 hover:bg-primary-500 text-white font-bold text-xs px-4 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer">
             <Plus className="w-4 h-4" /> Add Agent
-          </button>
-          <button type="button" onClick={handleDeleteAllAgents} disabled={deletingAll || refreshing}
-            className="h-9 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3.5 rounded-xl shadow-md transition-all active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
-            title="Delete all agents from database">
-            <Trash2 className={`w-4 h-4 ${deletingAll ? 'animate-spin' : ''}`} />
-            {deletingAll ? 'Deleting All...' : 'Delete All'}
           </button>
         </div>
       </div>
