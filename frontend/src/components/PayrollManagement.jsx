@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { formatName, validateName } from '../utils/formValidation.js';
 import {
   DollarSign, Users, Award, Download, Plus, Filter, Search, RefreshCw,
   CheckCircle, Clock, FileText, Calculator, ChevronRight, X, AlertCircle,
@@ -183,6 +184,12 @@ export const PayrollManagement = React.memo(({ token, API_BASE, currentUser, onT
     e.preventDefault();
     const formData = new FormData(e.target);
     const body = Object.fromEntries(formData.entries());
+    const nameCheck = validateName(body.employeeName, 'Employee Name', true);
+    if (!nameCheck.isValid) {
+      toast(nameCheck.message, 'error');
+      return;
+    }
+    body.employeeName = formatName(body.employeeName);
 
     try {
       const res = await fetch(`${API_BASE}/admin/enterprise/payroll/generate`, {

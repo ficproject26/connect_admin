@@ -48,6 +48,30 @@ const Manager = require('../models/Manager');
 const Payment = require('../models/Payment');
 const PaymentAuditLog = require('../models/PaymentAuditLog');
 const cacheService = require('../utils/cacheService');
+const {
+    formatName,
+    validateName,
+    normalizeEmail,
+    validateEmail,
+    cleanIndianMobile,
+    validateIndianMobile,
+    validatePasswordPolicy,
+    validatePasswordMatch,
+    cleanAadhaar,
+    maskAadhaar,
+    validateAadhaar,
+    cleanPAN,
+    validatePAN,
+    cleanBankAccount,
+    maskBankAccount,
+    validateBankAccount,
+    validateBankAccountMatch,
+    cleanIFSC,
+    validateIFSC,
+    calculateAge,
+    validateDOB,
+    validatePincode
+} = require('../utils/inputValidator');
 
 // Helper to get Socket.IO instance
 const getIo = (req) => req.app.get('io');
@@ -1376,6 +1400,59 @@ router.post('/vendors/agent-onboard', async (req, res) => {
             address, kycDocs, agentId
         } = req.body;
 
+        // 1. Name Validation
+        const contactVal = contactPerson || name || businessName;
+        const nameVal = validateName(contactVal, 'Contact person name', true);
+        if (!nameVal.isValid) {
+            return res.status(400).json({ success: false, msg: nameVal.message, message: nameVal.message });
+        }
+        const formattedContact = nameVal.sanitizedValue;
+
+        // 2. Email Validation & Normalization
+        const emailVal = validateEmail(email, true);
+        if (!emailVal.isValid) {
+            return res.status(400).json({ success: false, msg: emailVal.message, message: emailVal.message });
+        }
+        const lowerEmail = emailVal.normalizedEmail;
+
+        // 3. Indian Mobile Number Validation
+        const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+        if (!phoneCheck.isValid) {
+            return res.status(400).json({ success: false, msg: phoneCheck.message, message: phoneCheck.message });
+        }
+        const cleanPhone = phoneCheck.cleanPhone;
+
+        // 4. Pincode Validation (if provided)
+        if (pincode) {
+            const pinCheck = validatePincode(pincode, false);
+            if (!pinCheck.isValid) {
+                return res.status(400).json({ success: false, msg: pinCheck.message, message: pinCheck.message });
+            }
+        }
+
+        // 5. KYC Documents Validation
+        if (kycDocs) {
+            if (kycDocs.aadhaarNumber) {
+                const aVal = validateAadhaar(kycDocs.aadhaarNumber, false);
+                if (!aVal.isValid) return res.status(400).json({ success: false, msg: aVal.message, message: aVal.message });
+            }
+            if (kycDocs.panNumber) {
+                const pVal = validatePAN(kycDocs.panNumber, false);
+                if (!pVal.isValid) return res.status(400).json({ success: false, msg: pVal.message, message: pVal.message });
+                kycDocs.panNumber = cleanPAN(kycDocs.panNumber);
+            }
+            if (kycDocs.bankAccountNumber || kycDocs.accountNumber) {
+                const bAcc = kycDocs.bankAccountNumber || kycDocs.accountNumber;
+                const bVal = validateBankAccount(bAcc, kycDocs.bankName, false);
+                if (!bVal.isValid) return res.status(400).json({ success: false, msg: bVal.message, message: bVal.message });
+            }
+            if (kycDocs.ifscCode) {
+                const iVal = validateIFSC(kycDocs.ifscCode, false);
+                if (!iVal.isValid) return res.status(400).json({ success: false, msg: iVal.message, message: iVal.message });
+                kycDocs.ifscCode = iVal.cleanIFSC;
+            }
+        }
+
         const targetAgentId = agentId || req.user?.id;
         let agentDoc = null;
         if (targetAgentId && mongoose.Types.ObjectId.isValid(targetAgentId)) {
@@ -1385,9 +1462,6 @@ router.post('/vendors/agent-onboard', async (req, res) => {
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const randDigits = Math.floor(1000 + Math.random() * 9000);
         const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
-
-        const lowerEmail = (email || `vendor_${randDigits}@connect.app`).toLowerCase().trim();
-        const cleanPhone = (phone || '').replace(/\D/g, '');
 
         const existingVendorUser = await User.findOne({
             $or: [
@@ -1527,6 +1601,59 @@ router.post('/vendors/manager-onboard', async (req, res) => {
             address, kycDocs, managerId
         } = req.body;
 
+        // 1. Name Validation
+        const contactVal = contactPerson || name || businessName;
+        const nameVal = validateName(contactVal, 'Contact person name', true);
+        if (!nameVal.isValid) {
+            return res.status(400).json({ success: false, msg: nameVal.message, message: nameVal.message });
+        }
+        const formattedContact = nameVal.sanitizedValue;
+
+        // 2. Email Validation & Normalization
+        const emailVal = validateEmail(email, true);
+        if (!emailVal.isValid) {
+            return res.status(400).json({ success: false, msg: emailVal.message, message: emailVal.message });
+        }
+        const lowerEmail = emailVal.normalizedEmail;
+
+        // 3. Indian Mobile Number Validation
+        const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+        if (!phoneCheck.isValid) {
+            return res.status(400).json({ success: false, msg: phoneCheck.message, message: phoneCheck.message });
+        }
+        const cleanPhone = phoneCheck.cleanPhone;
+
+        // 4. Pincode Validation (if provided)
+        if (pincode) {
+            const pinCheck = validatePincode(pincode, false);
+            if (!pinCheck.isValid) {
+                return res.status(400).json({ success: false, msg: pinCheck.message, message: pinCheck.message });
+            }
+        }
+
+        // 5. KYC Documents Validation
+        if (kycDocs) {
+            if (kycDocs.aadhaarNumber) {
+                const aVal = validateAadhaar(kycDocs.aadhaarNumber, false);
+                if (!aVal.isValid) return res.status(400).json({ success: false, msg: aVal.message, message: aVal.message });
+            }
+            if (kycDocs.panNumber) {
+                const pVal = validatePAN(kycDocs.panNumber, false);
+                if (!pVal.isValid) return res.status(400).json({ success: false, msg: pVal.message, message: pVal.message });
+                kycDocs.panNumber = cleanPAN(kycDocs.panNumber);
+            }
+            if (kycDocs.bankAccountNumber || kycDocs.accountNumber) {
+                const bAcc = kycDocs.bankAccountNumber || kycDocs.accountNumber;
+                const bVal = validateBankAccount(bAcc, kycDocs.bankName, false);
+                if (!bVal.isValid) return res.status(400).json({ success: false, msg: bVal.message, message: bVal.message });
+            }
+            if (kycDocs.ifscCode) {
+                const iVal = validateIFSC(kycDocs.ifscCode, false);
+                if (!iVal.isValid) return res.status(400).json({ success: false, msg: iVal.message, message: iVal.message });
+                kycDocs.ifscCode = iVal.cleanIFSC;
+            }
+        }
+
         const targetManagerId = managerId || req.user?.id || req.body.onboardedByManager;
         let managerDoc = null;
         if (targetManagerId) {
@@ -1556,9 +1683,6 @@ router.post('/vendors/manager-onboard', async (req, res) => {
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const randDigits = Math.floor(1000 + Math.random() * 9000);
         const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
-
-        const lowerEmail = (email || `vendor_mgr_${randDigits}@connect.app`).toLowerCase().trim();
-        const cleanPhone = (phone || '').replace(/\D/g, '');
 
         const existingVendorUser = await User.findOne({
             $or: [
@@ -1674,21 +1798,81 @@ router.post('/vendors/manager-onboard', async (req, res) => {
 const handleVendorDirectRegister = async (req, res) => {
     try {
         const {
-            businessName, name, contactPerson, email, phone, password, category, subCategory,
+            businessName, name, contactPerson, email, phone, password, confirmPassword, category, subCategory,
             assignedState, assignedDistrict, assignedDivision, pincode, assignedArea,
             address, kycDocs
         } = req.body;
 
+        // 1. Name Validation & Auto-Capitalization (formatName)
+        const contactVal = contactPerson || name || businessName;
+        const nameVal = validateName(contactVal, 'Contact person name', true);
+        if (!nameVal.isValid) {
+            return res.status(400).json({ success: false, msg: nameVal.message, message: nameVal.message });
+        }
+        const formattedContact = nameVal.sanitizedValue;
+
+        // 2. Email Validation & Normalization
+        const emailVal = validateEmail(email, true);
+        if (!emailVal.isValid) {
+            return res.status(400).json({ success: false, msg: emailVal.message, message: emailVal.message });
+        }
+        const lowerEmail = emailVal.normalizedEmail;
+
+        // 3. Indian Mobile Number Validation (^[6-9][0-9]{9}$)
+        const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+        if (!phoneCheck.isValid) {
+            return res.status(400).json({ success: false, msg: phoneCheck.message, message: phoneCheck.message });
+        }
+        const cleanPhone = phoneCheck.cleanPhone;
+
+        // 4. Password Policy & Confirmation Match (if provided)
+        if (password) {
+            const pwdCheck = validatePasswordPolicy(password, true);
+            if (!pwdCheck.isValid) {
+                return res.status(400).json({ success: false, msg: pwdCheck.message || pwdCheck.msg, message: pwdCheck.message || pwdCheck.msg });
+            }
+            if (confirmPassword) {
+                const matchCheck = validatePasswordMatch(password, confirmPassword);
+                if (!matchCheck.isValid) {
+                    return res.status(400).json({ success: false, msg: matchCheck.message, message: matchCheck.message });
+                }
+            }
+        }
+
+        // 5. Pincode Validation (if provided)
+        if (pincode) {
+            const pinCheck = validatePincode(pincode, false);
+            if (!pinCheck.isValid) {
+                return res.status(400).json({ success: false, msg: pinCheck.message, message: pinCheck.message });
+            }
+        }
+
+        // 6. KYC Validation (if provided)
+        if (kycDocs) {
+            if (kycDocs.aadhaarNumber) {
+                const aVal = validateAadhaar(kycDocs.aadhaarNumber, false);
+                if (!aVal.isValid) return res.status(400).json({ success: false, msg: aVal.message, message: aVal.message });
+            }
+            if (kycDocs.panNumber) {
+                const pVal = validatePAN(kycDocs.panNumber, false);
+                if (!pVal.isValid) return res.status(400).json({ success: false, msg: pVal.message, message: pVal.message });
+                kycDocs.panNumber = cleanPAN(kycDocs.panNumber);
+            }
+            if (kycDocs.bankAccountNumber || kycDocs.accountNumber) {
+                const bAcc = kycDocs.bankAccountNumber || kycDocs.accountNumber;
+                const bVal = validateBankAccount(bAcc, kycDocs.bankName, false);
+                if (!bVal.isValid) return res.status(400).json({ success: false, msg: bVal.message, message: bVal.message });
+            }
+            if (kycDocs.ifscCode) {
+                const iVal = validateIFSC(kycDocs.ifscCode, false);
+                if (!iVal.isValid) return res.status(400).json({ success: false, msg: iVal.message, message: iVal.message });
+                kycDocs.ifscCode = iVal.cleanIFSC;
+            }
+        }
+
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
         const randDigits = Math.floor(1000 + Math.random() * 9000);
         const registrationId = req.body.registrationId || `REG-${dateStr}-${randDigits}`;
-
-        const lowerEmail = (email || '').toLowerCase().trim();
-        const cleanPhone = (phone || '').replace(/\D/g, '');
-
-        if (!lowerEmail && !cleanPhone) {
-            return res.status(400).json({ success: false, msg: 'Email or phone number is required', message: 'Email or phone number is required' });
-        }
 
         const existingVendorUser = await User.findOne({
             $or: [
@@ -3816,13 +4000,22 @@ router.post('/support-team/onboard', auth, async (req, res) => {
             reportingManager, reportingTL, joiningDate, salary, photo
         } = req.body;
 
+        const nameVal = validateName(name, 'Employee name', true);
+        if (!nameVal.isValid) return res.status(400).json({ msg: nameVal.message, message: nameVal.message });
+
+        const emailVal = validateEmail(email, true);
+        if (!emailVal.isValid) return res.status(400).json({ msg: emailVal.message, message: emailVal.message });
+
+        const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+        if (!phoneCheck.isValid) return res.status(400).json({ msg: phoneCheck.message, message: phoneCheck.message });
+
         const employeeId = `SUP-${Math.floor(1000 + Math.random() * 9000)}`;
 
         const newEmp = new SupportTeam({
             employeeId,
-            name,
-            email,
-            phone,
+            name: nameVal.sanitizedValue,
+            email: emailVal.normalizedEmail,
+            phone: phoneCheck.cleanPhone,
             department: department || 'Customer Support',
             designation: designation || 'Staff',
             reportingManager: reportingManager || null,

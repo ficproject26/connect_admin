@@ -10,30 +10,36 @@ const AuditLog = require('../models/AuditLog');
 const SecuritySession = require('../models/SecuritySession');
 const SecurityLog = require('../models/SecurityLog');
 const { parseDeviceInfo } = require('../middleware/security');
-const { validateIndianMobile } = require('../utils/inputValidator');
+const {
+    formatName,
+    validateName,
+    normalizeEmail,
+    validateEmail,
+    cleanIndianMobile,
+    validateIndianMobile,
+    validatePasswordPolicy,
+    validatePasswordMatch,
+    cleanAadhaar,
+    maskAadhaar,
+    validateAadhaar,
+    cleanPAN,
+    validatePAN,
+    cleanBankAccount,
+    maskBankAccount,
+    validateBankAccount,
+    validateBankAccountMatch,
+    cleanIFSC,
+    validateIFSC,
+    calculateAge,
+    validateDOB,
+    validatePincode
+} = require('../utils/inputValidator');
 const {
     getApplicationContext,
     isRoleAuthorizedForApp,
     isAccountApprovedAndActive
 } = require('../config/appRoles');
 
-
-// Password Strength & Policy Validator
-const validatePasswordPolicy = (password) => {
-    if (!password) return { isValid: false, msg: 'Password is required' };
-    if (password.length < 8 || password.length > 32) {
-        return { isValid: false, msg: 'Password length must be between 8 and 32 characters' };
-    }
-    const hasUpper = /[A-Z]/.test(password);
-    const hasLower = /[a-z]/.test(password);
-    const hasNumber = /[0-9]/.test(password);
-    const hasSpecial = /[@$!%*?&#^()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password);
-
-    if (!hasUpper || !hasLower || !hasNumber || !hasSpecial) {
-        return { isValid: false, msg: 'Password must contain at least 1 uppercase letter, 1 lowercase letter, 1 number, and 1 special character' };
-    }
-    return { isValid: true };
-};
 
 const cacheService = require('../utils/cacheService');
 
@@ -92,24 +98,97 @@ const createSecuritySession = async (userId, token, req) => {
 const handleRegister = async (req, res) => {
     const { name, email, password, role, level } = req.body;
     try {
-        const lowerEmail = (email || '').toLowerCase().trim();
+        // 1. Name Field Validation & Auto-Capitalization (formatName)
+        const rawName = name || req.body.contactPerson || req.body.businessName;
+        const nameVal = validateName(rawName, 'Full name', true);
+        if (!nameVal.isValid) {
+            return res.status(400).json({ message: nameVal.message, msg: nameVal.message });
+        }
+        const formattedName = nameVal.sanitizedValue;
+
+        // 2. Email Validation & Normalization
+        const emailVal = validateEmail(email, true);
+        if (!emailVal.isValid) {
+            return res.status(400).json({ message: emailVal.message, msg: emailVal.message });
+        }
+        const lowerEmail = emailVal.normalizedEmail;
+
         let user = await User.findOne({ email: lowerEmail });
         if (user) return res.status(400).json({ message: 'Email already registered', msg: 'User already exists' });
 
+        // 3. Indian Mobile Number Validation (^[6-9][0-9]{9}$)
         if (req.body.phone) {
-            // Strict Indian Mobile Number Validation (^[6-9][0-9]{9}$)
-            const phoneCheck = validateIndianMobile(req.body.phone);
+            const phoneCheck = validateIndianMobile(req.body.phone, 'Mobile number', true);
             if (!phoneCheck.isValid) {
                 return res.status(400).json({ message: phoneCheck.message, msg: phoneCheck.message });
             }
+            req.body.phone = phoneCheck.cleanPhone;
             let existingPhone = await User.findOne({ phone: phoneCheck.cleanPhone });
             if (existingPhone) return res.status(400).json({ message: 'Phone number already registered', msg: 'Phone number already registered' });
         }
+        if (req.body.altPhone || req.body.alternativePhone || req.body.secondaryPhone) {
+            const rawAlt = req.body.altPhone || req.body.alternativePhone || req.body.secondaryPhone;
+            const altCheck = validateIndianMobile(rawAlt, 'Alternative mobile number', false);
+            if (!altCheck.isValid) {
+                return res.status(400).json({ message: altCheck.message, msg: altCheck.message });
+            }
+            req.body.altPhone = altCheck.cleanPhone;
+        }
 
-        // Validate Password Policy
-        const pwdPolicy = validatePasswordPolicy(password);
+        // 4. Password Policy & Confirmation Validation
+        const pwdPolicy = validatePasswordPolicy(password, true);
         if (!pwdPolicy.isValid) {
-            return res.status(400).json({ message: pwdPolicy.msg, msg: pwdPolicy.msg });
+            return res.status(400).json({ message: pwdPolicy.message || pwdPolicy.msg, msg: pwdPolicy.message || pwdPolicy.msg });
+        }
+        if (req.body.confirmPassword) {
+            const matchCheck = validatePasswordMatch(password, req.body.confirmPassword);
+            if (!matchCheck.isValid) {
+                return res.status(400).json({ message: matchCheck.message, msg: matchCheck.message });
+            }
+        }
+
+        // 5. Date of Birth & Minimum 18 Years Validation (if provided)
+        const rawDob = req.body.dob || req.body.dateOfBirth;
+        if (rawDob) {
+            const dobCheck = validateDOB(rawDob, 18, 'Date of birth', false);
+            if (!dobCheck.isValid) {
+                return res.status(400).json({ message: dobCheck.message, msg: dobCheck.message });
+            }
+        }
+
+        // 6. Aadhaar Validation (if provided)
+        const rawAadhaar = req.body.aadhaarNumber || req.body.aadhaar || req.body.kyc?.aadhaarNumber || req.body.kyc?.aadhaar;
+        if (rawAadhaar) {
+            const aadhaarCheck = validateAadhaar(rawAadhaar, false);
+            if (!aadhaarCheck.isValid) {
+                return res.status(400).json({ message: aadhaarCheck.message, msg: aadhaarCheck.message });
+            }
+        }
+
+        // 7. PAN Card Validation (if provided)
+        const rawPAN = req.body.panNumber || req.body.pan || req.body.kyc?.panNumber || req.body.kyc?.pan;
+        if (rawPAN) {
+            const panCheck = validatePAN(rawPAN, false);
+            if (!panCheck.isValid) {
+                return res.status(400).json({ message: panCheck.message, msg: panCheck.message });
+            }
+        }
+
+        // 8. Bank Account Number & IFSC Validation (if provided)
+        const rawBankAcc = req.body.bankAccountNumber || req.body.accountNumber || req.body.kyc?.accountNumber || req.body.bankDetails?.accountNumber;
+        const rawBankName = req.body.bankName || req.body.kyc?.bankName || req.body.bankDetails?.bankName;
+        if (rawBankAcc) {
+            const bankCheck = validateBankAccount(rawBankAcc, rawBankName, false);
+            if (!bankCheck.isValid) {
+                return res.status(400).json({ message: bankCheck.message, msg: bankCheck.message });
+            }
+        }
+        const rawIFSC = req.body.ifscCode || req.body.ifsc || req.body.kyc?.ifscCode || req.body.bankDetails?.ifscCode;
+        if (rawIFSC) {
+            const ifscCheck = validateIFSC(rawIFSC, false);
+            if (!ifscCheck.isValid) {
+                return res.status(400).json({ message: ifscCheck.message, msg: ifscCheck.message });
+            }
         }
 
         // Generate unique Registration ID: REG-YYYYMMDD-XXXX
@@ -627,17 +706,92 @@ router.post('/register-manager', (req, res, next) => {
 router.post('/register-customer', async (req, res) => {
     try {
         const body = req.body || {};
-        const { name, email, phone, password, aadhaarNumber, panNumber, address, city, pincode } = body;
-        const cleanName = (name || '').trim();
-        const lowerEmail = (email || '').toLowerCase().trim();
-        const cleanPhone = (phone || '').replace(/\D/g, '');
-        const cleanAddress = (address || '').trim();
-        const cleanCity = (city || '').trim();
-        const cleanPincode = (pincode || '').trim();
+        const { name, email, phone, password, confirmPassword, aadhaarNumber, panNumber, address, city, pincode, dob, dateOfBirth } = body;
+
+        // 1. Name Validation & Auto-Capitalization (formatName)
+        let cleanName = '';
+        if (name) {
+            const nameCheck = validateName(name, 'Customer Name', false);
+            if (!nameCheck.isValid) {
+                return res.status(400).json({ status: 'error', message: nameCheck.message, msg: nameCheck.message });
+            }
+            cleanName = nameCheck.sanitizedValue;
+        }
+
+        // 2. Email Validation & Normalization
+        let lowerEmail = '';
+        if (email) {
+            const emailCheck = validateEmail(email, false);
+            if (!emailCheck.isValid) {
+                return res.status(400).json({ status: 'error', message: emailCheck.message, msg: emailCheck.message });
+            }
+            lowerEmail = emailCheck.normalizedEmail;
+        }
+
+        // 3. Indian Mobile Number Validation (10 digits, starts with 6,7,8,9)
+        let cleanPhone = '';
+        if (phone) {
+            const phoneCheck = validateIndianMobile(phone, 'Mobile number', false);
+            if (!phoneCheck.isValid) {
+                return res.status(400).json({ status: 'error', message: phoneCheck.message, msg: phoneCheck.message });
+            }
+            cleanPhone = phoneCheck.cleanPhone;
+        }
 
         if (!lowerEmail && !cleanPhone) {
             return res.status(400).json({ status: 'error', message: 'Email or mobile number is required', msg: 'Email or mobile number is required' });
         }
+
+        // 4. Password Policy & Confirmation Match (if user creates a custom password)
+        if (password) {
+            const pwdCheck = validatePasswordPolicy(password, false);
+            if (!pwdCheck.isValid) {
+                return res.status(400).json({ status: 'error', message: pwdCheck.message || pwdCheck.msg, msg: pwdCheck.message || pwdCheck.msg });
+            }
+            if (confirmPassword) {
+                const matchCheck = validatePasswordMatch(password, confirmPassword);
+                if (!matchCheck.isValid) {
+                    return res.status(400).json({ status: 'error', message: matchCheck.message, msg: matchCheck.message });
+                }
+            }
+        }
+
+        // 5. Date of Birth & Minimum 18 Years Validation (if provided)
+        const rawDob = dob || dateOfBirth;
+        if (rawDob) {
+            const dobCheck = validateDOB(rawDob, 18, 'Date of birth', false);
+            if (!dobCheck.isValid) {
+                return res.status(400).json({ status: 'error', message: dobCheck.message, msg: dobCheck.message });
+            }
+        }
+
+        // 6. Aadhaar Number Validation (if provided)
+        if (aadhaarNumber) {
+            const aCheck = validateAadhaar(aadhaarNumber, false);
+            if (!aCheck.isValid) {
+                return res.status(400).json({ status: 'error', message: aCheck.message, msg: aCheck.message });
+            }
+        }
+
+        // 7. PAN Card Validation (if provided)
+        if (panNumber) {
+            const pCheck = validatePAN(panNumber, false);
+            if (!pCheck.isValid) {
+                return res.status(400).json({ status: 'error', message: pCheck.message, msg: pCheck.message });
+            }
+        }
+
+        // 8. Pincode Validation (if provided)
+        if (pincode) {
+            const pinCheck = validatePincode(pincode, false);
+            if (!pinCheck.isValid) {
+                return res.status(400).json({ status: 'error', message: pinCheck.message, msg: pinCheck.message });
+            }
+        }
+
+        const cleanAddress = (address || '').trim();
+        const cleanCity = (city || '').trim();
+        const cleanPincode = (pincode || '').trim();
 
         // Check if user with same email or phone already exists
         let existingUser = await User.findOne({
@@ -672,6 +826,7 @@ router.post('/register-customer', async (req, res) => {
             name: cleanName || 'Customer Member',
             email: lowerEmail || `${cleanPhone}@connect.app`,
             phone: cleanPhone || '',
+            dob: rawDob || undefined,
             password: hashedPassword,
             role: 'customer',
             status: 'active',
@@ -681,8 +836,8 @@ router.post('/register-customer', async (req, res) => {
             pincode: cleanPincode,
             registrationId,
             kyc: {
-                aadhaarNumber: aadhaarNumber || '',
-                panNumber: panNumber || ''
+                aadhaarNumber: aadhaarNumber ? cleanAadhaar(aadhaarNumber) : '',
+                panNumber: panNumber ? cleanPAN(panNumber) : ''
             },
             createdAt: new Date()
         });

@@ -31,8 +31,30 @@ const Product = require('../models/Product');
 const TerritoryAuditLog = require('../models/TerritoryAuditLog');
 const AuditLog = require('../models/AuditLog');
 const SecuritySession = require('../models/SecuritySession');
-const UserSession = require('../models/UserSession');
-const { validateIndianMobile } = require('../utils/inputValidator');
+const {
+    formatName,
+    validateName,
+    normalizeEmail,
+    validateEmail,
+    cleanIndianMobile,
+    validateIndianMobile,
+    validatePasswordPolicy,
+    validatePasswordMatch,
+    cleanAadhaar,
+    maskAadhaar,
+    validateAadhaar,
+    cleanPAN,
+    validatePAN,
+    cleanBankAccount,
+    maskBankAccount,
+    validateBankAccount,
+    validateBankAccountMatch,
+    cleanIFSC,
+    validateIFSC,
+    calculateAge,
+    validateDOB,
+    validatePincode
+} = require('../utils/inputValidator');
 const cacheService = require('../utils/cacheService');
 
 const adminAuth = async (req, res, next) => {
@@ -975,16 +997,71 @@ router.get('/admins/:id', auth, async (req, res, next) => {
 });
 
 router.post('/admins', [auth, adminAuth], async (req, res) => {
-    const { name, email, phone, password, adminRole, branchId } = req.body;
+    const { name, email, phone, password, confirmPassword, adminRole, branchId } = req.body;
     try {
-        const bcrypt = require('bcryptjs');
-        const lowerEmail = (email || '').toLowerCase().trim();
-        const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
+        // 1. Name Field Validation & Auto-Capitalization (formatName)
+        const nameVal = validateName(name, 'Admin name', true);
+        if (!nameVal.isValid) {
+            return res.status(400).json({ success: false, msg: nameVal.message, message: nameVal.message });
+        }
+        const formattedName = nameVal.sanitizedValue;
+
+        // 2. Email Validation & Normalization
+        const emailVal = validateEmail(email, true);
+        if (!emailVal.isValid) {
+            return res.status(400).json({ success: false, msg: emailVal.message, message: emailVal.message });
+        }
+        const lowerEmail = emailVal.normalizedEmail;
+
+        // 3. Indian Mobile Number Validation (^[6-9][0-9]{9}$)
+        const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+        if (!phoneCheck.isValid) {
+            return res.status(400).json({ success: false, msg: phoneCheck.message, message: phoneCheck.message });
+        }
+        const cleanPhone = phoneCheck.cleanPhone;
+
+        // 4. Password Policy & Confirmation Match
+        const pwdPolicy = validatePasswordPolicy(password, true);
+        if (!pwdPolicy.isValid) {
+            return res.status(400).json({ success: false, msg: pwdPolicy.message || pwdPolicy.msg, message: pwdPolicy.message || pwdPolicy.msg });
+        }
+        if (confirmPassword) {
+            const matchCheck = validatePasswordMatch(password, confirmPassword);
+            if (!matchCheck.isValid) {
+                return res.status(400).json({ success: false, msg: matchCheck.message, message: matchCheck.message });
+            }
+        }
+
+        // 5. Minimum Age 18 Years Validation (Backend enforced)
+        const rawDob = req.body.dateOfBirth || req.body.dob;
+        if (rawDob) {
+            const dobCheck = validateDOB(rawDob, 18, 'Date of birth', false);
+            if (!dobCheck.isValid) {
+                return res.status(400).json({ success: false, msg: dobCheck.message, message: dobCheck.message });
+            }
+        }
+
+        // 6. Aadhaar Number Validation (if provided)
+        if (req.body.aadhaarNumber) {
+            const aCheck = validateAadhaar(req.body.aadhaarNumber, false);
+            if (!aCheck.isValid) {
+                return res.status(400).json({ success: false, msg: aCheck.message, message: aCheck.message });
+            }
+        }
+
+        // 7. PAN Card Validation (if provided)
+        if (req.body.panNumber) {
+            const panCheck = validatePAN(req.body.panNumber, false);
+            if (!panCheck.isValid) {
+                return res.status(400).json({ success: false, msg: panCheck.message, message: panCheck.message });
+            }
+        }
 
         const existingUser = await User.findOne({
             $or: [
                 { email: lowerEmail },
-                ...(cleanPhone ? [{ phone: cleanPhone }, { phone: phone }] : [])
+                { phone: cleanPhone },
+                { phone: phone }
             ]
         });
 
@@ -995,40 +1072,6 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
                 msg: isPhoneMatch ? 'A user with this phone number already exists.' : 'Admin user already exists with this email.',
                 message: isPhoneMatch ? 'A user with this phone number already exists.' : 'Admin user already exists with this email.'
             });
-        }
-
-        // Minimum Age 18 Years Validation
-        const rawDob = req.body.dateOfBirth || req.body.dob;
-        if (rawDob) {
-            const parts = String(rawDob).split('T')[0].split('-');
-            const today = new Date();
-            let age = 0;
-            if (parts.length === 3 && !isNaN(parseInt(parts[0], 10))) {
-                const birthYear = parseInt(parts[0], 10);
-                const birthMonth = parseInt(parts[1], 10) - 1;
-                const birthDay = parseInt(parts[2], 10);
-                age = today.getFullYear() - birthYear;
-                const m = today.getMonth() - birthMonth;
-                if (m < 0 || (m === 0 && today.getDate() < birthDay)) {
-                    age--;
-                }
-            } else {
-                const birthDate = new Date(rawDob);
-                if (!isNaN(birthDate.getTime())) {
-                    age = today.getFullYear() - birthDate.getFullYear();
-                    const m = today.getMonth() - birthDate.getMonth();
-                    if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-                        age--;
-                    }
-                }
-            }
-            if (age < 18) {
-                return res.status(400).json({
-                    success: false,
-                    msg: 'You must be 18 years or older to register.',
-                    message: 'You must be 18 years or older to register.'
-                });
-            }
         }
 
         const targetLevel = (req.body.adminLevel || (adminRole === 'state-admin' ? 'state' : 'branch')).toLowerCase();
@@ -1061,7 +1104,7 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
         const registrationId = req.body.registrationId || `ADM-${stateCode}-${dateStr}-${randDigits}`;
 
         user = new User({
-            name,
+            name: formattedName,
             email: lowerEmail,
             phone: cleanPhone || undefined,
             password,
@@ -1072,13 +1115,13 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
             assignedState: finalState,
             branchId,
             registrationId,
-            dob: req.body.dateOfBirth || req.body.dob || undefined,
+            dob: rawDob || undefined,
             gender: req.body.gender || undefined,
             fullAddress: req.body.address || req.body.fullAddress || '',
             kyc: req.body.kyc || (req.body.aadhaarNumber || req.body.panNumber ? {
-                aadhaarNumber: req.body.aadhaarNumber ? `XXXX XXXX ${String(req.body.aadhaarNumber).replace(/\s/g, '').slice(-4)}` : '',
+                aadhaarNumber: req.body.aadhaarNumber ? maskAadhaar(req.body.aadhaarNumber) : '',
                 aadhaarImage: req.body.aadhaarFrontUrl || '',
-                panNumber: req.body.panNumber ? String(req.body.panNumber).trim().toUpperCase() : '',
+                panNumber: req.body.panNumber ? cleanPAN(req.body.panNumber) : '',
                 panImage: req.body.panUrl || '',
                 selfie: req.body.photoUrl || ''
             } : undefined),
@@ -1126,6 +1169,42 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
 
 router.put('/admins/:id', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.body.name) {
+            const nameCheck = validateName(req.body.name, 'Admin name', false);
+            if (!nameCheck.isValid) return res.status(400).json({ msg: nameCheck.message, message: nameCheck.message });
+            req.body.name = nameCheck.sanitizedValue;
+        }
+        if (req.body.email) {
+            const emailCheck = validateEmail(req.body.email, false);
+            if (!emailCheck.isValid) return res.status(400).json({ msg: emailCheck.message, message: emailCheck.message });
+            req.body.email = emailCheck.normalizedEmail;
+        }
+        if (req.body.phone) {
+            const phoneCheck = validateIndianMobile(req.body.phone, 'Phone number', false);
+            if (!phoneCheck.isValid) return res.status(400).json({ msg: phoneCheck.message, message: phoneCheck.message });
+            req.body.phone = phoneCheck.cleanPhone;
+        }
+        if (req.body.password) {
+            const pwdCheck = validatePasswordPolicy(req.body.password, false);
+            if (!pwdCheck.isValid) return res.status(400).json({ msg: pwdCheck.message || pwdCheck.msg, message: pwdCheck.message || pwdCheck.msg });
+            const salt = await bcrypt.genSalt(10);
+            req.body.password = await bcrypt.hash(req.body.password, salt);
+        }
+        const editDob = req.body.dateOfBirth || req.body.dob;
+        if (editDob) {
+            const dobCheck = validateDOB(editDob, 18, 'Date of birth', false);
+            if (!dobCheck.isValid) return res.status(400).json({ msg: dobCheck.message, message: dobCheck.message });
+        }
+        if (req.body.aadhaarNumber) {
+            const aCheck = validateAadhaar(req.body.aadhaarNumber, false);
+            if (!aCheck.isValid) return res.status(400).json({ msg: aCheck.message, message: aCheck.message });
+        }
+        if (req.body.panNumber) {
+            const pCheck = validatePAN(req.body.panNumber, false);
+            if (!pCheck.isValid) return res.status(400).json({ msg: pCheck.message, message: pCheck.message });
+            req.body.panNumber = cleanPAN(req.body.panNumber);
+        }
+
         let user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
         res.json(user);
     } catch (err) {
@@ -3583,28 +3662,64 @@ router.put('/vendors/:id', [auth, adminAuth], async (req, res) => {
     try {
         const { userVendor: vendor, legacyVendor: legacy } = await findVendorByAnyId(req.params.id);
         if (vendor) {
-            const { businessName, contactPerson, address, phone, email, category, subcategory, vendorType } = req.body;
+            const { businessName, contactPerson, address, phone, email, category, subcategory, vendorType, bankDetails } = req.body;
             if (businessName) vendor.businessName = businessName;
-            if (contactPerson) vendor.contactPerson = contactPerson;
+            if (contactPerson) {
+                const nCheck = validateName(contactPerson, 'Contact Person', false);
+                if (!nCheck.isValid) return res.status(400).json({ msg: nCheck.message, message: nCheck.message });
+                vendor.contactPerson = nCheck.sanitizedValue;
+            }
             if (address) vendor.address = address;
             if (phone) {
-                const phoneCheck = validateIndianMobile(phone);
-                if (!phoneCheck.isValid) return res.status(400).json({ msg: phoneCheck.message });
+                const phoneCheck = validateIndianMobile(phone, 'Phone number', false);
+                if (!phoneCheck.isValid) return res.status(400).json({ msg: phoneCheck.message, message: phoneCheck.message });
                 vendor.phone = phoneCheck.cleanPhone;
             }
-            if (email) vendor.email = email;
+            if (email) {
+                const emailCheck = validateEmail(email, false);
+                if (!emailCheck.isValid) return res.status(400).json({ msg: emailCheck.message, message: emailCheck.message });
+                vendor.email = emailCheck.normalizedEmail;
+            }
             if (category) vendor.category = category;
             if (subcategory) vendor.subcategory = subcategory;
             if (vendorType) vendor.vendorType = vendorType;
+            if (bankDetails) {
+                if (bankDetails.accountNumber) {
+                    const bCheck = validateBankAccount(bankDetails.accountNumber, bankDetails.bankName, false);
+                    if (!bCheck.isValid) return res.status(400).json({ msg: bCheck.message, message: bCheck.message });
+                    bankDetails.accountNumber = bCheck.cleanAccountNumber;
+                }
+                if (bankDetails.ifscCode) {
+                    const iCheck = validateIFSC(bankDetails.ifscCode, false);
+                    if (!iCheck.isValid) return res.status(400).json({ msg: iCheck.message, message: iCheck.message });
+                    bankDetails.ifscCode = iCheck.cleanIFSC;
+                }
+                if (bankDetails.accountHolderName) {
+                    bankDetails.accountHolderName = formatName(bankDetails.accountHolderName);
+                }
+                vendor.bankDetails = bankDetails;
+            }
             await vendor.save();
             return res.json(vendor);
         }
         if (legacy) {
             const { businessName, contactName, phone, email, category } = req.body;
             if (businessName) legacy.businessName = businessName;
-            if (contactName) legacy.contactName = contactName;
-            if (phone) legacy.phone = phone;
-            if (email) legacy.email = email;
+            if (contactName) {
+                const nCheck = validateName(contactName, 'Contact Name', false);
+                if (!nCheck.isValid) return res.status(400).json({ msg: nCheck.message, message: nCheck.message });
+                legacy.contactName = nCheck.sanitizedValue;
+            }
+            if (phone) {
+                const phoneCheck = validateIndianMobile(phone, 'Phone number', false);
+                if (!phoneCheck.isValid) return res.status(400).json({ msg: phoneCheck.message, message: phoneCheck.message });
+                legacy.phone = phoneCheck.cleanPhone;
+            }
+            if (email) {
+                const emailCheck = validateEmail(email, false);
+                if (!emailCheck.isValid) return res.status(400).json({ msg: emailCheck.message, message: emailCheck.message });
+                legacy.email = emailCheck.normalizedEmail;
+            }
             if (category) legacy.category = category;
             await legacy.save();
             return res.json(legacy);
@@ -3891,6 +4006,25 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
 
 router.post('/customers', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.body.name) {
+            const nameCheck = validateName(req.body.name, 'Customer Name', true);
+            if (!nameCheck.isValid) return res.status(400).json({ msg: nameCheck.message, message: nameCheck.message });
+            req.body.name = nameCheck.sanitizedValue;
+        }
+        if (req.body.phone) {
+            const phoneCheck = validateIndianMobile(req.body.phone, 'Mobile number', true);
+            if (!phoneCheck.isValid) return res.status(400).json({ msg: phoneCheck.message, message: phoneCheck.message });
+            req.body.phone = phoneCheck.cleanPhone;
+        }
+        if (req.body.email) {
+            const emailCheck = validateEmail(req.body.email, false);
+            if (!emailCheck.isValid) return res.status(400).json({ msg: emailCheck.message, message: emailCheck.message });
+            req.body.email = emailCheck.normalizedEmail;
+        }
+        if (req.body.dob || req.body.dateOfBirth) {
+            const dobCheck = validateDOB(req.body.dob || req.body.dateOfBirth, 18, 'Date of birth', false);
+            if (!dobCheck.isValid) return res.status(400).json({ msg: dobCheck.message, message: dobCheck.message });
+        }
         const customer = new Customer({ ...req.body, branchId: req.adminUser.branchId || req.body.branchId });
         await customer.save();
         await cacheService.delPattern('admin_customers_*');
@@ -4592,6 +4726,38 @@ router.delete('/agents/:id', [auth, adminAuth], async (req, res) => {
 router.put('/update-agent/:id', [auth, adminAuth], async (req, res) => {
     const { level, assignedArea, pincode } = req.body;
     try {
+        if (req.body.name) {
+            const nameCheck = validateName(req.body.name, 'Agent name', false);
+            if (!nameCheck.isValid) return res.status(400).json({ msg: nameCheck.message, message: nameCheck.message });
+            req.body.name = nameCheck.sanitizedValue;
+        }
+        if (req.body.email) {
+            const emailCheck = validateEmail(req.body.email, false);
+            if (!emailCheck.isValid) return res.status(400).json({ msg: emailCheck.message, message: emailCheck.message });
+            req.body.email = emailCheck.normalizedEmail;
+        }
+        if (req.body.phone) {
+            const phoneCheck = validateIndianMobile(req.body.phone, 'Phone number', false);
+            if (!phoneCheck.isValid) return res.status(400).json({ msg: phoneCheck.message, message: phoneCheck.message });
+            req.body.phone = phoneCheck.cleanPhone;
+        }
+        if (req.body.bankDetails) {
+            if (req.body.bankDetails.accountNumber) {
+                const bCheck = validateBankAccount(req.body.bankDetails.accountNumber, req.body.bankDetails.bankName, false);
+                if (!bCheck.isValid) return res.status(400).json({ msg: bCheck.message, message: bCheck.message });
+                req.body.bankDetails.accountNumber = bCheck.cleanAccountNumber;
+            }
+            if (req.body.bankDetails.ifscCode) {
+                const iCheck = validateIFSC(req.body.bankDetails.ifscCode, false);
+                if (!iCheck.isValid) return res.status(400).json({ msg: iCheck.message, message: iCheck.message });
+                req.body.bankDetails.ifscCode = iCheck.cleanIFSC;
+            }
+        }
+        if (req.body.dob || req.body.dateOfBirth) {
+            const dobCheck = validateDOB(req.body.dob || req.body.dateOfBirth, 18, 'Date of birth', false);
+            if (!dobCheck.isValid) return res.status(400).json({ msg: dobCheck.message, message: dobCheck.message });
+        }
+
         let agent = await findAgentByIdentifier(req.params.id, req.body);
         if (!agent) return res.status(404).json({ msg: 'Agent not found' });
 
@@ -4744,19 +4910,78 @@ router.post('/save-pincode', [auth, adminAuth], async (req, res) => {
 
 // Create Agent Directly
 router.post('/create-agent', [auth, adminAuth], async (req, res) => {
-    const { name, email, phone, password, level, assignedArea, pincode, status, bankDetails } = req.body;
+    const { name, email, phone, password, confirmPassword, level, assignedArea, pincode, status, bankDetails } = req.body;
     try {
-        // Strict Indian Mobile Number Validation
-        if (phone) {
-            const phoneCheck = validateIndianMobile(phone);
-            if (!phoneCheck.isValid) {
-                return res.status(400).json({ msg: phoneCheck.message });
+        // 1. Name Field Validation & Auto-Capitalization (formatName)
+        const nameVal = validateName(name, 'Agent Name', true);
+        if (!nameVal.isValid) {
+            return res.status(400).json({ success: false, msg: nameVal.message, message: nameVal.message });
+        }
+        const formattedName = nameVal.sanitizedValue;
+
+        // 2. Email Validation & Normalization
+        const emailVal = validateEmail(email, true);
+        if (!emailVal.isValid) {
+            return res.status(400).json({ success: false, msg: emailVal.message, message: emailVal.message });
+        }
+        const lowerEmail = emailVal.normalizedEmail;
+
+        // 3. Strict Indian Mobile Number Validation (^[6-9][0-9]{9}$)
+        const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+        if (!phoneCheck.isValid) {
+            return res.status(400).json({ success: false, msg: phoneCheck.message, message: phoneCheck.message });
+        }
+        const cleanPhone = phoneCheck.cleanPhone;
+
+        // 4. Password Policy & Confirmation Match
+        const pwdCheck = validatePasswordPolicy(password, true);
+        if (!pwdCheck.isValid) {
+            return res.status(400).json({ success: false, msg: pwdCheck.message || pwdCheck.msg, message: pwdCheck.message || pwdCheck.msg });
+        }
+        if (confirmPassword) {
+            const matchCheck = validatePasswordMatch(password, confirmPassword);
+            if (!matchCheck.isValid) {
+                return res.status(400).json({ success: false, msg: matchCheck.message, message: matchCheck.message });
+            }
+        }
+
+        // 5. DOB / Age Validation (if provided)
+        const rawDob = req.body.dob || req.body.dateOfBirth;
+        if (rawDob) {
+            const dobCheck = validateDOB(rawDob, 18, 'Date of birth', false);
+            if (!dobCheck.isValid) {
+                return res.status(400).json({ success: false, msg: dobCheck.message, message: dobCheck.message });
+            }
+        }
+
+        // 6. Bank Details Validation (if provided)
+        if (bankDetails) {
+            if (bankDetails.accountNumber) {
+                const bCheck = validateBankAccount(bankDetails.accountNumber, bankDetails.bankName, false);
+                if (!bCheck.isValid) {
+                    return res.status(400).json({ success: false, msg: bCheck.message, message: bCheck.message });
+                }
+                bankDetails.accountNumber = bCheck.cleanAccountNumber;
+            }
+            if (bankDetails.confirmAccountNumber) {
+                const mCheck = validateBankAccountMatch(bankDetails.accountNumber, bankDetails.confirmAccountNumber);
+                if (!mCheck.isValid) {
+                    return res.status(400).json({ success: false, msg: mCheck.message, message: mCheck.message });
+                }
+            }
+            if (bankDetails.ifscCode) {
+                const ifscCheck = validateIFSC(bankDetails.ifscCode, false);
+                if (!ifscCheck.isValid) {
+                    return res.status(400).json({ success: false, msg: ifscCheck.message, message: ifscCheck.message });
+                }
+                bankDetails.ifscCode = ifscCheck.cleanIFSC;
+            }
+            if (bankDetails.accountHolderName) {
+                bankDetails.accountHolderName = formatName(bankDetails.accountHolderName);
             }
         }
 
         const bcrypt = require('bcryptjs');
-        const lowerEmail = (email || '').toLowerCase().trim();
-        const cleanPhone = phone ? String(phone).replace(/\D/g, '') : '';
 
         const existingUser = await User.findOne({
             $or: [
@@ -4802,22 +5027,11 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
 
         const agentRegId = req.body.registrationId || `REG-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-        if (bankDetails && bankDetails.accountNumber) {
-            const cleanAcc = String(bankDetails.accountNumber).trim();
-            if (!/^\d{8,20}$/.test(cleanAcc)) {
-                return res.status(400).json({
-                    success: false,
-                    msg: 'Account number must contain 8–20 digits.',
-                    message: 'Account number must contain 8–20 digits.'
-                });
-            }
-            bankDetails.accountNumber = cleanAcc;
-        }
-
         user = new User({
-            name,
+            name: formattedName,
             email: lowerEmail,
             phone: cleanPhone || undefined,
+            dob: rawDob || undefined,
             password,
             role: 'agent',
             level: level || 'pincode',
@@ -5716,6 +5930,21 @@ router.get('/card-holders', [auth, adminAuth], async (req, res) => {
 // POST new card holder
 router.post('/card-holders', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.body.name) {
+            const nVal = validateName(req.body.name, 'Card Holder Name', true);
+            if (!nVal.isValid) return res.status(400).json({ msg: nVal.message, message: nVal.message });
+            req.body.name = nVal.sanitizedValue;
+        }
+        if (req.body.phone) {
+            const pVal = validateIndianMobile(req.body.phone, 'Phone number', false);
+            if (!pVal.isValid) return res.status(400).json({ msg: pVal.message, message: pVal.message });
+            req.body.phone = pVal.cleanPhone;
+        }
+        if (req.body.email) {
+            const eVal = validateEmail(req.body.email, false);
+            if (!eVal.isValid) return res.status(400).json({ msg: eVal.message, message: eVal.message });
+            req.body.email = eVal.normalizedEmail;
+        }
         const newHolder = new CardHolder(req.body);
         const holder = await newHolder.save();
         res.json(holder);
@@ -5728,6 +5957,21 @@ router.post('/card-holders', [auth, adminAuth], async (req, res) => {
 // PUT update card holder status
 router.put('/card-holders/:id', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.body.name) {
+            const nVal = validateName(req.body.name, 'Card Holder Name', false);
+            if (!nVal.isValid) return res.status(400).json({ msg: nVal.message, message: nVal.message });
+            req.body.name = nVal.sanitizedValue;
+        }
+        if (req.body.phone) {
+            const pVal = validateIndianMobile(req.body.phone, 'Phone number', false);
+            if (!pVal.isValid) return res.status(400).json({ msg: pVal.message, message: pVal.message });
+            req.body.phone = pVal.cleanPhone;
+        }
+        if (req.body.email) {
+            const eVal = validateEmail(req.body.email, false);
+            if (!eVal.isValid) return res.status(400).json({ msg: eVal.message, message: eVal.message });
+            req.body.email = eVal.normalizedEmail;
+        }
         const holder = await CardHolder.findByIdAndUpdate(req.params.id, req.body, { new: true });
         res.json(holder);
     } catch (err) {
@@ -5810,6 +6054,21 @@ router.get('/delivery-partners', [auth, adminAuth], async (req, res) => {
 // POST new delivery partner
 router.post('/delivery-partners', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.body.name) {
+            const nVal = validateName(req.body.name, 'Partner Name', true);
+            if (!nVal.isValid) return res.status(400).json({ msg: nVal.message, message: nVal.message });
+            req.body.name = nVal.sanitizedValue;
+        }
+        if (req.body.phone) {
+            const pVal = validateIndianMobile(req.body.phone, 'Phone number', true);
+            if (!pVal.isValid) return res.status(400).json({ msg: pVal.message, message: pVal.message });
+            req.body.phone = pVal.cleanPhone;
+        }
+        if (req.body.email) {
+            const eVal = validateEmail(req.body.email, false);
+            if (!eVal.isValid) return res.status(400).json({ msg: eVal.message, message: eVal.message });
+            req.body.email = eVal.normalizedEmail;
+        }
         const newPartner = new DeliveryPartner(req.body);
         const partner = await newPartner.save();
         res.json(partner);
@@ -5822,6 +6081,21 @@ router.post('/delivery-partners', [auth, adminAuth], async (req, res) => {
 // PUT update delivery partner status
 router.put('/delivery-partners/:id', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.body.name) {
+            const nVal = validateName(req.body.name, 'Partner Name', false);
+            if (!nVal.isValid) return res.status(400).json({ msg: nVal.message, message: nVal.message });
+            req.body.name = nVal.sanitizedValue;
+        }
+        if (req.body.phone) {
+            const pVal = validateIndianMobile(req.body.phone, 'Phone number', false);
+            if (!pVal.isValid) return res.status(400).json({ msg: pVal.message, message: pVal.message });
+            req.body.phone = pVal.cleanPhone;
+        }
+        if (req.body.email) {
+            const eVal = validateEmail(req.body.email, false);
+            if (!eVal.isValid) return res.status(400).json({ msg: eVal.message, message: eVal.message });
+            req.body.email = eVal.normalizedEmail;
+        }
         const partner = await DeliveryPartner.findByIdAndUpdate(req.params.id, req.body, { new: true });
         res.json(partner);
     } catch (err) {
@@ -5855,6 +6129,21 @@ router.get('/support-team', [auth, adminAuth], async (req, res) => {
 // POST new support team member
 router.post('/support-team', [auth, adminAuth], async (req, res) => {
     try {
+        if (req.body.name) {
+            const nVal = validateName(req.body.name, 'Support Team Member Name', true);
+            if (!nVal.isValid) return res.status(400).json({ msg: nVal.message, message: nVal.message });
+            req.body.name = nVal.sanitizedValue;
+        }
+        if (req.body.phone) {
+            const pVal = validateIndianMobile(req.body.phone, 'Phone number', false);
+            if (!pVal.isValid) return res.status(400).json({ msg: pVal.message, message: pVal.message });
+            req.body.phone = pVal.cleanPhone;
+        }
+        if (req.body.email) {
+            const eVal = validateEmail(req.body.email, true);
+            if (!eVal.isValid) return res.status(400).json({ msg: eVal.message, message: eVal.message });
+            req.body.email = eVal.normalizedEmail;
+        }
         const newMember = new SupportTeam(req.body);
         const member = await newMember.save();
         res.json(member);

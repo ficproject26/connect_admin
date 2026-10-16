@@ -68,8 +68,38 @@ const AgentPaymentModule = lazyWithRetry(() => import('./components/AgentPayment
 const PincodeTerritoryManagement = lazyWithRetry(() => import('./components/PincodeTerritoryManagement'), 'PincodeTerritoryManagement');
 const AdminManagementModule = lazyWithRetry(() => import('./components/AdminManagementModule'), 'AdminManagementModule');
 const ManagerDirectoryModule = lazyWithRetry(() => import('./components/ManagerDirectoryModule'), 'ManagerDirectoryModule');
-const PaymentSecuritySettingsModule = lazyWithRetry(() => import('./components/PaymentSecuritySettingsModule'), 'PaymentSecuritySettingsModule');
 import dataSyncManager from './utils/dataSyncManager';
+import {
+  formatName,
+  validateName,
+  normalizeEmail,
+  validateEmail,
+  cleanIndianMobile,
+  validateIndianMobile,
+  handlePhoneInput,
+  validatePasswordPolicy,
+  validatePasswordMatch,
+  cleanAadhaar,
+  maskAadhaar,
+  validateAadhaar,
+  handleAadhaarInput,
+  cleanPAN,
+  validatePAN,
+  handlePANInput,
+  cleanBankAccount,
+  maskBankAccount,
+  validateBankAccount,
+  handleBankAccountInput,
+  validateBankAccountMatch,
+  cleanIFSC,
+  validateIFSC,
+  handleIFSCInput,
+  calculateAge,
+  validateDOB,
+  getMinAgeCutoffDate,
+  validatePincode,
+  handlePincodeInput
+} from './utils/formValidation';
 
 const resolveSanitizedApiBase = () => {
   if (typeof window !== 'undefined' && window.location) {
@@ -252,27 +282,6 @@ const getAgentVendorsCount = (agent) => {
   return Number(agent.vendorsAdded || agent.vendorCount || agent.totalVendors || 0);
 };
 
-// Indian Mobile Number Validation Utility (^[6-9][0-9]{9}$)
-const INDIAN_MOBILE_REGEX = /^[6-9][0-9]{9}$/;
-
-const validateIndianMobile = (phone) => {
-  if (!phone || !phone.trim()) return { isValid: false, message: 'Mobile number is required.' };
-  const clean = phone.replace(/\D/g, '');
-  if (clean.length === 0) return { isValid: false, message: 'Mobile number is required.' };
-  if (!/^[6-9]/.test(clean)) return { isValid: false, message: 'Mobile number must start with 6, 7, 8, or 9.' };
-  if (clean.length < 10) return { isValid: false, message: 'Enter a valid 10-digit mobile number.' };
-  if (clean.length > 10) return { isValid: false, message: 'Mobile number cannot exceed 10 digits.' };
-  if (!INDIAN_MOBILE_REGEX.test(clean)) return { isValid: false, message: 'Enter a valid 10-digit mobile number.' };
-  return { isValid: true, message: '' };
-};
-
-// Prevents invalid input: only digits, max 10, first char must be 6-9
-const handlePhoneInput = (e) => {
-  let val = e.target.value.replace(/\D/g, ''); // strip non-digits
-  if (val.length > 0 && !/^[6-9]/.test(val)) val = ''; // first digit must be 6-9
-  if (val.length > 10) val = val.slice(0, 10); // cap at 10 digits
-  e.target.value = val;
-};
 
 const isPendingAgent = (agent) => {
   if (!agent) return false;
@@ -7514,11 +7523,54 @@ function App() {
                 e.preventDefault();
                 const name = e.target.name.value;
                 const email = e.target.email.value;
+                const phone = e.target.phone?.value || '';
                 const password = e.target.password.value;
+                const confirmPassword = e.target.confirmPassword?.value || '';
                 const adminRole = e.target.adminRole.value;
                 const branchId = e.target.branchId.value || null;
 
-                const payload = { name, email, adminRole, branchId };
+                const nameCheck = validateName(name, 'Admin Name', true);
+                if (!nameCheck.isValid) {
+                  addToast(nameCheck.message, 'error');
+                  return;
+                }
+
+                const emailCheck = validateEmail(email, true);
+                if (!emailCheck.isValid) {
+                  addToast(emailCheck.message, 'error');
+                  return;
+                }
+
+                if (phone) {
+                  const phoneCheck = validateIndianMobile(phone, 'Phone number', false);
+                  if (!phoneCheck.isValid) {
+                    addToast(phoneCheck.message, 'error');
+                    return;
+                  }
+                }
+
+                if (!modalData || password) {
+                  const pwdCheck = validatePasswordPolicy(password, !modalData);
+                  if (!pwdCheck.isValid) {
+                    addToast(pwdCheck.message, 'error');
+                    return;
+                  }
+                  if (confirmPassword) {
+                    const matchCheck = validatePasswordMatch(password, confirmPassword);
+                    if (!matchCheck.isValid) {
+                      addToast(matchCheck.message, 'error');
+                      return;
+                    }
+                  }
+                }
+
+                const payload = {
+                  name: formatName(name),
+                  email: normalizeEmail(email),
+                  adminRole,
+                  branchId
+                };
+                if (phone) payload.phone = cleanIndianMobile(phone);
                 if (password) payload.password = password;
 
                 if (modalData) {
@@ -7532,18 +7584,68 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
-                <input name="name" required defaultValue={modalData?.name || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input
+                  name="name"
+                  required
+                  defaultValue={modalData?.name || ''}
+                  type="text"
+                  onInput={(e) => { e.target.value = formatName(e.target.value); }}
+                  placeholder="e.g. Administrator Name"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email</label>
-                <input name="email" required defaultValue={modalData?.email || ''} type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input
+                  name="email"
+                  required
+                  defaultValue={modalData?.email || ''}
+                  type="email"
+                  placeholder="admin@connect.app"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
+                <input
+                  name="phone"
+                  defaultValue={modalData?.phone || ''}
+                  type="text"
+                  maxLength={10}
+                  inputMode="numeric"
+                  pattern="[6-9][0-9]{9}"
+                  onInput={handlePhoneInput}
+                  title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9"
+                  placeholder="9876543210"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
                   Password {modalData && '(Leave blank to keep current)'}
                 </label>
-                <input name="password" required={!modalData} type="password" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input
+                  name="password"
+                  required={!modalData}
+                  type="password"
+                  placeholder="e.g. Rathika@123"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
               </div>
+              {!modalData && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">
+                    Confirm Password
+                  </label>
+                  <input
+                    name="confirmPassword"
+                    required
+                    type="password"
+                    placeholder="Re-enter password"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Role</label>
                 <select name="adminRole" defaultValue={modalData?.adminRole || 'branch-admin'} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
@@ -8232,7 +8334,37 @@ function App() {
                 const pincode = e.target.pincode.value;
                 const isActive = e.target.isActive.checked;
 
-                await executeAction(`/admin/update-agent/${modalData._id}`, 'PUT', { name, email, phone, level, assignedArea, pincode });
+                const nameCheck = validateName(name, 'Agent Name', true);
+                if (!nameCheck.isValid) {
+                  addToast(nameCheck.message, 'error');
+                  return;
+                }
+                const emailCheck = validateEmail(email, true);
+                if (!emailCheck.isValid) {
+                  addToast(emailCheck.message, 'error');
+                  return;
+                }
+                const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+                if (!phoneCheck.isValid) {
+                  addToast(phoneCheck.message, 'error');
+                  return;
+                }
+                if (pincode) {
+                  const pinCheck = validatePincode(pincode, false);
+                  if (!pinCheck.isValid) {
+                    addToast(pinCheck.message, 'error');
+                    return;
+                  }
+                }
+
+                await executeAction(`/admin/update-agent/${modalData._id}`, 'PUT', {
+                  name: formatName(name),
+                  email: normalizeEmail(email),
+                  phone: cleanIndianMobile(phone),
+                  level,
+                  assignedArea,
+                  pincode: pincode ? handlePincodeInput(pincode) : ''
+                });
                 await executeAction(`/admin/activate-agent/${modalData._id}`, 'PUT', { isActive });
                 setShowModal(null);
               }}
@@ -8240,16 +8372,42 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
-                <input name="name" required defaultValue={modalData.name || ''} type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input
+                  name="name"
+                  required
+                  defaultValue={modalData.name || ''}
+                  type="text"
+                  onInput={(e) => { e.target.value = formatName(e.target.value); }}
+                  placeholder="e.g. Agent Name"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email</label>
-                  <input name="email" required defaultValue={modalData.email || ''} type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input
+                    name="email"
+                    required
+                    defaultValue={modalData.email || ''}
+                    type="email"
+                    placeholder="agent@connect.app"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone</label>
-                  <input name="phone" required defaultValue={modalData.phone || ''} type="text" maxLength={10} inputMode="numeric" pattern="[6-9][0-9]{9}" onInput={handlePhoneInput} title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone (10 Digits)</label>
+                  <input
+                    name="phone"
+                    required
+                    defaultValue={modalData.phone || ''}
+                    type="text"
+                    maxLength={10}
+                    inputMode="numeric"
+                    onInput={(e) => { e.target.value = handleIndianMobileInput(e.target.value); }}
+                    placeholder="e.g. 9876543210"
+                    title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -8270,7 +8428,16 @@ function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Assigned Pincode</label>
-                  <input name="pincode" defaultValue={modalData.assignedPincode?.code || (typeof modalData.assignedPincode === 'string' ? modalData.assignedPincode : null) || modalData.pincode || (/^\d{6}$/.test(modalData.assignedArea) ? modalData.assignedArea : '')} type="text" placeholder="e.g. 600001" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input
+                    name="pincode"
+                    defaultValue={modalData.assignedPincode?.code || (typeof modalData.assignedPincode === 'string' ? modalData.assignedPincode : null) || modalData.pincode || (/^\d{6}$/.test(modalData.assignedArea) ? modalData.assignedArea : '')}
+                    type="text"
+                    maxLength={6}
+                    inputMode="numeric"
+                    onInput={(e) => { e.target.value = handlePincodeInput(e.target.value); }}
+                    placeholder="e.g. 600001"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
                 <div className="flex items-center gap-3 pt-6">
                   <input name="isActive" id="isActive" defaultChecked={modalData.isActive || false} type="checkbox" className="w-4 h-4 rounded text-primary-600 focus:ring-primary-500 border-slate-300" />
@@ -8381,27 +8548,110 @@ function App() {
                 const assignedArea = e.target.assignedArea.value;
                 const pincode = e.target.pincode.value;
                 const status = e.target.status.value;
+                const dob = e.target.dob?.value || '';
 
-                if (password !== confirmPassword) {
-                  addToast("Passwords do not match!", 'error');
+                // 1. Name Validation
+                const nameCheck = validateName(name, 'Agent Name', true);
+                if (!nameCheck.isValid) {
+                  addToast(nameCheck.message, 'error');
                   return;
                 }
 
-                const rawAccNo = (e.target.accountNumber.value || '').trim();
-                if (rawAccNo && !/^\d{8,20}$/.test(rawAccNo)) {
-                  addToast('Account number must contain 8–20 digits.', 'error');
+                // 2. Email Validation
+                const emailCheck = validateEmail(email, true);
+                if (!emailCheck.isValid) {
+                  addToast(emailCheck.message, 'error');
                   return;
+                }
+
+                // 3. Indian Mobile Number Validation
+                const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+                if (!phoneCheck.isValid) {
+                  addToast(phoneCheck.message, 'error');
+                  return;
+                }
+
+                // 4. Password Policy & Confirmation Match
+                const pwdCheck = validatePasswordPolicy(password, true);
+                if (!pwdCheck.isValid) {
+                  addToast(pwdCheck.message, 'error');
+                  return;
+                }
+                const matchCheck = validatePasswordMatch(password, confirmPassword);
+                if (!matchCheck.isValid) {
+                  addToast(matchCheck.message, 'error');
+                  return;
+                }
+
+                // 5. DOB / Age Validation
+                if (dob) {
+                  const dobCheck = validateDOB(dob, 18, 'Date of birth', false);
+                  if (!dobCheck.isValid) {
+                    addToast(dobCheck.message, 'error');
+                    return;
+                  }
+                }
+
+                // 6. Pincode Validation
+                if (pincode) {
+                  const pinCheck = validatePincode(pincode, false);
+                  if (!pinCheck.isValid) {
+                    addToast(pinCheck.message, 'error');
+                    return;
+                  }
+                }
+
+                const rawAccNo = (e.target.accountNumber?.value || '').trim();
+                const rawConfirmAccNo = (e.target.confirmAccountNumber?.value || '').trim();
+                const rawBankName = (e.target.bankName?.value || '').trim();
+                const rawIfsc = (e.target.ifscCode?.value || '').trim();
+                const rawHolder = (e.target.accountHolderName?.value || '').trim();
+
+                // 7. Bank Account Number & Match Validation
+                if (rawAccNo) {
+                  const bankCheck = validateBankAccount(rawAccNo, rawBankName, false);
+                  if (!bankCheck.isValid) {
+                    addToast(bankCheck.message, 'error');
+                    return;
+                  }
+                }
+                if (rawConfirmAccNo) {
+                  const matchAcc = validateBankAccountMatch(rawAccNo, rawConfirmAccNo);
+                  if (!matchAcc.isValid) {
+                    addToast(matchAcc.message, 'error');
+                    return;
+                  }
+                }
+
+                // 8. IFSC Code Validation
+                if (rawIfsc) {
+                  const ifscCheck = validateIFSC(rawIfsc, false);
+                  if (!ifscCheck.isValid) {
+                    addToast(ifscCheck.message, 'error');
+                    return;
+                  }
                 }
 
                 const bankDetails = {
-                  upiId: e.target.upiId.value,
-                  bankName: e.target.bankName.value,
+                  upiId: e.target.upiId?.value || '',
+                  bankName: rawBankName,
                   accountNumber: rawAccNo,
-                  ifscCode: e.target.ifscCode.value,
+                  accountHolderName: rawHolder ? formatName(rawHolder) : '',
+                  ifscCode: rawIfsc ? cleanIFSC(rawIfsc) : '',
                 };
 
                 await executeAction('/admin/create-agent', 'POST', {
-                  name, email, phone, password, level, assignedArea, pincode, status, bankDetails
+                  name: formatName(name),
+                  email: normalizeEmail(email),
+                  phone: phoneCheck.cleanPhone,
+                  password,
+                  confirmPassword,
+                  dob,
+                  level,
+                  assignedArea,
+                  pincode,
+                  status,
+                  bankDetails
                 });
                 setShowModal(null);
               }}
@@ -8409,16 +8659,59 @@ function App() {
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent Name</label>
-                <input name="name" required type="text" placeholder="e.g. John Doe" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input
+                  name="name"
+                  required
+                  type="text"
+                  placeholder="e.g. John Doe"
+                  onInput={(e) => { e.target.value = formatName(e.target.value); }}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
-                  <input name="email" required type="email" placeholder="john@example.com" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input
+                    name="email"
+                    required
+                    type="email"
+                    placeholder="john@example.com"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
-                  <input name="phone" required type="text" maxLength={10} inputMode="numeric" pattern="[6-9][0-9]{9}" onInput={handlePhoneInput} title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9" placeholder="9876543210" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input
+                    name="phone"
+                    required
+                    type="text"
+                    maxLength={10}
+                    inputMode="numeric"
+                    pattern="[6-9][0-9]{9}"
+                    onInput={handlePhoneInput}
+                    title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9"
+                    placeholder="9876543210"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Date of Birth (18+ Years)</label>
+                  <input
+                    name="dob"
+                    type="date"
+                    max={getMinAgeCutoffDate()}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Initial KYC Status</label>
+                  <select name="status" defaultValue="approved" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
+                    <option value="approved">Approved & Active</option>
+                    <option value="pending">Pending KYC Review</option>
+                  </select>
                 </div>
               </div>
 
@@ -8430,7 +8723,7 @@ function App() {
                       name="password"
                       required
                       type={showAgentPassword ? "text" : "password"}
-                      placeholder="••••••••"
+                      placeholder="e.g. Rathika@123"
                       className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3.5 pr-10 py-2 text-sm"
                     />
                     <button
@@ -8449,7 +8742,7 @@ function App() {
                       name="confirmPassword"
                       required
                       type={showAgentConfirmPassword ? "text" : "password"}
-                      placeholder="••••••••"
+                      placeholder="Re-enter password"
                       className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl pl-3.5 pr-10 py-2 text-sm"
                     />
                     <button
@@ -8481,38 +8774,76 @@ function App() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Assigned Pincode</label>
-                  <input name="pincode" type="text" placeholder="e.g. 600001" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input
+                    name="pincode"
+                    type="text"
+                    maxLength={6}
+                    inputMode="numeric"
+                    onInput={(e) => { e.target.value = handlePincodeInput(e.target.value); }}
+                    placeholder="e.g. 600001"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Initial KYC Status</label>
-                  <select name="status" defaultValue="approved" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm">
-                    <option value="approved">Approved & Active</option>
-                    <option value="pending">Pending KYC Review</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">UPI ID</label>
+                  <input name="upiId" type="text" placeholder="e.g. name@upi" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                 </div>
               </div>
 
               <div className="border-t border-slate-100 dark:border-slate-800 pt-4 space-y-4">
-                <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Payment / Payout Details</h4>
+                <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Bank Account Details (9–18 Digits)</h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">UPI ID</label>
-                    <input name="upiId" type="text" placeholder="e.g. name@upi" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Bank Name</label>
+                    <input name="bankName" type="text" placeholder="e.g. State Bank of India" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Bank Name</label>
-                    <input name="bankName" type="text" placeholder="e.g. HDFC Bank" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Account Holder Name</label>
+                    <input
+                      name="accountHolderName"
+                      type="text"
+                      placeholder="Account Holder Name"
+                      onInput={(e) => { e.target.value = formatName(e.target.value); }}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                    />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Account Number</label>
-                    <input name="accountNumber" type="text" inputMode="numeric" maxLength={20} placeholder="Account Number (8–20 digits)" onChange={(e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 20); }} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Account Number (9–18 Digits)</label>
+                    <input
+                      name="accountNumber"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={18}
+                      placeholder="Account Number"
+                      onInput={(e) => { e.target.value = handleBankAccountInput(e.target.value); }}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                    />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">IFSC Code</label>
-                    <input name="ifscCode" type="text" placeholder="IFSC Code" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                    <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Confirm Account Number</label>
+                    <input
+                      name="confirmAccountNumber"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={18}
+                      placeholder="Re-enter Account Number"
+                      onInput={(e) => { e.target.value = handleBankAccountInput(e.target.value); }}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                    />
                   </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">IFSC Code (11 Characters, 5th Digit '0')</label>
+                  <input
+                    name="ifscCode"
+                    type="text"
+                    maxLength={11}
+                    placeholder="e.g. SBIN0001234"
+                    onInput={(e) => { e.target.value = handleIFSCInput(e.target.value); }}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm uppercase"
+                  />
                 </div>
               </div>
 
@@ -8691,23 +9022,70 @@ function App() {
                 const cardType = e.target.cardType.value;
                 const cardNumber = e.target.cardNumber.value;
                 const expiryDate = e.target.expiryDate.value;
-                await executeAction('/admin/card-holders', 'POST', { name, email, phone, cardType, cardNumber, expiryDate });
+
+                const nameCheck = validateName(name, 'Holder Name', true);
+                if (!nameCheck.isValid) {
+                  addToast(nameCheck.message, 'error');
+                  return;
+                }
+                const emailCheck = validateEmail(email, true);
+                if (!emailCheck.isValid) {
+                  addToast(emailCheck.message, 'error');
+                  return;
+                }
+                const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+                if (!phoneCheck.isValid) {
+                  addToast(phoneCheck.message, 'error');
+                  return;
+                }
+
+                await executeAction('/admin/card-holders', 'POST', {
+                  name: formatName(name),
+                  email: normalizeEmail(email),
+                  phone: cleanIndianMobile(phone),
+                  cardType,
+                  cardNumber,
+                  expiryDate
+                });
                 setShowModal(null);
               }}
               className="space-y-4"
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
-                <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input
+                  name="name"
+                  required
+                  type="text"
+                  onInput={(e) => { e.target.value = formatName(e.target.value); }}
+                  placeholder="e.g. Card Holder Name"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
-                  <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input
+                    name="email"
+                    required
+                    type="email"
+                    placeholder="holder@connect.app"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
-                  <input name="phone" required type="text" maxLength={10} inputMode="numeric" pattern="[6-9][0-9]{9}" onInput={handlePhoneInput} title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number (10 Digits)</label>
+                  <input
+                    name="phone"
+                    required
+                    type="text"
+                    maxLength={10}
+                    inputMode="numeric"
+                    onInput={(e) => { e.target.value = handleIndianMobileInput(e.target.value); }}
+                    placeholder="e.g. 9876543210"
+                    title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -8805,23 +9183,70 @@ function App() {
                 const vehicleType = onboardType !== 'delivery-partner' ? onboardType : e.target.vehicleType.value;
                 const vehicleNumber = onboardType !== 'delivery-partner' ? 'N/A' : e.target.vehicleNumber.value;
                 const city = e.target.city.value;
-                await executeAction('/admin/delivery-partners', 'POST', { name, email, phone, vehicleType, vehicleNumber, city });
+
+                const nameCheck = validateName(name, 'Partner Name', true);
+                if (!nameCheck.isValid) {
+                  addToast(nameCheck.message, 'error');
+                  return;
+                }
+                const emailCheck = validateEmail(email, true);
+                if (!emailCheck.isValid) {
+                  addToast(emailCheck.message, 'error');
+                  return;
+                }
+                const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+                if (!phoneCheck.isValid) {
+                  addToast(phoneCheck.message, 'error');
+                  return;
+                }
+
+                await executeAction('/admin/delivery-partners', 'POST', {
+                  name: formatName(name),
+                  email: normalizeEmail(email),
+                  phone: cleanIndianMobile(phone),
+                  vehicleType,
+                  vehicleNumber,
+                  city
+                });
                 setShowModal(null);
               }}
               className="space-y-4"
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Name</label>
-                <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input
+                  name="name"
+                  required
+                  type="text"
+                  onInput={(e) => { e.target.value = formatName(e.target.value); }}
+                  placeholder="e.g. Partner Full Name"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
-                  <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input
+                    name="email"
+                    required
+                    type="email"
+                    placeholder="partner@connect.app"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
-                  <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number (10 Digits)</label>
+                  <input
+                    name="phone"
+                    required
+                    type="text"
+                    maxLength={10}
+                    inputMode="numeric"
+                    onInput={(e) => { e.target.value = handleIndianMobileInput(e.target.value); }}
+                    placeholder="e.g. 9876543210"
+                    title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
               </div>
               {onboardType === 'delivery-partner' && (
@@ -8864,23 +9289,68 @@ function App() {
                 const email = e.target.email.value;
                 const phone = e.target.phone.value;
                 const role = e.target.role.value;
-                await executeAction('/admin/support-team', 'POST', { name, email, phone, role });
+
+                const nameCheck = validateName(name, 'Agent Name', true);
+                if (!nameCheck.isValid) {
+                  addToast(nameCheck.message, 'error');
+                  return;
+                }
+                const emailCheck = validateEmail(email, true);
+                if (!emailCheck.isValid) {
+                  addToast(emailCheck.message, 'error');
+                  return;
+                }
+                const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+                if (!phoneCheck.isValid) {
+                  addToast(phoneCheck.message, 'error');
+                  return;
+                }
+
+                await executeAction('/admin/support-team', 'POST', {
+                  name: formatName(name),
+                  email: normalizeEmail(email),
+                  phone: cleanIndianMobile(phone),
+                  role
+                });
                 setShowModal(null);
               }}
               className="space-y-4"
             >
               <div>
                 <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Agent Name</label>
-                <input name="name" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                <input
+                  name="name"
+                  required
+                  type="text"
+                  onInput={(e) => { e.target.value = formatName(e.target.value); }}
+                  placeholder="e.g. Agent Name"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Email Address</label>
-                  <input name="email" required type="email" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <input
+                    name="email"
+                    required
+                    type="email"
+                    placeholder="support@connect.app"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number</label>
-                  <input name="phone" required type="text" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                  <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Phone Number (10 Digits)</label>
+                  <input
+                    name="phone"
+                    required
+                    type="text"
+                    maxLength={10}
+                    inputMode="numeric"
+                    onInput={(e) => { e.target.value = handleIndianMobileInput(e.target.value); }}
+                    placeholder="e.g. 9876543210"
+                    title="Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm"
+                  />
                 </div>
               </div>
               <div>
@@ -10009,7 +10479,7 @@ function App() {
                   <div>
                     <span className="block text-[10px] text-slate-400 uppercase font-bold">Aadhaar / PAN</span>
                     <span className="font-mono text-[11px] text-slate-600 dark:text-slate-400 block mt-0.5">
-                      {modalData.agentId?.kyc?.aadhaarNumber || '—'} | {modalData.agentId?.kyc?.panNumber || '—'}
+                      {modalData.agentId?.kyc?.aadhaarNumber ? maskAadhaar(modalData.agentId.kyc.aadhaarNumber) : (modalData.agentId?.aadhaar ? maskAadhaar(modalData.agentId.aadhaar) : '—')} | {modalData.agentId?.kyc?.panNumber || modalData.agentId?.pan || '—'}
                     </span>
                   </div>
                 </div>
@@ -10029,7 +10499,7 @@ function App() {
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 uppercase font-bold">Account Number</span>
-                    <span className="text-sm font-mono font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{modalData.accountNumber || '987654321098'}</span>
+                    <span className="text-sm font-mono font-bold text-slate-800 dark:text-slate-100 block mt-0.5">{maskBankAccount(modalData.accountNumber || modalData.agentId?.bankDetails?.accountNumber || '987654321098')}</span>
                   </div>
                   <div>
                     <span className="block text-[10px] text-slate-400 uppercase font-bold">IFSC Code</span>

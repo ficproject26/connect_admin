@@ -7,6 +7,14 @@ import {
   ShoppingBag, DollarSign, Calendar, TrendingUp, Store,
   Landmark, EyeOff, Copy, FileText, CreditCard, GraduationCap, Briefcase, ExternalLink, ZoomIn, Check, ShieldCheck, UserCog
 } from 'lucide-react';
+import {
+  formatName,
+  validateName,
+  validateEmail,
+  normalizeEmail,
+  validateIndianMobile,
+  cleanIndianMobile
+} from '../utils/formValidation.js';
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS & HELPERS
@@ -1241,9 +1249,27 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting, territoryOpti
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
-      setError('Name, email, and mobile phone number are required.');
+    const nameCheck = validateName(form.name, 'Full Name', true);
+    if (!nameCheck.isValid) {
+      setError(nameCheck.message);
       return;
+    }
+    const emailCheck = validateEmail(form.email, true);
+    if (!emailCheck.isValid) {
+      setError(emailCheck.message);
+      return;
+    }
+    const phoneCheck = validateIndianMobile(form.phone, 'Primary Mobile', true);
+    if (!phoneCheck.isValid) {
+      setError(phoneCheck.message);
+      return;
+    }
+    if (form.altPhone) {
+      const altCheck = validateIndianMobile(form.altPhone, 'Alternate Mobile', false);
+      if (!altCheck.isValid) {
+        setError(altCheck.message);
+        return;
+      }
     }
     if (!stateName.trim()) {
       setError('Assigned State is required.');
@@ -1264,6 +1290,10 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting, territoryOpti
 
     onSubmit({
       ...form,
+      name: formatName(form.name),
+      email: normalizeEmail(form.email),
+      phone: cleanIndianMobile(form.phone),
+      altPhone: form.altPhone ? cleanIndianMobile(form.altPhone) : '',
       level,
       assignedState: stateName.trim(),
       assignedDistrict: districtName.trim(),
@@ -1375,7 +1405,7 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting, territoryOpti
               type="text"
               required
               value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, name: formatName(e.target.value) }))}
               placeholder="Candidate Full Name"
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
@@ -1394,13 +1424,13 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting, territoryOpti
               />
             </div>
             <div>
-              <label className="block text-[11px] font-bold text-slate-500 mb-1">Primary Mobile *</label>
+              <label className="block text-[11px] font-bold text-slate-500 mb-1">Primary Mobile (10 Digits) *</label>
               <input
                 type="tel"
                 required
                 maxLength={10}
                 value={form.phone}
-                onChange={e => setForm(f => ({ ...f, phone: e.target.value.replace(/\D/g, '') }))}
+                onChange={e => setForm(f => ({ ...f, phone: cleanIndianMobile(e.target.value) }))}
                 placeholder="10-digit mobile"
                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
@@ -1413,8 +1443,8 @@ const NominateModal = ({ territory, onClose, onSubmit, submitting, territoryOpti
               type="tel"
               maxLength={10}
               value={form.altPhone}
-              onChange={e => setForm(f => ({ ...f, altPhone: e.target.value.replace(/\D/g, '') }))}
-              placeholder="Alternate phone number"
+              onChange={e => setForm(f => ({ ...f, altPhone: cleanIndianMobile(e.target.value) }))}
+              placeholder="Optional alternate mobile"
               className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>

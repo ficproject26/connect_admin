@@ -5,6 +5,7 @@ import {
   Eye, EyeOff, Building, Building2, Phone, Mail, FileText, CreditCard, ShieldCheck, User, Globe, Tag, Calendar, Layers, UserCog,
   ZoomIn, ExternalLink, Check, Copy, Loader2
 } from 'lucide-react';
+import { maskAadhaar, maskBankAccount } from '../utils/formValidation.js';
 
 const formatVendorId = (rawId, index = 0) => {
   if (!rawId) return `VND-${String(index + 1).padStart(4, '0')}`;
@@ -4180,7 +4181,7 @@ export const VendorDirectoryModule = React.memo(({
                         <div className="col-span-2">
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Aadhaar / National ID</span>
                           <strong className="text-slate-800 dark:text-slate-200 font-mono text-xs">
-                            {vendorKycModal.data.aadhaarNumber || 'Not Provided'}
+                            {vendorKycModal.data.aadhaarNumber ? maskAadhaar(vendorKycModal.data.aadhaarNumber) : 'Not Provided'}
                           </strong>
                         </div>
                       </div>
@@ -4207,7 +4208,7 @@ export const VendorDirectoryModule = React.memo(({
                         <div>
                           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Account Number</span>
                           <strong className="text-slate-800 dark:text-slate-200 font-mono">
-                            {vendorKycModal.data.bankDetails?.accountNumber || 'Not Provided'}
+                            {vendorKycModal.data.bankDetails?.accountNumber ? maskBankAccount(vendorKycModal.data.bankDetails.accountNumber) : 'Not Provided'}
                           </strong>
                         </div>
                         <div>

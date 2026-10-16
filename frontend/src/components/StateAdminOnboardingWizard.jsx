@@ -1,3 +1,16 @@
+import {
+  formatName,
+  validateName as validateNameUtil,
+  validateEmail as validateEmailUtil,
+  cleanIndianMobile,
+  validateIndianMobile,
+  validatePasswordPolicy,
+  validatePAN as validatePANUtil,
+  validateAadhaar as validateAadhaarUtil,
+  maskAadhaar as maskAadhaarUtil,
+  validateDOB as validateDOBUtil,
+  getMaxAdultDOB
+} from '../utils/formValidation.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   X, ChevronRight, ChevronLeft, User, Phone, Globe,
@@ -22,11 +35,11 @@ const STEPS = [
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────
-const validateEmail   = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
-const validatePhone   = v => /^\d{10}$/.test(v.replace(/\D/g,''));
-const validatePAN     = v => /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(v.trim().toUpperCase());
-const validateAadhaar = v => /^\d{12}$/.test(v.replace(/\s/g,''));
-const maskAadhaar     = v => { const d=v.replace(/\s/g,''); return d.length<4?d:'XXXX XXXX '+d.slice(-4); };
+const validateEmail   = v => validateEmailUtil(v).isValid;
+const validatePhone   = v => validateIndianMobile(v).isValid;
+const validatePAN     = v => validatePANUtil(v).isValid;
+const validateAadhaar = v => validateAadhaarUtil(v).isValid;
+const maskAadhaar     = v => maskAadhaarUtil(v);
 const pwScore = pw => {
   let s=0;
   if(pw.length>=8) s++;
@@ -336,22 +349,20 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
   const validate = () => {
     const e = {};
     if (step===1) {
-      if (!pers.fullName.trim()) e.fullName='Full name is required';
-      else if (!/^[a-zA-Z\s.'-]{2,80}$/.test(pers.fullName.trim())) e.fullName='2-80 chars, letters only';
+      const nameCheck = validateNameUtil(pers.fullName, 'Full name', true);
+      if (!nameCheck.isValid) e.fullName = nameCheck.message;
       if (!pers.dateOfBirth) {
         e.dateOfBirth = 'Date of birth is required';
       } else {
-        const age = calculateAge(pers.dateOfBirth);
-        if (isNaN(age) || age < 18) {
-          e.dateOfBirth = 'You must be 18 years or older to register.';
-        }
+        const dobCheck = validateDOBUtil(pers.dateOfBirth);
+        if (!dobCheck.isValid) e.dateOfBirth = dobCheck.message;
       }
       if (!pers.gender) e.gender='Gender is required';
       if (!cont.email.trim()) e.email='Email address is required';
       else if (!validateEmail(cont.email)) e.email='Enter a valid email address';
       if (!cont.primaryMobile) e.primaryMobile='Primary mobile is required';
-      else if (!validatePhone(cont.primaryMobile)) e.primaryMobile='Enter a valid 10-digit mobile';
-      if (cont.alternateMobile && !validatePhone(cont.alternateMobile)) e.alternateMobile='Enter valid 10-digit mobile';
+      else if (!validatePhone(cont.primaryMobile)) e.primaryMobile='Enter a valid 10-digit mobile starting with 6, 7, 8, or 9';
+      if (cont.alternateMobile && !validatePhone(cont.alternateMobile)) e.alternateMobile='Enter valid 10-digit mobile starting with 6, 7, 8, or 9';
     }
     if (step===2) {
       if (!cont.addressLine1.trim()) e.addressLine1='Address Line 1 is required';
@@ -384,8 +395,10 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
       else if (!validateEmail(emailToUse)) e.loginEmail = 'Enter a valid email address';
       const pw = acc.password;
       if (!pw) e.password='Password is required';
-      else if (pw.length<8) e.password='Minimum 8 characters required';
-      else if (pwScore(pw)<3) e.password='Too weak — add uppercase, numbers and symbols';
+      else {
+        const pwCheck = validatePasswordPolicy(pw);
+        if (!pwCheck.isValid) e.password = pwCheck.message;
+      }
       if (!acc.confirmPassword) e.confirmPassword='Please confirm your password';
       else if (pw!==acc.confirmPassword) e.confirmPassword='Passwords do not match';
     }
@@ -524,7 +537,7 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
               <FG>
                 <div>
                   <Lbl req>Full Name</Lbl>
-                  <Inp value={pers.fullName} onChange={e=>{upP('fullName',e.target.value);clrErr('fullName');}} placeholder="e.g. Dhanush Tamilarasan" err={errors.fullName}/>
+                  <Inp value={pers.fullName} onChange={e=>{upP('fullName',formatName(e.target.value));clrErr('fullName');}} placeholder="e.g. Dhanush Tamilarasan" err={errors.fullName}/>
                   <ErrMsg msg={errors.fullName}/>
                 </div>
                 <div>
@@ -551,12 +564,12 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
               <FG>
                 <div>
                   <Lbl req>Primary Mobile Number</Lbl>
-                  <Inp type="tel" maxLength={10} value={cont.primaryMobile} onChange={e=>{upC('primaryMobile',e.target.value.replace(/\D/g,''));clrErr('primaryMobile');}} placeholder="10-digit mobile" err={errors.primaryMobile}/>
+                  <Inp type="tel" maxLength={10} value={cont.primaryMobile} onChange={e=>{upC('primaryMobile',cleanIndianMobile(e.target.value));clrErr('primaryMobile');}} placeholder="10-digit mobile" err={errors.primaryMobile}/>
                   <ErrMsg msg={errors.primaryMobile}/>
                 </div>
                 <div>
                   <Lbl>Alternate Mobile Number</Lbl>
-                  <Inp type="tel" maxLength={10} value={cont.alternateMobile} onChange={e=>{upC('alternateMobile',e.target.value.replace(/\D/g,''));clrErr('alternateMobile');}} placeholder="Optional alternate mobile" err={errors.alternateMobile}/>
+                  <Inp type="tel" maxLength={10} value={cont.alternateMobile} onChange={e=>{upC('alternateMobile',cleanIndianMobile(e.target.value));clrErr('alternateMobile');}} placeholder="Optional alternate mobile" err={errors.alternateMobile}/>
                   <ErrMsg msg={errors.alternateMobile}/>
                 </div>
               </FG>
@@ -564,7 +577,7 @@ const StateAdminOnboardingWizard = ({token, API_BASE, prefilledState='', onClose
               <FG>
                 <div>
                   <Lbl>Father / Mother / Spouse Name</Lbl>
-                  <Inp value={pers.fatherName} onChange={e=>upP('fatherName',e.target.value)} placeholder="Guardian or spouse name (optional)"/>
+                  <Inp value={pers.fatherName} onChange={e=>upP('fatherName',formatName(e.target.value))} placeholder="Guardian or spouse name (optional)"/>
                 </div>
                 <div>
                   <Lbl>Blood Group</Lbl>

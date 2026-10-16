@@ -7,6 +7,16 @@ import {
   AlertCircle, Trash2, CreditCard
 } from 'lucide-react';
 import StateAdminOnboardingWizard from './StateAdminOnboardingWizard';
+import {
+  formatName,
+  validateName,
+  validateEmail,
+  normalizeEmail,
+  validateIndianMobile,
+  cleanIndianMobile,
+  validatePasswordPolicy,
+  validateDOB
+} from '../utils/formValidation.js';
 
 
 export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast }) => {
@@ -575,14 +585,30 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
   // Handle Create Admin Submit (for District, Division, Pincode Admins)
   const handleCreateAdminSubmit = async (e) => {
     e.preventDefault();
-    if (!adminFormData.name || !adminFormData.email || !adminFormData.password) {
-      notify('Please fill in all required fields.', 'error');
+    const nameCheck = validateName(adminFormData.name, 'Admin Name', true);
+    if (!nameCheck.isValid) {
+      notify(nameCheck.message, 'error');
+      return;
+    }
+    const emailCheck = validateEmail(adminFormData.email, true);
+    if (!emailCheck.isValid) {
+      notify(emailCheck.message, 'error');
+      return;
+    }
+    const phoneCheck = validateIndianMobile(adminFormData.phone, 'Primary Mobile', true);
+    if (!phoneCheck.isValid) {
+      notify(phoneCheck.message, 'error');
+      return;
+    }
+    const pwCheck = validatePasswordPolicy(adminFormData.password);
+    if (!pwCheck.isValid) {
+      notify(pwCheck.message, 'error');
       return;
     }
     if (adminFormData.dateOfBirth) {
-      const age = calculateAge(adminFormData.dateOfBirth);
-      if (isNaN(age) || age < 18) {
-        notify('You must be 18 years or older to register.', 'error');
+      const dobCheck = validateDOB(adminFormData.dateOfBirth, false);
+      if (!dobCheck.isValid) {
+        notify(dobCheck.message, 'error');
         return;
       }
     }
@@ -591,6 +617,9 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
       const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
       const payload = {
         ...adminFormData,
+        name: formatName(adminFormData.name),
+        email: normalizeEmail(adminFormData.email),
+        phone: cleanIndianMobile(adminFormData.phone),
         role: 'admin',
         adminRole: 'branch-admin', // Supported by both old and new schema
         level: adminFormData.adminLevel || 'district'
@@ -2058,7 +2087,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                     type="text"
                     required
                     value={adminFormData.name}
-                    onChange={e => setAdminFormData(prev => ({ ...prev, name: e.target.value }))}
+                    onChange={e => setAdminFormData(prev => ({ ...prev, name: formatName(e.target.value) }))}
                     placeholder="e.g. Raj Kumar"
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-medium"
                   />
@@ -2079,13 +2108,13 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Primary Mobile *</label>
+                  <label className="block text-[11px] font-bold text-slate-500 mb-1">Primary Mobile (10 Digits) *</label>
                   <input
                     type="tel"
                     required
                     maxLength={10}
                     value={adminFormData.phone}
-                    onChange={e => setAdminFormData(prev => ({ ...prev, phone: e.target.value.replace(/\D/g, '') }))}
+                    onChange={e => setAdminFormData(prev => ({ ...prev, phone: cleanIndianMobile(e.target.value) }))}
                     placeholder="10-digit mobile"
                     className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 font-medium"
                   />

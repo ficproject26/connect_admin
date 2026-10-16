@@ -16,6 +16,19 @@ const Booking = require('../models/Booking');
 const Customer = require('../models/Customer');
 const { validateTerritoryHierarchy } = require('./territory');
 const TerritoryAssignmentService = require('../utils/territoryAssignmentService');
+const {
+    formatName,
+    validateName,
+    normalizeEmail,
+    validateEmail,
+    validateIndianMobile,
+    validateDOB,
+    validateAadhaar,
+    validatePAN,
+    validateBankAccount,
+    validateIFSC,
+    validatePincode
+} = require('../utils/inputValidator');
 
 // Helper: safe string for regex
 const safeRegex = (val) => new RegExp(`^${String(val || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
@@ -1259,6 +1272,61 @@ const handleNominateManager = async (req, res) => {
             });
         }
 
+        // 1. Name Field Validation & Auto-Capitalization (formatName)
+        const nameVal = validateName(name, 'Manager name', true);
+        if (!nameVal.isValid) {
+            return res.status(400).json({ msg: nameVal.message, message: nameVal.message });
+        }
+        const formattedName = nameVal.sanitizedValue;
+
+        // 2. Email Validation & Normalization
+        const emailVal = validateEmail(email, true);
+        if (!emailVal.isValid) {
+            return res.status(400).json({ msg: emailVal.message, message: emailVal.message });
+        }
+        const cleanEmail = emailVal.normalizedEmail;
+
+        // 3. Indian Mobile Number Validation (^[6-9][0-9]{9}$)
+        const phoneCheck = validateIndianMobile(phone, 'Phone number', true);
+        if (!phoneCheck.isValid) {
+            return res.status(400).json({ msg: phoneCheck.message, message: phoneCheck.message });
+        }
+        const cleanPhone = phoneCheck.cleanPhone;
+
+        let cleanAltPhone = '';
+        if (altPhone) {
+            const altCheck = validateIndianMobile(altPhone, 'Alternative phone number', false);
+            if (!altCheck.isValid) {
+                return res.status(400).json({ msg: altCheck.message, message: altCheck.message });
+            }
+            cleanAltPhone = altCheck.cleanPhone;
+        }
+
+        // 4. Date of Birth & Minimum Age 18 Years Validation (if provided)
+        const rawDob = req.body.dob || req.body.dateOfBirth;
+        if (rawDob) {
+            const dobCheck = validateDOB(rawDob, 18, 'Date of birth', false);
+            if (!dobCheck.isValid) {
+                return res.status(400).json({ msg: dobCheck.message, message: dobCheck.message });
+            }
+        }
+
+        // 5. Aadhaar Validation (if provided)
+        if (req.body.aadhaarNumber) {
+            const aCheck = validateAadhaar(req.body.aadhaarNumber, false);
+            if (!aCheck.isValid) {
+                return res.status(400).json({ msg: aCheck.message, message: aCheck.message });
+            }
+        }
+
+        // 6. PAN Card Validation (if provided)
+        if (req.body.panNumber) {
+            const panCheck = validatePAN(req.body.panNumber, false);
+            if (!panCheck.isValid) {
+                return res.status(400).json({ msg: panCheck.message, message: panCheck.message });
+            }
+        }
+
         const validLevels = ['state', 'district', 'division', 'pincode'];
         const normLevel = normalizeManagerLevelStr(level);
         if (!validLevels.includes(normLevel)) {
@@ -1268,7 +1336,7 @@ const handleNominateManager = async (req, res) => {
         }
 
         const existingReq = await ManagerRequest.findOne({
-            email: email.toLowerCase().trim(),
+            email: cleanEmail,
             status: 'Pending'
         });
         if (existingReq) {
@@ -1291,10 +1359,11 @@ const handleNominateManager = async (req, res) => {
 
         const newRequest = new ManagerRequest({
             requestId,
-            name: name.trim(),
-            email: email.toLowerCase().trim(),
-            phone: phone.trim(),
-            altPhone: (altPhone || '').trim(),
+            name: formattedName,
+            email: cleanEmail,
+            phone: cleanPhone,
+            altPhone: cleanAltPhone,
+            dob: rawDob || undefined,
             level: normLevel,
             assignedState: assignedState.trim(),
             assignedDistrict: (assignedDistrict || '').trim(),
