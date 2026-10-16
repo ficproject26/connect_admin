@@ -8387,10 +8387,16 @@ function App() {
                   return;
                 }
 
+                const rawAccNo = (e.target.accountNumber.value || '').trim();
+                if (rawAccNo && !/^\d{8,20}$/.test(rawAccNo)) {
+                  addToast('Account number must contain 8–20 digits.', 'error');
+                  return;
+                }
+
                 const bankDetails = {
                   upiId: e.target.upiId.value,
                   bankName: e.target.bankName.value,
-                  accountNumber: e.target.accountNumber.value,
+                  accountNumber: rawAccNo,
                   ifscCode: e.target.ifscCode.value,
                 };
 
@@ -8501,7 +8507,7 @@ function App() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Account Number</label>
-                    <input name="accountNumber" type="text" placeholder="Account Number" className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
+                    <input name="accountNumber" type="text" inputMode="numeric" maxLength={20} placeholder="Account Number (8–20 digits)" onChange={(e) => { e.target.value = e.target.value.replace(/\D/g, "").slice(0, 20); }} className="w-full bg-slate-50 dark:bg-slate-950 border rounded-xl px-3.5 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">IFSC Code</label>

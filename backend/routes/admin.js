@@ -4802,6 +4802,18 @@ router.post('/create-agent', [auth, adminAuth], async (req, res) => {
 
         const agentRegId = req.body.registrationId || `REG-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
 
+        if (bankDetails && bankDetails.accountNumber) {
+            const cleanAcc = String(bankDetails.accountNumber).trim();
+            if (!/^\d{8,20}$/.test(cleanAcc)) {
+                return res.status(400).json({
+                    success: false,
+                    msg: 'Account number must contain 8–20 digits.',
+                    message: 'Account number must contain 8–20 digits.'
+                });
+            }
+            bankDetails.accountNumber = cleanAcc;
+        }
+
         user = new User({
             name,
             email: lowerEmail,
