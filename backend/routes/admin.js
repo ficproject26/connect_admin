@@ -1513,6 +1513,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     verificationStatus: userBankStatus
                 };
                 const userDocs = agent.documents || agent.kycDocs || agent.kyc || {};
+                const resolvedUserPhoto = agent.profilePhoto || agent.passportPhoto || agent.selfie || agent.avatar || userDocs.profilePhoto || userDocs.passportPhoto || userDocs.selfie || userDocs.photo || (agent.kycDocs && (agent.kycDocs.passportPhoto || agent.kycDocs.profilePhoto || agent.kycDocs.selfie)) || (agent.kyc && (agent.kyc.passportPhoto || agent.kyc.selfie)) || '';
+                kycObj.selfie = kycObj.selfie || resolvedUserPhoto;
+                kycObj.passportPhoto = kycObj.passportPhoto || resolvedUserPhoto;
 
                 agentMap.set(key, {
                     ...agent,
@@ -1553,7 +1556,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     kyc: kycObj,
                     kycDocs: userDocs,
                     documents: userDocs,
-                    profilePhoto: agent.profilePhoto || agent.selfie || userDocs.profilePhoto || '',
+                    profilePhoto: resolvedUserPhoto,
+                    avatar: resolvedUserPhoto,
+                    passportPhoto: resolvedUserPhoto,
                     bankDetails: userResolvedBank,
                     onboardingSource: agent.onboardingSource || (agent.createdVia === 'admin' ? 'ADMIN_INITIATED' : 'DIRECT'),
                     revokedAt: agent.revokedAt || null,
@@ -1681,7 +1686,9 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                         panNumber: raw.panNumber || rawKyc.panNumber || rawKycDocs.panNumber || '',
                         kycDocs: rawDocs,
                         documents: rawDocs,
-                        profilePhoto: raw.profilePhoto || raw.selfie || rawDocs.profilePhoto || '',
+                        profilePhoto: raw.profilePhoto || raw.passportPhoto || raw.selfie || raw.avatar || rawDocs.profilePhoto || rawDocs.passportPhoto || rawDocs.selfie || (raw.kycDocs && (raw.kycDocs.passportPhoto || raw.kycDocs.profilePhoto || raw.kycDocs.selfie)) || (raw.kyc && (raw.kyc.passportPhoto || raw.kyc.selfie)) || '',
+                        avatar: raw.profilePhoto || raw.passportPhoto || raw.selfie || raw.avatar || rawDocs.profilePhoto || rawDocs.passportPhoto || rawDocs.selfie || '',
+                        passportPhoto: raw.passportPhoto || raw.profilePhoto || rawDocs.passportPhoto || '',
                         bankDetails: resolvedBankDetails,
                         onboardingSource: raw.onboardingSource || (raw.createdVia === 'admin' ? 'ADMIN_INITIATED' : 'DIRECT'),
                         revokedAt: raw.revokedAt || null,
@@ -1993,8 +2000,10 @@ const enrichCompleteAgentDetails = async (agent, db) => {
     };
 
     const rawDocs = agent.documents || agent.kycDocs || agent.kyc || {};
+    const resolvedProfilePhoto = agent.profilePhoto || agent.passportPhoto || agent.selfie || agent.avatar || rawDocs.profilePhoto || rawDocs.passportPhoto || rawDocs.selfie || rawDocs.photo || (agent.kycDocs && (agent.kycDocs.passportPhoto || agent.kycDocs.profilePhoto || agent.kycDocs.selfie)) || (agent.kyc && (agent.kyc.passportPhoto || agent.kyc.selfie)) || '';
     const resolvedDocs = {
-        profilePhoto: rawDocs.profilePhoto || rawDocs.selfie || agent.profilePhoto || agent.selfie || agent.avatar || '',
+        profilePhoto: resolvedProfilePhoto,
+        passportPhoto: resolvedProfilePhoto,
         panCard: rawDocs.panCard || rawDocs.panImage || agent.panCard || agent.panImage || '',
         aadhaarCard: rawDocs.aadhaarCard || rawDocs.aadhaarImage || rawDocs.addressProof || agent.aadhaarCard || agent.aadhaarImage || '',
         addressProof: rawDocs.addressProof || agent.addressProof || '',
@@ -2061,10 +2070,12 @@ const enrichCompleteAgentDetails = async (agent, db) => {
         isApproved: !!agent.isApproved,
         registrationId: agent.registrationId || (agent._id ? `REG-${String(agent._id).substring(18, 24).toUpperCase()}` : 'N/A'),
         assignedState: stateName || 'N/A',
-        assignedDistrict: districtName || 'N/A',
-        assignedDivision: divisionName || 'N/A',
-        assignedPincode: pinCodeVal || 'N/A',
-        assignedArea: agent.assignedArea || (Object.values({ stateName, districtName, divisionName, pinCodeVal }).filter(Boolean).join(' / ')),
+        assignedDistrict: lvl === 'state' ? '' : (districtName || 'N/A'),
+        assignedDivision: (lvl === 'state' || lvl === 'district') ? '' : (divisionName || 'N/A'),
+        assignedPincode: (lvl === 'state' || lvl === 'district' || lvl === 'division') ? '' : (pinCodeVal || 'N/A'),
+        assignedArea: lvl === 'state' ? ('State: ' + (stateName || 'Tamil Nadu')) : (agent.assignedArea || (Object.values({ stateName, districtName, divisionName, pinCodeVal }).filter(Boolean).join(' / '))),
+        role: 'agent',
+        level: lvl,
         previousAssignedState: agent.previousAssignedState || '',
         previousAssignedDistrict: agent.previousAssignedDistrict || '',
         previousAssignedDivision: agent.previousAssignedDivision || '',
@@ -2080,9 +2091,16 @@ const enrichCompleteAgentDetails = async (agent, db) => {
         qualification: agent.qualification || agent.highestQualification || '',
         experience: agent.experience || agent.experienceLevel || '',
         previousCompany: agent.previousCompany || agent.previousOrg || '',
-        profilePhoto: resolvedDocs.profilePhoto,
+        profilePhoto: resolvedProfilePhoto,
+        avatar: resolvedProfilePhoto,
+        passportPhoto: resolvedProfilePhoto,
         documents: resolvedDocs,
         kycDocs: resolvedDocs,
+        kyc: {
+            ...(agent.kyc || {}),
+            selfie: (agent.kyc && agent.kyc.selfie) || resolvedProfilePhoto,
+            passportPhoto: (agent.kyc && agent.kyc.passportPhoto) || resolvedProfilePhoto
+        },
         declarationAccepted: !!agent.declarationAccepted || !!agent.declaration,
         bankDetails: resolvedBankDetails,
         onboardingSource,

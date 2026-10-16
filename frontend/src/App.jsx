@@ -165,13 +165,55 @@ const getFormattedTerritory = (agent) => {
     rawLvl === 4 || rawLvl === '4' ? 'pincode' :
     rawLvl
   ).toLowerCase();
+
+  const stateName = (agent.assignedState && agent.assignedState !== 'N/A' ? agent.assignedState : (agent.state || agent.territory?.state || '')).trim();
+  const districtName = (agent.assignedDistrict && agent.assignedDistrict !== 'N/A' ? agent.assignedDistrict : (agent.district || agent.territory?.district || '')).trim();
+  const divisionName = (agent.assignedDivision && agent.assignedDivision !== 'N/A' ? agent.assignedDivision : (agent.division || agent.territory?.division || '')).trim();
+  const pinCodeVal = (agent.assignedPincode?.code || (agent.assignedPincode && agent.assignedPincode !== 'N/A' ? agent.assignedPincode : '') || agent.pincode || agent.territory?.pincode || '').trim();
+
+  // If State Agent, strictly return State only! Never return District, Division, or PIN!
+  if (level.includes('state')) {
+    if (stateName) return `State: ${stateName}`;
+    const raw = String(agent.assignedArea || '');
+    const stateMatch = raw.match(/State:\s*([^›>/]+)/i) || raw.match(/^([^›>/]+)/);
+    const cleanState = (stateMatch ? stateMatch[1] : raw).replace(/[›>].*$/, '').trim();
+    return `State: ${cleanState || 'Tamil Nadu'}`;
+  }
+
+  // If District Agent, return State and District
+  if (level.includes('district')) {
+    const parts = [];
+    if (stateName) parts.push(`State: ${stateName}`);
+    if (districtName && districtName !== 'N/A') parts.push(`District: ${districtName}`);
+    if (parts.length > 0) return parts.join(' › ');
+  }
+
+  // If Division Agent, return State, District, Division
+  if (level.includes('division') || level.includes('divis')) {
+    const parts = [];
+    if (stateName) parts.push(`State: ${stateName}`);
+    if (districtName && districtName !== 'N/A') parts.push(`District: ${districtName}`);
+    if (divisionName && divisionName !== 'N/A') parts.push(`Division: ${divisionName}`);
+    if (parts.length > 0) return parts.join(' › ');
+  }
+
+  // Pincode Agent: return State, District, Division, PIN
+  if (level.includes('pincode') || level.includes('pin')) {
+    const parts = [];
+    if (stateName) parts.push(`State: ${stateName}`);
+    if (districtName && districtName !== 'N/A') parts.push(`District: ${districtName}`);
+    if (divisionName && divisionName !== 'N/A') parts.push(`Division: ${divisionName}`);
+    if (pinCodeVal && pinCodeVal !== 'N/A') parts.push(`PIN: ${pinCodeVal}`);
+    if (parts.length > 0) return parts.join(' › ');
+  }
+
   let rawArea = agent.assignedArea || (agent.territory ? [agent.territory.state, agent.territory.district, agent.territory.division, agent.territory.pincode].filter(Boolean).join(' / ') : '') || '';
   if (!rawArea) return 'Not assigned';
 
   if (rawArea.includes(' / ')) {
     const parts = rawArea.split(' / ').map(s => s.trim());
     if (level === 'state') {
-      return parts[0] || rawArea;
+      return parts[0] ? `State: ${parts[0]}` : rawArea;
     } else if (level === 'district') {
       return parts.slice(0, 2).join(' / ') || rawArea;
     } else if (level === 'division') {
@@ -9325,17 +9367,29 @@ function App() {
             {/* Header Row */}
             <div className="flex justify-between items-start">
               <div className="flex items-center gap-4">
-                {modalData.kyc?.selfie ? (
-                  <img
-                    src={modalData.kyc.selfie}
-                    alt=""
-                    className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-500/30 shadow-xs"
-                  />
-                ) : (
-                  <div className="w-14 h-14 rounded-2xl bg-amber-500/20 text-[#864f19] dark:text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 shrink-0">
-                    {(modalData.name || 'A')[0].toUpperCase()}
-                  </div>
-                )}
+                {(() => {
+                  const photoUrl = modalData.profilePhoto || modalData.avatar || modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto || modalData.documents?.profilePhoto || modalData.passportPhoto;
+                  return photoUrl ? (
+                    <img
+                      src={photoUrl}
+                      alt={modalData.name || 'Agent'}
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-amber-500/30 shadow-xs"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                  ) : null;
+                })()}
+                <div
+                  className="w-14 h-14 rounded-2xl bg-amber-500/20 text-[#864f19] dark:text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 shrink-0"
+                  style={{
+                    display: (modalData.profilePhoto || modalData.avatar || modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto || modalData.documents?.profilePhoto || modalData.passportPhoto) ? 'none' : 'flex'
+                  }}
+                >
+                  {(modalData.name || 'A')[0].toUpperCase()}
+                </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -9465,17 +9519,29 @@ function App() {
             {/* Header Row */}
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-4">
               <div className="flex items-center gap-4">
-                {modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto ? (
-                  <img
-                    src={modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto}
-                    alt=""
-                    className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-500/30 shadow-xs"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-2xl bg-amber-500/20 text-[#864f19] dark:text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 shrink-0">
-                    {(modalData.name || 'A')[0].toUpperCase()}
-                  </div>
-                )}
+                {(() => {
+                  const photoUrl = modalData.profilePhoto || modalData.avatar || modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto || modalData.documents?.profilePhoto || modalData.passportPhoto;
+                  return photoUrl ? (
+                    <img
+                      src={photoUrl}
+                      alt={modalData.name || 'Agent'}
+                      className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-500/30 shadow-xs"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                        const fallback = e.currentTarget.nextElementSibling;
+                        if (fallback) fallback.style.display = 'flex';
+                      }}
+                    />
+                  ) : null;
+                })()}
+                <div
+                  className="w-16 h-16 rounded-2xl bg-amber-500/20 text-[#864f19] dark:text-amber-400 font-black text-2xl flex items-center justify-center border border-amber-500/30 shrink-0"
+                  style={{
+                    display: (modalData.profilePhoto || modalData.avatar || modalData.kyc?.selfie || modalData.kycDocs?.passportPhoto || modalData.documents?.profilePhoto || modalData.passportPhoto) ? 'none' : 'flex'
+                  }}
+                >
+                  {(modalData.name || 'A')[0].toUpperCase()}
+                </div>
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -9524,17 +9590,22 @@ function App() {
                 <MapPin className="w-4 h-4" /> Step 2: Verification, Profile & Territory Location Details
               </h4>
               {(() => {
+                const rawRole = String(modalData.level || modalData.role || 'pincode').toLowerCase();
+                const isStateRole = rawRole.includes('state');
+                const isDistrictRole = rawRole.includes('district');
+                const isDivisionRole = rawRole.includes('division') || rawRole.includes('divis');
+                const isPincodeRole = !isStateRole && !isDistrictRole && !isDivisionRole;
+
                 const addrStr = modalData.fullAddress || modalData.address || modalData.streetAddress || '';
                 const addrPin = addrStr.match(/\b\d{6}\b/)?.[0];
 
-                let pin = addrPin || (typeof modalData.assignedPincode === 'object' ? (modalData.assignedPincode?.code || modalData.assignedPincode?.pincode) : modalData.assignedPincode) || modalData.pincode || modalData.territory?.pincode || '—';
+                const state = modalData.assignedState && modalData.assignedState !== 'N/A' ? modalData.assignedState : (modalData.territory?.state || modalData.state || 'Not Specified');
+                const district = modalData.assignedDistrict && modalData.assignedDistrict !== 'N/A' ? modalData.assignedDistrict : (modalData.territory?.district || modalData.district || 'Not Specified');
+                const division = modalData.assignedDivision && modalData.assignedDivision !== 'N/A' ? modalData.assignedDivision : (modalData.territory?.division || modalData.division || 'Not Specified');
+                const pin = modalData.assignedPincode?.code || (modalData.assignedPincode && modalData.assignedPincode !== 'N/A' ? modalData.assignedPincode : '') || modalData.pincode || modalData.territory?.pincode || (addrPin || 'Not Specified');
 
-                const state = modalData.territory?.state || modalData.state || modalData.assignedState || '—';
-                const district = modalData.territory?.district || modalData.district || modalData.assignedDistrict || '—';
-                const division = modalData.territory?.division || modalData.division || modalData.assignedDivision || (district !== '—' ? `${district} Division` : '—');
-                const postOffice = modalData.postOffice || (district !== '—' ? `${district} HO` : '—');
-
-                let fullAddress = addrStr || (district !== '—' && state !== '—' ? `${district}, ${state} - ${pin}` : 'Address not provided');
+                const postOffice = modalData.postOffice || modalData.postOfficeBranch || (addrStr.includes('PO:') ? addrStr.split('PO:')[1].split(',')[0].trim() : 'Not Specified');
+                let fullAddress = addrStr || (district !== 'Not Specified' && state !== 'Not Specified' ? `${district}, ${state} - ${pin}` : 'Address not provided');
 
                 return (
                   <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200/60 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
@@ -9552,22 +9623,34 @@ function App() {
                     <div><span className="text-slate-400 block font-semibold">Gender:</span><strong className="text-slate-800 dark:text-slate-200 capitalize">{modalData.gender || 'Not Provided'}</strong></div>
                     <div><span className="text-slate-400 block font-semibold">Aadhaar Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.aadhaarNumber || modalData.kyc?.aadhaarNumber || modalData.kycDocs?.aadhaarNumber || 'Not Provided'}</strong></div>
                     <div><span className="text-slate-400 block font-semibold">PAN Number:</span><strong className="text-slate-800 dark:text-slate-200 font-mono">{modalData.panNumber || modalData.kyc?.panNumber || modalData.kycDocs?.panNumber || 'Not Provided'}</strong></div>
+                    
+                    {/* Role-Specific Applicable Territory Fields */}
                     <div><span className="text-slate-400 block font-semibold">State:</span><strong className="text-slate-800 dark:text-slate-200">{state}</strong></div>
-                    <div><span className="text-slate-400 block font-semibold">District:</span><strong className="text-slate-800 dark:text-slate-200">{district}</strong></div>
-                    <div><span className="text-slate-400 block font-semibold">Division:</span><strong className="text-slate-800 dark:text-slate-200">{division}</strong></div>
-                    <div>
-                      <span className="text-slate-400 block font-semibold">Pincode:</span>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <strong className="text-slate-800 dark:text-slate-200 font-mono">{pin}</strong>
-                        <button
-                          type="button"
-                          onClick={() => handleVerifyAgentPincode({ ...modalData, pincode: pin, territory: { ...modalData.territory, pincode: pin, district } })}
-                          className="text-[10px] font-extrabold bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded-lg cursor-pointer flex items-center gap-1 transition-all"
-                        >
-                          <MapPin className="w-3 h-3" /> Verify
-                        </button>
+
+                    {!isStateRole && (
+                      <div><span className="text-slate-400 block font-semibold">District:</span><strong className="text-slate-800 dark:text-slate-200">{district}</strong></div>
+                    )}
+
+                    {(isDivisionRole || isPincodeRole) && (
+                      <div><span className="text-slate-400 block font-semibold">Division:</span><strong className="text-slate-800 dark:text-slate-200">{division}</strong></div>
+                    )}
+
+                    {isPincodeRole && (
+                      <div>
+                        <span className="text-slate-400 block font-semibold">Pincode:</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <strong className="text-slate-800 dark:text-slate-200 font-mono">{pin}</strong>
+                          <button
+                            type="button"
+                            onClick={() => handleVerifyAgentPincode({ ...modalData, pincode: pin, territory: { ...modalData.territory, pincode: pin, district } })}
+                            className="text-[10px] font-extrabold bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded-lg cursor-pointer flex items-center gap-1 transition-all"
+                          >
+                            <MapPin className="w-3 h-3" /> Verify
+                          </button>
+                        </div>
                       </div>
-                    </div>
+                    )}
+
                     <div><span className="text-slate-400 block font-semibold">Post Office Branch:</span><strong className="text-slate-800 dark:text-slate-200">{postOffice}</strong></div>
                     <div className="sm:col-span-2 lg:col-span-3"><span className="text-slate-400 block font-semibold">Full Street Address:</span><strong className="text-slate-800 dark:text-slate-200">{fullAddress}</strong></div>
                   </div>

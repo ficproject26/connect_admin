@@ -1444,13 +1444,17 @@ export default function AgentDirectoryModule({
         const districtName = ag.assignedDistrict && ag.assignedDistrict !== 'N/A' ? ag.assignedDistrict : (ag.district || ag.territory?.district || '');
         const divisionName = ag.assignedDivision && ag.assignedDivision !== 'N/A' ? ag.assignedDivision : (ag.division || ag.territory?.division || '');
         const pincodeCode = ag.assignedPincode?.code || (ag.assignedPincode !== 'N/A' ? ag.assignedPincode : '') || ag.pincode || ag.territory?.pincode || '';
+        const isState = lvl.includes('state');
+        const isDistrict = lvl.includes('district');
+        const isDivision = lvl.includes('division') || lvl.includes('divis');
+
         const territoryHierarchyParts = [
           stateName && `State: ${stateName}`,
-          districtName && `District: ${districtName}`,
-          divisionName && `Division: ${divisionName}`,
-          pincodeCode && `PIN: ${pincodeCode}`
+          (!isState && districtName && districtName !== 'N/A') && `District: ${districtName}`,
+          (!isState && !isDistrict && divisionName && divisionName !== 'N/A') && `Division: ${divisionName}`,
+          (!isState && !isDistrict && !isDivision && pincodeCode && pincodeCode !== 'N/A') && `PIN: ${pincodeCode}`
         ].filter(Boolean);
-        const hierarchyDisplay = territoryHierarchyParts.length > 0 ? territoryHierarchyParts.join(' \u203a ') : 'General Territory';
+        const hierarchyDisplay = territoryHierarchyParts.length > 0 ? territoryHierarchyParts.join(' \u203a ') : (isState ? `State: ${stateName || 'Tamil Nadu'}` : 'General Territory');
         const formattedRegId = ag.registrationId || (ag._id ? `REG-${String(ag._id).substring(18, 24).toUpperCase()}` : 'REG-N/A');
 
         const bank = ag.bankDetails || {};
@@ -1480,17 +1484,29 @@ export default function AgentDirectoryModule({
               {/* Header */}
               <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-4">
-                  {ag.profilePhoto && (ag.profilePhoto.startsWith('http') || ag.profilePhoto.startsWith('data:') || ag.profilePhoto.startsWith('/')) ? (
-                    <img
-                      src={ag.profilePhoto}
-                      alt={ag.name}
-                      className="w-16 h-16 rounded-2xl object-cover border-2 border-slate-200 dark:border-slate-700 shadow-sm shrink-0"
-                    />
-                  ) : (
-                    <div className={`w-16 h-16 rounded-2xl ${cfg.bg} ${cfg.text} font-black text-2xl flex items-center justify-center border ${cfg.border} shadow-sm shrink-0`}>
-                      {(ag.name || 'A')[0].toUpperCase()}
-                    </div>
-                  )}
+                  {(() => {
+                    const photoUrl = ag.profilePhoto || ag.avatar || ag.kyc?.selfie || ag.kycDocs?.passportPhoto || ag.documents?.profilePhoto || ag.passportPhoto;
+                    return photoUrl && (photoUrl.startsWith('http') || photoUrl.startsWith('data:') || photoUrl.startsWith('/')) ? (
+                      <img
+                        src={photoUrl}
+                        alt={ag.name}
+                        className="w-16 h-16 rounded-2xl object-cover border-2 border-slate-200 dark:border-slate-700 shadow-sm shrink-0"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fallback = e.currentTarget.nextElementSibling;
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
+                      />
+                    ) : null;
+                  })()}
+                  <div
+                    className={`w-16 h-16 rounded-2xl ${cfg.bg} ${cfg.text} font-black text-2xl flex items-center justify-center border ${cfg.border} shadow-sm shrink-0`}
+                    style={{
+                      display: (ag.profilePhoto || ag.avatar || ag.kyc?.selfie || ag.kycDocs?.passportPhoto || ag.documents?.profilePhoto || ag.passportPhoto) ? 'none' : 'flex'
+                    }}
+                  >
+                    {(ag.name || 'A')[0].toUpperCase()}
+                  </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-[10px] font-black tracking-wider uppercase px-2.5 py-0.5 rounded-md ${cfg.badge}`}>
