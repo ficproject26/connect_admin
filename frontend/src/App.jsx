@@ -3050,7 +3050,11 @@ function App() {
                           <span className="text-xs text-slate-400">New Vendor Tie-Up • {pVendor.category}</span>
                         </div>
                         <button
-                          onClick={() => { handleTabSelect('vendors') }}
+                          onClick={() => {
+                            setVendorDirInitialSection('direct-requests');
+                            setVendorDirHighlightId(pVendor._id || pVendor.id);
+                            handleTabSelect('vendor-directory-enterprise');
+                          }}
                           className="bg-primary-600 hover:bg-primary-500 text-white text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors"
                         >
                           Approve
@@ -3263,7 +3267,7 @@ function App() {
           )}
 
           {/* ENTERPRISE VENDOR DIRECTORY */}
-          {activeTab === 'vendor-directory-enterprise' && (
+          {(activeTab === 'vendor-directory-enterprise' || activeTab === 'vendor-directory') && (
             <VendorDirectoryModule
               key={`vdm-${vendorDirInitialSection || 'default'}-${vendorDirHighlightId || 'none'}`}
               token={token}

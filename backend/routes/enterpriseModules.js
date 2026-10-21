@@ -80,6 +80,9 @@ const getIo = (req) => req.app.get('io');
 // 1. VENDOR DIRECTORY & AUTO ASSIGN PINCODE AGENT
 // =========================================================
 
+// Projection exclusion list to prevent transferring multi-megabyte base64 strings in vendor listings
+const VENDOR_LIST_EXCLUSIONS = '-password -__v -documents -logo -businessLicense -storefrontPhoto -shopPhoto -businessImages -kycDocs.aadhaarImage -kycDocs.panImage -kycDocs.selfie -kycDocs.businessProofImage';
+
 // Helper to sanitize and format clean vendor addresses without placeholder strings (e.g. City, State, 111111, dfghjkhj)
 const sanitizeVendorAddressObj = (vObj) => {
     const isPlaceholder = (val) => {
@@ -286,15 +289,17 @@ const batchEnrichVendors = async (vendorsList = []) => {
     const fetchPromises = [];
 
     if (validObjectIds.length > 0 || stringKeys.length > 0) {
+        stringKeys.forEach(k => agentDocsMap.set(k, null));
         fetchPromises.push(
             User.find({
                 $or: [
                     ...(validObjectIds.length > 0 ? [{ _id: { $in: validObjectIds } }] : []),
-                    ...(stringKeys.length > 0 ? [{ registrationId: { $in: stringKeys } }, { email: { $in: stringKeys } }] : [])
+                    ...(stringKeys.length > 0 ? [{ registrationId: { $in: stringKeys } }, { email: { $in: stringKeys } }, { id: { $in: stringKeys } }] : [])
                 ]
-            }).select('name registrationId pincode assignedArea level role').lean().then(users => {
+            }).select('name registrationId pincode assignedArea level role id').lean().then(users => {
                 users.forEach(u => {
                     if (u._id) agentDocsMap.set(u._id.toString(), u);
+                    if (u.id) agentDocsMap.set(u.id.toString(), u);
                     if (u.registrationId) agentDocsMap.set(u.registrationId.toString(), u);
                     if (u.email) agentDocsMap.set(u.email.toLowerCase().trim(), u);
                 });
@@ -519,30 +524,32 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
 
         if (possibleAgentId) {
             const keyStr = possibleAgentId.toString();
-            if (preloadedAgentMap && preloadedAgentMap.has(keyStr)) {
-                agentDoc = preloadedAgentMap.get(keyStr);
-            } else if (mongoose.Types.ObjectId.isValid(possibleAgentId)) {
-                agentDoc = await User.findById(possibleAgentId).select('name registrationId pincode assignedArea level role').lean();
-            }
-            if (!agentDoc) {
-                const db = mongoose.connection.db;
-                if (db) {
-                    try {
-                        const filter = mongoose.Types.ObjectId.isValid(possibleAgentId)
-                            ? { _id: new mongoose.Types.ObjectId(possibleAgentId) }
-                            : { $or: [{ registrationId: possibleAgentId }, { email: possibleAgentId }] };
-                        agentDoc = await db.collection('agents').findOne(filter, {
-                            projection: {
-                                name: 1,
-                                registrationId: 1,
-                                pincode: 1,
-                                assignedArea: 1,
-                                territory: 1,
-                                level: 1,
-                                role: 1
-                            }
-                        });
-                    } catch (e) {}
+            if (preloadedAgentMap) {
+                agentDoc = preloadedAgentMap.get(keyStr) || null;
+            } else {
+                if (mongoose.Types.ObjectId.isValid(possibleAgentId)) {
+                    agentDoc = await User.findById(possibleAgentId).select('name registrationId pincode assignedArea level role').lean().catch(() => null);
+                }
+                if (!agentDoc) {
+                    const db = mongoose.connection.db;
+                    if (db) {
+                        try {
+                            const filter = mongoose.Types.ObjectId.isValid(possibleAgentId)
+                                ? { _id: new mongoose.Types.ObjectId(possibleAgentId) }
+                                : { $or: [{ registrationId: possibleAgentId }, { email: possibleAgentId }] };
+                            agentDoc = await db.collection('agents').findOne(filter, {
+                                projection: {
+                                    name: 1,
+                                    registrationId: 1,
+                                    pincode: 1,
+                                    assignedArea: 1,
+                                    territory: 1,
+                                    level: 1,
+                                    role: 1
+                                }
+                            });
+                        } catch (e) {}
+                    }
                 }
             }
         }
@@ -942,8 +949,8 @@ router.get('/vendors', auth, async (req, res) => {
             };
 
             const [agentVendorsFromUser, agentVendorsFromVendor] = await Promise.all([
-                User.find(agentMongoQuery).select('-password -__v').sort({ createdAt: -1 }).lean(),
-                Vendor.find(agentMongoQuery).select('-__v').sort({ createdAt: -1 }).lean()
+                User.find(agentMongoQuery).select('-password -__v -businessImages').sort({ createdAt: -1 }).lean(),
+                Vendor.find(agentMongoQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean()
             ]);
 
             const rawAgent = [...agentVendorsFromUser, ...agentVendorsFromVendor];
@@ -1058,8 +1065,8 @@ router.get('/vendors', auth, async (req, res) => {
                 User.find({
                     ...managerMongoQuery,
                     role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] }
-                }).select('-password -__v').sort({ createdAt: -1 }).lean(),
-                Vendor.find(managerMongoQuery).select('-__v').sort({ createdAt: -1 }).lean()
+                }).select('-password -__v -businessImages').sort({ createdAt: -1 }).lean(),
+                Vendor.find(managerMongoQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean()
             ]);
 
             const rawManager = [...managerVendorsFromUser, ...managerVendorsFromVendor];
@@ -1208,8 +1215,8 @@ router.get('/vendors', auth, async (req, res) => {
             };
 
             const [directVendors, directVendorDocs] = await Promise.all([
-                User.find(directMongoQuery).select('-password -__v').sort({ createdAt: -1 }).lean(),
-                Vendor.find(directMongoQuery).select('-__v').sort({ createdAt: -1 }).lean()
+                User.find(directMongoQuery).select('-password -__v -businessImages').sort({ createdAt: -1 }).lean(),
+                Vendor.find(directMongoQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean()
             ]);
 
             const rawDirect = deduplicateVendorsList([...directVendors, ...directVendorDocs]);
@@ -1290,8 +1297,8 @@ router.get('/vendors', auth, async (req, res) => {
         }
 
         const [userVendors, docVendors] = await Promise.all([
-            User.find(userQuery).select('-password -__v').sort({ createdAt: -1 }).lean(),
-            Vendor.find(vendorDocQuery).select('-__v').sort({ createdAt: -1 }).lean()
+            User.find(userQuery).select('-password -__v -businessImages').sort({ createdAt: -1 }).lean(),
+            Vendor.find(vendorDocQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean()
         ]);
         const rawVendors = [...userVendors, ...docVendors];
 

@@ -814,7 +814,7 @@ export const VendorDirectoryModule = React.memo(({
     const timeoutId = setTimeout(() => {
       isTimeout = true;
       controller.abort('timeout');
-    }, 25000);
+    }, 35000);
 
     try {
       const query = new URLSearchParams({
@@ -846,7 +846,7 @@ export const VendorDirectoryModule = React.memo(({
       let totalPages = 1;
       if (res.ok) {
         const data = await res.json();
-        const rawList = data.vendors || [];
+        const rawList = Array.isArray(data) ? data : (data.vendors || []);
         const dedupedList = deduplicateVendorsList(rawList);
         list = dedupedList;
         totalCount = data.stats?.total ?? (data.total || list.length);

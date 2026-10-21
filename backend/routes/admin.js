@@ -2836,6 +2836,8 @@ router.delete('/pincodes/:id', [auth, adminAuth], async (req, res) => {
 // ==========================================
 // 6. VENDOR MANAGEMENT
 // ==========================================
+const VENDOR_LIST_EXCLUSIONS = '-password -__v -documents -logo -businessLicense -storefrontPhoto -shopPhoto -businessImages -kycDocs.aadhaarImage -kycDocs.panImage -kycDocs.selfie -kycDocs.businessProofImage';
+
 router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
     try {
         const filter = getBranchFilter(req.adminUser);
@@ -2843,16 +2845,17 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
         // Concurrently query User and Vendor collections in parallel
         const [usersVendors, legacyVendors] = await Promise.all([
             User.find({ role: { $in: ['Vendor', 'vendor'] } })
-                .select('-password -__v')
+                .select('-password -__v -businessImages')
                 .populate('branchId', 'name')
                 .populate('referredBy', 'name')
                 .lean()
-                .catch(() => User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('-password -__v').lean()),
+                .catch(() => User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('-password -__v -businessImages').lean()),
             Vendor.find(filter)
+                .select(VENDOR_LIST_EXCLUSIONS)
                 .populate('branchId', 'name')
                 .populate('agentId', 'name')
                 .lean()
-                .catch(() => Vendor.find(filter).lean())
+                .catch(() => Vendor.find(filter).select(VENDOR_LIST_EXCLUSIONS).lean())
         ]);
         
         const formatVId = (v, index) => {
@@ -3061,21 +3064,21 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
                     { role: { $in: ['Vendor', 'vendor', 'Merchant', 'merchant'] } },
                     { vendorType: { $exists: true, $ne: '' } }
                 ]
-            }).populate('branchId', 'name').populate('referredBy', 'name');
+            }).select('-password -__v -businessImages').populate('branchId', 'name').populate('referredBy', 'name').lean();
         } catch (err1) {
             allUserVendors = await User.find({
                 $or: [
                     { role: { $in: ['Vendor', 'vendor', 'Merchant', 'merchant'] } },
                     { vendorType: { $exists: true, $ne: '' } }
                 ]
-            });
+            }).select('-password -__v -businessImages').lean();
         }
 
         let allLegacyVendors = [];
         try {
-            allLegacyVendors = await Vendor.find(filter).populate('branchId', 'name').populate('agentId', 'name');
+            allLegacyVendors = await Vendor.find(filter).select(VENDOR_LIST_EXCLUSIONS).populate('branchId', 'name').populate('agentId', 'name').lean();
         } catch (err2) {
-            allLegacyVendors = await Vendor.find(filter);
+            allLegacyVendors = await Vendor.find(filter).select(VENDOR_LIST_EXCLUSIONS).lean();
         }
 
         const isDirectPendingVendor = (v) => {
