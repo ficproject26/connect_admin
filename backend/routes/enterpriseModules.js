@@ -257,19 +257,20 @@ const batchEnrichVendors = async (vendorsList = []) => {
 
     vendorsList.forEach(v => {
         const vObj = typeof v.toObject === 'function' ? v.toObject() : v;
-        const possibleAgentId = (vObj.assignedAgent && typeof vObj.assignedAgent === 'object' ? (vObj.assignedAgent._id || vObj.assignedAgent) : vObj.assignedAgent) || vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId;
+        const possibleAgentId = (vObj.assignedAgent && typeof vObj.assignedAgent === 'object' ? (vObj.assignedAgent._id || vObj.assignedAgent) : vObj.assignedAgent) || vObj.agentId || vObj.onboardedBy || vObj.referredBy || vObj.onboardedByAgentId || vObj.agentRegistrationId;
         if (possibleAgentId) {
             agentIdsSet.add(possibleAgentId.toString());
         }
 
-        if (vObj.createdBy) {
-            creatorIdsSet.add(vObj.createdBy.toString());
+        const possibleActor = vObj.createdBy || vObj.createdById || vObj.onboardedBy || vObj.onboardedById || vObj.managerId || (vObj.addedBy && vObj.addedBy.id) || vObj.managerRegistrationId || (vObj.assignedManager && (vObj.assignedManager._id || vObj.assignedManager.id || vObj.assignedManager));
+        if (possibleActor) {
+            creatorIdsSet.add(possibleActor.toString());
         }
 
         sanitizeVendorAddressObj(vObj);
-        const pinCode = vObj.fullAddress?.match(/\b\d{6}\b/)?.[0] || vObj.pincode;
-        if (pinCode && /^\d{6}$/.test(pinCode)) {
-            pincodeCodesSet.add(pinCode);
+        const pinCode = vObj.fullAddress?.match(/\b\d{6}\b/)?.[0] || vObj.pincode || vObj.postalCode;
+        if (pinCode && /^\d{6}$/.test(String(pinCode).trim())) {
+            pincodeCodesSet.add(String(pinCode).trim());
         }
     });
 
@@ -297,7 +298,7 @@ const batchEnrichVendors = async (vendorsList = []) => {
                     if (u.registrationId) agentDocsMap.set(u.registrationId.toString(), u);
                     if (u.email) agentDocsMap.set(u.email.toLowerCase().trim(), u);
                 });
-            })
+            }).catch(() => {})
         );
 
         if (db) {
@@ -335,8 +336,8 @@ const batchEnrichVendors = async (vendorsList = []) => {
             User.find({
                 $or: [
                     ...(validCreatorObjIds.length > 0 ? [{ _id: { $in: validCreatorObjIds } }] : []),
-                    { _id: { $in: creatorArr } },
                     { id: { $in: creatorArr } },
+                    { managerId: { $in: creatorArr } },
                     { registrationId: { $in: creatorArr } }
                 ]
             }).select('name registrationId managerId email phone level role adminRole assignedState assignedDistrict assignedDivision assignedPincode territory pincode state district').lean().then(creators => {
@@ -344,6 +345,7 @@ const batchEnrichVendors = async (vendorsList = []) => {
                     if (c._id) creatorDocsMap.set(c._id.toString(), c);
                     if (c.id) creatorDocsMap.set(c.id.toString(), c);
                     if (c.registrationId) creatorDocsMap.set(c.registrationId.toString(), c);
+                    if (c.managerId) creatorDocsMap.set(c.managerId.toString(), c);
                 });
             }).catch(() => {})
         );
@@ -354,12 +356,18 @@ const batchEnrichVendors = async (vendorsList = []) => {
                     $or: [
                         ...(validCreatorObjIds.length > 0 ? [{ _id: { $in: validCreatorObjIds } }] : []),
                         { managerId: { $in: creatorArr } },
-                        { id: { $in: creatorArr } }
+                        { id: { $in: creatorArr } },
+                        { registrationId: { $in: creatorArr } },
+                        { employeeCode: { $in: creatorArr } }
                     ]
                 }).toArray().then(mgrs => {
                     mgrs.forEach(m => {
-                        if (m._id && !creatorDocsMap.has(m._id.toString())) creatorDocsMap.set(m._id.toString(), { ...m, role: 'district_manager' });
-                        if (m.managerId && !creatorDocsMap.has(m.managerId.toString())) creatorDocsMap.set(m.managerId.toString(), { ...m, role: 'district_manager' });
+                        const mObj = { ...m, role: m.role || 'district_manager' };
+                        if (m._id && !creatorDocsMap.has(m._id.toString())) creatorDocsMap.set(m._id.toString(), mObj);
+                        if (m.id && !creatorDocsMap.has(m.id.toString())) creatorDocsMap.set(m.id.toString(), mObj);
+                        if (m.managerId && !creatorDocsMap.has(m.managerId.toString())) creatorDocsMap.set(m.managerId.toString(), mObj);
+                        if (m.registrationId && !creatorDocsMap.has(m.registrationId.toString())) creatorDocsMap.set(m.registrationId.toString(), mObj);
+                        if (m.employeeCode && !creatorDocsMap.has(m.employeeCode.toString())) creatorDocsMap.set(m.employeeCode.toString(), mObj);
                     });
                 }).catch(() => {})
             );
@@ -377,7 +385,7 @@ const batchEnrichVendors = async (vendorsList = []) => {
                     pins.forEach(p => {
                         if (p.code) pincodeMap.set(p.code.toString(), p);
                     });
-                })
+                }).catch(() => {})
         );
     }
 
@@ -392,35 +400,8 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
     // Check creator document if present to resolve manager or agent source
     const possibleActorKey = vObj.createdBy || vObj.createdById || vObj.onboardedBy || vObj.onboardedById || vObj.managerId || (vObj.addedBy && vObj.addedBy.id);
     if (possibleActorKey) {
-        let creatorDoc = null;
         const cKey = String(possibleActorKey);
-        if (preloadedCreatorMap && preloadedCreatorMap.has(cKey)) {
-            creatorDoc = preloadedCreatorMap.get(cKey);
-        } else {
-            try {
-                creatorDoc = await User.findOne({
-                    $or: [
-                        ...(mongoose.Types.ObjectId.isValid(cKey) ? [{ _id: new mongoose.Types.ObjectId(cKey) }] : []),
-                        { _id: cKey },
-                        { id: cKey },
-                        { managerId: cKey },
-                        { registrationId: cKey }
-                    ]
-                }).select('name registrationId managerId email phone level role adminRole assignedState assignedDistrict assignedPincode').lean();
-
-                if (!creatorDoc && mongoose.connection.db) {
-                    creatorDoc = await mongoose.connection.db.collection('managers').findOne({
-                        $or: [
-                            ...(mongoose.Types.ObjectId.isValid(cKey) ? [{ _id: new mongoose.Types.ObjectId(cKey) }] : []),
-                            { _id: cKey },
-                            { id: cKey },
-                            { managerId: cKey },
-                            { employeeCode: cKey }
-                        ]
-                    });
-                }
-            } catch (e) {}
-        }
+        const creatorDoc = (preloadedCreatorMap && preloadedCreatorMap.has(cKey)) ? preloadedCreatorMap.get(cKey) : null;
 
         if (creatorDoc) {
             const cRole = String(creatorDoc.role || creatorDoc.adminRole || '').toLowerCase();
@@ -598,41 +579,9 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
         const possibleManagerId = (vObj.assignedManager && typeof vObj.assignedManager === 'object' ? (vObj.assignedManager._id || vObj.assignedManager) : vObj.assignedManager) || vObj.managerId || vObj.onboardedByManagerId || (typeof vObj.onboardedByManager === 'string' ? vObj.onboardedByManager : vObj.onboardedByManager?._id) || (vObj.addedBy && vObj.addedBy.id) || vObj.createdById || vObj.createdBy || vObj.onboardedById || vObj.onboardedBy;
 
         if (possibleManagerId) {
-            const db = mongoose.connection.db;
-            if (db) {
-                try {
-                    const filter = mongoose.Types.ObjectId.isValid(possibleManagerId)
-                        ? { $or: [{ _id: new mongoose.Types.ObjectId(possibleManagerId) }, { _id: possibleManagerId }, { id: possibleManagerId }] }
-                        : { $or: [{ _id: possibleManagerId }, { id: possibleManagerId }, { managerId: possibleManagerId }, { registrationId: possibleManagerId }, { employeeCode: possibleManagerId }, { email: possibleManagerId }] };
-                    managerDoc = await db.collection('managers').findOne(filter, {
-                        projection: {
-                            name: 1,
-                            managerId: 1,
-                            registrationId: 1,
-                            employeeCode: 1,
-                            phone: 1,
-                            email: 1,
-                            level: 1,
-                            role: 1,
-                            assignedPincode: 1,
-                            assignedDistrict: 1,
-                            assignedState: 1
-                        }
-                    });
-                    if (!managerDoc) {
-                        managerDoc = await User.findOne({
-                            $or: [
-                                ...(mongoose.Types.ObjectId.isValid(possibleManagerId) ? [{ _id: new mongoose.Types.ObjectId(possibleManagerId) }] : []),
-                                { _id: possibleManagerId },
-                                { id: possibleManagerId },
-                                { managerId: possibleManagerId },
-                                { registrationId: possibleManagerId },
-                                { employeeCode: possibleManagerId },
-                                { email: possibleManagerId }
-                            ]
-                        }).select('name registrationId managerId employeeCode phone email level role adminRole assignedState assignedDistrict assignedPincode').lean();
-                    }
-                } catch (e) {}
+            const mKey = String(possibleManagerId);
+            if (preloadedCreatorMap && preloadedCreatorMap.has(mKey)) {
+                managerDoc = preloadedCreatorMap.get(mKey);
             }
         }
 
@@ -693,17 +642,10 @@ const enrichVendorData = async (v, preloadedAgentMap = null, preloadedPincodeMap
     sanitizeVendorAddressObj(vObj);
 
     const pincodeCode = vObj.fullAddress?.match(/\b\d{6}\b/)?.[0] || vObj.pincode;
-    if (pincodeCode) {
-        if (preloadedPincodeMap && preloadedPincodeMap.has(pincodeCode.toString())) {
-            const pinDoc = preloadedPincodeMap.get(pincodeCode.toString());
-            if (pinDoc && pinDoc.activeAgentId) {
-                vObj.assignedPincodeAgent = pinDoc.activeAgentId;
-            }
-        } else {
-            const pinDoc = await Pincode.findOne({ code: pincodeCode }).populate('activeAgentId', 'name phone email level').lean();
-            if (pinDoc && pinDoc.activeAgentId) {
-                vObj.assignedPincodeAgent = pinDoc.activeAgentId;
-            }
+    if (pincodeCode && preloadedPincodeMap && preloadedPincodeMap.has(pincodeCode.toString())) {
+        const pinDoc = preloadedPincodeMap.get(pincodeCode.toString());
+        if (pinDoc && pinDoc.activeAgentId) {
+            vObj.assignedPincodeAgent = pinDoc.activeAgentId;
         }
     }
 
@@ -1070,7 +1012,7 @@ router.get('/vendors', auth, async (req, res) => {
                         { managerId: { $exists: true, $ne: '' } }
                     ]
                 }).select('_id id registrationId managerId employeeCode role adminRole name').lean().catch(() => []),
-                (mongoose.connection.db ? mongoose.connection.db.collection('managers').find({}).toArray() : []).catch(() => [])
+                (mongoose.connection.db ? mongoose.connection.db.collection('managers').find({}).toArray().catch(() => []) : Promise.resolve([]))
             ]);
 
             const managerIdsSet = new Set();

@@ -306,12 +306,15 @@
 
       // Silence extension-injected CSP violation events on window and document
       var suppressCspViolation = function(e) {
-        var blocked = ((e && e.blockedURI) || '') + ' ' + ((e && e.sourceFile) || '') + ' ' + ((e && e.violatedDirective) || '');
+        var blocked = ((e && e.blockedURI) || '') + ' ' + ((e && e.sourceFile) || '') + ' ' + ((e && e.violatedDirective) || '') + ' ' + ((e && e.effectiveDirective) || '') + ' ' + ((e && e.originalPolicy) || '');
         var lower = blocked.toLowerCase();
         if (
-          lower.indexOf('chrome-extension://') !== -1 ||
+          lower.indexOf('chrome-extension') !== -1 ||
           lower.indexOf('content.js') !== -1 ||
-          (e && e.violatedDirective === 'script-src')
+          lower.indexOf('f872d920-f021-4d52-ac98-78da36ceb659') !== -1 ||
+          lower.indexOf('unsafe-eval') !== -1 ||
+          lower.indexOf('evaluating a string as javascript') !== -1 ||
+          (e && (e.violatedDirective === 'script-src' || e.effectiveDirective === 'script-src'))
         ) {
           try {
             if (typeof e.preventDefault === 'function') e.preventDefault();

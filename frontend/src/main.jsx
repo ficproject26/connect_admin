@@ -242,11 +242,15 @@ try {
 
 // Silence extension-injected CSP violation events on window and document
 const suppressCspViolation = (e) => {
-  const blocked = `${e?.blockedURI || ''} ${e?.sourceFile || ''} ${e?.violatedDirective || ''}`.toLowerCase();
+  const blocked = `${e?.blockedURI || ''} ${e?.sourceFile || ''} ${e?.violatedDirective || ''} ${e?.effectiveDirective || ''} ${e?.originalPolicy || ''}`.toLowerCase();
   if (
-    blocked.includes('chrome-extension://') ||
+    blocked.includes('chrome-extension') ||
     blocked.includes('content.js') ||
-    e?.violatedDirective === 'script-src'
+    blocked.includes('f872d920-f021-4d52-ac98-78da36ceb659') ||
+    blocked.includes('unsafe-eval') ||
+    blocked.includes('evaluating a string as javascript') ||
+    e?.violatedDirective === 'script-src' ||
+    e?.effectiveDirective === 'script-src'
   ) {
     try {
       if (typeof e.preventDefault === 'function') e.preventDefault();
@@ -308,8 +312,10 @@ window.addEventListener('error', (event) => {
 });
 
 // Universal API Base URL Auto-Healing Interceptor:
-// If Nginx reverse proxy strips the /admin-api prefix causing a 404 Route Not Found,
-// transparently retry with /admin-api/admin-api/ on 404 to guarantee 100% uptime across all modules.
+// 1. If Nginx reverse proxy strips the /admin-api prefix causing a 404 Route Not Found,
+//    transparently retry with /admin-api/admin-api/ on 404.
+// 2. If Vercel rewrite proxy encounters 502/503/504 Bad Gateway,
+//    transparently retry directly against the authoritative backend https://api.ficapp.in/admin-api.
 if (typeof window !== 'undefined' && window.fetch) {
   const _origFetch = window.fetch;
   window.fetch = async function (input, init) {
@@ -337,12 +343,39 @@ if (typeof window !== 'undefined' && window.fetch) {
 
     try {
       const response = await _origFetch.call(this, primaryInput, init);
+
       if (response && response.status === 401 && typeof url === 'string') {
         const isAuthEndpoint = url.includes('/auth/login') || url.includes('/auth/send-otp') || url.includes('/auth/verify-otp');
         if (!isAuthEndpoint && typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:expired'));
         }
       }
+
+      // 502/503/504 Bad Gateway Auto-Recovery:
+      // If Vercel edge rewrite proxy returns 502 Bad Gateway or Gateway Timeout,
+      // transparently retry directly against authoritative origin https://api.ficapp.in
+      if (response && (response.status === 502 || response.status === 503 || response.status === 504) && typeof url === 'string') {
+        let directUrl = null;
+        if (url.includes('.vercel.app/admin-api/')) {
+          directUrl = url.replace(/https?:\/\/[^\/]+\/admin-api\//, 'https://api.ficapp.in/admin-api/');
+        } else if (url.startsWith('/admin-api/')) {
+          directUrl = `https://api.ficapp.in${url}`;
+        }
+
+        if (directUrl && directUrl !== url) {
+          try {
+            let directInput = directUrl;
+            if (typeof Request !== 'undefined' && input instanceof Request) {
+              directInput = new Request(directUrl, input);
+            }
+            const directResponse = await _origFetch.call(this, directInput, init);
+            if (directResponse && directResponse.status !== 502 && directResponse.status !== 503 && directResponse.status !== 504) {
+              return directResponse;
+            }
+          } catch (_) {}
+        }
+      }
+
       if (response && response.status === 404 && typeof url === 'string') {
         const fallbackUrl = url.includes('api.ficapp.in/admin-api/') && !url.includes('api.ficapp.in/admin-api/admin-api/')
           ? url.replace('api.ficapp.in/admin-api/', 'api.ficapp.in/admin-api/admin-api/')
@@ -365,6 +398,19 @@ if (typeof window !== 'undefined' && window.fetch) {
       }
       return response;
     } catch (err) {
+      // In case of network timeout or proxy drop on Vercel edge, transparently failover to api.ficapp.in directly
+      if (typeof url === 'string' && (url.includes('.vercel.app/admin-api/') || url.startsWith('/admin-api/'))) {
+        try {
+          const directUrl = url.includes('.vercel.app/admin-api/')
+            ? url.replace(/https?:\/\/[^\/]+\/admin-api\//, 'https://api.ficapp.in/admin-api/')
+            : `https://api.ficapp.in${url}`;
+          let directInput = directUrl;
+          if (typeof Request !== 'undefined' && input instanceof Request) {
+            directInput = new Request(directUrl, input);
+          }
+          return await _origFetch.call(this, directInput, init);
+        } catch (_) {}
+      }
       throw err;
     }
   };
