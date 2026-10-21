@@ -768,7 +768,7 @@ const RequestDetailsModal = ({ request, onClose, onApprove, onReject, approving,
               </div>
               <div className="text-xs p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800">
                 <span className="text-slate-400 block text-[10px] uppercase font-bold tracking-wider mb-0.5">Residential / Postal Address</span>
-                <span className="font-medium text-slate-700 dark:text-slate-300">{request.address || 'Address not specified'}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-300">{(typeof request.address === 'string' ? request.address : (request.fullAddress || (typeof request.address === 'object' && request.address !== null ? Object.values(request.address).filter(Boolean).join(', ') : ''))) || 'Address not specified'}</span>
               </div>
             </div>
           </div>

@@ -155,6 +155,25 @@ const resolveSanitizedApiBase = () => {
 const API_BASE = resolveSanitizedApiBase();
 const API_ORIGIN = API_BASE.replace(/\/admin-api\/?$/, '').replace(/\/api\/?$/, '');
 
+export const formatAddressString = (addr, fallback = '—') => {
+  if (!addr) return fallback;
+  if (typeof addr === 'string') return addr.trim() || fallback;
+  if (typeof addr === 'object') {
+    const parts = [
+      addr.buildingNo || addr.doorNo || addr.houseNo || addr.flatNo,
+      addr.street || addr.streetName || addr.streetAddress,
+      addr.locality || addr.area,
+      addr.postOffice ? `PO: ${addr.postOffice}` : '',
+      addr.taluk ? `Taluk: ${addr.taluk}` : '',
+      addr.district || addr.city,
+      addr.state,
+      addr.pincode || addr.pinCode
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : fallback;
+  }
+  return String(addr) || fallback;
+};
+
 const TAXONOMY = {
   "Services": {},
   "Products": {},
@@ -1049,7 +1068,8 @@ function App() {
     if (!agent) return;
     let pin = agent.assignedPincode?.code || agent.pincode || agent.territory?.pincode || '';
     if (!pin) {
-      const match = (agent.fullAddress || agent.assignedArea || (typeof getFormattedTerritory === 'function' ? getFormattedTerritory(agent) : '') || '').match(/\b\d{6}\b/);
+      const addrStr = formatAddressString(agent.fullAddress || agent.address, '');
+      const match = (addrStr || agent.assignedArea || (typeof getFormattedTerritory === 'function' ? getFormattedTerritory(agent) : '') || '').match(/\b\d{6}\b/);
       if (match) pin = match[0];
     }
     if (!pin) pin = '600001';
@@ -1642,6 +1662,7 @@ function App() {
         else if (rawLvlStr.includes('divis') || rawLvlStr.includes('division')) resolvedLvl = 'division';
         else if (rawLvlStr.includes('pincode') || rawLvlStr.includes('pin')) resolvedLvl = 'pincode';
 
+        const safeAddrStr = formatAddressString(ag.fullAddress || ag.address, '');
         return {
           ...ag,
           _id: ag._id || item._id,
@@ -1656,6 +1677,9 @@ function App() {
           isApproved: isApprovedVal,
           assignedArea: ag.assignedArea || item.assignedArea || (ag.territory ? Object.values(ag.territory).filter(Boolean).join(' / ') : ''),
           territory: ag.territory || item.territory || {},
+          fullAddress: safeAddrStr,
+          address: safeAddrStr,
+          rawAddress: (typeof ag.address === 'object' && ag.address !== null) ? ag.address : null,
           createdAt: ag.createdAt || item.createdAt || ag.registeredAt || item.registeredAt || null,
           balance: (ag.balance !== undefined && ag.balance > 0) ? ag.balance : (item.balance || metrics.revenue || 0),
           commissionEarned: (ag.commissionEarned !== undefined && ag.commissionEarned > 0) ? ag.commissionEarned : (item.commissionEarned || metrics.commission || 0),
@@ -3057,7 +3081,7 @@ function App() {
                         <tr key={b._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-900/30">
                           <td className="px-6 py-4">
                             <span className="block font-bold text-slate-850 dark:text-slate-100">{b.name}</span>
-                            <span className="text-xs text-slate-400">{b.address}</span>
+                            <span className="text-xs text-slate-400">{formatAddressString(b.address, '')}</span>
                             {b.agentId && (
                               <span className="inline-flex mt-1.5 text-[10px] bg-primary-500/10 text-primary-500 font-bold px-2 py-0.5 rounded-md">
                                 Agent: {b.agentId.name || b.agentId}
@@ -9707,7 +9731,7 @@ function App() {
                     <div className="flex justify-between"><span className="text-slate-400">Pincode:</span><span className="font-semibold font-mono text-amber-500">{modalData.pincode || modalData.postalCode}</span></div>
                   )}
                   {(modalData.address || modalData.fullAddress) && (
-                    <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-semibold text-right max-w-[200px] break-words">{modalData.address || modalData.fullAddress}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Address:</span><span className="font-semibold text-right max-w-[200px] break-words">{formatAddressString(modalData.fullAddress || modalData.address)}</span></div>
                   )}
                 </div>
 
@@ -10073,8 +10097,8 @@ function App() {
                 const isDivisionRole = rawRole.includes('division') || rawRole.includes('divis');
                 const isPincodeRole = !isStateRole && !isDistrictRole && !isDivisionRole;
 
-                const addrStr = modalData.fullAddress || modalData.address || modalData.streetAddress || '';
-                const addrPin = addrStr.match(/\b\d{6}\b/)?.[0];
+                const addrStr = formatAddressString(modalData.fullAddress || modalData.address || modalData.streetAddress, '');
+                const addrPin = typeof addrStr === 'string' ? addrStr.match(/\b\d{6}\b/)?.[0] : null;
 
                 const state = modalData.assignedState && modalData.assignedState !== 'N/A' ? modalData.assignedState : (modalData.territory?.state || modalData.state || 'Not Specified');
                 const district = modalData.assignedDistrict && modalData.assignedDistrict !== 'N/A' ? modalData.assignedDistrict : (modalData.territory?.district || modalData.district || 'Not Specified');
@@ -10129,7 +10153,7 @@ function App() {
                     )}
 
                     <div><span className="text-slate-400 block font-semibold">Post Office Branch:</span><strong className="text-slate-800 dark:text-slate-200">{postOffice}</strong></div>
-                    <div className="sm:col-span-2 lg:col-span-3"><span className="text-slate-400 block font-semibold">Full Street Address:</span><strong className="text-slate-800 dark:text-slate-200">{fullAddress}</strong></div>
+                    <div className="sm:col-span-2 lg:col-span-3"><span className="text-slate-400 block font-semibold">Full Street Address:</span><strong className="text-slate-800 dark:text-slate-200">{formatAddressString(fullAddress, 'Address not provided')}</strong></div>
                   </div>
                 );
               })()}

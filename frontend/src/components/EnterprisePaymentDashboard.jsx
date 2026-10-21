@@ -261,6 +261,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
       }
       if (!serverUrl) serverUrl = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? window.location.origin : 'https://api.ficapp.in';
 
+      const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('admin_token') || '') : '');
       const isRemoteServer = serverUrl.includes('api.ficapp.in') || (typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app'));
       const socketPath = isRemoteServer ? '/admin-api/socket.io' : '/socket.io';
 
@@ -2846,7 +2847,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
                     </div>
                     <div>
                       <span className="text-[10px] text-slate-400 block">Address</span>
-                      <span className="font-medium text-slate-800 dark:text-slate-200">{breakdownData.vendor?.address || 'Not available'}</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">{(typeof breakdownData.vendor?.address === 'string' ? breakdownData.vendor?.address : (breakdownData.vendor?.fullAddress || (typeof breakdownData.vendor?.address === 'object' && breakdownData.vendor?.address !== null ? Object.values(breakdownData.vendor?.address).filter(Boolean).join(', ') : ''))) || 'Not available'}</span>
                     </div>
                   </div>
 

@@ -22,6 +22,25 @@ const getVendorCategory = (v) => {
   return cat;
 };
 
+export const formatAddressString = (addr, fallback = '—') => {
+  if (!addr) return fallback;
+  if (typeof addr === 'string') return addr.trim() || fallback;
+  if (typeof addr === 'object') {
+    const parts = [
+      addr.buildingNo || addr.doorNo || addr.houseNo || addr.flatNo,
+      addr.street || addr.streetName || addr.streetAddress,
+      addr.locality || addr.area,
+      addr.postOffice ? `PO: ${addr.postOffice}` : '',
+      addr.taluk ? `Taluk: ${addr.taluk}` : '',
+      addr.district || addr.city,
+      addr.state,
+      addr.pincode || addr.pinCode
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : fallback;
+  }
+  return String(addr) || fallback;
+};
+
 const getVendorAddress = (v) => {
   if (!v) return '—';
 
@@ -42,11 +61,12 @@ const getVendorAddress = (v) => {
       .trim() || '—';
   };
 
-  if (v.fullAddress && !v.fullAddress.toLowerCase().includes('city, state') && !v.fullAddress.includes('111111') && !v.fullAddress.toLowerCase().includes('dfghjkhj')) {
-    return cleanTrailingArtifacts(v.fullAddress);
+  const safeFullAddr = formatAddressString(v.fullAddress, '');
+  if (safeFullAddr && !safeFullAddr.toLowerCase().includes('city, state') && !safeFullAddr.includes('111111') && !safeFullAddr.toLowerCase().includes('dfghjkhj')) {
+    return cleanTrailingArtifacts(safeFullAddr);
   }
 
-  let street = (v.businessAddress || v.street || v.address || v.streetAddress || '').trim();
+  let street = (typeof v.businessAddress === 'string' ? v.businessAddress : (typeof v.street === 'string' ? v.street : (typeof v.address === 'string' ? v.address : (typeof v.streetAddress === 'string' ? v.streetAddress : formatAddressString(v.address, ''))))).trim();
   let city = (v.city || v.district || '').trim();
   let state = (v.state || '').trim();
   let pin = (v.postalCode || v.pincode || v.zipCode || '').trim();
@@ -97,7 +117,7 @@ const getVendorCity = (v) => {
   if (!isInvalidLocationVal(v.city)) return v.city;
   if (!isInvalidLocationVal(v.district)) return v.district;
 
-  const fullAddr = v.address || v.fullAddress || v.businessAddress || v.street || '';
+  const fullAddr = formatAddressString(v.address || v.fullAddress || v.businessAddress || v.street, '');
   if (fullAddr && fullAddr.includes(',')) {
     const parts = fullAddr.split(',').map(p => p.trim()).filter(p => !isInvalidLocationVal(p));
     for (const part of parts) {
@@ -155,14 +175,14 @@ const getVendorFullAddressObject = (v) => {
     return ['city', 'state', '111111', '111', '000000', 'n/a', 'none', 'undefined', 'null', 'dfghjkhj', 'asdf', 'qwerty', '—', '-'].includes(clean) || /^(.)\1+$/.test(clean);
   };
 
-  let doorNo = (v.doorNo || v.doorNumber || v.buildingNo || v.buildingNumber || v.houseNo || v.flatNo || '').trim();
-  let street = (v.street || v.streetAddress || v.road || v.streetName || '').trim();
-  let area = (v.area || v.locality || v.colony || '').trim();
-  let city = (v.city || v.town || v.village || '').trim();
-  let district = (v.district || v.assignedDistrict || '').trim();
-  let state = (v.state || v.assignedState || '').trim();
-  let pincode = (v.pincode || v.postalCode || v.zipCode || v.pin || '').trim();
-  let landmark = (v.landmark || v.landMark || '').trim();
+  let doorNo = (typeof v.doorNo === 'string' ? v.doorNo : (typeof v.doorNumber === 'string' ? v.doorNumber : (typeof v.buildingNo === 'string' ? v.buildingNo : (typeof v.buildingNumber === 'string' ? v.buildingNumber : (typeof v.houseNo === 'string' ? v.houseNo : (typeof v.flatNo === 'string' ? v.flatNo : '')))))).trim();
+  let street = (typeof v.street === 'string' ? v.street : (typeof v.streetAddress === 'string' ? v.streetAddress : (typeof v.road === 'string' ? v.road : (typeof v.streetName === 'string' ? v.streetName : '')))).trim();
+  let area = (typeof v.area === 'string' ? v.area : (typeof v.locality === 'string' ? v.locality : (typeof v.colony === 'string' ? v.colony : ''))).trim();
+  let city = (typeof v.city === 'string' ? v.city : (typeof v.town === 'string' ? v.town : (typeof v.village === 'string' ? v.village : ''))).trim();
+  let district = (typeof v.district === 'string' ? v.district : (typeof v.assignedDistrict === 'string' ? v.assignedDistrict : '')).trim();
+  let state = (typeof v.state === 'string' ? v.state : (typeof v.assignedState === 'string' ? v.assignedState : '')).trim();
+  let pincode = (typeof v.pincode === 'string' ? v.pincode : (typeof v.postalCode === 'string' ? v.postalCode : (typeof v.zipCode === 'string' ? v.zipCode : (typeof v.pin === 'string' ? v.pin : '')))).trim();
+  let landmark = (typeof v.landmark === 'string' ? v.landmark : (typeof v.landMark === 'string' ? v.landMark : '')).trim();
 
   if (isJunk(doorNo)) doorNo = '';
   if (isJunk(street)) street = '';
@@ -185,7 +205,7 @@ const getVendorFullAddressObject = (v) => {
     if (!isJunk(helperState) && helperState !== '—') state = helperState;
   }
 
-  const rawAddr = (v.fullAddress || v.address || v.businessAddress || '').trim();
+  const rawAddr = formatAddressString(v.fullAddress || v.address || v.businessAddress, '');
   if (rawAddr && !isJunk(rawAddr)) {
     if (!pincode) {
       const pinMatch = rawAddr.match(/\b\d{6}\b/);
@@ -565,7 +585,7 @@ export const deduplicateVendorsList = (list = []) => {
       if ((!existing.phone || existing.phone === '—') && v.phone && v.phone !== '—') existing.phone = v.phone;
       if (!existing.email && v.email) existing.email = v.email;
       if ((!existing.category || existing.category === '—') && v.category && v.category !== '—') existing.category = v.category;
-      if (!existing.fullAddress && (v.fullAddress || v.address)) existing.fullAddress = v.fullAddress || v.address;
+      if (!existing.fullAddress && (v.fullAddress || v.address)) existing.fullAddress = formatAddressString(v.fullAddress || v.address, '');
       if (!existing.pincode && v.pincode) existing.pincode = v.pincode;
 
       if (regId && !regMap.has(regId)) regMap.set(regId, existing);
@@ -573,7 +593,11 @@ export const deduplicateVendorsList = (list = []) => {
       if (email && !emailMap.has(email)) emailMap.set(email, existing);
       if (idStr && !idMap.has(idStr)) idMap.set(idStr, existing);
     } else {
-      const vendorCopy = { ...v };
+      const vendorCopy = {
+        ...v,
+        fullAddress: formatAddressString(v.fullAddress || v.address, ''),
+        address: formatAddressString(v.fullAddress || v.address, '')
+      };
       if (regId) vendorCopy.registrationId = regId;
       if (isVendorBusinessRequest(vendorCopy)) {
         vendorCopy.requestType = 'business_request';
@@ -790,7 +814,7 @@ export const VendorDirectoryModule = React.memo(({
     const timeoutId = setTimeout(() => {
       isTimeout = true;
       controller.abort('timeout');
-    }, 12000);
+    }, 25000);
 
     try {
       const query = new URLSearchParams({
@@ -838,18 +862,22 @@ export const VendorDirectoryModule = React.memo(({
       }
     } catch (err) {
       if (!isMountedRef.current) return;
-      if (err.name === 'AbortError') {
+      const isAbortOrTimeout = err.name === 'AbortError' || isTimeout || err === 'timeout' || String(err?.message || err).includes('timeout');
+      if (isAbortOrTimeout) {
         if (isTimeout) {
-          console.error('Fetch vendor directory timeout error:', err);
-          setError('Request timed out after 12 seconds. Please retry.');
+          // Keep existing cached data if available rather than clearing UI
+          if (!vendors || vendors.length === 0) {
+            setError('Server request is taking longer than expected. Please retry.');
+          }
         } else {
           // Intentionally cancelled (superseded by new search/filter, unmounted, etc.)
-          // Do NOT show error or false timeout message
           return;
         }
       } else {
-        console.error('Fetch vendor directory error:', err);
-        setError('Unable to load latest data. Please try again.');
+        console.error('Fetch vendor directory notice:', err.message || err);
+        if (!vendors || vendors.length === 0) {
+          setError('Unable to load latest data. Please try again.');
+        }
       }
     } finally {
       clearTimeout(timeoutId);
@@ -2616,7 +2644,7 @@ export const VendorDirectoryModule = React.memo(({
                         <div className="pt-1.5 flex flex-col gap-0.5">
                           <span className="text-slate-400 text-[11px]">Full Address:</span>
                           <span className="font-semibold text-slate-800 dark:text-slate-200 break-words leading-relaxed bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-slate-200/60 dark:border-slate-800">
-                            {addrObj.fullAddress}
+                            {formatAddressString(addrObj.fullAddress)}
                           </span>
                         </div>
                       </div>
@@ -3585,7 +3613,7 @@ export const VendorDirectoryModule = React.memo(({
                               Reg ID: {b.registrationId}
                             </span>
                             <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                              📍 {b.address || 'Address not specified'} {b.pincode ? `(${b.pincode})` : ''}
+                              📍 {formatAddressString(b.address, 'Address not specified')} {b.pincode ? `(${b.pincode})` : ''}
                             </span>
                           </div>
                         </div>
@@ -4247,7 +4275,7 @@ export const VendorDirectoryModule = React.memo(({
                     <div className="pt-2 border-t border-slate-200/60 dark:border-slate-700/60 flex items-center justify-between">
                       <div>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Full Physical Street Address</span>
-                        <strong className="text-slate-800 dark:text-slate-200">{vendorKycModal.data.address || 'Address not specified'}</strong>
+                        <strong className="text-slate-800 dark:text-slate-200">{formatAddressString(vendorKycModal.data.address, 'Address not specified')}</strong>
                       </div>
                     </div>
                   </div>

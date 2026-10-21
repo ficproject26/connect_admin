@@ -19,6 +19,25 @@ import {
 } from '../utils/formValidation.js';
 
 
+const formatAddressString = (addr, fallback = '—') => {
+  if (!addr) return fallback;
+  if (typeof addr === 'string') return addr.trim() || fallback;
+  if (typeof addr === 'object') {
+    const parts = [
+      addr.buildingNo || addr.doorNo || addr.houseNo || addr.flatNo,
+      addr.street || addr.streetName || addr.streetAddress,
+      addr.locality || addr.area,
+      addr.postOffice ? `PO: ${addr.postOffice}` : '',
+      addr.taluk ? `Taluk: ${addr.taluk}` : '',
+      addr.district || addr.city,
+      addr.state,
+      addr.pincode || addr.pinCode
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : fallback;
+  }
+  return String(addr) || fallback;
+};
+
 export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast }) => {
   // Primary Tabs: 'hierarchy' | 'requests' | 'activity'
   const [activeTab, setActiveTab] = useState('hierarchy');
@@ -1822,7 +1841,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                   <Building className="w-3.5 h-3.5 text-blue-500" /> Address Details
                 </h5>
                 <div className="grid grid-cols-2 gap-3 text-slate-700 dark:text-slate-300">
-                  <div><span className="text-slate-400 block text-[10px]">Address Line 1:</span><strong>{adminView.addressLine1 || kycDocs.addressLine1 || adminView.address || '—'}</strong></div>
+                  <div><span className="text-slate-400 block text-[10px]">Address Line 1:</span><strong>{adminView.addressLine1 || kycDocs.addressLine1 || (typeof adminView.address === 'string' ? adminView.address : formatAddressString(adminView.address, '—')) || '—'}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">Address Line 2:</span><strong>{adminView.addressLine2 || kycDocs.addressLine2 || '—'}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">Locality / Taluk:</span><strong>{adminView.locality || adminView.taluk || kycDocs.locality || kycDocs.taluk || adminView.city || adminView.division || '—'}</strong></div>
                   <div><span className="text-slate-400 block text-[10px]">City / Town:</span><strong>{adminView.city || kycDocs.city || adminView.division || '—'}</strong></div>
@@ -1834,7 +1853,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
                   <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800">
                     <span className="text-slate-400 block text-[10px]">Complete Registered Address:</span>
                     <p className="text-slate-700 dark:text-slate-300 font-medium text-[11px] mt-0.5">
-                      {adminView.fullAddress || adminView.address || adminView.permanentAddress}
+                      {formatAddressString(adminView.fullAddress || adminView.address || adminView.permanentAddress)}
                     </p>
                   </div>
                 )}

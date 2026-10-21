@@ -7,6 +7,25 @@ import {
   Copy, Check, ExternalLink, EyeOff, CreditCard, FileText
 } from 'lucide-react';
 
+export const formatAddressString = (addr, fallback = '—') => {
+  if (!addr) return fallback;
+  if (typeof addr === 'string') return addr.trim() || fallback;
+  if (typeof addr === 'object') {
+    const parts = [
+      addr.buildingNo || addr.doorNo || addr.houseNo || addr.flatNo,
+      addr.street || addr.streetName || addr.streetAddress,
+      addr.locality || addr.area,
+      addr.postOffice ? `PO: ${addr.postOffice}` : '',
+      addr.taluk ? `Taluk: ${addr.taluk}` : '',
+      addr.district || addr.city,
+      addr.state,
+      addr.pincode || addr.pinCode
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(', ') : fallback;
+  }
+  return String(addr) || fallback;
+};
+
 // Module-level in-memory cache
 let MEMORY_AGENT_CACHE = null;
 
@@ -14,7 +33,18 @@ const getCachedAgents = () => {
   if (Array.isArray(MEMORY_AGENT_CACHE) && MEMORY_AGENT_CACHE.length > 0) return MEMORY_AGENT_CACHE;
   try {
     const raw = sessionStorage.getItem('connect_agent_directory_cache');
-    if (raw) { const parsed = JSON.parse(raw); if (Array.isArray(parsed) && parsed.length > 0) { MEMORY_AGENT_CACHE = parsed; return parsed; } }
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const cleaned = parsed.map(ag => ({
+          ...ag,
+          fullAddress: formatAddressString(ag.fullAddress || ag.address, ''),
+          address: formatAddressString(ag.fullAddress || ag.address, '')
+        }));
+        MEMORY_AGENT_CACHE = cleaned;
+        return cleaned;
+      }
+    }
   } catch (e) {}
   return [];
 };
@@ -48,7 +78,14 @@ export default function AgentDirectoryModule({
   token, API_BASE, initialAgents = [], onAgentsUpdated,
   onOpenOnboardingModal, onOpenOnboardingRequests, onOpenAddAgentModal
 }) {
-  const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) && initialAgents.length > 0 ? initialAgents : getCachedAgents()));
+  const [agents, setAgents] = useState(() => {
+    const list = Array.isArray(initialAgents) && initialAgents.length > 0 ? initialAgents : getCachedAgents();
+    return Array.isArray(list) ? list.map(ag => ({
+      ...ag,
+      fullAddress: formatAddressString(ag.fullAddress || ag.address, ''),
+      address: formatAddressString(ag.fullAddress || ag.address, '')
+    })) : [];
+  });
   const [loading, setLoading] = useState(() => !(Array.isArray(initialAgents) && initialAgents.length > 0));
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
@@ -153,9 +190,8 @@ export default function AgentDirectoryModule({
     const candidates = [
       `${baseClean}/admin/agents`,
       `${baseClean}/agents`,
-      `${baseClean.replace(/\/admin-api$/, '')}/api/admin/agents`,
       `${baseClean.replace(/\/admin-api$/, '')}/admin-api/agents`,
-      ...(typeof window !== 'undefined' && window.location.origin.includes('localhost') ? ['/admin-api/admin/agents', '/admin-api/agents', '/api/admin/agents'] : [])
+      ...(typeof window !== 'undefined' && window.location.origin.includes('localhost') ? ['/admin-api/admin/agents', '/admin-api/agents'] : [])
     ];
     const urls = Array.from(new Set(candidates.map(u => u.replace(/([^:])\/\//g, '$1/').replace(/\/admin-api\/admin-api\//g, '/admin-api/'))));
     for (const u of urls) {
@@ -224,6 +260,9 @@ export default function AgentDirectoryModule({
         assignedDivision: ag.assignedDivision || ag.division || ag.territory?.division || '',
         assignedPincode: ag.assignedPincode || ag.pincode || ag.territory?.pincode || '',
         assignedArea: ag.assignedArea || (ag.territory ? Object.values(ag.territory).filter(Boolean).join(' / ') : ''),
+        fullAddress: formatAddressString(ag.fullAddress || ag.address, ''),
+        address: formatAddressString(ag.fullAddress || ag.address, ''),
+        rawAddress: (typeof ag.address === 'object' && ag.address !== null) ? ag.address : null,
         territory: ag.territory || {}, balance: ag.balance !== undefined ? ag.balance : (metrics.revenue || 0),
         commissionEarned: ag.commissionEarned !== undefined ? ag.commissionEarned : (metrics.commission || 0),
         createdAt: ag.createdAt || ag.created_at || new Date().toISOString()
@@ -1717,7 +1756,7 @@ export default function AgentDirectoryModule({
                         </div>
                         <div className="flex justify-between items-start pt-1">
                           <span className="text-slate-400 shrink-0">Address:</span>
-                          <span className="font-bold text-slate-800 dark:text-slate-100 text-right leading-tight max-w-[200px]">{ag.fullAddress || ag.address || '—'}</span>
+                          <span className="font-bold text-slate-800 dark:text-slate-100 text-right leading-tight max-w-[200px]">{formatAddressString(ag.fullAddress || ag.address)}</span>
                         </div>
                       </div>
                     </div>
@@ -2356,12 +2395,13 @@ function AgentLeafCard({ agent, level, onInspect, onAction, compact = false }) {
   const st = getStatusConfig(agent.status);
   const formattedId = agent.registrationId || (agent._id ? `REG-${String(agent._id).substring(0, 8).toUpperCase()}` : 'REG-N/A');
   const regDate = agent.createdAt ? new Date(agent.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A';
+  const pinVal = agent.assignedPincode?.code || (typeof agent.assignedPincode === 'string' ? agent.assignedPincode : '') || (typeof agent.territory?.pincode === 'string' ? agent.territory.pincode : (agent.territory?.pincode?.code || ''));
   const territory = [
-    agent.assignedState || agent.territory?.state,
-    agent.assignedDistrict || agent.territory?.district,
-    agent.assignedDivision || agent.territory?.division,
-    (agent.assignedPincode?.code || agent.assignedPincode || agent.territory?.pincode)
-  ].filter(Boolean).join(' \u203a ');
+    typeof agent.assignedState === 'string' ? agent.assignedState : (agent.territory?.state || ''),
+    typeof agent.assignedDistrict === 'string' ? agent.assignedDistrict : (agent.territory?.district || ''),
+    typeof agent.assignedDivision === 'string' ? agent.assignedDivision : (agent.territory?.division || ''),
+    pinVal
+  ].filter(x => typeof x === 'string' && Boolean(x)).join(' \u203a ');
 
   if (!compact) {
     return (

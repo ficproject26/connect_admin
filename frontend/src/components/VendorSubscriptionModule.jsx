@@ -1219,7 +1219,7 @@ export default function VendorSubscriptionModule({ token, API_BASE, currentUser,
                 <div>
                   <span className="block text-[10px] uppercase font-bold text-slate-400">Full Business Address</span>
                   <p className="text-slate-700 dark:text-slate-300 font-medium mt-0.5">
-                    {viewingSubscription.fullBusinessAddress || viewingSubscription.address || '—'}
+                    {viewingSubscription.fullBusinessAddress || (typeof viewingSubscription.address === 'string' ? viewingSubscription.address : (typeof viewingSubscription.address === 'object' && viewingSubscription.address !== null ? Object.values(viewingSubscription.address).filter(Boolean).join(', ') : '')) || '—'}
                   </p>
                 </div>
               </div>

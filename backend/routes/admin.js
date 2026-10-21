@@ -57,6 +57,25 @@ const {
 } = require('../utils/inputValidator');
 const cacheService = require('../utils/cacheService');
 
+const safeFormatAddress = (addr, fallback = '') => {
+    if (!addr) return fallback;
+    if (typeof addr === 'string') return addr.trim() || fallback;
+    if (typeof addr === 'object') {
+        const parts = [
+            addr.buildingNo || addr.doorNo || addr.houseNo || addr.flatNo,
+            addr.street || addr.streetName || addr.streetAddress,
+            addr.locality || addr.area,
+            addr.postOffice ? `PO: ${addr.postOffice}` : '',
+            addr.taluk ? `Taluk: ${addr.taluk}` : '',
+            addr.district || addr.city,
+            addr.state,
+            addr.pincode || addr.pinCode
+        ].filter(Boolean);
+        return parts.length > 0 ? parts.join(', ') : fallback;
+    }
+    return String(addr) || fallback;
+};
+
 const adminAuth = async (req, res, next) => {
     try {
         let userId = req.user?.id || req.user?._id;
@@ -1628,8 +1647,8 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                     division: agent.division || agent.assignedDivision || territoryObj.division || '',
                     pincode: agent.pincode || territoryObj.pincode || '',
                     postOffice: agent.postOffice || agent.postOfficeBranch || '',
-                    address: agent.address || agent.fullAddress || '',
-                    fullAddress: agent.fullAddress || agent.address || '',
+                    address: safeFormatAddress(agent.fullAddress || agent.address),
+                    fullAddress: safeFormatAddress(agent.fullAddress || agent.address),
                     aadhaarNumber: agent.aadhaarNumber || kycObj.aadhaarNumber || '',
                     panNumber: agent.panNumber || kycObj.panNumber || '',
                     kyc: kycObj,
@@ -1759,8 +1778,8 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
                         division: raw.division || raw.assignedDivision || rawTerritory.division || '',
                         pincode: raw.pincode || raw.assignedPincode || rawTerritory.pincode || '',
                         postOffice: raw.postOffice || raw.postOfficeBranch || '',
-                        address: raw.address || raw.fullAddress || '',
-                        fullAddress: raw.fullAddress || raw.address || '',
+                        address: safeFormatAddress(raw.fullAddress || raw.address),
+                        fullAddress: safeFormatAddress(raw.fullAddress || raw.address),
                         aadhaarNumber: raw.aadhaarNumber || rawKyc.aadhaarNumber || rawKycDocs.aadhaarNumber || '',
                         panNumber: raw.panNumber || rawKyc.panNumber || rawKycDocs.panNumber || '',
                         kycDocs: rawDocs,
@@ -1831,8 +1850,8 @@ router.get('/agents', [auth, adminAuth], async (req, res) => {
 
                     existing.assignedArea = existing.assignedArea || (Object.values(existing.territory).filter(Boolean).join(' / '));
                     existing.postOffice = existing.postOffice || raw.postOffice || raw.postOfficeBranch || '';
-                    existing.address = existing.address || existing.fullAddress || raw.address || raw.fullAddress || '';
-                    existing.fullAddress = existing.fullAddress || existing.address || raw.fullAddress || raw.address || '';
+                    existing.address = safeFormatAddress(existing.fullAddress || existing.address || raw.fullAddress || raw.address);
+                    existing.fullAddress = safeFormatAddress(existing.fullAddress || existing.address || raw.fullAddress || raw.address);
 
                     existing.aadhaarNumber = existing.aadhaarNumber || existing.kyc?.aadhaarNumber || existing.kycDocs?.aadhaarNumber || raw.aadhaarNumber || '';
                     existing.panNumber = existing.panNumber || existing.kyc?.panNumber || existing.kycDocs?.panNumber || raw.panNumber || '';
@@ -2102,7 +2121,7 @@ const enrichCompleteAgentDetails = async (agent, db) => {
     const pinCodeVal = (agent.assignedPincode?.code || agent.assignedPincode || agent.pincode || agent.territory?.pincode || '').trim();
 
     const streetVal = [agent.buildingNo || agent.doorNo, agent.streetName || agent.street].filter(Boolean).join(', ');
-    const resolvedAddress = agent.address || agent.fullAddress || [streetVal, agent.postOffice, divisionName, districtName, stateName, pinCodeVal].filter(Boolean).join(', ');
+    const resolvedAddress = safeFormatAddress(agent.fullAddress || agent.address) || [streetVal, agent.postOffice, divisionName, districtName, stateName, pinCodeVal].filter(Boolean).join(', ');
 
     let initiatorDetails = null;
     let onboardingSource = agent.onboardingSource || (agent.createdVia === 'admin' ? 'ADMIN_INITIATED' : 'DIRECT');
