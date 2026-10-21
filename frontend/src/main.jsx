@@ -31,11 +31,27 @@ const EXTENSION_PATTERNS = [
   'could not be resolved to a valid node',
   'nmigaijibiabddkkmjhlehchpmgbokfj',
   '1af9505a-5825-464e-acf3-5ad9367aeb9d',
+  'f872d920-f021-4d52-ac98-78da36ceb659',
+  'content.js:1',
   'volume-booster'
 ];
 
-// Neutralize third-party extension calls to setTimeout/setInterval with undefined or string handlers that trigger CSP unsafe-eval violations
+// Neutralize third-party extension calls to eval/setTimeout/setInterval with undefined or string handlers that trigger CSP unsafe-eval violations
 if (typeof window !== 'undefined') {
+  try {
+    const _origEval = window.eval;
+    window.eval = function (code) {
+      try {
+        return _origEval.apply(this, arguments);
+      } catch (err) {
+        if (isExtensionNoise(err) || String(err).includes('Content Security Policy') || String(err).includes('unsafe-eval')) {
+          return undefined;
+        }
+        throw err;
+      }
+    };
+  } catch (_) {}
+
   const _origSetTimeout = window.setTimeout;
   window.setTimeout = function (handler, timeout, ...args) {
     if (typeof handler !== 'function') {
@@ -65,7 +81,103 @@ const drainLastError = () => {
   } catch (_) {}
 };
 
+// Patch window.chrome.runtime to safely absorb dangling message ports
+const patchRuntime = (runtime) => {
+  if (!runtime || typeof runtime !== 'object') return;
+
+  if (typeof runtime.sendMessage === 'function' && !runtime._sendMessagePatched) {
+    const origSend = runtime.sendMessage.bind(runtime);
+    runtime.sendMessage = function (...args) {
+      const cb = args[args.length - 1];
+      if (typeof cb === 'function') {
+        args[args.length - 1] = function (...cbArgs) {
+          drainLastError();
+          try {
+            return cb.apply(this, cbArgs);
+          } catch (_) {}
+        };
+        try {
+          return origSend.apply(null, args);
+        } catch (e) {
+          drainLastError();
+          return;
+        }
+      }
+      try {
+        const p = origSend.apply(null, args);
+        if (p && typeof p.then === 'function') {
+          return p
+            .then((res) => {
+              drainLastError();
+              return res;
+            })
+            .catch((err) => {
+              drainLastError();
+              return undefined;
+            });
+        }
+        return p;
+      } catch (err) {
+        drainLastError();
+        return Promise.resolve(undefined);
+      }
+    };
+    runtime._sendMessagePatched = true;
+  }
+
+  if (runtime.onMessage && typeof runtime.onMessage.addListener === 'function' && !runtime._addListenerPatched) {
+    const origAdd = runtime.onMessage.addListener.bind(runtime.onMessage);
+    runtime.onMessage.addListener = function (listener) {
+      if (typeof listener !== 'function') return origAdd(listener);
+      return origAdd(function (message, sender, sendResponse) {
+        let responded = false;
+        const safeSendResponse = (...srArgs) => {
+          if (responded) return;
+          responded = true;
+          try {
+            const p = sendResponse.apply(null, srArgs);
+            if (p && typeof p.catch === 'function') {
+              p.catch(() => {});
+            }
+          } catch (_) {}
+        };
+        try {
+          const res = listener(message, sender, safeSendResponse);
+          if (res === true) {
+            setTimeout(() => {
+              if (!responded) safeSendResponse({ status: 'auto_resolved' });
+            }, 200);
+            return true;
+          }
+          if (res && typeof res.then === 'function') {
+            res.then((r) => { safeSendResponse(r !== undefined ? r : { status: 'resolved' }); })
+               .catch((e) => { safeSendResponse({ error: String(e) }); });
+            return true;
+          }
+          return res;
+        } catch (e) {
+          safeSendResponse({ error: String(e) });
+          return false;
+        }
+      });
+    };
+    runtime._addListenerPatched = true;
+  }
+};
+
+const autoPatchChrome = () => {
+  try {
+    if (typeof window !== 'undefined' && window.chrome) {
+      if (window.chrome.runtime) {
+        patchRuntime(window.chrome.runtime);
+      }
+    }
+  } catch (_) {}
+};
+
 if (typeof window !== 'undefined') {
+  autoPatchChrome();
+  setInterval(autoPatchChrome, 50);
   setInterval(drainLastError, 50);
   drainLastError();
 }
@@ -73,24 +185,21 @@ if (typeof window !== 'undefined') {
 const extractErrorString = (arg) => {
   if (!arg) return '';
   if (typeof arg === 'string') return arg;
-  if (arg instanceof Error) {
-    return `${arg.name || ''} ${arg.message || ''} ${arg.stack || ''}`;
-  }
+  let str = '';
+  try {
+    str = `${arg.name || ''} ${arg.message || ''} ${arg.stack || ''} ${String(arg)}`;
+  } catch (_) {}
   if (typeof arg === 'object') {
     try {
       const msg = arg.message || '';
-      const reason = arg.reason ? (arg.reason.message || arg.reason.stack || String(arg.reason)) : '';
-      const err = arg.error ? (arg.error.message || arg.error.stack || String(arg.error)) : '';
-      const detail = arg.detail ? (arg.detail.message || String(arg.detail)) : '';
+      const reason = arg.reason ? extractErrorString(arg.reason) : '';
+      const err = arg.error ? extractErrorString(arg.error) : '';
+      const detail = arg.detail ? extractErrorString(arg.detail) : '';
       const stack = arg.stack || '';
-      let json = '';
-      try { json = JSON.stringify(arg); } catch (_) {}
-      return `${msg} ${reason} ${err} ${detail} ${stack} ${json}`;
-    } catch (_) {
-      return String(arg);
-    }
+      str += ` ${msg} ${reason} ${err} ${detail} ${stack}`;
+    } catch (_) {}
   }
-  return String(arg);
+  return str;
 };
 
 const isExtensionNoise = (errOrMsg) => {
@@ -114,6 +223,22 @@ const handleRejection = (event) => {
 
 window.addEventListener('unhandledrejection', handleRejection, { capture: true, passive: false });
 window.addEventListener('unhandledrejection', handleRejection, false);
+
+try {
+  const origUnhandled = window.onunhandledrejection;
+  window.onunhandledrejection = function (e) {
+    drainLastError();
+    if (e && isExtensionNoise(e.reason || e)) {
+      try {
+        if (typeof e.preventDefault === 'function') e.preventDefault();
+        if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+        e.returnValue = false;
+      } catch (_) {}
+      return true;
+    }
+    if (typeof origUnhandled === 'function') return origUnhandled.apply(this, arguments);
+  };
+} catch (_) {}
 
 // Silence extension-injected CSP violation events on window and document
 const suppressCspViolation = (e) => {
