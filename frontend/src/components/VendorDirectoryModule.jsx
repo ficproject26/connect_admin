@@ -829,14 +829,31 @@ export const VendorDirectoryModule = React.memo(({
 
       const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('adminToken')) : '');
 
-      const res = await fetch(`${API_BASE}/admin/enterprise/vendors?${query.toString()}`, {
-        headers: {
-          'x-auth-token': activeToken || '',
-          'Authorization': activeToken ? `Bearer ${activeToken}` : '',
-          'Content-Type': 'application/json'
-        },
-        signal: controller.signal
-      });
+      let res = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          res = await fetch(`${API_BASE}/admin/enterprise/vendors?${query.toString()}`, {
+            headers: {
+              'x-auth-token': activeToken || '',
+              'Authorization': activeToken ? `Bearer ${activeToken}` : '',
+              'Content-Type': 'application/json'
+            },
+            signal: controller.signal
+          });
+          if (res && res.ok) break;
+          if (res && (res.status === 502 || res.status === 503 || res.status === 504) && attempt < 2) {
+            await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+            continue;
+          }
+          break;
+        } catch (fetchErr) {
+          if (attempt < 2 && fetchErr.name !== 'AbortError') {
+            await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+            continue;
+          }
+          throw fetchErr;
+        }
+      }
       clearTimeout(timeoutId);
 
       if (!isMountedRef.current) return;

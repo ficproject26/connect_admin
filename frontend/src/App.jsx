@@ -1545,6 +1545,9 @@ function App() {
               if (setter) setter(data);
               return data;
             }
+          } else if (r.status >= 500 && attempt < retries) {
+            await new Promise(res => setTimeout(res, 600 * (attempt + 1)));
+            continue;
           }
 
           if (r.status === 404 && targetUrl.includes('api.ficapp.in/admin-api/')) {

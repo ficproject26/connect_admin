@@ -353,8 +353,17 @@ if (typeof window !== 'undefined' && window.fetch) {
 
       // 502/503/504 Bad Gateway Auto-Recovery:
       // If Vercel edge rewrite proxy returns 502 Bad Gateway or Gateway Timeout,
-      // transparently retry directly against authoritative origin https://api.ficapp.in
+      // 1. Transparently retry the same-origin request once after 600ms (recovers from proxy cold-start / reload).
+      // 2. If still failing, transparently retry directly against authoritative origin https://api.ficapp.in.
       if (response && (response.status === 502 || response.status === 503 || response.status === 504) && typeof url === 'string') {
+        try {
+          await new Promise(r => setTimeout(r, 600));
+          const retryResponse = await _origFetch.call(this, primaryInput, init);
+          if (retryResponse && retryResponse.status !== 502 && retryResponse.status !== 503 && retryResponse.status !== 504) {
+            return retryResponse;
+          }
+        } catch (_) {}
+
         let directUrl = null;
         if (url.includes('.vercel.app/admin-api/')) {
           directUrl = url.replace(/https?:\/\/[^\/]+\/admin-api\//, 'https://api.ficapp.in/admin-api/');
