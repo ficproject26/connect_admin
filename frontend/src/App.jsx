@@ -68,6 +68,7 @@ const AgentPaymentModule = lazyWithRetry(() => import('./components/AgentPayment
 const PincodeTerritoryManagement = lazyWithRetry(() => import('./components/PincodeTerritoryManagement'), 'PincodeTerritoryManagement');
 const AdminManagementModule = lazyWithRetry(() => import('./components/AdminManagementModule'), 'AdminManagementModule');
 const ManagerDirectoryModule = lazyWithRetry(() => import('./components/ManagerDirectoryModule'), 'ManagerDirectoryModule');
+const PaymentSecuritySettingsModule = lazyWithRetry(() => import('./components/PaymentSecuritySettingsModule'), 'PaymentSecuritySettingsModule');
 import dataSyncManager from './utils/dataSyncManager';
 import {
   formatName,
