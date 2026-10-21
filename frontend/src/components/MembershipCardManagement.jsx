@@ -85,17 +85,26 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
 
       const activeToken = token || (typeof localStorage !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('admin_token') || '') : '');
 
+      const isRemoteServer = serverUrl.includes('api.ficapp.in') || (typeof window !== 'undefined' && window.location.hostname.endsWith('.vercel.app'));
+      const socketPath = isRemoteServer ? '/admin-api/socket.io' : '/socket.io';
+
       socket = io(serverUrl, {
+        path: socketPath,
         auth: { token: activeToken },
         query: { token: activeToken },
-        transports: ['polling', 'websocket'],
-        reconnectionAttempts: 10,
-        reconnectionDelay: 1500
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 2000,
+        timeout: 10000
       });
 
       socket.on('connect', () => {
         setIsLiveConnected(true);
         socket.emit('register', { role: 'admin' });
+      });
+
+      socket.on('connect_error', () => {
+        setIsLiveConnected(false);
       });
 
       socket.on('disconnect', () => {
@@ -117,7 +126,7 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
         socket.disconnect();
       }
     };
-  }, [API_BASE, fetchMembershipRequests]);
+  }, [API_BASE, fetchMembershipRequests, token]);
 
   // Periodic background refresh when page is visible
   useEffect(() => {

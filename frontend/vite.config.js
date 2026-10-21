@@ -21,6 +21,13 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/admin-api/socket.io': {
+        target: 'http://localhost:8004',
+        ws: true,
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/admin-api/, '')
+      },
       '/admin-api': {
         target: 'http://localhost:8004',
         changeOrigin: true,

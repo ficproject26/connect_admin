@@ -171,7 +171,12 @@
               var safeSendResponse = function() {
                 if (responded) return;
                 responded = true;
-                try { sendResponse.apply(null, arguments); } catch (_) {}
+                try {
+                  var p = sendResponse.apply(null, arguments);
+                  if (p && typeof p.catch === 'function') {
+                    p.catch(function() {});
+                  }
+                } catch (_) {}
               };
               try {
                 var res = listener(message, sender, safeSendResponse);

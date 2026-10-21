@@ -39,7 +39,7 @@ if (typeof window !== 'undefined') {
   const _origSetTimeout = window.setTimeout;
   window.setTimeout = function (handler, timeout, ...args) {
     if (typeof handler !== 'function') {
-      if (!handler || handler === 'undefined' || handler === 'null') {
+      if (!handler || handler === 'undefined' || handler === 'null' || typeof handler === 'string') {
         return -1;
       }
     }
@@ -49,7 +49,7 @@ if (typeof window !== 'undefined') {
   const _origSetInterval = window.setInterval;
   window.setInterval = function (handler, timeout, ...args) {
     if (typeof handler !== 'function') {
-      if (!handler || handler === 'undefined' || handler === 'null') {
+      if (!handler || handler === 'undefined' || handler === 'null' || typeof handler === 'string') {
         return -1;
       }
     }
