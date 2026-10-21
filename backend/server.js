@@ -482,6 +482,11 @@ app.use('/customers', require('./routes/admin'));
 
 // 404 Handler for unmapped API routes
 app.use(['/api', '/admin-api', '/admin'], (req, res) => {
+    const origin = req.headers.origin;
+    if (origin && isOriginAllowed(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
     res.status(404).json({
         success: false,
         message: `API route not found: ${req.method} ${req.originalUrl}`,
@@ -492,6 +497,11 @@ app.use(['/api', '/admin-api', '/admin'], (req, res) => {
 // Global Error Handler (never leaks internal stack traces to clients)
 app.use((err, req, res, next) => {
     console.error('Global Error Handler:', err);
+    const origin = req.headers.origin;
+    if (origin && isOriginAllowed(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
     res.status(err.status || 500).json({
         success: false,
         message: 'Internal Server Error'

@@ -949,7 +949,7 @@ router.get('/vendors', auth, async (req, res) => {
             };
 
             const [agentVendorsFromUser, agentVendorsFromVendor] = await Promise.all([
-                User.find(agentMongoQuery).select('-password -__v -businessImages').sort({ createdAt: -1 }).lean(),
+                User.find(agentMongoQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean(),
                 Vendor.find(agentMongoQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean()
             ]);
 
@@ -1065,7 +1065,7 @@ router.get('/vendors', auth, async (req, res) => {
                 User.find({
                     ...managerMongoQuery,
                     role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] }
-                }).select('-password -__v -businessImages').sort({ createdAt: -1 }).lean(),
+                }).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean(),
                 Vendor.find(managerMongoQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean()
             ]);
 
@@ -1215,7 +1215,7 @@ router.get('/vendors', auth, async (req, res) => {
             };
 
             const [directVendors, directVendorDocs] = await Promise.all([
-                User.find(directMongoQuery).select('-password -__v -businessImages').sort({ createdAt: -1 }).lean(),
+                User.find(directMongoQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean(),
                 Vendor.find(directMongoQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean()
             ]);
 
@@ -1297,7 +1297,7 @@ router.get('/vendors', auth, async (req, res) => {
         }
 
         const [userVendors, docVendors] = await Promise.all([
-            User.find(userQuery).select('-password -__v -businessImages').sort({ createdAt: -1 }).lean(),
+            User.find(userQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean(),
             Vendor.find(vendorDocQuery).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean()
         ]);
         const rawVendors = [...userVendors, ...docVendors];

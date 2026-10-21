@@ -2845,11 +2845,11 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
         // Concurrently query User and Vendor collections in parallel
         const [usersVendors, legacyVendors] = await Promise.all([
             User.find({ role: { $in: ['Vendor', 'vendor'] } })
-                .select('-password -__v -businessImages')
+                .select(VENDOR_LIST_EXCLUSIONS)
                 .populate('branchId', 'name')
                 .populate('referredBy', 'name')
                 .lean()
-                .catch(() => User.find({ role: { $in: ['Vendor', 'vendor'] } }).select('-password -__v -businessImages').lean()),
+                .catch(() => User.find({ role: { $in: ['Vendor', 'vendor'] } }).select(VENDOR_LIST_EXCLUSIONS).lean()),
             Vendor.find(filter)
                 .select(VENDOR_LIST_EXCLUSIONS)
                 .populate('branchId', 'name')
@@ -4427,8 +4427,8 @@ router.get('/reports', [auth, adminAuth], async (req, res) => {
     try {
         // Depending on type, return formatted analytics
         // Let's build real/realistic aggregations
-        const branches = await Branch.find();
-        const vendors = await Vendor.find();
+        const branches = await Branch.find().lean();
+        const vendors = await Vendor.find().select(VENDOR_LIST_EXCLUSIONS).lean();
         
         let reportData = [];
 

@@ -353,33 +353,15 @@ if (typeof window !== 'undefined' && window.fetch) {
 
       // 502/503/504 Bad Gateway Auto-Recovery:
       // If Vercel edge rewrite proxy returns 502 Bad Gateway or Gateway Timeout,
-      // 1. Transparently retry the same-origin request once after 600ms (recovers from proxy cold-start / reload).
-      // 2. If still failing, transparently retry directly against authoritative origin https://api.ficapp.in.
+      // transparently retry the same-origin request up to 2 times with progressive backoff (recovers from proxy cold-start / reload).
+      // Keep strictly same-origin to prevent browser CORS preflight violations.
       if (response && (response.status === 502 || response.status === 503 || response.status === 504) && typeof url === 'string') {
-        try {
-          await new Promise(r => setTimeout(r, 600));
-          const retryResponse = await _origFetch.call(this, primaryInput, init);
-          if (retryResponse && retryResponse.status !== 502 && retryResponse.status !== 503 && retryResponse.status !== 504) {
-            return retryResponse;
-          }
-        } catch (_) {}
-
-        let directUrl = null;
-        if (url.includes('.vercel.app/admin-api/')) {
-          directUrl = url.replace(/https?:\/\/[^\/]+\/admin-api\//, 'https://api.ficapp.in/admin-api/');
-        } else if (url.startsWith('/admin-api/')) {
-          directUrl = `https://api.ficapp.in${url}`;
-        }
-
-        if (directUrl && directUrl !== url) {
+        for (let rAttempt = 0; rAttempt < 2; rAttempt++) {
           try {
-            let directInput = directUrl;
-            if (typeof Request !== 'undefined' && input instanceof Request) {
-              directInput = new Request(directUrl, input);
-            }
-            const directResponse = await _origFetch.call(this, directInput, init);
-            if (directResponse && directResponse.status !== 502 && directResponse.status !== 503 && directResponse.status !== 504) {
-              return directResponse;
+            await new Promise(r => setTimeout(r, 750 * (rAttempt + 1)));
+            const retryResponse = await _origFetch.call(this, primaryInput, init);
+            if (retryResponse && retryResponse.status !== 502 && retryResponse.status !== 503 && retryResponse.status !== 504) {
+              return retryResponse;
             }
           } catch (_) {}
         }
