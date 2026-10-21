@@ -70,6 +70,8 @@ const AdminManagementModule = lazyWithRetry(() => import('./components/AdminMana
 const ManagerDirectoryModule = lazyWithRetry(() => import('./components/ManagerDirectoryModule'), 'ManagerDirectoryModule');
 const PaymentSecuritySettingsModule = lazyWithRetry(() => import('./components/PaymentSecuritySettingsModule'), 'PaymentSecuritySettingsModule');
 import dataSyncManager from './utils/dataSyncManager';
+import TerritoryFilterBar from './components/TerritoryFilterBar';
+import { matchesTerritoryFilter } from './utils/territoryMatcher';
 import {
   formatName,
   validateName,
@@ -1312,6 +1314,17 @@ function App() {
       }
     } catch (e) {}
   }, [activeTab, ordersSearchTerm, ordersDateFilter, ordersStatusFilter, ordersProductFilter, ordersBusinessTypeFilter]);
+
+  // Global Cascading Territory Filters (State -> District -> Division -> Pincode)
+  const [customerTerritoryFilter, setCustomerTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+  const [ordersTerritoryFilter, setOrdersTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+  const [bookingsTerritoryFilter, setBookingsTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+  const [jobsTerritoryFilter, setJobsTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+  const [cardHoldersTerritoryFilter, setCardHoldersTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+  const [queriesTerritoryFilter, setQueriesTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+  const [tasksTerritoryFilter, setTasksTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+  const [managerReportsTerritoryFilter, setManagerReportsTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+  const [adminReportsTerritoryFilter, setAdminReportsTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
 
   // Customers Search & Filters
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
@@ -3325,6 +3338,15 @@ function App() {
                   </div>
                 </div>
 
+                {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                <div className="p-3 bg-slate-50/80 dark:bg-slate-950/60 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+                  <TerritoryFilterBar
+                    API_BASE={API_BASE}
+                    territoryFilter={tasksTerritoryFilter}
+                    setTerritoryFilter={setTasksTerritoryFilter}
+                  />
+                </div>
+
                 {/* Clean Dashboard Empty State */}
                 <div className="py-16 text-center space-y-4 max-w-md mx-auto">
                   <div className="w-16 h-16 rounded-3xl bg-slate-100 dark:bg-slate-800/80 flex items-center justify-center mx-auto text-slate-400">
@@ -3374,6 +3396,15 @@ function App() {
                       Module Initialized
                     </span>
                   </div>
+                </div>
+
+                {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                <div className="p-3 bg-slate-50/80 dark:bg-slate-950/60 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+                  <TerritoryFilterBar
+                    API_BASE={API_BASE}
+                    territoryFilter={adminReportsTerritoryFilter}
+                    setTerritoryFilter={setAdminReportsTerritoryFilter}
+                  />
                 </div>
 
                 {/* Clean Dashboard Empty State */}
@@ -3426,6 +3457,15 @@ function App() {
                       Module Initialized
                     </span>
                   </div>
+                </div>
+
+                {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                <div className="p-3 bg-slate-50/80 dark:bg-slate-950/60 rounded-2xl border border-slate-200/60 dark:border-slate-800">
+                  <TerritoryFilterBar
+                    API_BASE={API_BASE}
+                    territoryFilter={managerReportsTerritoryFilter}
+                    setTerritoryFilter={setManagerReportsTerritoryFilter}
+                  />
                 </div>
 
                 {/* Clean Dashboard Empty State */}
@@ -3672,7 +3712,9 @@ function App() {
               const typeVal = c.customerType || c.type || 'Standard';
               const matchesType = customerTypeFilter === 'All' || typeVal === customerTypeFilter;
 
-              return matchesSearch && matchesDistrict && matchesStatus && matchesType;
+              const matchesTerritory = matchesTerritoryFilter(c, customerTerritoryFilter);
+
+              return matchesSearch && matchesDistrict && matchesStatus && matchesType && matchesTerritory;
             });
 
             return (
@@ -3715,6 +3757,15 @@ function App() {
                         ))}
                       </select>
                     </div>
+                  </div>
+
+                  {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <TerritoryFilterBar
+                      API_BASE={API_BASE}
+                      territoryFilter={customerTerritoryFilter}
+                      setTerritoryFilter={setCustomerTerritoryFilter}
+                    />
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
@@ -5389,7 +5440,9 @@ function App() {
                 }
               }
 
-              return matchesSearch && matchesStatus && matchesBusinessType && matchesProduct && matchesDate;
+              const matchesTerritory = matchesTerritoryFilter(o, ordersTerritoryFilter);
+
+              return matchesSearch && matchesStatus && matchesBusinessType && matchesProduct && matchesDate && matchesTerritory;
             }).sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
 
             return (
@@ -5481,7 +5534,7 @@ function App() {
                       </select>
 
                       {/* Reset button */}
-                      {(ordersSearchTerm || ordersBusinessTypeFilter !== 'All' || ordersProductFilter !== 'All' || ordersDateFilter !== 'All' || ordersStatusFilter !== 'All') && (
+                      {(ordersSearchTerm || ordersBusinessTypeFilter !== 'All' || ordersProductFilter !== 'All' || ordersDateFilter !== 'All' || ordersStatusFilter !== 'All' || (ordersTerritoryFilter && ordersTerritoryFilter.state !== 'All')) && (
                         <button
                           onClick={() => {
                             setOrdersSearchTerm('');
@@ -5489,6 +5542,7 @@ function App() {
                             setOrdersProductFilter('All');
                             setOrdersDateFilter('All');
                             setOrdersStatusFilter('All');
+                            setOrdersTerritoryFilter({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
                           }}
                           className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                           title="Reset Filters"
@@ -5497,6 +5551,15 @@ function App() {
                         </button>
                       )}
                     </div>
+                  </div>
+
+                  {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <TerritoryFilterBar
+                      API_BASE={API_BASE}
+                      territoryFilter={ordersTerritoryFilter}
+                      setTerritoryFilter={setOrdersTerritoryFilter}
+                    />
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
@@ -5605,7 +5668,9 @@ function App() {
                 }
               }
 
-              return isServiceOrBooking && matchesSearch && matchesStatus && matchesBookingType && matchesDate;
+              const matchesTerritory = matchesTerritoryFilter(b, bookingsTerritoryFilter);
+
+              return isServiceOrBooking && matchesSearch && matchesStatus && matchesBookingType && matchesDate && matchesTerritory;
             }).sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
 
             return (
@@ -5683,13 +5748,14 @@ function App() {
                       </select>
 
                       {/* Reset button */}
-                      {(bookingSearchTerm || bookingTypeFilter !== 'All' || bookingStatusFilter !== 'All' || bookingDateFilter !== 'All') && (
+                      {(bookingSearchTerm || bookingTypeFilter !== 'All' || bookingStatusFilter !== 'All' || bookingDateFilter !== 'All' || (bookingsTerritoryFilter && bookingsTerritoryFilter.state !== 'All')) && (
                         <button
                           onClick={() => {
                             setBookingSearchTerm('');
                             setBookingTypeFilter('All');
                             setBookingStatusFilter('All');
                             setBookingDateFilter('All');
+                            setBookingsTerritoryFilter({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
                           }}
                           className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                           title="Reset Filters"
@@ -5698,6 +5764,15 @@ function App() {
                         </button>
                       )}
                     </div>
+                  </div>
+
+                  {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <TerritoryFilterBar
+                      API_BASE={API_BASE}
+                      territoryFilter={bookingsTerritoryFilter}
+                      setTerritoryFilter={setBookingsTerritoryFilter}
+                    />
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
@@ -5813,7 +5888,9 @@ function App() {
                 catVal === jobTypeFilter.toLowerCase() ||
                 rawCat.includes(jobTypeFilter.toLowerCase());
 
-              return matchesSearch && matchesStatus && matchesJobType;
+              const matchesTerritory = matchesTerritoryFilter(job, jobsTerritoryFilter);
+
+              return matchesSearch && matchesStatus && matchesJobType && matchesTerritory;
             }).sort((a, b) => new Date(b.createdAt || b.appliedAt || b.appliedDate || b.date || 0) - new Date(a.createdAt || a.appliedAt || a.appliedDate || a.date || 0));
 
             const totalApps = filteredJobs.length;
@@ -5872,55 +5949,67 @@ function App() {
                 </div>
 
                 {/* SEARCH & FILTER TOOLBAR */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3.5 shadow-sm flex flex-col sm:flex-row gap-3 items-center justify-between">
-                  <div className="relative flex-1 w-full">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={jobSearchTerm}
-                      onChange={(e) => setJobSearchTerm(e.target.value)}
-                      placeholder="Search candidates, position, company, ID or contact..."
-                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 text-slate-800 dark:text-slate-200"
-                    />
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+                  <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                    <div className="relative flex-1 w-full">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={jobSearchTerm}
+                        onChange={(e) => setJobSearchTerm(e.target.value)}
+                        placeholder="Search candidates, position, company, ID or contact..."
+                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/20 text-slate-800 dark:text-slate-200"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                      <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Job Type</label>
+                      <select
+                        value={jobTypeFilter}
+                        onChange={(e) => setJobTypeFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+                      >
+                        <option value="All">All Job Types</option>
+                        {allAvailableJobTypes.map(t => (
+                          <option key={t} value={t}>{t}</option>
+                        ))}
+                      </select>
+
+                      <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Status Filter</label>
+                      <select
+                        value={jobStatusFilter}
+                        onChange={(e) => setJobStatusFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+                      >
+                        <option value="All">All Statuses</option>
+                        <option value="applied">Applied</option>
+                        <option value="shortlisted">Shortlisted / Interviewing</option>
+                        <option value="selected">Selected</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+
+                      <button
+                        onClick={() => {
+                          setJobSearchTerm("");
+                          setJobStatusFilter("All");
+                          setJobTypeFilter("All");
+                          setJobsTerritoryFilter({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
+                        }}
+                        className="p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
+                        title="Reset Filters"
+                      >
+                        <RotateCcw className="w-4 h-4 text-slate-400" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
-                    <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Job Type</label>
-                    <select
-                      value={jobTypeFilter}
-                      onChange={(e) => setJobTypeFilter(e.target.value)}
-                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
-                    >
-                      <option value="All">All Job Types</option>
-                      {allAvailableJobTypes.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-
-                    <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Status Filter</label>
-                    <select
-                      value={jobStatusFilter}
-                      onChange={(e) => setJobStatusFilter(e.target.value)}
-                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
-                    >
-                      <option value="All">All Statuses</option>
-                      <option value="applied">Applied</option>
-                      <option value="shortlisted">Shortlisted / Interviewing</option>
-                      <option value="selected">Selected</option>
-                      <option value="rejected">Rejected</option>
-                    </select>
-
-                    <button
-                      onClick={() => {
-                        setJobSearchTerm("");
-                        setJobStatusFilter("All");
-                        setJobTypeFilter("All");
-                      }}
-                      className="p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
-                      title="Reset Filters"
-                    >
-                      <RotateCcw className="w-4 h-4 text-slate-400" />
-                    </button>
+                  {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <TerritoryFilterBar
+                      API_BASE={API_BASE}
+                      territoryFilter={jobsTerritoryFilter}
+                      setTerritoryFilter={setJobsTerritoryFilter}
+                    />
                   </div>
                 </div>
 
@@ -6038,7 +6127,9 @@ function App() {
                 }
               }
 
-              return matchesSearch && matchesType && matchesStatus && matchesExpiry;
+              const matchesTerritory = matchesTerritoryFilter(h, cardHoldersTerritoryFilter);
+
+              return matchesSearch && matchesType && matchesStatus && matchesExpiry && matchesTerritory;
             });
 
             return (
@@ -6102,6 +6193,15 @@ function App() {
                         <option value="Expired">Already Expired</option>
                       </select>
                     </div>
+                  </div>
+
+                  {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <TerritoryFilterBar
+                      API_BASE={API_BASE}
+                      territoryFilter={cardHoldersTerritoryFilter}
+                      setTerritoryFilter={setCardHoldersTerritoryFilter}
+                    />
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">
@@ -7513,7 +7613,9 @@ function App() {
 
               const matchesStatus = queryStatusFilter === 'All' || (q.status || '').toLowerCase() === queryStatusFilter.toLowerCase();
 
-              return matchesSearch && matchesUserType && matchesStatus;
+              const matchesTerritory = matchesTerritoryFilter(q, queriesTerritoryFilter);
+
+              return matchesSearch && matchesUserType && matchesStatus && matchesTerritory;
             });
 
             return (
@@ -7561,6 +7663,15 @@ function App() {
                         <option value="resolved">Resolved</option>
                       </select>
                     </div>
+                  </div>
+
+                  {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <TerritoryFilterBar
+                      API_BASE={API_BASE}
+                      territoryFilter={queriesTerritoryFilter}
+                      setTerritoryFilter={setQueriesTerritoryFilter}
+                    />
                   </div>
 
                   <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-800">

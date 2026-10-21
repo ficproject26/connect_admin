@@ -4,6 +4,7 @@ import {
   Calendar, CheckCircle, Clock, AlertTriangle, ArrowUpRight, ArrowDownRight,
   Eye, FileText, Printer, X, Download, Shield, MapPin, Building, CreditCard
 } from 'lucide-react';
+import TerritoryFilterBar from './TerritoryFilterBar';
 
 export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) => {
   const [loading, setLoading] = useState(false);
@@ -12,6 +13,9 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
   const [page, setPage] = useState(1);
   const [limit] = useState(20);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Cascading Territory Filter (State -> District -> Division -> Pincode)
+  const [territoryFilter, setTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
 
   // Filters
   const [search, setSearch] = useState('');
@@ -44,6 +48,10 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
       if (status !== 'all') query.set('status', status);
       if (startDate) query.set('startDate', startDate);
       if (endDate) query.set('endDate', endDate);
+      if (territoryFilter.state && territoryFilter.state !== 'All') query.set('state', territoryFilter.state);
+      if (territoryFilter.district && territoryFilter.district !== 'All') query.set('district', territoryFilter.district);
+      if (territoryFilter.division && territoryFilter.division !== 'All') query.set('division', territoryFilter.division);
+      if (territoryFilter.pincode && territoryFilter.pincode !== 'All') query.set('pincode', territoryFilter.pincode);
       if (isRefresh) query.set('_t', Date.now().toString());
 
       const res = await fetch(`${API_BASE}/admin/enterprise/payments/transactions?${query.toString()}`, {
@@ -69,7 +77,7 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, token, page, limit, search, direction, category, status, startDate, endDate, toast]);
+  }, [API_BASE, token, page, limit, search, direction, category, status, startDate, endDate, toast, territoryFilter]);
 
   useEffect(() => {
     fetchTransactions();
@@ -276,6 +284,18 @@ export const PaymentHistoryModule = React.memo(({ token, API_BASE, onToast }) =>
         </div>
 
         <span className="text-xs font-bold text-slate-400">Total Records: <strong>{totalCount}</strong></span>
+
+        {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+        <div className="w-full pt-3 border-t border-slate-200/60 dark:border-slate-800">
+          <TerritoryFilterBar
+            API_BASE={API_BASE}
+            territoryFilter={territoryFilter}
+            setTerritoryFilter={(newFilter) => {
+              setTerritoryFilter(newFilter);
+              setPage(1);
+            }}
+          />
+        </div>
       </div>
 
       {/* 4. TRANSACTIONS TABLE */}

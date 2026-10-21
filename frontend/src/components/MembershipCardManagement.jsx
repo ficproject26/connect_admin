@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   CreditCard, Search, CheckCircle, XCircle, Printer,
   Eye, RefreshCw, Sparkles, Award, Shield, User, ArrowUpRight,
   Calendar, AlertCircle, Radio
 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import TerritoryFilterBar from './TerritoryFilterBar';
+import { matchesTerritoryFilter } from '../utils/territoryMatcher';
 
 export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
   const [loading, setLoading] = useState(false);
@@ -12,6 +14,9 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
   const [selectedCard, setSelectedCard] = useState(null);
   const [fetchError, setFetchError] = useState(null);
   const [isLiveConnected, setIsLiveConnected] = useState(false);
+
+  // Cascading Territory Filter (State -> District -> Division -> Pincode)
+  const [territoryFilter, setTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
 
   // Filters
   const [search, setSearch] = useState('');
@@ -32,6 +37,11 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
         status,
         _t: Date.now().toString()
       });
+
+      if (territoryFilter.state && territoryFilter.state !== 'All') query.set('state', territoryFilter.state);
+      if (territoryFilter.district && territoryFilter.district !== 'All') query.set('district', territoryFilter.district);
+      if (territoryFilter.division && territoryFilter.division !== 'All') query.set('division', territoryFilter.division);
+      if (territoryFilter.pincode && territoryFilter.pincode !== 'All') query.set('pincode', territoryFilter.pincode);
 
       // Always send refresh=true on load or refresh to ensure instant DB sync
       query.set('refresh', 'true');
@@ -54,7 +64,12 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
     } finally {
       setLoading(false);
     }
-  }, [API_BASE, token, search, membershipType, paymentMode, paymentStatus, status]);
+  }, [API_BASE, token, search, membershipType, paymentMode, paymentStatus, status, territoryFilter]);
+
+  // Client-side territory filter
+  const filteredRequests = useMemo(() => {
+    return requests.filter(req => matchesTerritoryFilter(req, territoryFilter));
+  }, [requests, territoryFilter]);
 
   useEffect(() => {
     fetchMembershipRequests();
@@ -324,7 +339,16 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
           </select>
         </div>
 
-        <span className="text-xs font-bold text-slate-400">Total Cards: <strong>{requests.length}</strong></span>
+        <span className="text-xs font-bold text-slate-400">Total Cards: <strong>{filteredRequests.length}</strong></span>
+
+        {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+        <div className="w-full pt-3 border-t border-slate-200/60 dark:border-slate-800">
+          <TerritoryFilterBar
+            API_BASE={API_BASE}
+            territoryFilter={territoryFilter}
+            setTerritoryFilter={setTerritoryFilter}
+          />
+        </div>
       </div>
 
       {/* MEMBERSHIP REQUESTS TABLE */}
@@ -342,7 +366,7 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-850 text-xs">
-            {requests.map((req, idx) => (
+            {filteredRequests.map((req, idx) => (
               <tr key={req._id || idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-850/40 transition-colors">
                 {/* S.NO */}
                 <td className="py-3 px-3 text-center font-mono font-bold text-slate-400">
@@ -437,7 +461,7 @@ export const MembershipCardManagement = React.memo(({ token, API_BASE }) => {
               </tr>
             ))}
 
-            {requests.length === 0 && !loading && (
+            {filteredRequests.length === 0 && !loading && (
               <tr>
                 <td colSpan={7} className="text-center py-12 text-slate-400">
                   <CreditCard className="w-10 h-10 text-purple-500 mx-auto mb-2 opacity-50" />

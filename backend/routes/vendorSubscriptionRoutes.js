@@ -12,6 +12,9 @@ const Payment = require('../models/Payment');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
 const Pincode = require('../models/Pincode');
+const State = require('../models/State');
+const District = require('../models/District');
+const Division = require('../models/Division');
 
 require('dotenv').config();
 
@@ -335,18 +338,38 @@ router.get('/filters', [auth, territoryScope], async (req, res) => {
             if (r.billingCycle) billingCyclesSet.add(r.billingCycle);
         }
 
-        // Also enrich with database Pincode collection for available locations if empty
-        if (statesSet.size === 0) {
-            const pins = await Pincode.find({}).limit(50).lean();
-            pins.forEach(p => {
-                statesSet.add(p.state);
-                if (!districtsMap[p.state]) districtsMap[p.state] = new Set();
-                districtsMap[p.state].add(p.district);
-                if (!divisionsMap[p.district]) divisionsMap[p.district] = new Set();
-                divisionsMap[p.district].add(p.division || p.area || 'General');
-                if (!pincodesMap[p.division || p.area || 'General']) pincodesMap[p.division || p.area || 'General'] = new Set();
-                pincodesMap[p.division || p.area || 'General'].add(p.code);
+        // Also enrich with database State, District, Division, and Pincode collections for authoritative hierarchy
+        try {
+            const [allStates, allDistricts, allDivisions, allPins] = await Promise.all([
+                State.find({ status: { $in: ['Active', 'active'] } }).select('name code').lean(),
+                District.find({ status: { $in: ['Active', 'active'] } }).populate('stateId', 'name code').select('name stateId').lean(),
+                Division.find({ status: { $in: ['Active', 'active'] } }).populate('districtId', 'name').select('name districtId').lean(),
+                Pincode.find({ status: { $in: ['Active', 'active'] } }).select('code district division state').limit(200).lean()
+            ]);
+
+            allStates.forEach(s => {
+                if (s.name) statesSet.add(s.name);
             });
+
+            allDistricts.forEach(d => {
+                const sName = d.stateId?.name || 'Tamil Nadu';
+                if (!districtsMap[sName]) districtsMap[sName] = new Set();
+                if (d.name) districtsMap[sName].add(d.name);
+            });
+
+            allDivisions.forEach(v => {
+                const dName = v.districtId?.name || 'General District';
+                if (!divisionsMap[dName]) divisionsMap[dName] = new Set();
+                if (v.name) divisionsMap[dName].add(v.name);
+            });
+
+            allPins.forEach(p => {
+                const vName = p.division || 'General Division';
+                if (!pincodesMap[vName]) pincodesMap[vName] = new Set();
+                if (p.code) pincodesMap[vName].add(p.code);
+            });
+        } catch (terrErr) {
+            console.warn('[VendorSubscription filters]: Hierarchy enrichment warning:', terrErr.message);
         }
 
         const formattedDistricts = {};

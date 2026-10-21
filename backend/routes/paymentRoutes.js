@@ -140,12 +140,46 @@ const computeRecipientPayables = async (filterScope = {}) => {
     const db = mongoose.connection.db;
 
     const agentQuery = { role: { $in: ['agent', 'Agent'] }, isActive: { $ne: false } };
-    if (filterScope.state) {
-        agentQuery.$or = [
-            { assignedState: new RegExp(`^${filterScope.state}$`, 'i') },
-            { state: new RegExp(`^${filterScope.state}$`, 'i') },
-            { 'territory.state': new RegExp(`^${filterScope.state}$`, 'i') }
-        ];
+    const agentAndClauses = [];
+
+    if (filterScope.state && filterScope.state.toLowerCase() !== 'all') {
+        agentAndClauses.push({
+            $or: [
+                { assignedState: new RegExp(`^${filterScope.state}$`, 'i') },
+                { state: new RegExp(`^${filterScope.state}$`, 'i') },
+                { 'territory.state': new RegExp(`^${filterScope.state}$`, 'i') }
+            ]
+        });
+    }
+    if (filterScope.district && filterScope.district.toLowerCase() !== 'all') {
+        agentAndClauses.push({
+            $or: [
+                { assignedDistrict: new RegExp(`^${filterScope.district}$`, 'i') },
+                { district: new RegExp(`^${filterScope.district}$`, 'i') },
+                { 'territory.district': new RegExp(`^${filterScope.district}$`, 'i') }
+            ]
+        });
+    }
+    if (filterScope.division && filterScope.division.toLowerCase() !== 'all') {
+        agentAndClauses.push({
+            $or: [
+                { assignedDivision: new RegExp(`^${filterScope.division}$`, 'i') },
+                { division: new RegExp(`^${filterScope.division}$`, 'i') },
+                { 'territory.division': new RegExp(`^${filterScope.division}$`, 'i') }
+            ]
+        });
+    }
+    if (filterScope.pincode && filterScope.pincode.toLowerCase() !== 'all') {
+        agentAndClauses.push({
+            $or: [
+                { assignedPincode: filterScope.pincode },
+                { pincode: filterScope.pincode },
+                { 'territory.pincode': filterScope.pincode }
+            ]
+        });
+    }
+    if (agentAndClauses.length > 0) {
+        agentQuery.$and = agentAndClauses;
     }
 
     // Pre-fetch related operational data in bulk (single parallel batch, zero N+1 queries, lean projections)
@@ -600,6 +634,17 @@ router.get('/dashboard', auth, async (req, res) => {
         const isSuperAdmin = (req.user?.role === 'super-admin' || req.user?.adminRole === 'super-admin' || req.user?.role === 'admin');
         const userState = req.user?.assignedState || req.user?.state;
         const filterScope = (!isSuperAdmin && userState) ? { state: userState.trim() } : {};
+
+        // Parse incoming territory query filters
+        const qState = (req.query.state || '').trim();
+        const qDistrict = (req.query.district || '').trim();
+        const qDivision = (req.query.division || '').trim();
+        const qPincode = (req.query.pincode || '').trim();
+
+        if (qState && qState.toLowerCase() !== 'all') filterScope.state = qState;
+        if (qDistrict && qDistrict.toLowerCase() !== 'all') filterScope.district = qDistrict;
+        if (qDivision && qDivision.toLowerCase() !== 'all') filterScope.division = qDivision;
+        if (qPincode && qPincode.toLowerCase() !== 'all') filterScope.pincode = qPincode;
 
         const recipients = await computeRecipientPayables(filterScope);
 
@@ -2259,6 +2304,49 @@ const handleHistoryQuery = async (req, res) => {
                 { notes: new RegExp(s, 'i') },
                 { paymentPurpose: new RegExp(s, 'i') }
             ];
+        }
+
+        // Territory filters (State -> District -> Division -> Pincode)
+        const histState = (req.query.state || '').trim();
+        const histDistrict = (req.query.district || '').trim();
+        const histDivision = (req.query.division || '').trim();
+        const histPincode = (req.query.pincode || '').trim();
+
+        if (histState && histState.toLowerCase() !== 'all') {
+            filter.$and = filter.$and || [];
+            filter.$and.push({
+                $or: [
+                    { 'territory.state': new RegExp(`^${histState}$`, 'i') },
+                    { notes: new RegExp(histState, 'i') }
+                ]
+            });
+        }
+        if (histDistrict && histDistrict.toLowerCase() !== 'all') {
+            filter.$and = filter.$and || [];
+            filter.$and.push({
+                $or: [
+                    { 'territory.district': new RegExp(`^${histDistrict}$`, 'i') },
+                    { notes: new RegExp(histDistrict, 'i') }
+                ]
+            });
+        }
+        if (histDivision && histDivision.toLowerCase() !== 'all') {
+            filter.$and = filter.$and || [];
+            filter.$and.push({
+                $or: [
+                    { 'territory.division': new RegExp(`^${histDivision}$`, 'i') },
+                    { notes: new RegExp(histDivision, 'i') }
+                ]
+            });
+        }
+        if (histPincode && histPincode.toLowerCase() !== 'all') {
+            filter.$and = filter.$and || [];
+            filter.$and.push({
+                $or: [
+                    { 'territory.pincode': histPincode },
+                    { notes: new RegExp(histPincode, 'i') }
+                ]
+            });
         }
 
         const [records, total] = await Promise.all([

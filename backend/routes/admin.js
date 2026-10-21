@@ -3923,7 +3923,9 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
 
             const custProjection = {
                 _id: 1, name: 1, fullName: 1, username: 1, email: 1, phone: 1, mobileNumber: 1,
-                role: 1, customerType: 1, district: 1, city: 1, status: 1, aadhaar: 1, aadhaarNumber: 1,
+                role: 1, customerType: 1, district: 1, city: 1, state: 1, division: 1, pincode: 1,
+                address: 1, addresses: 1, assignedArea: 1, assignedState: 1, assignedDistrict: 1,
+                assignedDivision: 1, assignedPincode: 1, status: 1, aadhaar: 1, aadhaarNumber: 1,
                 aadhar: 1, aadharNumber: 1, pan: 1, panNumber: 1, branchId: 1, createdAt: 1,
                 customerId: 1, registrationId: 1, id: 1
             };
@@ -3955,8 +3957,11 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
                 d.registrationId = canonicalId;
                 d.aadhaarNumber = d.aadhaar || d.aadhaarNumber || d.aadhar || d.aadharNumber || d.adhaar || d.adhaarNumber || (d.kyc && (d.kyc.aadhaarNumber || d.kyc.aadhaar || d.kyc.aadhar)) || (d.kycDocs && (d.kycDocs.aadhaarNumber || d.kycDocs.aadhaar)) || '';
                 d.panNumber = d.pan || d.panNumber || d.panCard || d.pancard || (d.kyc && (d.kyc.panNumber || d.kyc.pan)) || (d.kycDocs && (d.kycDocs.panNumber || d.kycDocs.pan)) || '';
-                d.customerType = d.customerType || 'Standard';
-                d.district = d.district || d.city || 'Direct';
+                d.state = d.state || d.assignedState || (d.addresses && d.addresses[0]?.state) || '';
+                d.district = d.district || d.assignedDistrict || d.city || (d.addresses && d.addresses[0]?.city) || 'Direct';
+                d.division = d.division || d.assignedDivision || d.assignedArea || '';
+                d.pincode = d.pincode || d.assignedPincode || (d.addresses && d.addresses[0]?.pincode) || '';
+                d.address = d.address || (d.addresses && d.addresses[0]?.address) || '';
                 d.status = d.status || 'Active';
                 d.name = d.name || d.fullName || d.username || 'Customer';
                 d.phone = d.phone || d.mobileNumber || d.mobileContact || d.telephone || '';
@@ -4012,6 +4017,25 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
         }
         if (qType && qType.toLowerCase() !== 'all') {
             result = result.filter(c => (c.customerType || '').toLowerCase() === qType.toLowerCase());
+        }
+
+        // Territory Filters: State -> District -> Division -> Pincode
+        const qState = (req.query?.state || '').trim().toLowerCase();
+        const qDistrict = (req.query?.district || '').trim().toLowerCase();
+        const qDivision = (req.query?.division || '').trim().toLowerCase();
+        const qPincode = (req.query?.pincode || '').trim().toLowerCase();
+
+        if (qState && qState !== 'all') {
+            result = result.filter(c => (c.state || '').toLowerCase() === qState || (c.address || '').toLowerCase().includes(qState));
+        }
+        if (qDistrict && qDistrict !== 'all') {
+            result = result.filter(c => (c.district || '').toLowerCase() === qDistrict || (c.city || '').toLowerCase() === qDistrict || (c.address || '').toLowerCase().includes(qDistrict));
+        }
+        if (qDivision && qDivision !== 'all') {
+            result = result.filter(c => (c.division || '').toLowerCase() === qDivision || (c.address || '').toLowerCase().includes(qDivision));
+        }
+        if (qPincode && qPincode !== 'all') {
+            result = result.filter(c => String(c.pincode || '').toLowerCase().includes(qPincode) || (c.address || '').toLowerCase().includes(qPincode));
         }
 
         res.json(result);
@@ -4875,13 +4899,53 @@ router.post('/assign-task', [auth, adminAuth], async (req, res) => {
     }
 });
 
-// Get all tasks
-router.get('/tasks', [auth, adminAuth], async (req, res) => {
+// Get all tasks (supports /tasks and /admin-tasks with territory filtering)
+router.get(['/tasks', '/admin-tasks'], [auth, adminAuth], async (req, res) => {
     try {
-        const tasks = await Task.find()
-            .populate('assignedTo', 'name email')
-            .populate('adminId', 'name')
-            .sort({ createdAt: -1 });
+        const { state, district, division, pincode, status } = req.query;
+        let tasks = await Task.find()
+            .populate('assignedTo', 'name email role assignedState assignedDistrict assignedDivision assignedPincode state district division pincode')
+            .populate('adminId', 'name email adminRole')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        if (status && status !== 'All') {
+            tasks = tasks.filter(t => (t.status || '').toLowerCase() === status.toLowerCase());
+        }
+
+        if (state && state.toLowerCase() !== 'all') {
+            const sLower = state.toLowerCase();
+            tasks = tasks.filter(t => {
+                const u = t.assignedTo || {};
+                return (u.assignedState && u.assignedState.toLowerCase() === sLower) ||
+                       (u.state && u.state.toLowerCase() === sLower);
+            });
+        }
+        if (district && district.toLowerCase() !== 'all') {
+            const dLower = district.toLowerCase();
+            tasks = tasks.filter(t => {
+                const u = t.assignedTo || {};
+                return (u.assignedDistrict && u.assignedDistrict.toLowerCase() === dLower) ||
+                       (u.district && u.district.toLowerCase() === dLower);
+            });
+        }
+        if (division && division.toLowerCase() !== 'all') {
+            const vLower = division.toLowerCase();
+            tasks = tasks.filter(t => {
+                const u = t.assignedTo || {};
+                return (u.assignedDivision && u.assignedDivision.toLowerCase() === vLower) ||
+                       (u.division && u.division.toLowerCase() === vLower);
+            });
+        }
+        if (pincode && pincode.toLowerCase() !== 'all') {
+            const pStr = String(pincode).trim();
+            tasks = tasks.filter(t => {
+                const u = t.assignedTo || {};
+                return String(u.assignedPincode || '').includes(pStr) ||
+                       String(u.pincode || '').includes(pStr);
+            });
+        }
+
         res.json(tasks);
     } catch (err) {
         console.error(err);
@@ -5338,7 +5402,52 @@ router.get(['/orders', '/public/orders'], async (req, res) => {
             rawOrders = await Order.find(queryFilter).sort({ createdAt: -1 }).lean();
         }
         const resolvedOrders = await resolveVendorAndCustomer(rawOrders);
-        res.json(resolvedOrders);
+
+        // Server-side Territory Filters (State -> District -> Division -> Pincode)
+        let finalOrders = resolvedOrders;
+        const ordState = (req.query.state || '').trim();
+        const ordDistrict = (req.query.district || '').trim();
+        const ordDivision = (req.query.division || '').trim();
+        const ordPincode = (req.query.pincode || '').trim();
+
+        if (ordState && ordState.toLowerCase() !== 'all') {
+            const sLower = ordState.toLowerCase();
+            finalOrders = finalOrders.filter(o =>
+                (o.state && o.state.toLowerCase() === sLower) ||
+                (o.customer_address && o.customer_address.toLowerCase().includes(sLower)) ||
+                (o.vendorId?.state && o.vendorId.state.toLowerCase() === sLower) ||
+                (o.customerId?.state && o.customerId.state.toLowerCase() === sLower)
+            );
+        }
+        if (ordDistrict && ordDistrict.toLowerCase() !== 'all') {
+            const dLower = ordDistrict.toLowerCase();
+            finalOrders = finalOrders.filter(o =>
+                (o.district && o.district.toLowerCase() === dLower) ||
+                (o.customer_address && o.customer_address.toLowerCase().includes(dLower)) ||
+                (o.vendorId?.district && o.vendorId.district.toLowerCase() === dLower) ||
+                (o.customerId?.district && o.customerId.district.toLowerCase() === dLower) ||
+                (o.customerId?.city && o.customerId.city.toLowerCase() === dLower)
+            );
+        }
+        if (ordDivision && ordDivision.toLowerCase() !== 'all') {
+            const vLower = ordDivision.toLowerCase();
+            finalOrders = finalOrders.filter(o =>
+                (o.division && o.division.toLowerCase() === vLower) ||
+                (o.customer_address && o.customer_address.toLowerCase().includes(vLower)) ||
+                (o.vendorId?.division && o.vendorId.division.toLowerCase() === vLower)
+            );
+        }
+        if (ordPincode && ordPincode.toLowerCase() !== 'all') {
+            const pStr = String(ordPincode).trim();
+            finalOrders = finalOrders.filter(o =>
+                String(o.pincode || '').includes(pStr) ||
+                (o.customer_address && o.customer_address.includes(pStr)) ||
+                String(o.vendorId?.pincode || '').includes(pStr) ||
+                String(o.customerId?.pincode || '').includes(pStr)
+            );
+        }
+
+        res.json(finalOrders);
     } catch (err) {
         console.error(err);
         res.status(500).json({ success: false, message: 'Server error fetching orders', error: err.message });
@@ -5699,11 +5808,57 @@ router.get(['/bookings', '/public/bookings'], async (req, res) => {
             return { ...b, appointmentTimeSlot: slot };
         });
 
-        const allBookings = [...resolvedDbBookings, ...resolvedCustomBookings]
+        let allBookings = [...resolvedDbBookings, ...resolvedCustomBookings]
             .filter(isBookingItem)
             .sort((a, b) => {
                 return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             });
+
+        // Server-side Territory Filters (State -> District -> Division -> Pincode)
+        const bkState = (req.query.state || '').trim();
+        const bkDistrict = (req.query.district || '').trim();
+        const bkDivision = (req.query.division || '').trim();
+        const bkPincode = (req.query.pincode || '').trim();
+
+        if (bkState && bkState.toLowerCase() !== 'all') {
+            const sLower = bkState.toLowerCase();
+            allBookings = allBookings.filter(b =>
+                (b.location && b.location.toLowerCase().includes(sLower)) ||
+                (b.pickupLocation && b.pickupLocation.toLowerCase().includes(sLower)) ||
+                (b.destination && b.destination.toLowerCase().includes(sLower)) ||
+                (b.vendorId?.state && b.vendorId.state.toLowerCase() === sLower) ||
+                (b.customerId?.state && b.customerId.state.toLowerCase() === sLower) ||
+                (b.customer_address && b.customer_address.toLowerCase().includes(sLower))
+            );
+        }
+        if (bkDistrict && bkDistrict.toLowerCase() !== 'all') {
+            const dLower = bkDistrict.toLowerCase();
+            allBookings = allBookings.filter(b =>
+                (b.location && b.location.toLowerCase().includes(dLower)) ||
+                (b.pickupLocation && b.pickupLocation.toLowerCase().includes(dLower)) ||
+                (b.destination && b.destination.toLowerCase().includes(dLower)) ||
+                (b.vendorId?.district && b.vendorId.district.toLowerCase() === dLower) ||
+                (b.customerId?.district && b.customerId.district.toLowerCase() === dLower) ||
+                (b.customer_address && b.customer_address.toLowerCase().includes(dLower))
+            );
+        }
+        if (bkDivision && bkDivision.toLowerCase() !== 'all') {
+            const vLower = bkDivision.toLowerCase();
+            allBookings = allBookings.filter(b =>
+                (b.vendorId?.division && b.vendorId.division.toLowerCase() === vLower) ||
+                (b.division && b.division.toLowerCase() === vLower) ||
+                (b.customer_address && b.customer_address.toLowerCase().includes(vLower))
+            );
+        }
+        if (bkPincode && bkPincode.toLowerCase() !== 'all') {
+            const pStr = String(bkPincode).trim();
+            allBookings = allBookings.filter(b =>
+                String(b.vendorId?.pincode || '').includes(pStr) ||
+                String(b.customerId?.pincode || '').includes(pStr) ||
+                (b.customer_address && b.customer_address.includes(pStr)) ||
+                (b.location && b.location.includes(pStr))
+            );
+        }
 
         res.json(allBookings);
     } catch (err) {
@@ -5821,9 +5976,47 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
             };
         });
 
-        const allJobs = [...mappedDbJobs, ...mappedCustomJobs].sort((a, b) => {
+        let allJobs = [...mappedDbJobs, ...mappedCustomJobs].sort((a, b) => {
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         });
+
+        // Server-side Territory Filters (State -> District -> Division -> Pincode)
+        const jState = (req.query.state || '').trim();
+        const jDistrict = (req.query.district || '').trim();
+        const jDivision = (req.query.division || '').trim();
+        const jPincode = (req.query.pincode || '').trim();
+
+        if (jState && jState.toLowerCase() !== 'all') {
+            const sLower = jState.toLowerCase();
+            allJobs = allJobs.filter(j =>
+                (j.jobLocation && j.jobLocation.toLowerCase().includes(sLower)) ||
+                (j.customer_address && j.customer_address.toLowerCase().includes(sLower)) ||
+                (j.vendorId?.state && j.vendorId.state.toLowerCase() === sLower)
+            );
+        }
+        if (jDistrict && jDistrict.toLowerCase() !== 'all') {
+            const dLower = jDistrict.toLowerCase();
+            allJobs = allJobs.filter(j =>
+                (j.jobLocation && j.jobLocation.toLowerCase().includes(dLower)) ||
+                (j.customer_address && j.customer_address.toLowerCase().includes(dLower)) ||
+                (j.vendorId?.district && j.vendorId.district.toLowerCase() === dLower)
+            );
+        }
+        if (jDivision && jDivision.toLowerCase() !== 'all') {
+            const vLower = jDivision.toLowerCase();
+            allJobs = allJobs.filter(j =>
+                (j.vendorId?.division && j.vendorId.division.toLowerCase() === vLower) ||
+                (j.jobLocation && j.jobLocation.toLowerCase().includes(vLower))
+            );
+        }
+        if (jPincode && jPincode.toLowerCase() !== 'all') {
+            const pStr = String(jPincode).trim();
+            allJobs = allJobs.filter(j =>
+                (j.jobLocation && j.jobLocation.includes(pStr)) ||
+                (j.customer_address && j.customer_address.includes(pStr)) ||
+                String(j.vendorId?.pincode || '').includes(pStr)
+            );
+        }
 
         res.json(allJobs);
     } catch (err) {
@@ -5949,10 +6142,62 @@ router.delete('/jobs/:id', [auth, adminAuth], async (req, res) => {
     }
 });
 
-// GET all membership card holders
+// GET all membership card holders (with customer territory enrichment & filtering)
 router.get('/card-holders', [auth, adminAuth], async (req, res) => {
     try {
-        const holders = await CardHolder.find().sort({ createdAt: -1 }).lean();
+        const { state, district, division, pincode, search, status, cardType } = req.query;
+        let holders = await CardHolder.find().sort({ createdAt: -1 }).lean();
+
+        // Enrich each holder with customer territory details
+        const emails = holders.map(h => (h.email || '').toLowerCase().trim()).filter(Boolean);
+        const phones = holders.map(h => (h.phone || '').trim()).filter(Boolean);
+        const [matchingUsers, matchingCustomers] = await Promise.all([
+            User.find({ $or: [{ email: { $in: emails } }, { phone: { $in: phones } }] })
+                .select('email phone state district division pincode assignedArea address')
+                .lean(),
+            Customer.find({ $or: [{ email: { $in: emails } }, { phone: { $in: phones } }] })
+                .select('email phone state district division pincode city address addresses')
+                .lean()
+        ]);
+
+        const contactMap = new Map();
+        matchingUsers.forEach(u => {
+            if (u.email) contactMap.set(u.email.toLowerCase(), u);
+            if (u.phone) contactMap.set(u.phone, u);
+        });
+        matchingCustomers.forEach(c => {
+            if (c.email) contactMap.set(c.email.toLowerCase(), c);
+            if (c.phone) contactMap.set(c.phone, c);
+        });
+
+        holders = holders.map(h => {
+            const cObj = contactMap.get((h.email || '').toLowerCase()) || contactMap.get(h.phone) || {};
+            const st = cObj.state || (cObj.addresses && cObj.addresses[0]?.state) || '';
+            const dt = cObj.district || cObj.city || (cObj.addresses && cObj.addresses[0]?.city) || '';
+            const dv = cObj.division || cObj.assignedArea || '';
+            const pin = cObj.pincode || (cObj.addresses && cObj.addresses[0]?.pincode) || '';
+            return {
+                ...h,
+                state: st,
+                district: dt,
+                division: dv,
+                pincode: pin
+            };
+        });
+
+        if (state && state.toLowerCase() !== 'all') {
+            holders = holders.filter(h => (h.state || '').toLowerCase() === state.toLowerCase());
+        }
+        if (district && district.toLowerCase() !== 'all') {
+            holders = holders.filter(h => (h.district || '').toLowerCase() === district.toLowerCase());
+        }
+        if (division && division.toLowerCase() !== 'all') {
+            holders = holders.filter(h => (h.division || '').toLowerCase() === division.toLowerCase());
+        }
+        if (pincode && pincode.toLowerCase() !== 'all') {
+            holders = holders.filter(h => String(h.pincode || '').includes(String(pincode).trim()));
+        }
+
         res.json(holders);
     } catch (err) {
         console.error(err);
@@ -6823,10 +7068,65 @@ router.get('/public/banners', async (req, res) => {
 });
 
 
-// GET all queries
+// GET all queries (with submitter territory enrichment & filtering)
 router.get('/queries', [auth, adminAuth], async (req, res) => {
     try {
-        const queries = await Query.find().sort({ createdAt: -1 });
+        const { state, district, division, pincode, status, userType } = req.query;
+        let queries = await Query.find().sort({ createdAt: -1 }).lean();
+
+        // Enrich queries with submitter's territory
+        const emails = queries.map(q => (q.email || '').toLowerCase().trim()).filter(Boolean);
+        const phones = queries.map(q => (q.phone || '').trim()).filter(Boolean);
+
+        const [matchingUsers, matchingCustomers, matchingVendors] = await Promise.all([
+            User.find({ $or: [{ email: { $in: emails } }, { phone: { $in: phones } }] }).select('email phone state district division pincode assignedState assignedDistrict assignedDivision assignedPincode').lean(),
+            Customer.find({ $or: [{ email: { $in: emails } }, { phone: { $in: phones } }] }).select('email phone state district division pincode city addresses').lean(),
+            Vendor.find({ $or: [{ email: { $in: emails } }, { phone: { $in: phones } }] }).select('email phone state district division pincode').lean()
+        ]);
+
+        const submitterMap = new Map();
+        matchingUsers.forEach(u => {
+            if (u.email) submitterMap.set(u.email.toLowerCase(), u);
+            if (u.phone) submitterMap.set(u.phone, u);
+        });
+        matchingCustomers.forEach(c => {
+            if (c.email) submitterMap.set(c.email.toLowerCase(), c);
+            if (c.phone) submitterMap.set(c.phone, c);
+        });
+        matchingVendors.forEach(v => {
+            if (v.email) submitterMap.set(v.email.toLowerCase(), v);
+            if (v.phone) submitterMap.set(v.phone, v);
+        });
+
+        queries = queries.map(q => {
+            const sub = submitterMap.get((q.email || '').toLowerCase()) || submitterMap.get(q.phone) || {};
+            const st = sub.state || sub.assignedState || (sub.addresses && sub.addresses[0]?.state) || '';
+            const dt = sub.district || sub.assignedDistrict || sub.city || (sub.addresses && sub.addresses[0]?.city) || '';
+            const dv = sub.division || sub.assignedDivision || '';
+            const pin = sub.pincode || sub.assignedPincode || (sub.addresses && sub.addresses[0]?.pincode) || '';
+            return {
+                ...q,
+                state: st,
+                district: dt,
+                division: dv,
+                pincode: pin,
+                territory: { state: st, district: dt, division: dv, pincode: pin }
+            };
+        });
+
+        if (state && state.toLowerCase() !== 'all') {
+            queries = queries.filter(q => (q.state || '').toLowerCase() === state.toLowerCase());
+        }
+        if (district && district.toLowerCase() !== 'all') {
+            queries = queries.filter(q => (q.district || '').toLowerCase() === district.toLowerCase());
+        }
+        if (division && division.toLowerCase() !== 'all') {
+            queries = queries.filter(q => (q.division || '').toLowerCase() === division.toLowerCase());
+        }
+        if (pincode && pincode.toLowerCase() !== 'all') {
+            queries = queries.filter(q => String(q.pincode || '').includes(String(pincode).trim()));
+        }
+
         res.json(queries);
     } catch (err) {
         console.error(err);

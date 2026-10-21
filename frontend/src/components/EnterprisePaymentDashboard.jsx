@@ -8,10 +8,13 @@ import {
   Zap
 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import TerritoryFilterBar from './TerritoryFilterBar';
+import { matchesTerritoryFilter } from '../utils/territoryMatcher';
 
 export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, currentUser, onToast }) => {
   // Main Data States
   const [loading, setLoading] = useState(false);
+  const [territoryFilter, setTerritoryFilter] = useState({ state: 'All', district: 'All', division: 'All', pincode: 'All' });
   const [activeTab, setActiveTab] = useState('agents'); // 'agents' | 'vendors' | 'delivery' | 'technicians'
   const [isLiveConnected, setIsLiveConnected] = useState(false);
 
@@ -141,7 +144,14 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
     }
 
     try {
-      const res = await fetch(`${API_BASE}/admin/enterprise/payments/dashboard`, {
+      const queryParams = new URLSearchParams();
+      if (territoryFilter.state && territoryFilter.state !== 'All') queryParams.set('state', territoryFilter.state);
+      if (territoryFilter.district && territoryFilter.district !== 'All') queryParams.set('district', territoryFilter.district);
+      if (territoryFilter.division && territoryFilter.division !== 'All') queryParams.set('division', territoryFilter.division);
+      if (territoryFilter.pincode && territoryFilter.pincode !== 'All') queryParams.set('pincode', territoryFilter.pincode);
+      const urlSuffix = queryParams.toString() ? `?${queryParams.toString()}` : '';
+
+      const res = await fetch(`${API_BASE}/admin/enterprise/payments/dashboard${urlSuffix}`, {
         headers: {
           'x-auth-token': token,
           'Authorization': `Bearer ${token}`
@@ -181,7 +191,7 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
       if (!isSilent) setLoading(false);
       setIsSilentSyncing(false);
     }
-  }, [API_BASE, token, toast]);
+  }, [API_BASE, token, toast, territoryFilter]);
 
   // Check Security PIN Status
   const checkPinStatus = useCallback(async () => {
@@ -370,11 +380,17 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
         const phone = (item.recipientPhone || '').toLowerCase();
         const email = (item.recipientEmail || '').toLowerCase();
         const bName = (item.businessName || '').toLowerCase();
-        return name.includes(q) || id.includes(q) || ref.includes(q) || purp.includes(q) || phone.includes(q) || email.includes(q) || bName.includes(q);
+        if (!(name.includes(q) || id.includes(q) || ref.includes(q) || purp.includes(q) || phone.includes(q) || email.includes(q) || bName.includes(q))) {
+          return false;
+        }
       }
+
+      // Territory filter
+      if (!matchesTerritoryFilter(item, territoryFilter)) return false;
+
       return true;
     });
-  }, [recipients, activeTab, statusFilter, searchTerm]);
+  }, [recipients, activeTab, statusFilter, searchTerm, territoryFilter]);
 
   // Selectable pending items in the currently visible list (Requirements 3, 4)
   const pendingItemsInCurrentList = useMemo(() => {
@@ -1445,6 +1461,15 @@ export const EnterprisePaymentDashboard = React.memo(({ token, API_BASE, current
               <option value="CANCELLED">Cancelled</option>
             </select>
           </div>
+        </div>
+
+        {/* Territory Filter System (State -> District -> Division -> Pincode) */}
+        <div className="p-3 bg-slate-50/80 dark:bg-slate-800/40 rounded-2xl border border-slate-200/80 dark:border-slate-700/60">
+          <TerritoryFilterBar
+            API_BASE={API_BASE}
+            territoryFilter={territoryFilter}
+            setTerritoryFilter={setTerritoryFilter}
+          />
         </div>
 
         {/* ── Bulk Selection Bar (Requirements 4, 5) ── */}
