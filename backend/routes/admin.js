@@ -497,14 +497,15 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
         const pendingVendorKYC = allVendorsList.filter(v => (v.kycVal || '').includes('pending')).length;
 
         // ── 3. REVENUE & ORDER TOTALS (GENUINE COMMERCE RECORDS ONLY) ────────
-        // Filter out candidate job applications stored under Order collection
-        const isJobApplicationRecord = (item) => {
-            const t = (item.type || '').toLowerCase();
-            const s = (item.status || '').toLowerCase();
-            return t === 'job' || t === 'jobs' || t === 'job application' ||
+        // Filter out non-commerce records (bookings, stays, travels, services, jobs) matching GET /orders
+        const nonCommerceTypes = ['booking', 'bookings', 'job', 'jobs', 'job application', 'stay', 'travel', 'service', 'services'];
+        const isNonCommerceOrder = (item) => {
+            const t = String(item.type || '').trim().toLowerCase();
+            const s = String(item.status || '').toLowerCase();
+            return nonCommerceTypes.includes(t) ||
                    ['applied', 'interviewing', 'selected', 'shortlisted', 'application received'].includes(s);
         };
-        const qualifyingCommerceOrders = (completedOrders || []).filter(o => !isJobApplicationRecord(o));
+        const qualifyingCommerceOrders = (completedOrders || []).filter(o => !isNonCommerceOrder(o));
 
         const getItemAmount = (item) => Number(item.finalAmount || item.totalAmount || item.amount || item.price || item.total || 0);
         const totalRevenue = qualifyingCommerceOrders.reduce((sum, o) => sum + getItemAmount(o), 0) + (completedBookings || []).reduce((sum, b) => sum + getItemAmount(b), 0);
@@ -5293,13 +5294,18 @@ const resolveVendorAndCustomer = async (items) => {
 // GET all orders (supports admin, vendor filter, and public requests)
 router.get(['/orders', '/public/orders'], async (req, res) => {
     try {
-        const { vendorId, customerId, status, type } = req.query;
+        const { vendorId, customerId, status, type, businessType } = req.query;
         const queryFilter = {};
 
-        if (type) {
-            queryFilter.type = type;
+        const effectiveType = businessType || type;
+        if (effectiveType && effectiveType !== 'All') {
+            queryFilter.$or = [
+                { type: new RegExp(`^${effectiveType}$`, 'i') },
+                { category: new RegExp(`^${effectiveType}$`, 'i') },
+                { businessType: new RegExp(`^${effectiveType}$`, 'i') }
+            ];
         } else {
-            queryFilter.type = { $nin: ['Booking', 'Job', 'Stay', 'Travel', 'Jobs'] };
+            queryFilter.type = { $nin: ['Booking', 'Job', 'Stay', 'Travel', 'Jobs', 'Service', 'Services'] };
         }
 
         if (vendorId) {
@@ -5630,7 +5636,7 @@ router.get(['/users', '/'], [auth, adminAuth], async (req, res) => {
 // GET all bookings (supports admin, vendor filter, and public requests)
 router.get(['/bookings', '/public/bookings'], async (req, res) => {
     try {
-        const { vendorId, customerId, status } = req.query;
+        const { vendorId, customerId, status, type, bookingType } = req.query;
         const filter = {};
 
         if (vendorId) {
@@ -5653,15 +5659,19 @@ router.get(['/bookings', '/public/bookings'], async (req, res) => {
             filter.status = new RegExp(status, 'i');
         }
 
+        const effectiveBookingType = bookingType || type;
+        const typeRegex = (effectiveBookingType && effectiveBookingType !== 'All') ? new RegExp(effectiveBookingType, 'i') : null;
+
         const dbBookings = await Booking.find(filter)
             .populate('vendorId', 'businessName email phone')
             .populate('customerId', 'name email phone customerId registrationId')
             .sort({ createdAt: -1 });
 
-        const customBookings = await Order.find({
+        const customBookingsFilter = {
             ...filter,
-            type: { $in: ['Booking', 'Stay', 'Travel', 'Service', 'Services'] }
-        }).sort({ createdAt: -1 });
+            type: typeRegex ? typeRegex : { $in: ['Booking', 'Stay', 'Travel', 'Service', 'Services'] }
+        };
+        const customBookings = await Order.find(customBookingsFilter).sort({ createdAt: -1 });
 
         const defaultSlots = ['10:00 AM - 11:00 AM', '11:30 AM - 12:30 PM', '02:00 PM - 03:00 PM', '04:30 PM - 05:30 PM', '06:00 PM - 07:00 PM'];
 
@@ -5763,12 +5773,14 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
             const compVal = obj.companyName || obj.vendorName || obj.businessName || '—';
             const hrVal = obj.hrName || obj.contactPerson || obj.hr || '—';
             const resumeVal = obj.resumeUrl || '';
+            const typeVal = obj.jobType || obj.category || obj.jobCategory || obj.department || obj.position || 'General';
             return {
                 ...obj,
                 applicationId: obj.applicationId || (obj._id ? 'JOB-' + String(obj._id).substring(18, 24).toUpperCase() : '—'),
                 candidateName: obj.candidateName || 'Candidate',
                 customerId: custIdVal,
                 position: posVal,
+                jobType: typeVal,
                 companyName: compVal,
                 hrName: hrVal,
                 status: obj.status || 'applied',
@@ -5785,6 +5797,7 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
             const posVal = order.jobTitle || (order.items && order.items[0]?.name) || order.product_details || order.position || order.title || 'Job Role';
             const resumeVal = order.candidateResume || order.resumeUrl || '';
             const statusVal = order.status && order.status !== 'Pending' && order.status !== 'Order Received' ? order.status : 'APPLICATION RECEIVED';
+            const typeVal = order.jobType || order.jobCategory || order.category || (order.items && order.items[0]?.category) || order.department || posVal || 'General';
 
             return {
                 _id: order._id,
@@ -5795,6 +5808,7 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
                 email: order.candidateEmail || order.customer_email || order.email || order.customerId?.email || 'N/A',
                 phone: order.candidatePhone || ((order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.customerId?.phone && order.customerId?.phone !== 'N/A' ? order.customerId.phone : 'N/A')),
                 position: posVal,
+                jobType: typeVal,
                 jobLocation: order.jobLocation || order.candidateLocation || order.customer_address || 'N/A',
                 candidateEducation: order.candidateEducation || 'Graduate',
                 experience: order.experience || 'Fresher',
@@ -7445,17 +7459,29 @@ const handleAgentPerformanceOverview = async (req, res) => {
             };
         });
 
-        // Sorted lists for Leaderboard
-        const sortedByScore = [...agentMetricsList].sort((a, b) => b.score - a.score);
-        const sortedByRevenue = [...agentMetricsList].sort((a, b) => b.metrics.revenue - a.metrics.revenue);
-        const sortedByMembership = [...agentMetricsList].sort((a, b) => b.metrics.membershipSales - a.metrics.membershipSales);
-        const sortedByVendor = [...agentMetricsList].sort((a, b) => b.metrics.vendorOnboarding - a.metrics.vendorOnboarding);
+        // Define eligible approved agents for performance rankings & leaderboards
+        const isEligibleApprovedAgent = (item) => {
+            const ag = item.agent || item;
+            const st = String(ag.status || '').toLowerCase().trim();
+            const kyc = String(ag.kycStatus || '').toLowerCase().trim();
+            if (['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', 'rejected', 'suspended', 'revoked'].includes(st)) return false;
+            if (['rejected', 'suspended', 'revoked'].includes(kyc)) return false;
+            return st === 'approved' || st === 'active' || ag.isApproved === true;
+        };
+
+        const approvedAgentMetrics = agentMetricsList.filter(isEligibleApprovedAgent);
+
+        // Sorted lists for Leaderboard strictly from eligible approved agents
+        const sortedByScore = [...approvedAgentMetrics].sort((a, b) => b.score - a.score);
+        const sortedByRevenue = [...approvedAgentMetrics].sort((a, b) => b.metrics.revenue - a.metrics.revenue);
+        const sortedByMembership = [...approvedAgentMetrics].sort((a, b) => b.metrics.membershipSales - a.metrics.membershipSales);
+        const sortedByVendor = [...approvedAgentMetrics].sort((a, b) => b.metrics.vendorOnboarding - a.metrics.vendorOnboarding);
 
         const leaderboards = {
-            topStateAgent: agentMetricsList.find(a => normalizeAgentLevel(a.agent.level) === 'state') || null,
-            topDistrictAgent: agentMetricsList.find(a => normalizeAgentLevel(a.agent.level) === 'district') || null,
-            topDivisionalAgent: agentMetricsList.find(a => ['division', 'divisional'].includes(normalizeAgentLevel(a.agent.level))) || null,
-            topPincodeAgent: agentMetricsList.find(a => normalizeAgentLevel(a.agent.level) === 'pincode') || null,
+            topStateAgent: approvedAgentMetrics.find(a => normalizeAgentLevel(a.agent.level) === 'state' && (a.score > 0 || a.metrics.revenue > 0)) || null,
+            topDistrictAgent: approvedAgentMetrics.find(a => normalizeAgentLevel(a.agent.level) === 'district' && (a.score > 0 || a.metrics.revenue > 0)) || null,
+            topDivisionalAgent: approvedAgentMetrics.find(a => ['division', 'divisional'].includes(normalizeAgentLevel(a.agent.level)) && (a.score > 0 || a.metrics.revenue > 0)) || null,
+            topPincodeAgent: approvedAgentMetrics.find(a => normalizeAgentLevel(a.agent.level) === 'pincode' && (a.score > 0 || a.metrics.revenue > 0)) || null,
             topRevenueGenerator: sortedByRevenue[0] && sortedByRevenue[0].metrics.revenue > 0 ? sortedByRevenue[0] : null,
             topMembershipSeller: sortedByMembership[0] && sortedByMembership[0].metrics.membershipSales > 0 ? sortedByMembership[0] : null,
             topVendorCreator: sortedByVendor[0] && sortedByVendor[0].metrics.vendorOnboarding > 0 ? sortedByVendor[0] : null,
@@ -7463,22 +7489,21 @@ const handleAgentPerformanceOverview = async (req, res) => {
         };
 
         // Aggregated Card Metrics strictly from DB
-        const nonRejectedAgents = allAgents.filter(a => (a.status || '').toLowerCase() !== 'rejected');
-        const totalAgents = nonRejectedAgents.length;
-        const isAgentActive = (a) => {
+        const approvedAgentsList = allAgents.filter(a => {
             const st = (a.status || '').toLowerCase().trim();
-            if (st === 'rejected' || a.isActive === false) return false;
-            return st === 'active' || st === 'approved' || !st;
-        };
-        const isAgentInactive = (a) => {
+            if (['rejected', 'suspended', 'revoked', 'pending', 'under_verification', 'under verification', 'in_review'].includes(st)) return false;
+            return st === 'approved' || st === 'active' || a.isApproved === true;
+        });
+        const pendingAgentsList = allAgents.filter(a => {
             const st = (a.status || '').toLowerCase().trim();
-            if (st === 'rejected') return false;
-            return a.isActive === false || ['inactive', 'pending', 'suspended', 'under_verification', 'under verification', 'in_review'].includes(st);
-        };
-        const activeAgents = nonRejectedAgents.filter(isAgentActive).length;
-        const inactiveAgents = nonRejectedAgents.filter(isAgentInactive).length;
-        const totalRevenue = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.revenue, 0);
-        const totalLeads = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.callsMade + curr.metrics.meetingsConducted, 0);
+            return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes(st);
+        });
+
+        const totalAgents = approvedAgentsList.length;
+        const activeAgents = approvedAgentsList.filter(a => a.isActive !== false).length;
+        const inactiveAgents = approvedAgentsList.filter(a => a.isActive === false).length + pendingAgentsList.length;
+        const totalRevenue = approvedAgentMetrics.reduce((acc, curr) => acc + curr.metrics.revenue, 0);
+        const totalLeads = approvedAgentMetrics.reduce((acc, curr) => acc + curr.metrics.callsMade + curr.metrics.meetingsConducted, 0);
         const totalRegistrations = agentMetricsList.reduce((acc, curr) => acc + curr.metrics.registrations, 0);
 
         const avgScore = agentMetricsList.length > 0 ? Math.round(agentMetricsList.reduce((acc, c) => acc + c.score, 0) / agentMetricsList.length) : 0;

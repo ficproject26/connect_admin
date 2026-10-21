@@ -78,3 +78,97 @@ aside nav button {
 aside .bg-primary-600 {
   color: #facc15 !important; 
 }
+
+/* ==========================================================================
+   PRINT MEDIA STYLES (Bug 8: Agent Performance & Reports Print Layout)
+   ========================================================================== */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  /* Hide navigation, sidebar, top header, floating controls, dialogs & buttons */
+  aside,
+  header,
+  nav,
+  .no-print,
+  button,
+  input,
+  select,
+  [role="dialog"] {
+    display: none !important;
+  }
+
+  /* Reset layout constraints so document flows naturally across pages */
+  html,
+  body,
+  #root,
+  .min-h-screen,
+  main,
+  div {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    position: static !important;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    font-size: 11pt !important;
+  }
+
+  /* Main wrapper takes full width */
+  .flex-1,
+  main,
+  .max-w-7xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Prevent awkward page breaks inside cards, tables, and charts */
+  .print-avoid-break,
+  .rounded-3xl,
+  .rounded-2xl,
+  .rounded-xl,
+  table,
+  tr,
+  figure,
+  .recharts-wrapper {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Ensure Recharts SVGs render with full visibility and minimum height */
+  .recharts-responsive-container {
+    width: 100% !important;
+    min-height: 250px !important;
+    height: 250px !important;
+    overflow: visible !important;
+  }
+
+  svg {
+    overflow: visible !important;
+  }
+
+  /* Clean up dark backgrounds when printing */
+  .dark,
+  .dark * {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    border-color: #e2e8f0 !important;
+  }
+
+  .dark .text-slate-400,
+  .dark .text-slate-500 {
+    color: #64748b !important;
+  }
+}
+

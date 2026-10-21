@@ -1042,6 +1042,7 @@ function App() {
   const [tickets, setTickets] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
   const [exclusiveOffers, setExclusiveOffers] = useState([]);
+  const [subadminKycRequests, setSubadminKycRequests] = useState([]);
 
   // Refined UX States
   const [selectedPlanTab, setSelectedPlanTab] = useState(0);
@@ -1241,6 +1242,13 @@ function App() {
       return sp.get('ordersProduct') || sp.get('product') || 'All';
     } catch (e) { return 'All'; }
   });
+  const [ordersBusinessTypeFilter, setOrdersBusinessTypeFilter] = useState(() => {
+    if (typeof window === 'undefined') return 'All';
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      return sp.get('ordersBusinessType') || sp.get('businessType') || 'All';
+    } catch (e) { return 'All'; }
+  });
 
   // Synchronize active orders filters to URL search params when on orders tab
   useEffect(() => {
@@ -1289,11 +1297,21 @@ function App() {
         changed = true;
       }
 
+      if (ordersBusinessTypeFilter && ordersBusinessTypeFilter !== 'All') {
+        if (url.searchParams.get('ordersBusinessType') !== ordersBusinessTypeFilter) {
+          url.searchParams.set('ordersBusinessType', ordersBusinessTypeFilter);
+          changed = true;
+        }
+      } else if (url.searchParams.has('ordersBusinessType')) {
+        url.searchParams.delete('ordersBusinessType');
+        changed = true;
+      }
+
       if (changed) {
         window.history.replaceState({ tab: 'orders' }, '', `${url.pathname}${url.search}`);
       }
     } catch (e) {}
-  }, [activeTab, ordersSearchTerm, ordersDateFilter, ordersStatusFilter, ordersProductFilter]);
+  }, [activeTab, ordersSearchTerm, ordersDateFilter, ordersStatusFilter, ordersProductFilter, ordersBusinessTypeFilter]);
 
   // Customers Search & Filters
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
@@ -1313,6 +1331,10 @@ function App() {
   const [bookingSearchTerm, setBookingSearchTerm] = useState('');
   const [bookingStatusFilter, setBookingStatusFilter] = useState('All');
   const [bookingDateFilter, setBookingDateFilter] = useState('All');
+  const [bookingTypeFilter, setBookingTypeFilter] = useState('All');
+
+  // Job Applications Search & Filters
+  const [jobTypeFilter, setJobTypeFilter] = useState('All');
 
   // Membership Card Holders Search & Filters
   const [cardHolderSearchTerm, setCardHolderSearchTerm] = useState('');
@@ -1888,6 +1910,8 @@ function App() {
     if (activeTab === 'kyc') {
       swrFetch(`${API_BASE}/admin/vendors`, setVendors, 'vendors');
       swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
+      fetchManagerKycRequests();
+      fetchSubadminKycRequests();
     }
   }, [activeTab, token, reportType, swrFetch, handleSetAgents]);
 
@@ -2203,6 +2227,53 @@ function App() {
       if (!res.ok) throw new Error(data.msg || data.message || 'Action failed');
       addToast(action === 'approve' ? 'Manager KYC approved & activated successfully.' : 'Manager KYC rejected.', 'success');
       await fetchManagerKycRequests();
+    } catch (err) {
+      addToast(err.message || 'Action failed', 'error');
+    } finally {
+      setProcessingKycId(null);
+      setKycActionType(null);
+    }
+  };
+
+  const fetchSubadminKycRequests = useCallback(async () => {
+    try {
+      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
+      const res = await fetch(`${API_BASE}/admin/admins/requests?category=subadmin`, {
+        headers: { 'x-auth-token': activeToken, Authorization: `Bearer ${activeToken}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : (data.requests || []);
+        setSubadminKycRequests(list);
+      }
+    } catch (e) {
+      console.warn('Error fetching subadmin KYC requests:', e);
+    }
+  }, [API_BASE, token]);
+
+  const handleSubadminKycAction = async (request, action) => {
+    if (processingKycId) return;
+    setProcessingKycId(request._id);
+    setKycActionType(action);
+    try {
+      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
+      const endpoint = action === 'approve'
+        ? `${API_BASE}/admin/admins/requests/${request._id}/approve`
+        : `${API_BASE}/admin/admins/requests/${request._id}/reject`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-auth-token': activeToken,
+          'Authorization': `Bearer ${activeToken}`
+        },
+        body: JSON.stringify(action === 'approve' ? {} : { reason: 'KYC Verification Rejected by KYC Administrator' })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.msg || data.message || 'Action failed');
+      addToast(action === 'approve' ? 'Sub-admin KYC approved & activated successfully.' : 'Sub-admin KYC rejected.', 'success');
+      setSubadminKycRequests(prev => prev.filter(r => r._id !== request._id));
+      await fetchSubadminKycRequests();
     } catch (err) {
       addToast(err.message || 'Action failed', 'error');
     } finally {
@@ -2781,7 +2852,7 @@ function App() {
                     <div className="min-w-0 flex-1 pr-2">
                       <span className={`block text-[11px] sm:text-xs font-extrabold uppercase tracking-wider truncate ${kpi.titleColor}`}>{kpi.title}</span>
                       {kpi.value !== null ? (
-                        <span className={`block text-2xl sm:text-3xl font-black mt-1.5 sm:mt-2.5 truncate ${kpi.valueColor}`}>{kpi.value}</span>
+                        <span className={`block font-black mt-1.5 sm:mt-2.5 whitespace-nowrap tracking-tight ${String(kpi.value).length > 11 ? 'text-lg sm:text-xl xl:text-2xl' : 'text-2xl sm:text-3xl'} ${kpi.valueColor}`} title={String(kpi.value)}>{kpi.value}</span>
                       ) : (
                         <div className="h-8 w-24 bg-slate-200 dark:bg-slate-800 rounded-lg animate-pulse mt-2.5"></div>
                       )}
@@ -3708,19 +3779,25 @@ function App() {
                         onClick={() => setKycRoleTab('agent')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${kycRoleTab === 'agent' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                       >
-                        Agent KYC ({agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'in_review'].includes((a.status || '').toLowerCase())).length})
+                        Agent KYC ({agents.filter(a => ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((a.kycStatus || a.status || '').toLowerCase())).length})
                       </button>
                       <button
                         onClick={() => setKycRoleTab('vendor')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${kycRoleTab === 'vendor' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                       >
-                        Vendor KYC ({vendors.filter(v => ['pending', 'pending_approval', 'under_verification', 'in_review'].includes((v.status || '').toLowerCase())).length})
+                        Vendor KYC ({vendors.filter(v => ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((v.kycStatus || v.status || '').toLowerCase())).length})
                       </button>
                       <button
                         onClick={() => setKycRoleTab('manager')}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${kycRoleTab === 'manager' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
                       >
-                        Manager KYC ({managerKycRequests.filter(m => ['pending', 'pending_approval', 'under_verification', 'in_review'].includes((m.status || '').toLowerCase()) || m.approvalStage === 'kyc_review').length})
+                        Manager KYC ({managerKycRequests.filter(m => ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review'].includes((m.status || '').toLowerCase()) || m.approvalStage === 'kyc_review').length})
+                      </button>
+                      <button
+                        onClick={() => setKycRoleTab('subadmin')}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${kycRoleTab === 'subadmin' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+                      >
+                        Sub-admin KYC ({subadminKycRequests.filter(s => ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', ''].includes((s.status || '').toLowerCase())).length})
                       </button>
                     </div>
                   </div>
@@ -4243,6 +4320,148 @@ function App() {
                         <div className="text-center py-12 text-slate-400 text-sm">
                           <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                           No manager KYC records found for this status.
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {kycRoleTab === 'subadmin' && (
+                    <>
+                      {subadminKycRequests
+                        .filter(s => {
+                          const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                          const sStatus = (s.status || '').toLowerCase();
+                          if (currentFilter === 'pending') {
+                            return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', ''].includes(sStatus);
+                          }
+                          return sStatus === currentFilter;
+                        })
+                        .map((subadmin) => {
+                          const aadhaarUrl = (subadmin.kyc?.aadhaarImage && !subadmin.kyc.aadhaarImage.includes('unsplash.com')) ? subadmin.kyc.aadhaarImage : (subadmin.kycDocs?.aadhaarImage || null);
+                          const panUrl = (subadmin.kyc?.panImage && !subadmin.kyc.panImage.includes('unsplash.com')) ? subadmin.kyc.panImage : (subadmin.kycDocs?.panImage || null);
+                          const selfieUrl = (subadmin.kyc?.selfie && !subadmin.kyc.selfie.includes('unsplash.com')) ? subadmin.kyc.selfie : (subadmin.kycDocs?.selfie || null);
+                          const certUrl = (subadmin.kyc?.educationalCertificates && !subadmin.kyc.educationalCertificates.includes('unsplash.com')) ? subadmin.kyc.educationalCertificates : (subadmin.kycDocs?.educationalCertificates || null);
+                          const aadhaarNum = subadmin.kyc?.aadhaarNumber || subadmin.kycDocs?.aadhaarNumber || subadmin.aadhaarNumber || '';
+                          const panNum = subadmin.kyc?.panNumber || subadmin.kycDocs?.panNumber || subadmin.panNumber || '';
+                          const tierLabel = (subadmin.adminLevel || subadmin.adminRole || subadmin.level || 'Sub-admin').replace('-', ' ').toUpperCase();
+                          const territoryInfo = [subadmin.assignedState, subadmin.assignedDistrict, subadmin.assignedDivision, subadmin.assignedPincode].filter(Boolean).join(' / ') || subadmin.assignedArea || subadmin.state || 'General Territory';
+
+                          return (
+                            <div key={subadmin._id} className="py-5 space-y-4">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-extrabold text-slate-850 dark:text-slate-100 text-lg">{subadmin.name}</span>
+                                    <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                                      🛡️ {tierLabel}
+                                    </span>
+                                  </div>
+                                  <span className="block text-xs text-slate-400 mt-0.5">
+                                    {subadmin.email} • {subadmin.phone || 'Phone not provided'} • Assigned: {territoryInfo}
+                                  </span>
+                                </div>
+                                <span className={`text-xs px-2.5 py-1 rounded-full font-bold capitalize ${
+                                  (subadmin.status || '').toLowerCase() === 'approved' ? 'bg-emerald-500/10 text-emerald-500' :
+                                  (subadmin.status || '').toLowerCase() === 'rejected' ? 'bg-rose-500/10 text-rose-500' :
+                                  'bg-amber-500/10 text-amber-500'
+                                }`}>
+                                  KYC {(subadmin.status || 'Pending').toUpperCase()}
+                                </span>
+                              </div>
+
+                              {/* Documents viewer */}
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                <div
+                                  onClick={() => setKycPreviewImage(aadhaarUrl || getDocFallbackSvg('Aadhaar Card', subadmin.name))}
+                                  className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                >
+                                  <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
+                                  <img
+                                    src={aadhaarUrl || getDocFallbackSvg('Aadhaar Card', subadmin.name)}
+                                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Aadhaar Card', subadmin.name); }}
+                                    alt="Aadhaar"
+                                    className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                  />
+                                  <span className="block text-[10px] font-mono mt-2 text-slate-600 dark:text-slate-400">{aadhaarNum || 'Verified Document'}</span>
+                                </div>
+                                <div
+                                  onClick={() => setKycPreviewImage(panUrl || getDocFallbackSvg('PAN Card', subadmin.name))}
+                                  className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                >
+                                  <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
+                                  <img
+                                    src={panUrl || getDocFallbackSvg('PAN Card', subadmin.name)}
+                                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('PAN Card', subadmin.name); }}
+                                    alt="PAN"
+                                    className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                  />
+                                  <span className="block text-[10px] font-mono mt-2 text-slate-600 dark:text-slate-400">{panNum || 'Verified Document'}</span>
+                                </div>
+                                <div
+                                  onClick={() => setKycPreviewImage(selfieUrl || getDocFallbackSvg('Photo / Selfie', subadmin.name))}
+                                  className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                >
+                                  <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Admin Photo</span>
+                                  <img
+                                    src={selfieUrl || getDocFallbackSvg('Photo / Selfie', subadmin.name)}
+                                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Photo / Selfie', subadmin.name); }}
+                                    alt="Photo"
+                                    className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                  />
+                                </div>
+                                <div
+                                  onClick={() => setKycPreviewImage(certUrl || getDocFallbackSvg('Qualifications', subadmin.name))}
+                                  className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
+                                >
+                                  <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Qualification / Cert</span>
+                                  <img
+                                    src={certUrl || getDocFallbackSvg('Qualifications', subadmin.name)}
+                                    onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Qualifications', subadmin.name); }}
+                                    alt="Certificates"
+                                    className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                  />
+                                </div>
+                              </div>
+
+                              {['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', ''].includes((subadmin.status || '').toLowerCase()) && (
+                                <div className="flex gap-3 justify-end">
+                                  <button
+                                    onClick={() => handleSubadminKycAction(subadmin, 'reject')}
+                                    disabled={processingKycId === subadmin._id}
+                                    className="bg-slate-100 hover:bg-rose-500/10 text-rose-500 text-xs font-semibold px-4 py-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                  >
+                                    {processingKycId === subadmin._id && kycActionType === 'reject' ? 'Rejecting...' : 'Reject KYC'}
+                                  </button>
+                                  <button
+                                    onClick={() => handleSubadminKycAction(subadmin, 'approve')}
+                                    disabled={processingKycId === subadmin._id}
+                                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                                  >
+                                    {processingKycId === subadmin._id && kycActionType === 'approve' ? (
+                                      <>
+                                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                        <span>Approving & Activating...</span>
+                                      </>
+                                    ) : (
+                                      <span>Verify & Approve Sub-admin KYC</span>
+                                    )}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      {subadminKycRequests.filter(s => {
+                        const currentFilter = ['pending', 'approved', 'rejected'].includes(filterCategory) ? filterCategory : 'pending';
+                        const sStatus = (s.status || '').toLowerCase();
+                        if (currentFilter === 'pending') {
+                          return ['pending', 'pending_approval', 'under_verification', 'under verification', 'in_review', ''].includes(sStatus);
+                        }
+                        return sStatus === currentFilter;
+                      }).length === 0 && (
+                        <div className="text-center py-12 text-slate-400 text-sm">
+                          <CheckCircle className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                          No Sub-admin KYC records found for this status.
                         </div>
                       )}
                     </>
@@ -5127,7 +5346,19 @@ function App() {
 
           {/* 15. TOTAL ORDERS */}
           {activeTab === 'orders' && (() => {
-            const productOptions = [...new Set(orders.map(o => o.productDetails || o.product_details || o.productName || 'General Product').filter(Boolean))].sort();
+            const resolveOrderBizType = (o) => {
+              const raw = String(o.businessType || o.type || o.category || o.vendorCategory || o.items?.[0]?.category || 'Product').trim().toLowerCase();
+              if (raw.includes('food') || raw.includes('dining') || raw.includes('restaurant')) return 'Food';
+              if (raw.includes('daily') || raw.includes('grocery') || raw.includes('needs')) return 'Daily Needs';
+              return 'Product';
+            };
+
+            const filteredByBiz = orders.filter(o => {
+              if (ordersBusinessTypeFilter === 'All') return true;
+              return resolveOrderBizType(o).toLowerCase() === ordersBusinessTypeFilter.toLowerCase();
+            });
+
+            const productOptions = [...new Set(filteredByBiz.map(o => o.productDetails || o.product_details || o.productName || 'General Product').filter(Boolean))].sort();
 
             const filteredOrders = orders.filter(o => {
               const matchesSearch = !ordersSearchTerm ||
@@ -5137,6 +5368,8 @@ function App() {
                 (o.customerId?.name || '').toLowerCase().includes(ordersSearchTerm.toLowerCase());
 
               const matchesStatus = ordersStatusFilter === 'All' || (o.status || '').toLowerCase() === ordersStatusFilter.toLowerCase();
+
+              const matchesBusinessType = ordersBusinessTypeFilter === 'All' || resolveOrderBizType(o).toLowerCase() === ordersBusinessTypeFilter.toLowerCase();
 
               const prodName = o.productDetails || o.product_details || o.productName || 'General Product';
               const matchesProduct = ordersProductFilter === 'All' || prodName === ordersProductFilter;
@@ -5156,7 +5389,7 @@ function App() {
                 }
               }
 
-              return matchesSearch && matchesStatus && matchesProduct && matchesDate;
+              return matchesSearch && matchesStatus && matchesBusinessType && matchesProduct && matchesDate;
             }).sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
 
             return (
@@ -5196,6 +5429,21 @@ function App() {
                         />
                       </div>
 
+                      {/* Business Type Filter */}
+                      <select
+                        value={ordersBusinessTypeFilter}
+                        onChange={(e) => {
+                          setOrdersBusinessTypeFilter(e.target.value);
+                          setOrdersProductFilter('All');
+                        }}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Business Types</option>
+                        <option value="Product">Product</option>
+                        <option value="Daily Needs">Daily Needs</option>
+                        <option value="Food">Food</option>
+                      </select>
+
                       {/* Product Filter */}
                       <select
                         value={ordersProductFilter}
@@ -5231,6 +5479,23 @@ function App() {
                         <option value="Delivered">Delivered</option>
                         <option value="Cancelled">Cancelled</option>
                       </select>
+
+                      {/* Reset button */}
+                      {(ordersSearchTerm || ordersBusinessTypeFilter !== 'All' || ordersProductFilter !== 'All' || ordersDateFilter !== 'All' || ordersStatusFilter !== 'All') && (
+                        <button
+                          onClick={() => {
+                            setOrdersSearchTerm('');
+                            setOrdersBusinessTypeFilter('All');
+                            setOrdersProductFilter('All');
+                            setOrdersDateFilter('All');
+                            setOrdersStatusFilter('All');
+                          }}
+                          className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                          title="Reset Filters"
+                        >
+                          Reset
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -5301,6 +5566,13 @@ function App() {
 
           {/* 16. BOOKINGS */}
           {activeTab === 'bookings' && (() => {
+            const resolveBookingType = (b) => {
+              const raw = String(b.type || b.bookingType || b.category || b.serviceType || b.serviceName || b.service || '').trim().toLowerCase();
+              if (raw.includes('stay') || raw.includes('hotel') || raw.includes('resort') || raw.includes('room')) return 'Stay';
+              if (raw.includes('travel') || raw.includes('cab') || raw.includes('car') || raw.includes('tour') || raw.includes('taxi')) return 'Travel';
+              return 'Services';
+            };
+
             const filteredBookings = bookings.filter(b => {
               const vName = b.vendorId?.businessName || b.vendorName || b.vendorId?.name || '';
               const cName = b.customerId?.name || b.customer_name || '';
@@ -5315,6 +5587,8 @@ function App() {
                 sName.includes(bookingSearchTerm.toLowerCase());
 
               const matchesStatus = bookingStatusFilter === 'All' || (b.status || '').toLowerCase() === bookingStatusFilter.toLowerCase();
+
+              const matchesBookingType = bookingTypeFilter === 'All' || resolveBookingType(b).toLowerCase() === bookingTypeFilter.toLowerCase();
 
               let matchesDate = true;
               if (bookingDateFilter !== 'All' && b.createdAt) {
@@ -5331,7 +5605,7 @@ function App() {
                 }
               }
 
-              return isServiceOrBooking && matchesSearch && matchesStatus && matchesDate;
+              return isServiceOrBooking && matchesSearch && matchesStatus && matchesBookingType && matchesDate;
             }).sort((a, b) => new Date(b.createdAt || b.date || 0) - new Date(a.createdAt || a.date || 0));
 
             return (
@@ -5371,6 +5645,18 @@ function App() {
                         />
                       </div>
 
+                      {/* Booking Type Filter */}
+                      <select
+                        value={bookingTypeFilter}
+                        onChange={(e) => setBookingTypeFilter(e.target.value)}
+                        className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200"
+                      >
+                        <option value="All">All Booking Types</option>
+                        <option value="Stay">Stay</option>
+                        <option value="Travel">Travel</option>
+                        <option value="Services">Services</option>
+                      </select>
+
                       {/* Status Filter */}
                       <select
                         value={bookingStatusFilter}
@@ -5395,6 +5681,22 @@ function App() {
                         <option value="Weekly">Weekly</option>
                         <option value="Monthly">Monthly</option>
                       </select>
+
+                      {/* Reset button */}
+                      {(bookingSearchTerm || bookingTypeFilter !== 'All' || bookingStatusFilter !== 'All' || bookingDateFilter !== 'All') && (
+                        <button
+                          onClick={() => {
+                            setBookingSearchTerm('');
+                            setBookingTypeFilter('All');
+                            setBookingStatusFilter('All');
+                            setBookingDateFilter('All');
+                          }}
+                          className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                          title="Reset Filters"
+                        >
+                          Reset
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -5471,9 +5773,22 @@ function App() {
 
           {/* 17. JOB APPLIED */}
           {activeTab === 'jobs' && (() => {
-            const totalApps = jobs.length;
-            const shortlistedApps = jobs.filter(j => ['shortlisted', 'shortlist', 'interviewing'].includes((j.status || '').toLowerCase())).length;
-            const selectedApps = jobs.filter(j => ['selected', 'hired', 'offered'].includes((j.status || '').toLowerCase())).length;
+            const resolveJobCategory = (job) => {
+              const raw = String(job.jobType || job.category || job.jobCategory || job.department || job.position || '').trim();
+              if (!raw || raw === '—') return 'General';
+              const lower = raw.toLowerCase();
+              if (lower.includes('it') || lower.includes('software') || lower.includes('developer') || lower.includes('mern') || lower.includes('stack') || lower.includes('tech') || lower.includes('engineer')) return 'IT';
+              if (lower.includes('bank') || lower.includes('casa') || lower.includes('credit') || lower.includes('loan')) return 'Banking';
+              if (lower.includes('finance') || lower.includes('account')) return 'Finance';
+              if (lower.includes('hr') || lower.includes('recruit') || lower.includes('human')) return 'HR';
+              if (lower.includes('sales') || lower.includes('market')) return 'Sales & Marketing';
+              if (lower.includes('non-it') || lower.includes('non it')) return 'Non-IT';
+              return raw;
+            };
+
+            const knownTypes = ['IT', 'Non-IT', 'Banking', 'Finance'];
+            const presentTypes = [...new Set(jobs.map(resolveJobCategory).filter(Boolean))];
+            const allAvailableJobTypes = [...new Set([...knownTypes, ...presentTypes])].sort();
 
             const filteredJobs = jobs.filter(job => {
               const term = jobSearchTerm.toLowerCase();
@@ -5492,8 +5807,18 @@ function App() {
                 (jobStatusFilter === 'selected' && ['selected', 'hired', 'offered'].includes(st)) ||
                 (jobStatusFilter === 'rejected' && st === 'rejected');
 
-              return matchesSearch && matchesStatus;
+              const catVal = resolveJobCategory(job).toLowerCase();
+              const rawCat = String(job.jobType || job.category || job.position || '').toLowerCase();
+              const matchesJobType = jobTypeFilter === 'All' || 
+                catVal === jobTypeFilter.toLowerCase() ||
+                rawCat.includes(jobTypeFilter.toLowerCase());
+
+              return matchesSearch && matchesStatus && matchesJobType;
             }).sort((a, b) => new Date(b.createdAt || b.appliedAt || b.appliedDate || b.date || 0) - new Date(a.createdAt || a.appliedAt || a.appliedDate || a.date || 0));
+
+            const totalApps = filteredJobs.length;
+            const shortlistedApps = filteredJobs.filter(j => ['shortlisted', 'shortlist', 'interviewing'].includes((j.status || '').toLowerCase())).length;
+            const selectedApps = filteredJobs.filter(j => ['selected', 'hired', 'offered'].includes((j.status || '').toLowerCase())).length;
 
             return (
               <div className="space-y-6">
@@ -5559,7 +5884,19 @@ function App() {
                     />
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                    <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Job Type</label>
+                    <select
+                      value={jobTypeFilter}
+                      onChange={(e) => setJobTypeFilter(e.target.value)}
+                      className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none"
+                    >
+                      <option value="All">All Job Types</option>
+                      {allAvailableJobTypes.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                      ))}
+                    </select>
+
                     <label className="text-xs font-semibold text-slate-500 hidden sm:inline">Status Filter</label>
                     <select
                       value={jobStatusFilter}
@@ -5577,6 +5914,7 @@ function App() {
                       onClick={() => {
                         setJobSearchTerm("");
                         setJobStatusFilter("All");
+                        setJobTypeFilter("All");
                       }}
                       className="p-2 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
                       title="Reset Filters"

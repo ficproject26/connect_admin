@@ -370,6 +370,20 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
   return (
     <div className="space-y-8 pb-16">
 
+      {/* PRINT-ONLY REPORT HEADER */}
+      <div className="hidden print:block mb-6 border-b-2 border-slate-800 pb-4">
+        <div className="flex justify-between items-end">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">AGENT PERFORMANCE REPORT</h1>
+            <p className="text-xs text-slate-600 mt-1">Connect App — Main Administration Portal</p>
+          </div>
+          <div className="text-right text-xs text-slate-600 space-y-0.5">
+            <div><span className="font-bold">Period:</span> {typeof period === 'string' ? period.toUpperCase() : 'ALL'}</div>
+            <div><span className="font-bold">Generated:</span> {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+          </div>
+        </div>
+      </div>
+
       {/* ERROR BANNER WITH RETRY */}
       {error && !cardsData && (
         <div className="bg-rose-500/10 border border-rose-500/30 p-6 rounded-3xl text-center space-y-3">
@@ -386,7 +400,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
       )}
 
       {/* 1. PERFORMANCE PERIOD SWITCHER + ACTIONS INCLUDED */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm">
+      <div className="no-print bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-sm">
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-primary-500" /> Period:
@@ -789,7 +803,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
           </div>
 
           {/* List / Grid Toggle Switcher */}
-          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl shrink-0">
+          <div className="no-print flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl shrink-0">
             <button
               onClick={() => setViewMode('list')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${viewMode === 'list' ? 'bg-white dark:bg-slate-900 text-primary-600 shadow-xs' : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'}`}
@@ -808,7 +822,7 @@ export const AgentPerformanceDashboard = React.memo(({ token, API_BASE }) => {
         </div>
 
         {/* ADVANCED FILTERS CARD EMBEDDED INSIDE INDIVIDUAL AGENT MONITORING DIRECTORY */}
-        <div className="bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-850 space-y-4 shadow-xs">
+        <div className="no-print bg-slate-50 dark:bg-slate-950 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-850 space-y-4 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2">
               <Filter className="w-4 h-4 text-primary-500" /> Advanced Performance Filters
