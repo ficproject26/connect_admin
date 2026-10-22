@@ -70,26 +70,35 @@ export default function AgentPaymentModule({ token, API_BASE, initialAgents = []
   // Safe Fetch Helper for Payments & Agent Earnings
   const safeFetchPaymentData = useCallback(async () => {
     if (!token) return null;
-    const headers = { 'x-auth-token': token, 'Content-Type': 'application/json' };
+    const headers = { 
+      'x-auth-token': token, 
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json' 
+    };
     
     const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
-    const url = `${baseClean}/admin/agents`;
+    const urls = [
+      `${baseClean}/admin/agents`,
+      'https://api.ficapp.in/admin-api/admin/agents'
+    ];
 
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 20000);
-      const res = await fetch(url, { headers, signal: controller.signal });
-      clearTimeout(timeoutId);
+    for (const url of urls) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(url, { headers, signal: controller.signal });
+        clearTimeout(timeoutId);
 
-      if (res.ok) {
-        const contentType = res.headers.get('content-type') || '';
-        if (contentType.includes('application/json')) {
-          const data = await res.json();
-          if (data !== null && data !== undefined) return data;
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const data = await res.json();
+            if (data !== null && data !== undefined) return data;
+          }
         }
+      } catch (e) {
+        if (e.name !== 'AbortError') console.warn('Fetch agent payments warning:', e.message);
       }
-    } catch (e) {
-      if (e.name !== 'AbortError') console.warn('Fetch agent payments warning:', e.message);
     }
     return null;
   }, [token, API_BASE]);

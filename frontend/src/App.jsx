@@ -103,30 +103,28 @@ import {
 } from './utils/formValidation';
 
 const resolveSanitizedApiBase = () => {
+  let envUrl = '';
+  if (typeof import.meta !== 'undefined' && import.meta.env) {
+    envUrl = import.meta.env.VITE_API_URL || import.meta.env.ADMIN_API_URL || import.meta.env.VITE_ADMIN_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || '';
+  }
+  if (!envUrl && typeof process !== 'undefined' && process.env) {
+    envUrl = process.env.VITE_API_URL || process.env.ADMIN_API_URL || process.env.VITE_ADMIN_API_URL || process.env.VITE_API_BASE || '';
+  }
+
   if (typeof window !== 'undefined' && window.location) {
     const hostname = window.location.hostname;
-    // On Vercel deployments, use same-origin /admin-api which proxies seamlessly via vercel.json rewrites
-    // This completely eliminates CORS preflight issues and avoids cross-origin blocking
-    if (hostname.endsWith('.vercel.app')) {
-      return `${window.location.origin}/admin-api`;
-    }
     // On Localhost dev, use same-origin /admin-api (proxied seamlessly via vite.config.js to port 8004) or explicit localhost URL
-    // This eliminates CORS preflight blocks from remote production server
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
-      let envUrl = '';
-      if (typeof import.meta !== 'undefined' && import.meta.env) {
-        envUrl = import.meta.env.VITE_API_URL || import.meta.env.ADMIN_API_URL || import.meta.env.VITE_ADMIN_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || '';
-      }
       if (envUrl && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1') || envUrl.startsWith('/'))) {
         return envUrl.trim().replace(/\/+$/, '');
       }
       return `${window.location.origin}/admin-api`;
     }
-  }
-
-  let envUrl = '';
-  if (typeof import.meta !== 'undefined' && import.meta.env) {
-    envUrl = import.meta.env.VITE_API_URL || import.meta.env.ADMIN_API_URL || import.meta.env.VITE_ADMIN_API_URL || import.meta.env.VITE_API_BASE || import.meta.env.VITE_BACKEND_URL || '';
+    // On Vercel deployments, connect directly to production backend https://api.ficapp.in/admin-api
+    // This completely eliminates Vercel edge proxy 502 Bad Gateway timeouts while CORS is 100% authorized
+    if (hostname.endsWith('.vercel.app')) {
+      return (envUrl && envUrl.startsWith('http')) ? envUrl.trim().replace(/\/+$/, '') : 'https://api.ficapp.in/admin-api';
+    }
   }
   if (!envUrl && typeof process !== 'undefined' && process.env) {
     envUrl = process.env.VITE_API_URL || process.env.ADMIN_API_URL || process.env.VITE_ADMIN_API_URL || process.env.VITE_API_BASE || '';
@@ -1544,6 +1542,24 @@ function App() {
               return data;
             }
           } else if (r.status >= 500 && attempt < retries) {
+            // If Vercel edge proxy returned 502/503/504 Bad Gateway, try direct connection to production backend
+            if ((r.status === 502 || r.status === 503 || r.status === 504) && targetUrl.includes('.vercel.app/admin-api/')) {
+              const directFallbackUrl = targetUrl.replace(/https:\/\/[^/]+\/admin-api\//, 'https://api.ficapp.in/admin-api/');
+              try {
+                const fbController = new AbortController();
+                const fbTimeout = setTimeout(() => fbController.abort(), 12000);
+                const fbRes = await fetch(directFallbackUrl, { headers, signal: fbController.signal });
+                clearTimeout(fbTimeout);
+                if (fbRes.ok) {
+                  let fbData = null;
+                  try { fbData = await fbRes.json(); } catch (_) { const txt = await fbRes.text().catch(() => ''); try { fbData = JSON.parse(txt); } catch(__) {} }
+                  if (fbData !== null && fbData !== undefined) {
+                    if (setter) setter(fbData);
+                    return fbData;
+                  }
+                }
+              } catch (_) {}
+            }
             await new Promise(res => setTimeout(res, 600 * (attempt + 1)));
             continue;
           }

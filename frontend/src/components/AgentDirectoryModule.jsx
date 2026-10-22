@@ -189,7 +189,9 @@ export default function AgentDirectoryModule({
     const baseClean = (API_BASE || 'https://api.ficapp.in/admin-api').trim().replace(/\/+$/, '').replace(/\/api$/, '/admin-api');
     const candidates = [
       `${baseClean}/admin/agents`,
+      'https://api.ficapp.in/admin-api/admin/agents',
       `${baseClean}/agents`,
+      'https://api.ficapp.in/admin-api/agents',
       `${baseClean.replace(/\/admin-api$/, '')}/admin-api/agents`,
       ...(typeof window !== 'undefined' && window.location.origin.includes('localhost') ? ['/admin-api/admin/agents', '/admin-api/agents'] : [])
     ];
