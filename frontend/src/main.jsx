@@ -36,151 +36,7 @@ const EXTENSION_PATTERNS = [
   'volume-booster'
 ];
 
-// Neutralize third-party extension calls to eval/setTimeout/setInterval with undefined or string handlers that trigger CSP unsafe-eval violations
-if (typeof window !== 'undefined') {
-  try {
-    const _origEval = window.eval;
-    window.eval = function (code) {
-      try {
-        return _origEval.apply(this, arguments);
-      } catch (err) {
-        if (isExtensionNoise(err) || String(err).includes('Content Security Policy') || String(err).includes('unsafe-eval')) {
-          return undefined;
-        }
-        throw err;
-      }
-    };
-  } catch (_) {}
 
-  const _origSetTimeout = window.setTimeout;
-  window.setTimeout = function (handler, timeout, ...args) {
-    if (typeof handler !== 'function') {
-      if (!handler || handler === 'undefined' || handler === 'null' || typeof handler === 'string') {
-        return -1;
-      }
-    }
-    return _origSetTimeout.call(this, handler, timeout, ...args);
-  };
-
-  const _origSetInterval = window.setInterval;
-  window.setInterval = function (handler, timeout, ...args) {
-    if (typeof handler !== 'function') {
-      if (!handler || handler === 'undefined' || handler === 'null' || typeof handler === 'string') {
-        return -1;
-      }
-    }
-    return _origSetInterval.call(this, handler, timeout, ...args);
-  };
-}
-
-const drainLastError = () => {
-  try {
-    if (typeof window !== 'undefined' && window.chrome && window.chrome.runtime) {
-      void window.chrome.runtime.lastError;
-    }
-  } catch (_) {}
-};
-
-// Patch window.chrome.runtime to safely absorb dangling message ports
-const patchRuntime = (runtime) => {
-  if (!runtime || typeof runtime !== 'object') return;
-
-  if (typeof runtime.sendMessage === 'function' && !runtime._sendMessagePatched) {
-    const origSend = runtime.sendMessage.bind(runtime);
-    runtime.sendMessage = function (...args) {
-      const cb = args[args.length - 1];
-      if (typeof cb === 'function') {
-        args[args.length - 1] = function (...cbArgs) {
-          drainLastError();
-          try {
-            return cb.apply(this, cbArgs);
-          } catch (_) {}
-        };
-        try {
-          return origSend.apply(null, args);
-        } catch (e) {
-          drainLastError();
-          return;
-        }
-      }
-      try {
-        const p = origSend.apply(null, args);
-        if (p && typeof p.then === 'function') {
-          return p
-            .then((res) => {
-              drainLastError();
-              return res;
-            })
-            .catch((err) => {
-              drainLastError();
-              return undefined;
-            });
-        }
-        return p;
-      } catch (err) {
-        drainLastError();
-        return Promise.resolve(undefined);
-      }
-    };
-    runtime._sendMessagePatched = true;
-  }
-
-  if (runtime.onMessage && typeof runtime.onMessage.addListener === 'function' && !runtime._addListenerPatched) {
-    const origAdd = runtime.onMessage.addListener.bind(runtime.onMessage);
-    runtime.onMessage.addListener = function (listener) {
-      if (typeof listener !== 'function') return origAdd(listener);
-      return origAdd(function (message, sender, sendResponse) {
-        let responded = false;
-        const safeSendResponse = (...srArgs) => {
-          if (responded) return;
-          responded = true;
-          try {
-            const p = sendResponse.apply(null, srArgs);
-            if (p && typeof p.catch === 'function') {
-              p.catch(() => {});
-            }
-          } catch (_) {}
-        };
-        try {
-          const res = listener(message, sender, safeSendResponse);
-          if (res === true) {
-            setTimeout(() => {
-              if (!responded) safeSendResponse({ status: 'auto_resolved' });
-            }, 200);
-            return true;
-          }
-          if (res && typeof res.then === 'function') {
-            res.then((r) => { safeSendResponse(r !== undefined ? r : { status: 'resolved' }); })
-               .catch((e) => { safeSendResponse({ error: String(e) }); });
-            return true;
-          }
-          return res;
-        } catch (e) {
-          safeSendResponse({ error: String(e) });
-          return false;
-        }
-      });
-    };
-    runtime._addListenerPatched = true;
-  }
-};
-
-const autoPatchChrome = () => {
-  try {
-    if (typeof window !== 'undefined' && window.chrome) {
-      if (window.chrome.runtime) {
-        patchRuntime(window.chrome.runtime);
-      }
-    }
-  } catch (_) {}
-};
-
-if (typeof window !== 'undefined') {
-  autoPatchChrome();
-  setInterval(autoPatchChrome, 50);
-  setInterval(drainLastError, 50);
-  drainLastError();
-}
 
 const extractErrorString = (arg) => {
   if (!arg) return '';
@@ -209,9 +65,7 @@ const isExtensionNoise = (errOrMsg) => {
 };
 
 const handleRejection = (event) => {
-  drainLastError();
   if (isExtensionNoise(event?.reason) || isExtensionNoise(event?.message) || isExtensionNoise(event)) {
-    drainLastError();
     try {
       event.preventDefault();
       if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
@@ -227,7 +81,6 @@ window.addEventListener('unhandledrejection', handleRejection, false);
 try {
   const origUnhandled = window.onunhandledrejection;
   window.onunhandledrejection = function (e) {
-    drainLastError();
     if (e && isExtensionNoise(e.reason || e)) {
       try {
         if (typeof e.preventDefault === 'function') e.preventDefault();
@@ -269,7 +122,6 @@ if (typeof console !== 'undefined') {
     const origMethod = console[method];
     if (typeof origMethod === 'function') {
       console[method] = function (...args) {
-        drainLastError();
         if (args.some((arg) => isExtensionNoise(arg))) {
           return;
         }
