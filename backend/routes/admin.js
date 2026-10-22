@@ -3994,7 +3994,9 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
                     return [];
                 }),
                 User.find({
-                    role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff'] }
+                    role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff', 'super-admin', 'Super-Admin', 'superadmin', 'SuperAdmin'] },
+                    adminRole: { $nin: ['super-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] },
+                    email: { $nin: ['admin@example.com', 'admin@vendor.com'] }
                 }, custProjection).lean().catch((e) => {
                     console.warn('[User.find as customer notice]:', e?.message);
                     return [];
