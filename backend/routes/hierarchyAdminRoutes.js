@@ -528,6 +528,8 @@ const isPendingStatus = (st) => {
     return PENDING_ONBOARDING_STATUSES.includes(String(st).toLowerCase().trim());
 };
 
+const VENDOR_LIST_EXCLUSIONS = '-password -__v -documents -logo -businessLicense -storefrontPhoto -shopPhoto -businessImages -kycDocs.aadhaarImage -kycDocs.panImage -kycDocs.selfie -kycDocs.businessProofImage';
+
 const getAdminRequestsHandler = async (req, res) => {
     try {
         const isMainAdmin = Boolean(req.adminUser?.isMainAdmin);
@@ -536,6 +538,12 @@ const getAdminRequestsHandler = async (req, res) => {
         const userDivision = (req.adminUser?.assignedDivision || '').trim();
         const userPincode = (req.adminUser?.assignedPincode ? String(req.adminUser.assignedPincode) : '').trim();
         const adminTier = (req.adminUser?.adminTier || '').toLowerCase();
+
+        const requestedCategory = (req.query.category || 'all').toLowerCase().trim();
+        const shouldFetchVendors = requestedCategory === 'all' || requestedCategory === 'vendor' || requestedCategory === 'vendors';
+        const shouldFetchAgents = requestedCategory === 'all' || requestedCategory === 'agent' || requestedCategory === 'agents';
+        const shouldFetchManagers = requestedCategory === 'all' || requestedCategory === 'manager' || requestedCategory === 'managers';
+        const shouldFetchSubadmins = requestedCategory === 'all' || requestedCategory === 'subadmin' || requestedCategory === 'subadmins' || requestedCategory === 'admin' || requestedCategory === 'admins';
 
         // Safe territory match scoped to Sub-Admin tier
         const matchesTerritory = (item) => {
@@ -567,278 +575,287 @@ const getAdminRequestsHandler = async (req, res) => {
 
         // 1. CATEGORY 1: VENDOR ONBOARDING REQUESTS
         const vendorItems = [];
-        try {
-            const rawVendors = await Vendor.find({
-                status: { $nin: ['approved', 'Approved', 'active', 'Active', 'rejected', 'Rejected', 'suspended', 'Suspended'] }
-            }).sort({ createdAt: -1 }).lean().catch(() => []);
+        if (shouldFetchVendors) {
+            try {
+                const [rawVendors, rawVendorUsers] = await Promise.all([
+                    Vendor.find({
+                        status: { $nin: ['approved', 'Approved', 'active', 'Active', 'rejected', 'Rejected', 'suspended', 'Suspended'] }
+                    }).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean().catch(() => []),
+                    User.find({
+                        role: { $in: ['vendor', 'Vendor'] },
+                        status: { $nin: ['approved', 'Approved', 'active', 'Active', 'rejected', 'Rejected', 'suspended', 'Suspended'] }
+                    }).select(VENDOR_LIST_EXCLUSIONS).sort({ createdAt: -1 }).lean().catch(() => [])
+                ]);
 
-            const rawVendorUsers = await User.find({
-                role: { $in: ['vendor', 'Vendor'] },
-                status: { $nin: ['approved', 'Approved', 'active', 'Active', 'rejected', 'Rejected', 'suspended', 'Suspended'] }
-            }).sort({ createdAt: -1 }).lean().catch(() => []);
+                const seenVendorKeys = new Set();
+                const allCandidateVendors = [...rawVendors, ...rawVendorUsers];
 
-            const seenVendorKeys = new Set();
-            const allCandidateVendors = [...rawVendors, ...rawVendorUsers];
+                for (const v of allCandidateVendors) {
+                    const dedupeKey = String(v.email || v._id).toLowerCase();
+                    if (seenVendorKeys.has(dedupeKey)) continue;
+                    seenVendorKeys.add(dedupeKey);
 
-            for (const v of allCandidateVendors) {
-                const dedupeKey = String(v.email || v._id).toLowerCase();
-                if (seenVendorKeys.has(dedupeKey)) continue;
-                seenVendorKeys.add(dedupeKey);
+                    if (!matchesTerritory(v)) continue;
 
-                if (!matchesTerritory(v)) continue;
+                    // Determine Onboarding Source
+                    let onboardingSource = (v.onboardingSource || '').toUpperCase();
+                    let onboardingSourceLabel = 'Direct Onboarded';
+                    let initiator = { id: null, name: '', role: '', territory: '', registrationId: '' };
 
-                // Determine Onboarding Source
-                let onboardingSource = (v.onboardingSource || '').toUpperCase();
-                let onboardingSourceLabel = 'Direct Onboarded';
-                let initiator = { id: null, name: '', role: '', territory: '', registrationId: '' };
+                    const isAgentSource = onboardingSource === 'AGENT_INITIATED' ||
+                        v.joiningType === 'agent' ||
+                        v.createdVia === 'agent' ||
+                        v.registrationSource === 'agent' ||
+                        Boolean(v.agentId || v.onboardedByAgentId || v.onboardedBy);
 
-                const isAgentSource = onboardingSource === 'AGENT_INITIATED' ||
-                    v.joiningType === 'agent' ||
-                    v.createdVia === 'agent' ||
-                    v.registrationSource === 'agent' ||
-                    Boolean(v.agentId || v.onboardedByAgentId || v.onboardedBy);
+                    const isManagerSource = !isAgentSource && (
+                        onboardingSource === 'MANAGER_INITIATED' ||
+                        v.joiningType === 'manager' ||
+                        v.createdVia === 'manager_website' ||
+                        v.registrationSource === 'manager_website' ||
+                        Boolean(v.managerId || v.onboardedByManagerId)
+                    );
 
-                const isManagerSource = !isAgentSource && (
-                    onboardingSource === 'MANAGER_INITIATED' ||
-                    v.joiningType === 'manager' ||
-                    v.createdVia === 'manager_website' ||
-                    v.registrationSource === 'manager_website' ||
-                    Boolean(v.managerId || v.onboardedByManagerId)
-                );
+                    if (isAgentSource) {
+                        onboardingSource = 'AGENT_INITIATED';
+                        onboardingSourceLabel = 'Agent Onboarded';
+                        initiator = {
+                            id: v.initiatedByUserId || v.agentId || v.onboardedBy || null,
+                            name: v.initiatedByName || v.agentName || v.onboardedByAgent?.name || 'Field Agent',
+                            role: v.initiatedByRole || 'Agent',
+                            territory: v.initiatedByTerritory || '',
+                            registrationId: v.agentRegistrationId || v.onboardedByAgent?.registrationId || ''
+                        };
+                    } else if (isManagerSource) {
+                        onboardingSource = 'MANAGER_INITIATED';
+                        onboardingSourceLabel = 'Manager Onboarded';
+                        initiator = {
+                            id: v.initiatedByUserId || v.managerId || v.onboardedByManagerId || null,
+                            name: v.initiatedByName || v.managerName || v.onboardedByManager?.name || 'Territory Manager',
+                            role: v.initiatedByRole || 'Manager',
+                            territory: v.initiatedByTerritory || '',
+                            registrationId: v.managerRegistrationId || v.onboardedByManager?.registrationId || ''
+                        };
+                    } else {
+                        onboardingSource = 'DIRECT';
+                        onboardingSourceLabel = 'Direct Onboarded';
+                    }
 
-                if (isAgentSource) {
-                    onboardingSource = 'AGENT_INITIATED';
-                    onboardingSourceLabel = 'Agent Onboarded';
-                    initiator = {
-                        id: v.initiatedByUserId || v.agentId || v.onboardedBy || null,
-                        name: v.initiatedByName || v.agentName || v.onboardedByAgent?.name || 'Field Agent',
-                        role: v.initiatedByRole || 'Agent',
-                        territory: v.initiatedByTerritory || '',
-                        registrationId: v.agentRegistrationId || v.onboardedByAgent?.registrationId || ''
-                    };
-                } else if (isManagerSource) {
-                    onboardingSource = 'MANAGER_INITIATED';
-                    onboardingSourceLabel = 'Manager Onboarded';
-                    initiator = {
-                        id: v.initiatedByUserId || v.managerId || v.onboardedByManagerId || null,
-                        name: v.initiatedByName || v.managerName || v.onboardedByManager?.name || 'Territory Manager',
-                        role: v.initiatedByRole || 'Manager',
-                        territory: v.initiatedByTerritory || '',
-                        registrationId: v.managerRegistrationId || v.onboardedByManager?.registrationId || ''
-                    };
-                } else {
-                    onboardingSource = 'DIRECT';
-                    onboardingSourceLabel = 'Direct Onboarded';
+                    const docs = v.kycDocs || v.kyc || v.documents || {};
+                    vendorItems.push({
+                        _id: String(v._id),
+                        id: String(v._id),
+                        category: 'vendor',
+                        requestType: 'Vendor Onboarding',
+                        name: v.businessName || v.name || 'Vendor Merchant',
+                        applicantName: v.businessName || v.name || 'Vendor Merchant',
+                        contactName: v.contactPerson || v.contactName || v.name || '—',
+                        email: v.email || '—',
+                        phone: v.phone || v.mobile || '—',
+                        requestedRole: `Vendor (${v.category || v.vendorType || 'Store'})`,
+                        role: `Vendor (${v.category || v.vendorType || 'Store'})`,
+                        state: v.assignedState || v.state || '',
+                        district: v.assignedDistrict || v.district || '',
+                        division: v.assignedDivision || v.division || '',
+                        pincode: v.assignedPincode ? String(v.assignedPincode) : (v.pincode || ''),
+                        territory: [v.assignedState || v.state, v.assignedDistrict || v.district, v.assignedDivision || v.division, v.assignedPincode || v.pincode].filter(Boolean).join(' › ') || 'General Territory',
+                        onboardingSource,
+                        onboardingSourceLabel,
+                        initiatedBy: initiator,
+                        documents: docs,
+                        kycDocs: docs,
+                        approvalStage: v.approvalStage || 'subadmin_review',
+                        subAdminApprovalStatus: v.subAdminApprovalStatus || 'pending',
+                        status: v.status || 'Pending Approval',
+                        createdAt: v.createdAt || new Date()
+                    });
                 }
-
-                const docs = v.kycDocs || v.kyc || v.documents || {};
-                vendorItems.push({
-                    _id: String(v._id),
-                    id: String(v._id),
-                    category: 'vendor',
-                    requestType: 'Vendor Onboarding',
-                    name: v.businessName || v.name || 'Vendor Merchant',
-                    applicantName: v.businessName || v.name || 'Vendor Merchant',
-                    contactName: v.contactPerson || v.contactName || v.name || '—',
-                    email: v.email || '—',
-                    phone: v.phone || v.mobile || '—',
-                    requestedRole: `Vendor (${v.category || v.vendorType || 'Store'})`,
-                    role: `Vendor (${v.category || v.vendorType || 'Store'})`,
-                    state: v.assignedState || v.state || '',
-                    district: v.assignedDistrict || v.district || '',
-                    division: v.assignedDivision || v.division || '',
-                    pincode: v.assignedPincode ? String(v.assignedPincode) : (v.pincode || ''),
-                    territory: [v.assignedState || v.state, v.assignedDistrict || v.district, v.assignedDivision || v.division, v.assignedPincode || v.pincode].filter(Boolean).join(' › ') || 'General Territory',
-                    onboardingSource,
-                    onboardingSourceLabel,
-                    initiatedBy: initiator,
-                    documents: docs,
-                    kycDocs: docs,
-                    approvalStage: v.approvalStage || 'subadmin_review',
-                    subAdminApprovalStatus: v.subAdminApprovalStatus || 'pending',
-                    status: v.status || 'Pending Approval',
-                    createdAt: v.createdAt || new Date()
-                });
+            } catch (vErr) {
+                console.error('Error querying vendor requests for subadmin:', vErr);
             }
-        } catch (vErr) {
-            console.error('Error querying vendor requests for subadmin:', vErr);
         }
 
         // 2. CATEGORY 2: AGENT ONBOARDING REQUESTS
         const agentItems = [];
-        try {
-            const rawAgents = await User.find({
-                role: { $in: ['agent', 'Agent'] },
-                status: { $nin: ['approved', 'Approved', 'rejected', 'Rejected', 'suspended', 'Suspended', 'revoked', 'Revoked'] }
-            }).sort({ createdAt: -1 }).lean().catch(() => []);
+        if (shouldFetchAgents) {
+            try {
+                const rawAgents = await User.find({
+                    role: { $in: ['agent', 'Agent'] },
+                    status: { $nin: ['approved', 'Approved', 'rejected', 'Rejected', 'suspended', 'Suspended', 'revoked', 'Revoked'] }
+                }).select('-password -__v -kycDocs.aadhaarImage -kycDocs.panImage -kycDocs.selfie').sort({ createdAt: -1 }).lean().catch(() => []);
 
-            for (const a of rawAgents) {
-                if (!matchesTerritory(a)) continue;
+                for (const a of rawAgents) {
+                    if (!matchesTerritory(a)) continue;
 
-                let onboardingSource = (a.onboardingSource || '').toUpperCase();
-                let onboardingSourceLabel = 'Direct Onboarded';
-                let initiator = { id: null, name: '', role: '', territory: '', registrationId: '' };
+                    let onboardingSource = (a.onboardingSource || '').toUpperCase();
+                    let onboardingSourceLabel = 'Direct Onboarded';
+                    let initiator = { id: null, name: '', role: '', territory: '', registrationId: '' };
 
-                const isAdminSource = onboardingSource === 'ADMIN_INITIATED' ||
-                    Boolean(a.parentAdminId || (a.createdBy && !String(a.createdBy).startsWith('usr_mgr_')));
+                    const isAdminSource = onboardingSource === 'ADMIN_INITIATED' ||
+                        Boolean(a.parentAdminId || (a.createdBy && !String(a.createdBy).startsWith('usr_mgr_')));
 
-                if (isAdminSource) {
-                    onboardingSource = 'ADMIN_INITIATED';
-                    onboardingSourceLabel = 'Admin Onboarded';
-                    initiator = {
-                        id: a.initiatedByUserId || a.parentAdminId || a.createdBy || null,
-                        name: a.initiatedByName || a.parentAdminId?.name || 'Administrator',
-                        role: a.initiatedByRole || a.parentAdminId?.adminRole || 'Admin',
-                        territory: a.initiatedByTerritory || '',
-                        registrationId: ''
-                    };
-                } else {
-                    onboardingSource = 'DIRECT';
-                    onboardingSourceLabel = 'Direct Onboarded';
+                    if (isAdminSource) {
+                        onboardingSource = 'ADMIN_INITIATED';
+                        onboardingSourceLabel = 'Admin Onboarded';
+                        initiator = {
+                            id: a.initiatedByUserId || a.parentAdminId || a.createdBy || null,
+                            name: a.initiatedByName || a.parentAdminId?.name || 'Administrator',
+                            role: a.initiatedByRole || a.parentAdminId?.adminRole || 'Admin',
+                            territory: a.initiatedByTerritory || '',
+                            registrationId: ''
+                        };
+                    } else {
+                        onboardingSource = 'DIRECT';
+                        onboardingSourceLabel = 'Direct Onboarded';
+                    }
+
+                    const docs = a.kycDocs || a.kyc || {};
+                    agentItems.push({
+                        _id: String(a._id),
+                        id: String(a._id),
+                        category: 'agent',
+                        requestType: `${a.level || 'Pincode'} Agent Onboarding`,
+                        name: a.name || 'Agent Applicant',
+                        applicantName: a.name || 'Agent Applicant',
+                        contactName: a.name || '—',
+                        email: a.email || '—',
+                        phone: a.phone || a.mobile || '—',
+                        requestedRole: `${a.level || 'Pincode'} Agent`,
+                        role: `${a.level || 'Pincode'} Agent`,
+                        state: a.assignedState || a.state || '',
+                        district: a.assignedDistrict || a.district || '',
+                        division: a.assignedDivision || a.division || '',
+                        pincode: a.assignedPincode ? String(a.assignedPincode) : (a.pincode || ''),
+                        territory: [a.assignedState || a.state, a.assignedDistrict || a.district, a.assignedDivision || a.division, a.assignedPincode || a.pincode].filter(Boolean).join(' › ') || 'General Territory',
+                        onboardingSource,
+                        onboardingSourceLabel,
+                        initiatedBy: initiator,
+                        documents: docs,
+                        kycDocs: docs,
+                        registrationId: a.registrationId || '',
+                        approvalStage: a.approvalStage || 'subadmin_review',
+                        subAdminApprovalStatus: a.subAdminApprovalStatus || 'pending',
+                        status: a.status || 'Pending Approval',
+                        createdAt: a.createdAt || new Date()
+                    });
                 }
-
-                const docs = a.kycDocs || a.kyc || {};
-                agentItems.push({
-                    _id: String(a._id),
-                    id: String(a._id),
-                    category: 'agent',
-                    requestType: `${a.level || 'Pincode'} Agent Onboarding`,
-                    name: a.name || 'Agent Applicant',
-                    applicantName: a.name || 'Agent Applicant',
-                    contactName: a.name || '—',
-                    email: a.email || '—',
-                    phone: a.phone || a.mobile || '—',
-                    requestedRole: `${a.level || 'Pincode'} Agent`,
-                    role: `${a.level || 'Pincode'} Agent`,
-                    state: a.assignedState || a.state || '',
-                    district: a.assignedDistrict || a.district || '',
-                    division: a.assignedDivision || a.division || '',
-                    pincode: a.assignedPincode ? String(a.assignedPincode) : (a.pincode || ''),
-                    territory: [a.assignedState || a.state, a.assignedDistrict || a.district, a.assignedDivision || a.division, a.assignedPincode || a.pincode].filter(Boolean).join(' › ') || 'General Territory',
-                    onboardingSource,
-                    onboardingSourceLabel,
-                    initiatedBy: initiator,
-                    documents: docs,
-                    kycDocs: docs,
-                    registrationId: a.registrationId || '',
-                    approvalStage: a.approvalStage || 'subadmin_review',
-                    subAdminApprovalStatus: a.subAdminApprovalStatus || 'pending',
-                    status: a.status || 'Pending Approval',
-                    createdAt: a.createdAt || new Date()
-                });
+            } catch (aErr) {
+                console.error('Error querying agent requests for subadmin:', aErr);
             }
-        } catch (aErr) {
-            console.error('Error querying agent requests for subadmin:', aErr);
         }
 
         // 3. CATEGORY 3: MANAGER ONBOARDING REQUESTS
         const managerItems = [];
-        try {
-            const rawManagers = await ManagerRequest.find({
-                status: { $nin: ['Approved', 'approved', 'Rejected', 'rejected'] }
-            }).sort({ createdAt: -1 }).lean().catch(() => []);
+        if (shouldFetchManagers) {
+            try {
+                const rawManagers = await ManagerRequest.find({
+                    status: { $nin: ['Approved', 'approved', 'Rejected', 'rejected'] }
+                }).select('-documents.aadhaarImage -documents.panImage').sort({ createdAt: -1 }).lean().catch(() => []);
 
-            for (const m of rawManagers) {
-                if (!matchesTerritory(m) && String(m.requestedBy) !== String(req.adminUser._id)) continue;
+                for (const m of rawManagers) {
+                    if (!matchesTerritory(m) && String(m.requestedBy) !== String(req.adminUser._id)) continue;
 
-                const onboardingSource = (m.onboardingSource || (m.requestedBy ? 'ADMIN_INITIATED' : 'DIRECT')).toUpperCase();
-                const onboardingSourceLabel = onboardingSource === 'ADMIN_INITIATED' ? 'Admin Onboarded' : 'Direct Onboarded';
+                    const onboardingSource = (m.onboardingSource || (m.requestedBy ? 'ADMIN_INITIATED' : 'DIRECT')).toUpperCase();
+                    const onboardingSourceLabel = onboardingSource === 'ADMIN_INITIATED' ? 'Admin Onboarded' : 'Direct Onboarded';
 
-                const initiator = {
-                    id: m.initiatedByUserId || m.requestedBy || null,
-                    name: m.initiatedByName || m.requestingAdminName || 'Administrator',
-                    role: m.initiatedByRole || m.requestingAdminRole || 'Admin',
-                    territory: m.initiatedByTerritory || '',
-                    registrationId: ''
-                };
+                    const initiator = {
+                        id: m.initiatedByUserId || m.requestedBy || null,
+                        name: m.initiatedByName || m.requestingAdminName || 'Administrator',
+                        role: m.initiatedByRole || m.requestingAdminRole || 'Admin',
+                        territory: m.initiatedByTerritory || '',
+                        registrationId: ''
+                    };
 
-                const docs = m.documents || m.kycDocs || {};
-                managerItems.push({
-                    _id: String(m._id || m.requestId),
-                    id: String(m._id || m.requestId),
-                    requestId: m.requestId || '',
-                    category: 'manager',
-                    requestType: `${m.level || 'Territory'} Manager Onboarding`,
-                    name: m.name || 'Manager Applicant',
-                    applicantName: m.name || 'Manager Applicant',
-                    contactName: m.name || '—',
-                    email: m.email || '—',
-                    phone: m.phone || m.altPhone || '—',
-                    requestedRole: `${m.level} Manager`,
-                    role: `${m.level} Manager`,
-                    state: m.assignedState || '',
-                    district: m.assignedDistrict || '',
-                    division: m.assignedDivision || '',
-                    pincode: m.assignedPincode || '',
-                    territory: [m.assignedState, m.assignedDistrict, m.assignedDivision, m.assignedPincode].filter(Boolean).join(' › ') || 'General Territory',
-                    onboardingSource,
-                    onboardingSourceLabel,
-                    initiatedBy: initiator,
-                    documents: docs,
-                    kycDocs: docs,
-                    approvalStage: m.approvalStage || 'subadmin_review',
-                    subAdminApprovalStatus: m.subAdminApprovalStatus || 'pending',
-                    status: m.status || 'Pending',
-                    createdAt: m.createdAt || new Date()
-                });
+                    const docs = m.documents || m.kycDocs || {};
+                    managerItems.push({
+                        _id: String(m._id || m.requestId),
+                        id: String(m._id || m.requestId),
+                        requestId: m.requestId || '',
+                        category: 'manager',
+                        requestType: `${m.level || 'Territory'} Manager Onboarding`,
+                        name: m.name || 'Manager Applicant',
+                        applicantName: m.name || 'Manager Applicant',
+                        contactName: m.name || '—',
+                        email: m.email || '—',
+                        phone: m.phone || m.altPhone || '—',
+                        requestedRole: `${m.level} Manager`,
+                        role: `${m.level} Manager`,
+                        state: m.assignedState || '',
+                        district: m.assignedDistrict || '',
+                        division: m.assignedDivision || '',
+                        pincode: m.assignedPincode || '',
+                        territory: [m.assignedState, m.assignedDistrict, m.assignedDivision, m.assignedPincode].filter(Boolean).join(' › ') || 'General Territory',
+                        onboardingSource,
+                        onboardingSourceLabel,
+                        initiatedBy: initiator,
+                        documents: docs,
+                        kycDocs: docs,
+                        approvalStage: m.approvalStage || 'subadmin_review',
+                        subAdminApprovalStatus: m.subAdminApprovalStatus || 'pending',
+                        status: m.status || 'Pending',
+                        createdAt: m.createdAt || new Date()
+                    });
+                }
+            } catch (mErr) {
+                console.error('Error querying manager requests for subadmin:', mErr);
             }
-        } catch (mErr) {
-            console.error('Error querying manager requests for subadmin:', mErr);
         }
 
         // 4. CATEGORY 4: SUB-ADMIN ONBOARDING REQUESTS
         const subadminItems = [];
-        try {
-            const rawSubAdmins = await User.find({
-                role: { $in: ['admin', 'super-admin'] },
-                status: { $in: ['pending', 'pending_approval', 'requested', 'in_review', 'under_verification'] }
-            }).select('-password -passwordHash').sort({ createdAt: -1 }).lean().catch(() => []);
+        if (shouldFetchSubadmins) {
+            try {
+                const rawSubAdmins = await User.find({
+                    role: { $in: ['admin', 'super-admin'] },
+                    status: { $in: ['pending', 'pending_approval', 'requested', 'in_review', 'under_verification'] }
+                }).select('-password -passwordHash').sort({ createdAt: -1 }).lean().catch(() => []);
 
-            for (const sa of rawSubAdmins) {
-                if (!matchesTerritory(sa)) continue;
+                for (const sa of rawSubAdmins) {
+                    if (!matchesTerritory(sa)) continue;
 
-                const initiator = {
-                    id: sa.initiatedByUserId || sa.parentAdminId || null,
-                    name: sa.initiatedByName || 'Senior Administrator',
-                    role: sa.initiatedByRole || 'Administrator',
-                    territory: sa.initiatedByTerritory || '',
-                    registrationId: ''
-                };
+                    const initiator = {
+                        id: sa.initiatedByUserId || sa.parentAdminId || null,
+                        name: sa.initiatedByName || 'Senior Administrator',
+                        role: sa.initiatedByRole || 'Administrator',
+                        territory: sa.initiatedByTerritory || '',
+                        registrationId: ''
+                    };
 
-                const docs = sa.kycDocs || sa.kyc || {};
-                subadminItems.push({
-                    _id: String(sa._id),
-                    id: String(sa._id),
-                    category: 'subadmin',
-                    requestType: `${(sa.adminLevel || sa.level || 'Territory').toUpperCase()} Admin Onboarding`,
-                    name: sa.name || 'Administrator Candidate',
-                    applicantName: sa.name || 'Administrator Candidate',
-                    contactName: sa.name || '—',
-                    email: sa.email || '—',
-                    phone: sa.phone || sa.altPhone || '—',
-                    requestedRole: sa.adminRole || `${(sa.adminLevel || 'territory')} Admin`,
-                    role: sa.adminRole || 'Admin',
-                    state: sa.assignedState || sa.state || '',
-                    district: sa.assignedDistrict || sa.district || '',
-                    division: sa.assignedDivision || sa.division || '',
-                    pincode: sa.assignedPincode ? String(sa.assignedPincode) : (sa.pincode || ''),
-                    territory: [sa.assignedState || sa.state, sa.assignedDistrict || sa.district, sa.assignedDivision || sa.division, sa.assignedPincode || sa.pincode].filter(Boolean).join(' › ') || 'General Territory',
-                    onboardingSource: 'ADMIN_INITIATED',
-                    onboardingSourceLabel: 'Admin Onboarded',
-                    initiatedBy: initiator,
-                    documents: docs,
-                    kycDocs: docs,
-                    approvalStage: sa.approvalStage || 'subadmin_review',
-                    subAdminApprovalStatus: sa.subAdminApprovalStatus || 'pending',
-                    status: sa.status || 'Pending',
-                    createdAt: sa.createdAt || new Date()
-                });
+                    const docs = sa.kycDocs || sa.kyc || {};
+                    subadminItems.push({
+                        _id: String(sa._id),
+                        id: String(sa._id),
+                        category: 'subadmin',
+                        requestType: `${(sa.adminLevel || sa.level || 'Territory').toUpperCase()} Admin Onboarding`,
+                        name: sa.name || 'Administrator Candidate',
+                        applicantName: sa.name || 'Administrator Candidate',
+                        contactName: sa.name || '—',
+                        email: sa.email || '—',
+                        phone: sa.phone || sa.altPhone || '—',
+                        requestedRole: sa.adminRole || `${(sa.adminLevel || 'territory')} Admin`,
+                        role: sa.adminRole || 'Admin',
+                        state: sa.assignedState || sa.state || '',
+                        district: sa.assignedDistrict || sa.district || '',
+                        division: sa.assignedDivision || sa.division || '',
+                        pincode: sa.assignedPincode ? String(sa.assignedPincode) : (sa.pincode || ''),
+                        territory: [sa.assignedState || sa.state, sa.assignedDistrict || sa.district, sa.assignedDivision || sa.division, sa.assignedPincode || sa.pincode].filter(Boolean).join(' › ') || 'General Territory',
+                        onboardingSource: 'ADMIN_INITIATED',
+                        onboardingSourceLabel: 'Admin Onboarded',
+                        initiatedBy: initiator,
+                        documents: docs,
+                        kycDocs: docs,
+                        approvalStage: sa.approvalStage || 'subadmin_review',
+                        subAdminApprovalStatus: sa.subAdminApprovalStatus || 'pending',
+                        status: sa.status || 'Pending',
+                        createdAt: sa.createdAt || new Date()
+                    });
+                }
+            } catch (saErr) {
+                console.error('Error querying subadmin requests:', saErr);
             }
-        } catch (saErr) {
-            console.error('Error querying subadmin requests:', saErr);
         }
 
-        const counts = {
+        let counts = {
             all: vendorItems.length + agentItems.length + managerItems.length + subadminItems.length,
             vendor: vendorItems.length,
             agent: agentItems.length,
@@ -846,7 +863,24 @@ const getAdminRequestsHandler = async (req, res) => {
             subadmin: subadminItems.length
         };
 
-        const requestedCategory = (req.query.category || 'all').toLowerCase().trim();
+        if (requestedCategory !== 'all') {
+            try {
+                const [vc, ac, mc, sac] = await Promise.all([
+                    shouldFetchVendors ? Promise.resolve(vendorItems.length) : Vendor.countDocuments({ status: { $nin: ['approved', 'Approved', 'active', 'Active', 'rejected', 'Rejected', 'suspended', 'Suspended'] } }).catch(() => 0),
+                    shouldFetchAgents ? Promise.resolve(agentItems.length) : User.countDocuments({ role: { $in: ['agent', 'Agent'] }, status: { $nin: ['approved', 'Approved', 'rejected', 'Rejected', 'suspended', 'Suspended', 'revoked', 'Revoked'] } }).catch(() => 0),
+                    shouldFetchManagers ? Promise.resolve(managerItems.length) : ManagerRequest.countDocuments({ status: { $nin: ['Approved', 'approved', 'Rejected', 'rejected'] } }).catch(() => 0),
+                    shouldFetchSubadmins ? Promise.resolve(subadminItems.length) : User.countDocuments({ role: { $in: ['admin', 'super-admin'] }, status: { $in: ['pending', 'pending_approval', 'requested', 'in_review', 'under_verification'] } }).catch(() => 0)
+                ]);
+                counts = {
+                    all: (vc || 0) + (ac || 0) + (mc || 0) + (sac || 0),
+                    vendor: vc || 0,
+                    agent: ac || 0,
+                    manager: mc || 0,
+                    subadmin: sac || 0
+                };
+            } catch (_) {}
+        }
+
         let selectedList = [];
         if (requestedCategory === 'vendor' || requestedCategory === 'vendors') {
             selectedList = vendorItems;
@@ -867,7 +901,7 @@ const getAdminRequestsHandler = async (req, res) => {
             requests: selectedList,
             counts,
             total: selectedList.length,
-            currentUserTier: req.adminUser.adminTier || (req.adminUser.isMainAdmin ? 'main' : 'unknown')
+            currentUserTier: req.adminUser?.adminTier || (req.adminUser?.isMainAdmin ? 'main' : 'unknown')
         });
     } catch (err) {
         console.error('Get admin requests error:', err);
