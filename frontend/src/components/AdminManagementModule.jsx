@@ -631,6 +631,23 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
         return;
       }
     }
+    if (adminFormData.adminLevel === 'state' && !adminFormData.assignedState) {
+      notify('Please select an Assigned State.', 'error');
+      return;
+    }
+    if (adminFormData.adminLevel === 'district' && (!adminFormData.assignedState || !adminFormData.assignedDistrict)) {
+      notify('Please select an Assigned State and District.', 'error');
+      return;
+    }
+    if (adminFormData.adminLevel === 'division' && (!adminFormData.assignedState || !adminFormData.assignedDistrict || !adminFormData.assignedDivision)) {
+      notify('Please select Assigned State, District, and Division.', 'error');
+      return;
+    }
+    if (adminFormData.adminLevel === 'pincode' && (!adminFormData.assignedState || !adminFormData.assignedPincode)) {
+      notify('Please select Assigned State and Pincode.', 'error');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '');
@@ -640,7 +657,8 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
         email: normalizeEmail(adminFormData.email),
         phone: cleanIndianMobile(adminFormData.phone),
         role: 'admin',
-        adminRole: 'branch-admin', // Supported by both old and new schema
+        adminRole: `${adminFormData.adminLevel || 'district'}-admin`,
+        adminLevel: adminFormData.adminLevel || 'district',
         level: adminFormData.adminLevel || 'district'
       };
       const res = await fetch(`${API_BASE}/admin/admins`, {

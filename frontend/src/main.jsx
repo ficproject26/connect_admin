@@ -33,8 +33,27 @@ const EXTENSION_PATTERNS = [
   '1af9505a-5825-464e-acf3-5ad9367aeb9d',
   'f872d920-f021-4d52-ac98-78da36ceb659',
   'content.js:1',
-  'volume-booster'
+  'volume-booster',
+  'no tab with id',
+  'tab with id',
+  'asynchronous response',
+  'lastError'
 ];
+
+// Mark Chrome Extension background runtime errors as checked to silence Unchecked runtime.lastError
+if (typeof window !== 'undefined') {
+  try {
+    const drainLastError = () => {
+      try {
+        if (window.chrome?.runtime?.lastError) {
+          void window.chrome.runtime.lastError;
+        }
+      } catch (_) {}
+    };
+    drainLastError();
+    setInterval(drainLastError, 250);
+  } catch (_) {}
+}
 
 
 

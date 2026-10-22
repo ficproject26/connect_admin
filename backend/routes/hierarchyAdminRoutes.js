@@ -1656,10 +1656,20 @@ const createHierarchyAdminHandler = async (req, res) => {
             declarationAccepted
         } = req.body;
 
+        let targetLevel = (adminLevel || req.body.level || '').toLowerCase().trim();
+        if (!targetLevel && req.body.adminRole) {
+            const ar = String(req.body.adminRole).toLowerCase().trim();
+            if (ar.includes('super') || ar.includes('main')) targetLevel = 'main';
+            else if (ar.includes('state')) targetLevel = 'state';
+            else if (ar.includes('dist') || ar.includes('branch')) targetLevel = 'district';
+            else if (ar.includes('div')) targetLevel = 'division';
+            else if (ar.includes('pin')) targetLevel = 'pincode';
+        }
+        if (!targetLevel) targetLevel = 'district';
+
         if (!name || !name.trim()) return res.status(400).json({ msg: 'Full Name is required' });
         if (!email || !email.trim()) return res.status(400).json({ msg: 'Email is required' });
         if (!password || password.length < 6) return res.status(400).json({ msg: 'Password of at least 6 characters is required' });
-        if (!adminLevel) return res.status(400).json({ msg: 'Admin Level is required' });
 
         // Minimum Age 18 Years Validation
         const rawDob = dateOfBirth || req.body.dob;
@@ -1695,7 +1705,6 @@ const createHierarchyAdminHandler = async (req, res) => {
             }
         }
 
-        const targetLevel = adminLevel.toLowerCase().trim();
         const callerRank = getTierRank(req.adminUser.adminTier);
         const targetRank = getTierRank(targetLevel);
 
@@ -1726,6 +1735,18 @@ const createHierarchyAdminHandler = async (req, res) => {
         let finalDivision = (assignedDivision || '').trim();
         let finalPincode = (assignedPincode || '').trim();
 
+        // Automatic territory inference from Branch if branchId provided
+        if (req.body.branchId && (!finalDistrict || !finalState)) {
+            try {
+                const Branch = require('../models/Branch');
+                const branchDoc = await Branch.findById(req.body.branchId).lean();
+                if (branchDoc) {
+                    if (!finalDistrict) finalDistrict = branchDoc.name || '';
+                    if (!finalState) finalState = branchDoc.state || req.adminUser.assignedState || 'General State';
+                }
+            } catch (_) {}
+        }
+
         if (!req.adminUser.isMainAdmin) {
             if (req.adminUser.assignedState) finalState = req.adminUser.assignedState;
             if (req.adminUser.adminTier === 'district' && req.adminUser.assignedDistrict) {
@@ -1735,9 +1756,13 @@ const createHierarchyAdminHandler = async (req, res) => {
                 finalDistrict = req.adminUser.assignedDistrict;
                 finalDivision = req.adminUser.assignedDivision;
             }
+        } else {
+            if (targetLevel === 'district' && finalDistrict && !finalState) {
+                finalState = req.adminUser.assignedState || 'General State';
+            }
         }
 
-        // Validate mandatory territory fields per tier
+        // Validate mandatory territory fields per tier (skip for 'main' Super Admins)
         if (targetLevel === 'district' && (!finalState || !finalDistrict)) {
             return res.status(400).json({ msg: 'State and District are required for District Admin' });
         }
@@ -1952,20 +1977,31 @@ const createHierarchyAdminHandler = async (req, res) => {
 
         await newAdmin.save();
 
+        let formattedAdmin = null;
+        try {
+            formattedAdmin = await formatAdminForResponse(newAdmin.toObject(), new Map(), {}, null);
+        } catch (_) {
+            formattedAdmin = newAdmin.toObject();
+        }
+
         res.status(201).json({
             success: true,
             msg: `${targetLevel.charAt(0).toUpperCase() + targetLevel.slice(1)} Administrator onboarded successfully.`,
             registrationId,
-            admin: await formatAdminForResponse(newAdmin.toObject())
+            admin: formattedAdmin
         });
     } catch (err) {
         console.error('Create hierarchy admin error:', err);
         if (err.code === 11000) {
             const field = Object.keys(err.keyValue || {})[0];
             const fieldLabels = { email: 'Email address', phone: 'Mobile number' };
-            return res.status(400).json({ msg: `${fieldLabels[field] || 'This'} is already registered.` });
+            return res.status(400).json({ success: false, msg: `${fieldLabels[field] || 'This'} is already registered.` });
         }
-        res.status(500).json({ msg: 'Server error creating administrator', error: err.message });
+        if (err.name === 'ValidationError') {
+            const messages = Object.values(err.errors || {}).map(e => e.message).join(', ');
+            return res.status(400).json({ success: false, msg: messages || 'Validation error', message: messages || 'Validation error' });
+        }
+        res.status(500).json({ success: false, msg: 'Server error creating administrator', error: err.message });
     }
 };
 

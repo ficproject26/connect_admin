@@ -1746,6 +1746,13 @@ function App() {
     }
   }, []);
 
+  const handleSetAdmins = useCallback((data) => {
+    if (!data) return;
+    const list = Array.isArray(data) ? data : (data.admins || data.data || []);
+    setAdmins(list);
+    if (apiCacheRef.current) apiCacheRef.current['admins'] = list;
+  }, []);
+
   // Centralized Tab-Specific Silent Background Auto-Refresh Engine
   const refetchActiveTabData = useCallback(async (isBackground = true) => {
     if (!token) return;
@@ -1762,7 +1769,7 @@ function App() {
     } else if (activeTab === 'branches') {
       safeFetch(`${API_BASE}/admin/branches`, setBranches);
     } else if (activeTab === 'admins' || activeTab === 'admin-management') {
-      safeFetch(`${API_BASE}/admin/admins`, setAdmins);
+      safeFetch(`${API_BASE}/admin/admins`, handleSetAdmins);
       safeFetch(`${API_BASE}/admin/branches`, setBranches);
     } else if (activeTab === 'pincodes' || activeTab === 'pincode-management') {
       safeFetch(`${API_BASE}/pincodes`, setPincodes);
@@ -1867,7 +1874,7 @@ function App() {
       swrFetch(`${API_BASE}/admin/branches`, setBranches, 'branches');
     }
     if (activeTab === 'admins' || activeTab === 'admin-management') {
-      swrFetch(`${API_BASE}/admin/admins`, setAdmins, 'admins');
+      swrFetch(`${API_BASE}/admin/admins`, handleSetAdmins, 'admins');
       swrFetch(`${API_BASE}/admin/branches`, setBranches, 'branches');
       if (!Array.isArray(agents) || agents.length === 0) {
         swrFetch(`${API_BASE}/admin/agents`, handleSetAgents, 'agents');
@@ -3154,7 +3161,7 @@ function App() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {admins.map((adm) => (
+                {(Array.isArray(admins) ? admins : (admins?.admins || [])).map((adm) => (
                   <div key={adm._id} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm flex items-start justify-between">
                     <div>
                       <div className="flex items-center gap-2">
@@ -7980,6 +7987,8 @@ function App() {
                   name: formatName(name),
                   email: normalizeEmail(email),
                   adminRole,
+                  adminLevel: adminRole === 'super-admin' ? 'main' : (adminRole === 'state-admin' ? 'state' : 'district'),
+                  level: adminRole === 'super-admin' ? 'main' : (adminRole === 'state-admin' ? 'state' : 'district'),
                   branchId
                 };
                 if (phone) payload.phone = cleanIndianMobile(phone);
