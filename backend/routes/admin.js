@@ -5859,17 +5859,15 @@ router.get(['/bookings', '/public/bookings'], async (req, res) => {
         };
         const customBookings = await Order.find(customBookingsFilter).sort({ createdAt: -1 });
 
-        const defaultSlots = ['10:00 AM - 11:00 AM', '11:30 AM - 12:30 PM', '02:00 PM - 03:00 PM', '04:30 PM - 05:30 PM', '06:00 PM - 07:00 PM'];
-
         const isBookingItem = (item) => {
             const name = String(item.serviceName || item.service || item.serviceType || item.product_details || item.productDetails || item.title || '').toLowerCase();
             const productNamesToExclude = ['urad dal', 'spring onions', 'phone', 'headphone', 'salad', 'chicken biriyani', 'biriyani'];
             return !productNamesToExclude.some(p => name.includes(p));
         };
 
-        const resolvedDbBookings = dbBookings.map((b, idx) => {
+        const resolvedDbBookings = dbBookings.map((b) => {
             const obj = b.toObject ? b.toObject() : b;
-            const slot = (!obj.appointmentTimeSlot || String(obj.appointmentTimeSlot).toLowerCase().includes('standard')) ? defaultSlots[idx % defaultSlots.length] : obj.appointmentTimeSlot;
+            const slot = obj.appointmentTimeSlot || '';
             const cObj = obj.customerId;
             const cId = cObj?.customerId || cObj?.registrationId || getCanonicalCustomerId(cObj || obj);
             const enrichedCustomer = (cObj && typeof cObj === 'object') ? {
@@ -5880,8 +5878,8 @@ router.get(['/bookings', '/public/bookings'], async (req, res) => {
             return { ...obj, customerId: enrichedCustomer, appointmentTimeSlot: slot };
         });
 
-        const resolvedCustomBookings = (await resolveVendorAndCustomer(customBookings)).map((b, idx) => {
-            const slot = (!b.appointmentTimeSlot || String(b.appointmentTimeSlot).toLowerCase().includes('standard')) ? defaultSlots[idx % defaultSlots.length] : b.appointmentTimeSlot;
+        const resolvedCustomBookings = (await resolveVendorAndCustomer(customBookings)).map((b) => {
+            const slot = b.appointmentTimeSlot || '';
             return { ...b, appointmentTimeSlot: slot };
         });
 
@@ -6009,7 +6007,7 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
             return {
                 ...obj,
                 applicationId: obj.applicationId || (obj._id ? 'JOB-' + String(obj._id).substring(18, 24).toUpperCase() : '—'),
-                candidateName: obj.candidateName || 'Candidate',
+                candidateName: obj.candidateName || '—',
                 customerId: custIdVal,
                 position: posVal,
                 jobType: typeVal,
@@ -6036,14 +6034,14 @@ router.get(['/jobs', '/public/jobs'], async (req, res) => {
                 applicationId: appId,
                 jobId: order.jobId || (order.items && order.items[0]?.productId) || 'N/A',
                 jobTitle: posVal,
-                candidateName: order.candidateName || order.memberName || order.customer_name || order.customerId?.name || 'Candidate',
+                candidateName: order.candidateName || order.memberName || order.customer_name || order.customerId?.name || '—',
                 email: order.candidateEmail || order.customer_email || order.email || order.customerId?.email || 'N/A',
                 phone: order.candidatePhone || ((order.customer_phone && order.customer_phone !== 'N/A') ? order.customer_phone : (order.customerId?.phone && order.customerId?.phone !== 'N/A' ? order.customerId.phone : 'N/A')),
                 position: posVal,
                 jobType: typeVal,
                 jobLocation: order.jobLocation || order.candidateLocation || order.customer_address || 'N/A',
-                candidateEducation: order.candidateEducation || 'Graduate',
-                experience: order.experience || 'Fresher',
+                candidateEducation: order.candidateEducation || '—',
+                experience: order.experience || '—',
                 status: statusVal,
                 createdAt: order.applicationDate || order.created_at || order.createdAt,
                 customerId: custIdVal,
