@@ -38,14 +38,19 @@ const wipeDumpData = async () => {
             const name = col.name;
             const normalizedName = (name || '').toLowerCase().trim();
             if (normalizedName === 'users') {
-                // Delete all users except super admin
+                // Delete all non-administrative users, strictly preserving all admin accounts
+                const adminFilter = {
+                    $and: [
+                        { role: { $nin: ['admin', 'super-admin', 'superadmin', 'main-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] } },
+                        { adminRole: { $nin: ['admin', 'super-admin', 'superadmin', 'main-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] } },
+                        { email: { $nin: ['admin@example.com', 'admin@vendor.com', 'dhanushiyasri1924@gmail.com', 'dinesh12@gmail.com', 'akash@gmail.com', 'aakash@gmail.com', 'hi@gmail.com', 'north@example.com'] } }
+                    ]
+                };
                 if (isDryRun) {
-                    const count = await db.collection('users').countDocuments({ email: { $ne: 'admin@example.com' } });
+                    const count = await db.collection('users').countDocuments(adminFilter);
                     console.log(`[DRY RUN] Would delete ${count} non-admin records in '${name}' collection.`);
                 } else {
-                    const res = await db.collection('users').deleteMany({
-                        email: { $ne: 'admin@example.com' }
-                    });
+                    const res = await db.collection('users').deleteMany(adminFilter);
                     console.log(`Cleared non-admin records in '${name}' collection. Deleted: ${res.deletedCount}`);
                 }
             } else if (PROTECTED_COLLECTIONS.has(normalizedName)) {

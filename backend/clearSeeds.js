@@ -26,9 +26,13 @@ const clearMockData = async () => {
         await mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URI);
         console.log('Connected to MongoDB for clearing...');
 
-        // Delete all agents/users except admins and selvi
+        // Delete all users except admin accounts
         const deleteUsersResult = await User.deleteMany({
-            email: { $nin: ['admin@example.com', 'north@example.com', 'south@example.com', 'selvi@gmail.com'] }
+            $and: [
+                { role: { $nin: ['admin', 'super-admin', 'superadmin', 'main-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] } },
+                { adminRole: { $nin: ['admin', 'super-admin', 'superadmin', 'main-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] } },
+                { email: { $nin: ['admin@example.com', 'admin@vendor.com', 'dhanushiyasri1924@gmail.com', 'dinesh12@gmail.com', 'akash@gmail.com', 'aakash@gmail.com', 'hi@gmail.com', 'north@example.com', 'south@example.com', 'selvi@gmail.com'] } }
+            ]
         });
         console.log(`Deleted users count: ${deleteUsersResult.deletedCount}`);
 

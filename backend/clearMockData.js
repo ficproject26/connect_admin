@@ -36,8 +36,14 @@ const clearMockData = async () => {
         await CommissionConfig.deleteMany({});
         await MembershipPlan.deleteMany({});
 
-        // 2. Delete all users EXCEPT the Super Admin so you can still log in
-        await User.deleteMany({ email: { $ne: 'admin@example.com' } });
+        // 2. Delete all users EXCEPT the Admin accounts so you can still log in
+        await User.deleteMany({
+            $and: [
+                { role: { $nin: ['admin', 'super-admin', 'superadmin', 'main-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] } },
+                { adminRole: { $nin: ['admin', 'super-admin', 'superadmin', 'main-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] } },
+                { email: { $nin: ['admin@example.com', 'admin@vendor.com', 'dhanushiyasri1924@gmail.com', 'dinesh12@gmail.com', 'akash@gmail.com', 'aakash@gmail.com', 'hi@gmail.com', 'north@example.com'] } }
+            ]
+        });
 
         // 3. Clear active agent assignments on pincodes
         await Pincode.updateMany({}, { activeAgentId: null });

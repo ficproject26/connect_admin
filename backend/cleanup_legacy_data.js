@@ -39,8 +39,14 @@ async function cleanupTestDb() {
     // In test.users, remove non-admin users (such as test vendors)
     const usersBefore = await db.collection('users').find({}).toArray();
     console.log(`\nUsers in test before: ${usersBefore.length}`);
-    const adminRoles = ['super-admin', 'admin', 'Super Admin', 'Admin'];
-    const userDeleteRes = await db.collection('users').deleteMany({ role: { $nin: adminRoles } });
+    const adminFilter = {
+        $and: [
+            { role: { $nin: ['admin', 'super-admin', 'superadmin', 'main-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff', 'Super Admin', 'Admin'] } },
+            { adminRole: { $nin: ['admin', 'super-admin', 'superadmin', 'main-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] } },
+            { email: { $nin: ['admin@example.com', 'admin@vendor.com', 'dhanushiyasri1924@gmail.com', 'dinesh12@gmail.com', 'akash@gmail.com', 'aakash@gmail.com', 'hi@gmail.com', 'north@example.com'] } }
+        ]
+    };
+    const userDeleteRes = await db.collection('users').deleteMany(adminFilter);
     console.log(`✅ Deleted non-admin users in test: ${userDeleteRes.deletedCount}`);
     const usersAfter = await db.collection('users').find({}).toArray();
     console.log(`Remaining users in test: ${usersAfter.length} (${usersAfter.map(u => u.email).join(', ')})`);
