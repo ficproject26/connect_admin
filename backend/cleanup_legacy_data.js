@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const uri = 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/test?retryWrites=true&w=majority';
+const uri = process.env.MONGODB_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
 
 async function cleanupTestDb() {
     console.log('Connecting to MongoDB cluster0.riukwbj.mongodb.net/test...');

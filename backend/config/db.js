@@ -6,7 +6,7 @@ const connectDB = async () => {
         return mongoose.connection;
     }
 
-    let rawURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-app:Connect123@cluster0.fzj1k5l.mongodb.net/test?retryWrites=true&w=majority&appName=Cluster0';
+    let rawURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
     const dbURI = rawURI;
 
     const options = {
