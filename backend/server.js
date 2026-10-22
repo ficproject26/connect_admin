@@ -52,6 +52,8 @@ app.use(helmet({
 
 const allowedOrigins = [
     'https://connect-admin-roan.vercel.app',
+    'https://connect-agent-one.vercel.app',
+    'https://agent.ficapp.in',
     'https://api.ficapp.in',
     'https://ficapp.in',
     'https://admin.ficapp.in',
@@ -82,6 +84,12 @@ const isOriginAllowed = (origin) => {
     if (!origin) return true;
     const cleanOrigin = origin.replace(/\/$/, '');
     if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(cleanOrigin)) {
+        return true;
+    }
+    if (/^https:\/\/[a-zA-Z0-9_.-]*vercel\.app$/.test(cleanOrigin)) {
+        return true;
+    }
+    if (/^https:\/\/[a-zA-Z0-9_.-]*ficapp\.in$/.test(cleanOrigin)) {
         return true;
     }
     return allowedOrigins.includes(cleanOrigin);
