@@ -92,9 +92,10 @@ const emitPaymentRealtime = (req, eventAction, paymentData) => {
             io.emit('payment_updated', paymentData);
             io.emit('payment:updated', paymentData);
         }
-        // Redis Pub/Sub if active
+        // Redis Pub/Sub if active & Cache invalidation
         try {
             const cacheService = require('../utils/cacheService');
+            cacheService.delPattern('payment_dashboard_*').catch(() => {});
             if (cacheService && cacheService.publish) {
                 cacheService.publish('connect:realtime:events', JSON.stringify({
                     entity: 'payment',
@@ -633,6 +634,18 @@ router.get('/dashboard', auth, async (req, res) => {
     try {
         const isSuperAdmin = (req.user?.role === 'super-admin' || req.user?.adminRole === 'super-admin' || req.user?.role === 'admin');
         const userState = req.user?.assignedState || req.user?.state;
+        const queryHash = Buffer.from(JSON.stringify(req.query || {})).toString('base64');
+        const userScope = isSuperAdmin ? 'super' : (userState || 'scoped');
+        const cacheKey = `payment_dashboard_${userScope}_${queryHash}`;
+
+        if (req.query.refresh !== 'true') {
+            const cacheService = require('../utils/cacheService');
+            const cached = await cacheService.get(cacheKey);
+            if (cached) {
+                return res.json(cached);
+            }
+        }
+
         const filterScope = (!isSuperAdmin && userState) ? { state: userState.trim() } : {};
 
         // Parse incoming territory query filters
@@ -725,7 +738,7 @@ router.get('/dashboard', auth, async (req, res) => {
         }).select('amount').lean();
         const totalPaidOut = paidDisbursements.reduce((sum, p) => sum + Number(p.amount || 0), 0);
 
-        res.json({
+        const dashboardPayload = {
             success: true,
             kpis: {
                 totalPayableAmount,
@@ -743,7 +756,14 @@ router.get('/dashboard', auth, async (req, res) => {
                 cancelledCount
             },
             recipients
-        });
+        };
+
+        if (req.query.refresh !== 'true') {
+            const cacheService = require('../utils/cacheService');
+            await cacheService.set(cacheKey, dashboardPayload, 25).catch(() => {});
+        }
+
+        res.json(dashboardPayload);
 
     } catch (err) {
         console.error('Error fetching payout dashboard:', err);

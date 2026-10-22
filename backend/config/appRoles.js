@@ -238,7 +238,8 @@ const isAccountApprovedAndActive = (userDoc) => {
     }
 
     // 6. Inactive Check
-    if (userDoc.isActive === false || rawStatus === 'inactive') {
+    const isExplicitlyActiveOrApproved = rawStatus === 'active' || rawStatus === 'approved' || userDoc.isApproved === true;
+    if (rawStatus === 'inactive' || (userDoc.isActive === false && !isExplicitlyActiveOrApproved)) {
         return {
             authorized: false,
             code: 'ACCOUNT_INACTIVE',

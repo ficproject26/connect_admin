@@ -301,12 +301,15 @@ const getHierarchyAdminsHandler = async (req, res) => {
         const distAdminsByDist = new Map();
         const divAdminsByDiv = new Map();
 
+        const pincodeAdminsByPin = new Map();
+
         adminDocs.forEach(a => {
             const rawLvl = a.adminLevel || a.level;
             const rawRole = (a.role || a.adminRole || '').toLowerCase();
             const st = (a.assignedState || a.state || '').trim().toLowerCase();
             const dist = (a.assignedDistrict || a.district || '').trim().toLowerCase();
             const div = (a.assignedDivision || a.division || '').trim().toLowerCase();
+            const pin = String(a.assignedPincode || a.pincode || '').trim();
 
             if (rawLvl === 1 || rawLvl === '1' || rawLvl === 'state' || rawRole.includes('state')) {
                 if (st) stateAdminsByState.set(st, a);
@@ -314,10 +317,12 @@ const getHierarchyAdminsHandler = async (req, res) => {
                 if (st && dist) distAdminsByDist.set(`${st}::${dist}`, a);
             } else if (rawLvl === 3 || rawLvl === '3' || rawLvl === 'division' || rawRole.includes('division')) {
                 if (st && dist && div) divAdminsByDiv.set(`${st}::${dist}::${div}`, a);
+            } else if (rawLvl === 4 || rawLvl === '4' || rawLvl === 'pincode' || rawRole.includes('pincode')) {
+                if (pin) pincodeAdminsByPin.set(pin, a);
             }
         });
 
-        const hierarchyParents = { stateAdminsByState, distAdminsByDist, divAdminsByDiv };
+        const hierarchyParents = { stateAdminsByState, distAdminsByDist, divAdminsByDiv, pincodeAdminsByPin };
 
         // Preload managers for count calculations
         const managerFilter = !req.adminUser.isMainAdmin ? territoryFilter : {};
@@ -329,7 +334,7 @@ const getHierarchyAdminsHandler = async (req, res) => {
             managersUnder: {}
         };
 
-        // Group child admins by parentAdminId and by territory hierarchy
+        // Group child admins by parentAdminId and by territory hierarchy in O(1) time
         adminDocs.forEach(a => {
             if (a.parentAdminId) {
                 const pId = String(a.parentAdminId);
@@ -344,76 +349,54 @@ const getHierarchyAdminsHandler = async (req, res) => {
             else if (aRawLvl === 3 || aRawLvl === '3' || aRawLvl === 'division' || aRawRole.includes('division')) aLvl = 'division';
             else if (aRawLvl === 4 || aRawLvl === '4' || aRawLvl === 'pincode' || aRawRole.includes('pincode')) aLvl = 'pincode';
 
-            const aState = (a.assignedState || a.state || '').toLowerCase();
-            const aDist = (a.assignedDistrict || a.district || '').toLowerCase();
-            const aDiv = (a.assignedDivision || a.division || '').toLowerCase();
+            const aState = (a.assignedState || a.state || '').trim().toLowerCase();
+            const aDist = (a.assignedDistrict || a.district || '').trim().toLowerCase();
+            const aDiv = (a.assignedDivision || a.division || '').trim().toLowerCase();
 
             // Link children to their parent admins in hierarchy tree when direct parentAdminId isn't stored
             if (!a.parentAdminId) {
-                adminDocs.forEach(parent => {
-                    const pRawLvl = parent.adminLevel || parent.level;
-                    const pRawRole = (parent.role || parent.adminRole || '').toLowerCase();
-                    let pLvl = 'main';
-                    if (pRawLvl === 1 || pRawLvl === '1' || pRawLvl === 'state' || pRawRole.includes('state')) pLvl = 'state';
-                    else if (pRawLvl === 2 || pRawLvl === '2' || pRawLvl === 'district' || pRawRole.includes('district') || pRawRole.includes('branch')) pLvl = 'district';
-                    else if (pRawLvl === 3 || pRawLvl === '3' || pRawLvl === 'division' || pRawRole.includes('division')) pLvl = 'division';
-
-                    const pState = (parent.assignedState || parent.state || '').toLowerCase();
-                    const pDist = (parent.assignedDistrict || parent.district || '').toLowerCase();
-                    const pDiv = (parent.assignedDivision || parent.division || '').toLowerCase();
-
-                    if (pLvl === 'state' && aLvl === 'district') {
-                        if ((parent.stateId && a.stateId && String(parent.stateId) === String(a.stateId)) || (pState && aState && pState === aState)) {
-                            countsMap.adminChildren[String(parent._id)] = (countsMap.adminChildren[String(parent._id)] || 0) + 1;
-                        }
-                    } else if (pLvl === 'district' && aLvl === 'division') {
-                        if ((parent.districtId && a.districtId && String(parent.districtId) === String(a.districtId)) || (pDist && aDist && pDist === aDist)) {
-                            countsMap.adminChildren[String(parent._id)] = (countsMap.adminChildren[String(parent._id)] || 0) + 1;
-                        }
-                    } else if (pLvl === 'division' && aLvl === 'pincode') {
-                        if ((parent.divisionId && a.divisionId && String(parent.divisionId) === String(a.divisionId)) || (pDiv && aDiv && pDiv === aDiv)) {
-                            countsMap.adminChildren[String(parent._id)] = (countsMap.adminChildren[String(parent._id)] || 0) + 1;
-                        }
-                    }
-                });
+                let parent = null;
+                if (aLvl === 'district' && aState) {
+                    parent = stateAdminsByState.get(aState);
+                } else if (aLvl === 'division' && aState && aDist) {
+                    parent = distAdminsByDist.get(`${aState}::${aDist}`);
+                } else if (aLvl === 'pincode' && aState && aDist && aDiv) {
+                    parent = divAdminsByDiv.get(`${aState}::${aDist}::${aDiv}`);
+                }
+                if (parent) {
+                    countsMap.adminChildren[String(parent._id)] = (countsMap.adminChildren[String(parent._id)] || 0) + 1;
+                }
             }
         });
 
-        // Group managers by territory and direct parent
+        // Group managers by territory and direct parent in O(1) time
         managers.forEach(m => {
             if (m.parentAdminId) {
                 const pId = String(m.parentAdminId);
                 countsMap.managersUnder[pId] = (countsMap.managersUnder[pId] || 0) + 1;
             }
-            // Also attribute managers by territory to the corresponding admin
-            adminDocs.forEach(a => {
-                const aRawLvl = a.adminLevel || a.level;
-                const aRawRole = (a.role || a.adminRole || '').toLowerCase();
-                let aLevel = 'pincode';
-                if (aRawLvl === 1 || aRawLvl === '1' || aRawLvl === 'state' || aRawRole.includes('state')) aLevel = 'state';
-                else if (aRawLvl === 2 || aRawLvl === '2' || aRawLvl === 'district' || aRawRole.includes('district') || aRawRole.includes('branch')) aLevel = 'district';
-                else if (aRawLvl === 3 || aRawLvl === '3' || aRawLvl === 'division' || aRawRole.includes('division')) aLevel = 'division';
+            // Attribute managers by territory to the corresponding admin in O(1) time
+            const mState = (m.assignedState || m.state || '').trim().toLowerCase();
+            const mDist = (m.assignedDistrict || m.district || '').trim().toLowerCase();
+            const mDiv = (m.assignedDivision || m.division || '').trim().toLowerCase();
+            const mPin = String(m.assignedPincode || m.pincode || '').trim();
 
-                const aState = (a.assignedState || a.state || '').toLowerCase();
-                const aDist = (a.assignedDistrict || a.district || '').toLowerCase();
-                const aDiv = (a.assignedDivision || a.division || '').toLowerCase();
-                const aPin = String(a.assignedPincode || a.pincode || '');
-
-                const mState = (m.assignedState || m.state || '').toLowerCase();
-                const mDist = (m.assignedDistrict || m.district || '').toLowerCase();
-                const mDiv = (m.assignedDivision || m.division || '').toLowerCase();
-                const mPin = String(m.assignedPincode || m.pincode || '');
-
-                if (aLevel === 'state' && aState && aState === mState) {
-                    countsMap.managersUnder[String(a._id)] = (countsMap.managersUnder[String(a._id)] || 0) + 1;
-                } else if (aLevel === 'district' && aDist && aDist === mDist && aState === mState) {
-                    countsMap.managersUnder[String(a._id)] = (countsMap.managersUnder[String(a._id)] || 0) + 1;
-                } else if (aLevel === 'division' && aDiv && aDiv === mDiv && aDist === mDist) {
-                    countsMap.managersUnder[String(a._id)] = (countsMap.managersUnder[String(a._id)] || 0) + 1;
-                } else if (aLevel === 'pincode' && aPin && aPin === mPin) {
-                    countsMap.managersUnder[String(a._id)] = (countsMap.managersUnder[String(a._id)] || 0) + 1;
-                }
-            });
+            if (mState) {
+                const sAdmin = stateAdminsByState.get(mState);
+                if (sAdmin) countsMap.managersUnder[String(sAdmin._id)] = (countsMap.managersUnder[String(sAdmin._id)] || 0) + 1;
+            }
+            if (mState && mDist) {
+                const dAdmin = distAdminsByDist.get(`${mState}::${mDist}`);
+                if (dAdmin) countsMap.managersUnder[String(dAdmin._id)] = (countsMap.managersUnder[String(dAdmin._id)] || 0) + 1;
+            }
+            if (mState && mDist && mDiv) {
+                const divAdmin = divAdminsByDiv.get(`${mState}::${mDist}::${mDiv}`);
+                if (divAdmin) countsMap.managersUnder[String(divAdmin._id)] = (countsMap.managersUnder[String(divAdmin._id)] || 0) + 1;
+            }
+            if (mPin) {
+                const pinAdmin = pincodeAdminsByPin.get(mPin);
+                if (pinAdmin) countsMap.managersUnder[String(pinAdmin._id)] = (countsMap.managersUnder[String(pinAdmin._id)] || 0) + 1;
+            }
         });
 
         const formattedAdmins = await Promise.all(

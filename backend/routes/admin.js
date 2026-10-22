@@ -736,7 +736,10 @@ router.get('/dashboard-stats', [auth, adminAuth], async (req, res) => {
 // ==========================================
 router.get('/branches', [auth, adminAuth], async (req, res) => {
     try {
-        const branches = await Branch.find().populate('agentId', 'name email phone');
+        const cached = await cacheService.get('admin_branches_list');
+        if (cached && Array.isArray(cached) && req.query.refresh !== 'true') return res.json(cached);
+        const branches = await Branch.find().populate('agentId', 'name email phone').lean();
+        await cacheService.set('admin_branches_list', branches, 60).catch(() => {});
         res.json(branches);
     } catch (err) {
         console.error(err);
@@ -754,6 +757,7 @@ router.post('/branches', [auth, adminAuth], async (req, res) => {
             await User.findByIdAndUpdate(agentId, { branchId: branch._id, level: 'district', assignedDistrict: name });
         }
         
+        await cacheService.del('admin_branches_list').catch(() => {});
         res.json(branch);
     } catch (err) {
         console.error(err);
@@ -878,7 +882,10 @@ router.get('/admins', [auth, adminAuth], async (req, res) => {
         if (req.adminUser.adminRole !== 'super-admin') {
             return res.status(403).json({ msg: 'Access restricted to Super Admins' });
         }
-        const admins = await User.find({ role: { $in: ['admin', 'super-admin'] } }).populate('branchId', 'name');
+        const cached = await cacheService.get('admin_users_list');
+        if (cached && Array.isArray(cached) && req.query.refresh !== 'true') return res.json(cached);
+        const admins = await User.find({ role: { $in: ['admin', 'super-admin'] } }).select('-password').populate('branchId', 'name').lean();
+        await cacheService.set('admin_users_list', admins, 60).catch(() => {});
         res.json(admins);
     } catch (err) {
         console.error(err);
@@ -2838,8 +2845,42 @@ router.delete('/pincodes/:id', [auth, adminAuth], async (req, res) => {
 // ==========================================
 const VENDOR_LIST_EXCLUSIONS = '-password -__v -documents -logo -businessLicense -storefrontPhoto -shopPhoto -businessImages -kycDocs.aadhaarImage -kycDocs.panImage -kycDocs.selfie -kycDocs.businessProofImage';
 
+const invalidateVendorCaches = async () => {
+    try {
+        await Promise.all([
+            cacheService.delPattern('admin_vendors_list_*'),
+            cacheService.delPattern('admin_vendor_requests_*'),
+            cacheService.delPattern('enterprise_vendors_*'),
+            cacheService.delPattern('admin_dashboard_stats*'),
+            cacheService.del('dashboard_stats')
+        ]);
+    } catch (_) {}
+};
+
+router.use(['/vendors', '/vendors/*'], (req, res, next) => {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        res.on('finish', () => {
+            if (res.statusCode < 400) {
+                invalidateVendorCaches();
+            }
+        });
+    }
+    next();
+});
+
 router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
     try {
+        const branchKey = req.adminUser?.branchId ? String(req.adminUser.branchId) : 'all';
+        const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+        const cacheKey = `admin_vendors_list_${branchKey}`;
+
+        if (!isRefresh) {
+            const cached = await cacheService.get(cacheKey);
+            if (cached && Array.isArray(cached) && cached.length > 0) {
+                return res.json(cached);
+            }
+        }
+
         const filter = getBranchFilter(req.adminUser);
 
         // Concurrently query User and Vendor collections in parallel
@@ -3041,7 +3082,11 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
             }
         });
 
-        res.json(Array.from(vendorMap.values()));
+        const finalVendorList = Array.from(vendorMap.values());
+        if (!isRefresh) {
+            await cacheService.set(cacheKey, finalVendorList, 30).catch(() => {});
+        }
+        res.json(finalVendorList);
     } catch (err) {
         console.error('Fatal error in GET /api/admin/vendors:', err);
         res.status(500).json({ error: 'Server error fetching vendors', message: err.message });
@@ -3050,6 +3095,17 @@ router.get(['/vendors', '/'], [auth, adminAuth], async (req, res) => {
 
 router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
     try {
+        const branchKey = req.adminUser?.branchId ? String(req.adminUser.branchId) : 'all';
+        const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+        const cacheKey = `admin_vendor_requests_${branchKey}`;
+
+        if (!isRefresh) {
+            const cached = await cacheService.get(cacheKey);
+            if (cached && Array.isArray(cached)) {
+                return res.json(cached);
+            }
+        }
+
         const filter = getBranchFilter(req.adminUser);
         const isPendingStatus = (st) => {
             const s = (st || 'pending').toLowerCase().trim();
@@ -3057,29 +3113,24 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
             return true;
         };
 
-        let allUserVendors = [];
-        try {
-            allUserVendors = await User.find({
+        const [allUserVendors, allLegacyVendors] = await Promise.all([
+            User.find({
                 $or: [
                     { role: { $in: ['Vendor', 'vendor', 'Merchant', 'merchant'] } },
                     { vendorType: { $exists: true, $ne: '' } }
                 ]
-            }).select('-password -__v -businessImages').populate('branchId', 'name').populate('referredBy', 'name').lean();
-        } catch (err1) {
-            allUserVendors = await User.find({
-                $or: [
-                    { role: { $in: ['Vendor', 'vendor', 'Merchant', 'merchant'] } },
-                    { vendorType: { $exists: true, $ne: '' } }
-                ]
-            }).select('-password -__v -businessImages').lean();
-        }
-
-        let allLegacyVendors = [];
-        try {
-            allLegacyVendors = await Vendor.find(filter).select(VENDOR_LIST_EXCLUSIONS).populate('branchId', 'name').populate('agentId', 'name').lean();
-        } catch (err2) {
-            allLegacyVendors = await Vendor.find(filter).select(VENDOR_LIST_EXCLUSIONS).lean();
-        }
+            }).select('-password -__v -businessImages').populate('branchId', 'name').populate('referredBy', 'name').lean().catch(() =>
+                User.find({
+                    $or: [
+                        { role: { $in: ['Vendor', 'vendor', 'Merchant', 'merchant'] } },
+                        { vendorType: { $exists: true, $ne: '' } }
+                    ]
+                }).select('-password -__v -businessImages').lean().catch(() => [])
+            ),
+            Vendor.find(filter).select(VENDOR_LIST_EXCLUSIONS).populate('branchId', 'name').populate('agentId', 'name').lean().catch(() =>
+                Vendor.find(filter).select(VENDOR_LIST_EXCLUSIONS).lean().catch(() => [])
+            )
+        ]);
 
         const isDirectPendingVendor = (v) => {
             if (!v) return false;
@@ -3184,7 +3235,11 @@ router.get('/vendors/requests', [auth, adminAuth], async (req, res) => {
             };
         }).filter(Boolean);
 
-        res.json([...formattedUser, ...formattedLegacy]);
+        const finalRequests = [...formattedUser, ...formattedLegacy];
+        if (!isRefresh) {
+            await cacheService.set(cacheKey, finalRequests, 30).catch(() => {});
+        }
+        res.json(finalRequests);
     } catch (err) {
         console.error('Fatal error in GET /api/admin/vendors/requests:', err);
         res.status(500).json({ error: 'Server error fetching vendor requests', message: err.message });
@@ -5361,6 +5416,16 @@ const resolveVendorAndCustomer = async (items) => {
 // GET all orders (supports admin, vendor filter, and public requests)
 router.get(['/orders', '/public/orders'], async (req, res) => {
     try {
+        const queryHash = Buffer.from(JSON.stringify(req.query || {})).toString('base64');
+        const cacheKey = `admin_orders_list_${queryHash}`;
+
+        if (req.query.refresh !== 'true') {
+            const cached = await cacheService.get(cacheKey);
+            if (cached && Array.isArray(cached) && cached.length > 0) {
+                return res.json(cached);
+            }
+        }
+
         const { vendorId, customerId, status, type, businessType } = req.query;
         const queryFilter = {};
 
@@ -5450,6 +5515,10 @@ router.get(['/orders', '/public/orders'], async (req, res) => {
             );
         }
 
+        if (req.query.refresh !== 'true') {
+            await cacheService.set(cacheKey, finalOrders, 20).catch(() => {});
+        }
+
         res.json(finalOrders);
     } catch (err) {
         console.error(err);
@@ -5480,6 +5549,11 @@ router.post(['/orders', '/public/orders'], async (req, res) => {
         if (io) {
             io.emit('orderCreated', newOrder);
         }
+
+        cacheService.delPattern('admin_orders_list_*').catch(() => {});
+        cacheService.delPattern('payment_dashboard_*').catch(() => {});
+        cacheService.del('dashboard_stats').catch(() => {});
+        cacheService.delPattern('admin_dashboard_stats*').catch(() => {});
 
         res.status(201).json({ success: true, message: 'Order created successfully', data: newOrder, order: newOrder });
     } catch (err) {

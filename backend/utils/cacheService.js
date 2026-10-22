@@ -54,6 +54,10 @@ class MemoryCache {
     return count;
   }
 
+  delByPattern(pattern) {
+    return this.delPattern(pattern);
+  }
+
   cleanup() {
     const now = Date.now();
     for (const [key, expiry] of this.ttls.entries()) {
@@ -183,6 +187,10 @@ class CacheService {
       } catch (e) {}
     }
     return true;
+  }
+
+  async delByPattern(pattern) {
+    return this.delPattern(pattern);
   }
 
   /**

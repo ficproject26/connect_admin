@@ -21,6 +21,16 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
+// Response Gzip/Deflate Compression for APIs and text payloads (threshold 1KB)
+const compression = require('compression');
+app.use(compression({
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+    },
+    threshold: 1024
+}));
+
 // Enterprise Helmet Security Headers
 app.use(helmet({
     contentSecurityPolicy: {
@@ -157,6 +167,9 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 if (!fs.existsSync(resumesDir)) fs.mkdirSync(resumesDir, { recursive: true });
 
 const staticUploadOptions = {
+    maxAge: '7d',
+    etag: true,
+    lastModified: true,
     setHeaders: (res, filePath) => {
         res.setHeader('X-Content-Type-Options', 'nosniff');
         res.setHeader('Content-Security-Policy', "default-src 'none'");

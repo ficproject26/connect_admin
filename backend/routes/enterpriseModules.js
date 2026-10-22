@@ -76,6 +76,16 @@ const {
 // Helper to get Socket.IO instance
 const getIo = (req) => req.app.get('io');
 
+const invalidateEnterpriseVendorCaches = async () => {
+    try {
+        await Promise.all([
+            cacheService.delPattern('enterprise_vendors_*'),
+            cacheService.delPattern('admin_vendors_list_*'),
+            cacheService.delPattern('admin_vendor_requests_*')
+        ]);
+    } catch (_) {}
+};
+
 // =========================================================
 // 1. VENDOR DIRECTORY & AUTO ASSIGN PINCODE AGENT
 // =========================================================
@@ -917,9 +927,19 @@ const deduplicateVendorsList = (list = []) => {
     return canonicalVendors;
 };
 
-// GET Vendor Directory with filters, pagination, and direct requests / agent-onboarded requests
 router.get('/vendors', auth, async (req, res) => {
     try {
+        const queryHash = Buffer.from(JSON.stringify(req.query || {})).toString('base64');
+        const userScope = req.user?.id || 'public';
+        const cacheKey = `enterprise_vendors_${userScope}_${queryHash}`;
+
+        if (req.query.refresh !== 'true') {
+            const cached = await cacheService.get(cacheKey);
+            if (cached) {
+                return res.json(cached);
+            }
+        }
+
         const { search, category, state, status, isDirectRequest, isAgentOnboarded, isManagerOnboarded, page = 1, limit = 20 } = req.query;
 
         if (isAgentOnboarded === 'true') {
@@ -1170,7 +1190,7 @@ router.get('/vendors', auth, async (req, res) => {
                 ? resultVendors.slice((pageNum - 1) * limitNum, pageNum * limitNum)
                 : resultVendors;
 
-            return res.json({
+            const payload = {
                 success: true,
                 vendors: paginated,
                 total,
@@ -1178,7 +1198,11 @@ router.get('/vendors', auth, async (req, res) => {
                 pendingCount,
                 page: pageNum,
                 pages: Math.ceil(resultVendors.length / limitNum) || 1
-            });
+            };
+            if (req.query.refresh !== 'true') {
+                await cacheService.set(cacheKey, payload, 25).catch(() => {});
+            }
+            return res.json(payload);
         }
 
         if (isDirectRequest === 'true') {
@@ -1246,12 +1270,16 @@ router.get('/vendors', auth, async (req, res) => {
                 ? pendingDirect.slice((pageNum - 1) * limitNum, pageNum * limitNum)
                 : pendingDirect;
 
-            return res.json({
+            const directPayload = {
                 vendors: paginated,
                 total,
                 page: pageNum,
                 pages: Math.ceil(total / limitNum) || 1
-            });
+            };
+            if (req.query.refresh !== 'true') {
+                await cacheService.set(cacheKey, directPayload, 25).catch(() => {});
+            }
+            return res.json(directPayload);
         }
 
         const userQuery = { role: { $in: ['Vendor', 'vendor', 'merchant', 'Merchant'] } };
@@ -1327,13 +1355,17 @@ router.get('/vendors', auth, async (req, res) => {
             ? enrichedVendors.slice((pageNum - 1) * limitNum, pageNum * limitNum)
             : enrichedVendors;
 
-        res.json({
+        const standardPayload = {
             vendors: paginated,
             total,
             stats,
             page: pageNum,
             pages: Math.ceil(total / limitNum) || 1
-        });
+        };
+        if (req.query.refresh !== 'true') {
+            await cacheService.set(cacheKey, standardPayload, 25).catch(() => {});
+        }
+        res.json(standardPayload);
     } catch (err) {
         console.error('Vendor directory error:', err);
         res.status(500).send('Server error');
@@ -1529,6 +1561,8 @@ router.post('/vendors/agent-onboard', async (req, res) => {
             io.to('admin').emit('vendor_onboarded_by_agent', enriched);
             io.emit('vendor_onboarded_by_agent', enriched);
         }
+
+        invalidateEnterpriseVendorCaches();
 
         res.status(201).json({
             success: true,
@@ -1732,6 +1766,8 @@ router.post('/vendors/manager-onboard', async (req, res) => {
             io.emit('vendor_onboarded_by_manager', enriched);
         }
 
+        invalidateEnterpriseVendorCaches();
+
         res.status(201).json({
             success: true,
             message: 'Vendor onboarded successfully by manager and submitted for Admin approval',
@@ -1896,6 +1932,8 @@ const handleVendorDirectRegister = async (req, res) => {
             io.to('admin').emit('vendor_registered_direct', enriched);
             io.emit('vendor_registered_direct', enriched);
         }
+
+        invalidateEnterpriseVendorCaches();
 
         res.status(201).json({
             success: true,
@@ -2284,6 +2322,8 @@ router.post('/vendors/update-status', auth, async (req, res) => {
             }
         }
 
+        invalidateEnterpriseVendorCaches();
+
         res.json({
             success: true,
             msg: `Vendor status updated to ${formattedStatus} successfully`,
@@ -2411,6 +2451,8 @@ router.post('/vendors/update-business-status', auth, async (req, res) => {
                 isActive: isCurrentlyActive
             });
         }
+
+        invalidateEnterpriseVendorCaches();
 
         return res.json({
             success: true,
@@ -2567,6 +2609,8 @@ router.post('/vendors/approve', auth, async (req, res) => {
             });
         }
 
+        invalidateEnterpriseVendorCaches();
+
         res.json({
             success: true,
             status: 'Active',
@@ -2682,6 +2726,8 @@ router.post('/vendors/reject', auth, async (req, res) => {
                 });
             }
         }
+
+        invalidateEnterpriseVendorCaches();
 
         res.json({ success: true, status: 'Rejected', msg: 'Vendor rejected successfully' });
     } catch (err) {
@@ -3138,6 +3184,8 @@ router.delete('/vendors/:id', auth, async (req, res) => {
             io.emit('vendor_deleted', { vendorId: id, email, timestamp: new Date() });
         }
 
+        invalidateEnterpriseVendorCaches();
+
         res.json({ success: true, msg: 'Vendor deleted successfully' });
     } catch (err) {
         console.error('Delete vendor error:', err);
@@ -3159,6 +3207,8 @@ router.post('/vendors/delete', auth, async (req, res) => {
         if (io) {
             io.emit('vendor_deleted', { vendorId, email, timestamp: new Date() });
         }
+
+        invalidateEnterpriseVendorCaches();
 
         res.json({ success: true, msg: 'Vendor deleted successfully' });
     } catch (err) {

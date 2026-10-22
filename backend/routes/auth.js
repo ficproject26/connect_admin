@@ -1236,6 +1236,9 @@ router.post('/login', async (req, res) => {
         user.failedLoginAttempts = 0;
         user.lockUntil = null;
         user.requireCaptcha = false;
+        if (user.isActive !== true && (user.status === 'active' || user.status === 'approved' || user.isApproved === true)) {
+            user.isActive = true;
+        }
         await user.save();
 
         const secret = process.env.JWT_SECRET;

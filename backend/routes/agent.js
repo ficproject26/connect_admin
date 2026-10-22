@@ -72,14 +72,19 @@ router.get('/tasks', auth, async (req, res) => {
 // @access   Private
 router.get('/dashboard-stats', auth, async (req, res) => {
     try {
-        const user = await User.findById(req.user.id);
-        const tasks = await Task.find({ assignedTo: req.user.id });
-        const tieUps = await TieUp.find({ agentId: req.user.id });
-        
-        const downlineCount = await User.countDocuments({ referredBy: req.user.id });
+        const [user, tasks, tieUps, downlineCount] = await Promise.all([
+            User.findById(req.user.id).select('balance commissionEarned').lean(),
+            Task.find({ assignedTo: req.user.id }).select('status').lean(),
+            TieUp.find({ agentId: req.user.id }).select('_id').lean(),
+            User.countDocuments({ referredBy: req.user.id })
+        ]);
+
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
+        }
 
         res.json({
-            balance: user.balance,
+            balance: user.balance || 0,
             tasks: {
                 total: tasks.length,
                 pending: tasks.filter(t => t.status === 'pending').length,
@@ -102,7 +107,7 @@ const Transaction = require('../models/Transaction');
 // @access   Private
 router.get('/transactions', auth, async (req, res) => {
     try {
-        const transactions = await Transaction.find({ userId: req.user.id }).sort({ createdAt: -1 });
+        const transactions = await Transaction.find({ userId: req.user.id }).sort({ createdAt: -1 }).lean();
         res.json(transactions);
     } catch (err) {
         console.error(err.message);

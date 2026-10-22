@@ -17,8 +17,16 @@
 }
 
 body {
-  @apply bg-slate-100 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100;
+  background-color: #f1f5f9;
+  color: #0f172a;
+  transition-property: color, background-color;
+  transition-duration: 200ms;
   font-family: var(--font-sans);
+}
+
+.dark body {
+  background-color: #020617;
+  color: #f8fafc;
 }
 
 /* Glassmorphism custom styling */
@@ -47,11 +55,20 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 rounded-full dark:bg-slate-800;
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: #1e293b;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-400 dark:bg-slate-700;
+  background-color: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: #334155;
 }
 
 /* Premium active navigation styling (Subtle low-opacity yellow background with bright yellow text) */

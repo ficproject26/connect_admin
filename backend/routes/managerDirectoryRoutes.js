@@ -16,6 +16,22 @@ const Booking = require('../models/Booking');
 const Customer = require('../models/Customer');
 const { validateTerritoryHierarchy } = require('./territory');
 const TerritoryAssignmentService = require('../utils/territoryAssignmentService');
+const cacheService = require('../utils/cacheService');
+
+const invalidateManagerCaches = () => {
+    cacheService.delPattern('mgr_dir_*').catch(() => {});
+};
+
+router.use((req, res, next) => {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        res.on('finish', () => {
+            if (res.statusCode < 400) {
+                invalidateManagerCaches();
+            }
+        });
+    }
+    next();
+});
 const {
     formatName,
     validateName,
@@ -54,25 +70,25 @@ const normalizeManagerLevelStr = (lvl) => {
 async function getUnifiedRealManagers(territoryFilter = {}, options = {}) {
     const { search, state, district, division, pincode, level, status } = options;
 
-    // 1. Fetch from Manager collection
-    const rawFromManager = await Manager.find({
-        role: { $nin: ['agent', 'Agent', 'admin', 'Admin', 'super-admin', 'superadmin', 'vendor', 'customer'] },
-        registrationId: { $not: { $regex: '^(ADM-|REG-)', $options: 'i' } }
-    })
-        .populate('parentAdminId', 'name email adminRole adminLevel')
-        .populate('approvedBy', 'name email')
-        .lean()
-        .catch(() => []);
-
-    // 2. Fetch from User collection (where role matches any manager role)
-    const rawFromUser = await User.find({
-        $or: [
-            { role: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'] } },
-            { adminRole: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager'] } }
-        ],
-        role: { $nin: ['agent', 'Agent', 'admin', 'Admin', 'super-admin', 'superadmin', 'vendor', 'customer'] },
-        registrationId: { $not: { $regex: '^(ADM-|REG-)', $options: 'i' } }
-    }).lean().catch(() => []);
+    // 1 & 2. Concurrently fetch from Manager and User collections in parallel
+    const [rawFromManager, rawFromUser] = await Promise.all([
+        Manager.find({
+            role: { $nin: ['agent', 'Agent', 'admin', 'Admin', 'super-admin', 'superadmin', 'vendor', 'customer'] },
+            registrationId: { $not: { $regex: '^(ADM-|REG-)', $options: 'i' } }
+        })
+            .populate('parentAdminId', 'name email adminRole adminLevel')
+            .populate('approvedBy', 'name email')
+            .lean()
+            .catch(() => []),
+        User.find({
+            $or: [
+                { role: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'manager'] } },
+                { adminRole: { $in: ['state_manager', 'district_manager', 'division_manager', 'pincode_manager'] } }
+            ],
+            role: { $nin: ['agent', 'Agent', 'admin', 'Admin', 'super-admin', 'superadmin', 'vendor', 'customer'] },
+            registrationId: { $not: { $regex: '^(ADM-|REG-)', $options: 'i' } }
+        }).lean().catch(() => [])
+    ]);
 
     // 3. Normalize all manager records
     const all = [];
@@ -225,6 +241,13 @@ async function getUnifiedRealManagers(territoryFilter = {}, options = {}) {
 // ============================================================
 router.get('/manager-directory/summary', [auth, territoryScope], async (req, res) => {
     try {
+        const queryHash = Buffer.from(JSON.stringify(req.territoryFilter || {})).toString('base64');
+        const cacheKey = `mgr_dir_summary_${queryHash}`;
+        if (req.query.refresh !== 'true') {
+            const cached = await cacheService.get(cacheKey);
+            if (cached) return res.json(cached);
+        }
+
         const baseFilter = req.territoryFilter || {};
         const managers = await getUnifiedRealManagers(baseFilter);
 
@@ -233,10 +256,16 @@ router.get('/manager-directory/summary', [auth, territoryScope], async (req, res
         const inactive = managers.filter(m => m.status === 'Inactive' || m.status === 'Suspended').length;
         const pending = await ManagerRequest.countDocuments({ ...baseFilter, status: 'Pending' }).catch(() => 0);
 
-        res.json({
+        const summaryPayload = {
             success: true,
             summary: { total, active, pending, inactive }
-        });
+        };
+
+        if (req.query.refresh !== 'true') {
+            await cacheService.set(cacheKey, summaryPayload, 25).catch(() => {});
+        }
+
+        res.json(summaryPayload);
     } catch (err) {
         console.error('Manager directory summary error:', err);
         res.status(500).json({ msg: 'Error fetching summary', error: err.message });
@@ -249,6 +278,13 @@ router.get('/manager-directory/summary', [auth, territoryScope], async (req, res
 // ============================================================
 router.get('/manager-directory/hierarchy', [auth, territoryScope], async (req, res) => {
     try {
+        const queryHash = Buffer.from(JSON.stringify({ ...req.territoryFilter, ...req.query })).toString('base64');
+        const cacheKey = `mgr_dir_hierarchy_${queryHash}`;
+        if (req.query.refresh !== 'true') {
+            const cached = await cacheService.get(cacheKey);
+            if (cached) return res.json(cached);
+        }
+
         const managers = await getUnifiedRealManagers(req.territoryFilter, req.query);
 
         // Structure hierarchical tree
@@ -392,11 +428,19 @@ router.get('/manager-directory/hierarchy', [auth, territoryScope], async (req, r
 
         statesTree.sort((a, b) => a.state.localeCompare(b.state));
 
-        res.json({
+        const hierarchyPayload = {
             success: true,
             totalManagers: managers.length,
             states: statesTree
-        });
+        };
+
+        if (req.query.refresh !== 'true') {
+            const queryHash = Buffer.from(JSON.stringify({ ...req.territoryFilter, ...req.query })).toString('base64');
+            const cacheKey = `mgr_dir_hierarchy_${queryHash}`;
+            await cacheService.set(cacheKey, hierarchyPayload, 25).catch(() => {});
+        }
+
+        res.json(hierarchyPayload);
     } catch (err) {
         console.error('Manager directory hierarchy error:', err);
         res.status(500).json({ msg: 'Error building managers hierarchy', error: err.message });
