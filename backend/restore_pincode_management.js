@@ -4,7 +4,7 @@ const path = require('path');
 require('dotenv').config();
 
 async function restorePincodeBackup() {
-    const uri = process.env.MONGODB_URI || process.env.MONGO_URI;
+    const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
     console.log('Connecting to MongoDB...');
     await mongoose.connect(uri);
 

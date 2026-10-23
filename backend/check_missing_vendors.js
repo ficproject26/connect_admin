@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 async function verifyAgentOnboardedQuery() {
-  await mongoose.connect(process.env.MONGODB_URI);
+  const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
+  await mongoose.connect(uri);
   const db = mongoose.connection.db;
 
   // This replicates the exact query the Admin backend uses for isAgentOnboarded=true

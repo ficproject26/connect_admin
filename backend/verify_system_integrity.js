@@ -3,7 +3,7 @@ require('dotenv').config();
 
 async function runValidation() {
     console.log('Connecting to database...');
-    const uri = process.env.MONGODB_URI;
+    const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
     console.log('Target URI:', uri.replace(/:([^@]+)@/, ':****@'));
     await mongoose.connect(uri);
 

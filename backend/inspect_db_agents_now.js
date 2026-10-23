@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 require('dotenv').config();
-
-mongoose.connect(process.env.MONGODB_URI).then(async () => {
+const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
+mongoose.connect(uri).then(async () => {
   const User = mongoose.model('User', new mongoose.Schema({}, { strict: false }));
   const db = mongoose.connection.db;
 

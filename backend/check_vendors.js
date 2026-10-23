@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
-const uri = process.env.MONGODB_URI || 'mongodb+srv://Connect_App:Connect123@cluster0.k1s5dbl.mongodb.net/connect_db?appName=Cluster0';
+require('dotenv').config();
+const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
 
 async function checkVendors() {
     await mongoose.connect(uri);

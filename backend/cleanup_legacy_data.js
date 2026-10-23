@@ -3,9 +3,9 @@ const mongoose = require('mongoose');
 const uri = process.env.MONGODB_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
 
 async function cleanupTestDb() {
-    console.log('Connecting to MongoDB cluster0.riukwbj.mongodb.net/test...');
+    console.log('Connecting to MongoDB cluster0.riukwbj.mongodb.net/connect_db...');
     await mongoose.connect(uri);
-    const db = mongoose.connection.client.db('test');
+    const db = mongoose.connection.db || mongoose.connection.client.db('connect_db');
 
     console.log('\n--- Cleaning obsolete collections in test db ---');
     const obsoleteCollections = [
