@@ -817,7 +817,7 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
       </div>
 
       {/* 2. STATS KPI CARDS (Section 15) */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Total State Admins</span>
@@ -860,21 +860,6 @@ export const AdminManagementModule = ({ token, API_BASE, currentUser, onToast })
           </div>
           <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mt-2">{totalPincodeAdmins}</h3>
           <span className="text-[10px] text-amber-500 font-bold">Grassroots Coverage</span>
-        </div>
-
-        <div 
-          onClick={() => setActiveTab(activeTab === 'requests' ? 'hierarchy' : 'requests')}
-          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs col-span-2 lg:col-span-1 cursor-pointer hover:border-rose-400 transition-colors"
-          title="Click to view administrator onboarding requests"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Pending Requests</span>
-            <div className="p-1.5 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400">
-              <Clock className="w-4 h-4" />
-            </div>
-          </div>
-          <h3 className="text-xl font-black text-slate-800 dark:text-slate-100 mt-2">{pendingRequestsCount}</h3>
-          <span className="text-[10px] text-rose-500 font-bold">Awaiting Main Admin Action</span>
         </div>
       </div>
 
