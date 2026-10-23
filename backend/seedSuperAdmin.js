@@ -31,6 +31,26 @@ async function run() {
             updatedAt: new Date()
         },
         {
+            name: 'Dhanush',
+            email: 'dhanush.antigraviity@gmail.com',
+            phone: '6379068721',
+            password: hashedPassword,
+            passwordHash: hashedPassword,
+            role: 'super-admin',
+            adminRole: 'super-admin',
+            adminLevel: 'main',
+            level: 'main',
+            status: 'approved',
+            isActive: true,
+            isApproved: true,
+            failedLoginAttempts: 0,
+            isLocked: false,
+            lockUntil: null,
+            requireCaptcha: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        },
+        {
             name: 'System Admin',
             email: 'admin@vendor.com',
             password: hashedPassword,

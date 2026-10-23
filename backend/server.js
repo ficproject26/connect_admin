@@ -529,33 +529,43 @@ app.use((err, req, res, next) => {
     });
 });
 
-// Auto-seed default Super Admin if missing on server boot
+// Auto-seed default Administrative accounts if missing on server boot
 const seedSuperAdminIfNeeded = async () => {
     try {
         const User = require('./models/User');
         const bcrypt = require('bcryptjs');
-        const superAdmin = await User.findOne({ email: 'admin@example.com' });
-        if (!superAdmin) {
-            console.log('🔄 No Super Admin found. Auto-seeding admin@example.com...');
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('admin123', salt);
-            await User.create({
-                name: 'Super Admin',
-                email: 'admin@example.com',
-                password: hashedPassword,
-                role: 'super-admin',
-                adminRole: 'super-admin',
-                adminLevel: 'main',
-                level: 'main',
-                status: 'approved',
-                isActive: true,
-                isApproved: true,
-                failedLoginAttempts: 0,
-                isLocked: false,
-                lockUntil: null,
-                requireCaptcha: false
-            });
-            console.log('✅ Auto-seeded Super Admin (admin@example.com)');
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash('admin123', salt);
+
+        const adminAccounts = [
+            { name: 'Super Admin', email: 'admin@example.com', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
+            { name: 'System Admin', email: 'admin@vendor.com', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
+            { name: 'Dhanush', email: 'dhanush.antigraviity@gmail.com', phone: '6379068721', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
+            { name: 'Dhanu', email: 'dhanushiyasri1924@gmail.com', phone: '8765432134', role: 'admin', adminRole: 'branch-admin', adminLevel: 'state', level: 'state' },
+            { name: 'Dinesh', email: 'dinesh12@gmail.com', phone: '8493844583', role: 'admin', adminRole: 'state-admin', adminLevel: 'state', level: 'state' },
+            { name: 'Akash Kumar', email: 'akash@gmail.com', role: 'admin', adminRole: 'state-admin', adminLevel: 'state', level: 'state' },
+            { name: 'Aakash Kumar', email: 'aakash@gmail.com', role: 'admin', adminRole: 'state-admin', adminLevel: 'state', level: 'state' },
+            { name: 'Dhanush Tamilarasan', email: 'hi@gmail.com', phone: '6379068725', role: 'admin', adminRole: 'state-admin', adminLevel: 'state', level: 'pincode' },
+            { name: 'North District Admin', email: 'north@example.com', role: 'admin', adminRole: 'district-admin', adminLevel: 'district', level: 'district' }
+        ];
+
+        for (const adm of adminAccounts) {
+            const existing = await User.findOne({ email: adm.email });
+            if (!existing) {
+                await User.create({
+                    ...adm,
+                    password: hashedPassword,
+                    passwordHash: hashedPassword,
+                    status: 'approved',
+                    isActive: true,
+                    isApproved: true,
+                    failedLoginAttempts: 0,
+                    isLocked: false,
+                    lockUntil: null,
+                    requireCaptcha: false
+                });
+                console.log(`✅ Auto-seeded essential admin account (${adm.email})`);
+            }
         }
     } catch (err) {
         console.error('Super Admin auto-seed warning:', err.message);

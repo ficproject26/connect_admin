@@ -13,6 +13,9 @@ module.exports = {
       env: {
         NODE_ENV: 'development',
         PORT: 8004,
+        MONGODB_URI: 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority',
+        MONGO_URI: 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority',
+        DB_NAME: 'connect_db',
         SMTP_HOST: 'smtp.gmail.com',
         SMTP_PORT: 587,
         SMTP_SECURE: 'true',
@@ -24,6 +27,9 @@ module.exports = {
       env_production: {
         NODE_ENV: 'production',
         PORT: 8004,
+        MONGODB_URI: 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority',
+        MONGO_URI: 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority',
+        DB_NAME: 'connect_db',
         SMTP_HOST: 'smtp.gmail.com',
         SMTP_PORT: 587,
         SMTP_SECURE: 'true',
