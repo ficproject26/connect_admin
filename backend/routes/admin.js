@@ -2858,7 +2858,7 @@ const invalidateVendorCaches = async () => {
     } catch (_) {}
 };
 
-router.use(['/vendors', '/vendors/*'], (req, res, next) => {
+router.use('/vendors', (req, res, next) => {
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
         res.on('finish', () => {
             if (res.statusCode < 400) {
