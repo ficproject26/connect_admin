@@ -30,8 +30,8 @@ const ManagerRequestSchema = new mongoose.Schema({
     },
     level: {
         type: String,
-        enum: ['state', 'district', 'division', 'pincode'],
-        required: true
+        required: true,
+        trim: true
     },
     assignedState: {
         type: String,
@@ -208,7 +208,8 @@ const ManagerRequestSchema = new mongoose.Schema({
         default: null
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    strict: false
 });
 
 ManagerRequestSchema.index({ status: 1 });

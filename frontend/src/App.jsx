@@ -2272,20 +2272,37 @@ function App() {
       const endpoint = action === 'approve'
         ? `${API_BASE}/admin/manager-directory/requests/${request._id}/approve-kyc`
         : `${API_BASE}/admin/manager-directory/requests/${request._id}/reject`;
+      const activeToken = token || (typeof localStorage !== 'undefined' ? localStorage.getItem('token') : '') || '';
       const res = await fetch(endpoint, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'x-auth-token': localStorage.getItem('token') || ''
+          'x-auth-token': activeToken,
+          'Authorization': `Bearer ${activeToken}`
         },
         body: JSON.stringify(action === 'approve' ? { stage: 'kyc' } : { reason: 'KYC Verification Rejected by KYC Administrator' })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.msg || data.message || 'Action failed');
-      addToast(action === 'approve' ? 'Manager KYC approved & activated successfully.' : 'Manager KYC rejected.', 'success');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const detailError = data.msg || data.message || data.error || `Server error (${res.status})`;
+        throw new Error(detailError);
+      }
+      
+      const successMsg = data.msg || (action === 'approve' ? 'Manager KYC approved & activated successfully.' : 'Manager KYC rejected.');
+      addToast(successMsg, 'success');
+
+      // Optimistically update local manager list
+      setManagerKycRequests(prev => prev.map(m => m._id === request._id ? {
+        ...m,
+        status: action === 'approve' ? 'Approved' : 'Rejected',
+        approvalStage: action === 'approve' ? 'approved' : 'rejected',
+        kycVerificationStatus: action === 'approve' ? 'approved' : 'rejected'
+      } : m));
+
       await fetchManagerKycRequests();
     } catch (err) {
-      addToast(err.message || 'Action failed', 'error');
+      console.error(`Manager KYC ${action} error:`, err);
+      addToast(err.message || 'Action failed: Server error or network issue.', 'error');
     } finally {
       setProcessingKycId(null);
       setKycActionType(null);

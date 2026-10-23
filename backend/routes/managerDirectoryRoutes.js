@@ -958,10 +958,44 @@ router.get('/manager-directory/requests', auth, async (req, res) => {
 // ============================================================
 const handleApproveManagerRequest = async (req, res) => {
     try {
-        const mReq = await ManagerRequest.findById(req.params.id);
-        if (!mReq) return res.status(404).json({ msg: 'Manager request not found' });
-        if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already fully approved.' });
-        if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request has been rejected.' });
+        let mReq = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            mReq = await ManagerRequest.findById(req.params.id);
+        }
+        if (!mReq) {
+            mReq = await ManagerRequest.findOne({
+                $or: [
+                    { requestId: req.params.id },
+                    { id: req.params.id },
+                    { _id: req.params.id }
+                ]
+            });
+        }
+        if (!mReq) {
+            const rawReqColl = mongoose.connection.collection('managerrequests');
+            mReq = await rawReqColl.findOne({
+                $or: [
+                    ...(mongoose.Types.ObjectId.isValid(req.params.id) ? [{ _id: new mongoose.Types.ObjectId(req.params.id) }] : []),
+                    { _id: req.params.id },
+                    { requestId: req.params.id },
+                    { id: req.params.id }
+                ]
+            });
+        }
+        if (!mReq) return res.status(404).json({ success: false, msg: 'Manager request not found' });
+
+        // Idempotent handling: if already approved, safely return success
+        if (mReq.status === 'Approved' && mReq.approvalStage === 'approved') {
+            return res.json({
+                success: true,
+                stage: 'approved',
+                msg: `Manager KYC is already approved and active for ${mReq.name}.`,
+                request: mReq
+            });
+        }
+        if (mReq.status === 'Rejected' || mReq.approvalStage === 'rejected') {
+            return res.status(400).json({ success: false, msg: 'Request has been rejected.' });
+        }
 
         const normLevel = normalizeManagerLevelStr(mReq.level);
 
@@ -971,7 +1005,11 @@ const handleApproveManagerRequest = async (req, res) => {
         const operatorId = req.user?.id || req.user?._id || null;
         if (operatorId) {
             try {
-                const u = await User.findById(operatorId).select('name role adminRole').lean();
+                let userQueryId = operatorId;
+                if (mongoose.Types.ObjectId.isValid(operatorId)) {
+                    userQueryId = new mongoose.Types.ObjectId(operatorId);
+                }
+                const u = await User.findById(userQueryId).select('name role adminRole').lean();
                 if (u) {
                     operatorName = u.name || operatorName;
                     operatorRole = u.role || u.adminRole || operatorRole;
@@ -987,7 +1025,7 @@ const handleApproveManagerRequest = async (req, res) => {
             Boolean(mReq.subadminApprovedByName) ||
             Boolean(mReq.subAdminApproval && mReq.subAdminApproval.status === 'approved');
 
-        const isSuperAdminCaller = ['super-admin', 'superadmin', 'main-admin', 'mainadmin'].includes(operatorRole.toLowerCase().trim()) ||
+        const isSuperAdminCaller = ['super-admin', 'superadmin', 'main-admin', 'mainadmin'].includes(String(operatorRole || '').toLowerCase().trim()) ||
             req.user?.adminLevel === 'main' ||
             Boolean(req.user?.isPrimarySuperAdmin);
 
@@ -1000,7 +1038,11 @@ const handleApproveManagerRequest = async (req, res) => {
             });
         }
 
-        const isKycStage = req.path.includes('approve-kyc') || req.query.stage === 'kyc' || req.body.stage === 'kyc' || mReq.approvalStage === 'kyc_review';
+        const isKycStage = req.path.includes('approve-kyc') ||
+            Boolean(req.originalUrl && req.originalUrl.includes('approve-kyc')) ||
+            req.query.stage === 'kyc' ||
+            req.body?.stage === 'kyc' ||
+            mReq.approvalStage === 'kyc_review';
 
         if (isKycStage) {
             // =====================================================
@@ -1048,16 +1090,16 @@ const handleApproveManagerRequest = async (req, res) => {
             const rawManagersColl = mongoose.connection.collection('managers');
             let existingManager = await rawManagersColl.findOne({
                 $or: [
-                    { email: mReq.email.toLowerCase().trim() },
-                    { managerId: mReq.requestId },
-                    ...(mReq.userId ? [{ id: mReq.userId }, { userId: mReq.userId }] : [])
+                    { email: (mReq.email || '').toLowerCase().trim() },
+                    ...(mReq.requestId ? [{ managerId: mReq.requestId }] : []),
+                    ...(mReq.userId ? [{ _id: mReq.userId }, { id: mReq.userId }, { userId: mReq.userId }] : [])
                 ]
             });
 
             const finalManagerId = existingManager?.managerId || generatedManagerId;
             const managerUpdatePayload = {
                 name: mReq.name,
-                email: mReq.email.toLowerCase().trim(),
+                email: (mReq.email || '').toLowerCase().trim(),
                 phone: mReq.phone || existingManager?.phone || existingManager?.mobile || '',
                 altPhone: mReq.altPhone || existingManager?.altPhone || '',
                 level: normLevel,
@@ -1106,36 +1148,47 @@ const handleApproveManagerRequest = async (req, res) => {
             mReq.reviewedBy = operatorId;
             mReq.reviewedAt = new Date();
 
-            await ManagerRequest.updateOne({ _id: mReq._id }, {
-                $set: {
-                    status: 'Approved',
-                    approvalStage: 'approved',
-                    overallRegistrationStatus: 'active',
-                    kycVerificationStatus: 'approved',
-                    subAdminApprovalStatus: mReq.subAdminApprovalStatus,
-                    subadminApprovedByName: mReq.subadminApprovedByName,
-                    subadminApprovedAt: mReq.subadminApprovedAt,
-                    subAdminApproval: mReq.subAdminApproval,
-                    mainAdminApprovalStatus: 'approved',
-                    mainadminApprovedByName: operatorName,
-                    mainadminApprovedAt: new Date(),
-                    kycApprovedBy: operatorId,
-                    kycApprovedByName: operatorName,
-                    kycApprovedAt: new Date(),
-                    reviewedBy: operatorId,
-                    reviewedAt: new Date()
-                }
-            });
+            const approvalUpdateFields = {
+                status: 'Approved',
+                approvalStage: 'approved',
+                overallRegistrationStatus: 'active',
+                kycVerificationStatus: 'approved',
+                subAdminApprovalStatus: mReq.subAdminApprovalStatus || 'approved',
+                subadminApprovedByName: mReq.subadminApprovedByName || operatorName,
+                subadminApprovedAt: mReq.subadminApprovedAt || new Date(),
+                subAdminApproval: mReq.subAdminApproval || { status: 'approved' },
+                mainAdminApprovalStatus: 'approved',
+                mainadminApprovedByName: operatorName,
+                mainadminApprovedAt: new Date(),
+                kycApprovedBy: operatorId,
+                kycApprovedByName: operatorName,
+                kycApprovedAt: new Date(),
+                reviewedBy: operatorId,
+                reviewedAt: new Date()
+            };
+
+            await ManagerRequest.updateOne({ _id: mReq._id }, { $set: approvalUpdateFields }).catch(() => {});
+            await mongoose.connection.collection('managerrequests').updateOne(
+                { _id: mReq._id },
+                { $set: approvalUpdateFields }
+            ).catch(() => {});
 
             // Update matching User document to Active
             const rawUsersColl = mongoose.connection.collection('users');
+            const userOrConditions = [
+                { email: (mReq.email || '').toLowerCase().trim() }
+            ];
+            if (mReq.userId) {
+                userOrConditions.push({ id: mReq.userId });
+                userOrConditions.push({ userId: mReq.userId });
+                userOrConditions.push({ _id: mReq.userId });
+                if (mongoose.Types.ObjectId.isValid(mReq.userId)) {
+                    userOrConditions.push({ _id: new mongoose.Types.ObjectId(mReq.userId) });
+                }
+            }
+
             await rawUsersColl.updateMany(
-                {
-                    $or: [
-                        { email: mReq.email.toLowerCase().trim() },
-                        ...(mReq.userId ? [{ _id: mReq.userId }, { id: mReq.userId }] : [])
-                    ]
-                },
+                { $or: userOrConditions },
                 {
                     $set: {
                         status: 'active',
@@ -1149,6 +1202,30 @@ const handleApproveManagerRequest = async (req, res) => {
                     }
                 }
             ).catch(e => console.warn('User activate error during KYC clearance:', e.message));
+
+            // Synchronize with Atlas kycrecords
+            try {
+                const kycColl = mongoose.connection.collection('kycrecords');
+                const mgrIdStr = String(mReq.userId || mReq._id);
+                await kycColl.updateMany(
+                    {
+                        $or: [
+                            { managerId: mgrIdStr },
+                            { email: (mReq.email || '').toLowerCase().trim() },
+                            { _id: `KYC-MGR-${mgrIdStr}` }
+                        ]
+                    },
+                    {
+                        $set: {
+                            status: 'Approved',
+                            kycStatus: 'Verified',
+                            verifiedAt: new Date(),
+                            verifiedBy: operatorName,
+                            updatedAt: new Date()
+                        }
+                    }
+                );
+            } catch (_) {}
 
             // Emit real-time notification
             try {
@@ -1282,7 +1359,11 @@ const handleApproveManagerRequest = async (req, res) => {
         }
     } catch (err) {
         console.error('Manager directory approve error:', err);
-        res.status(500).json({ msg: 'Error approving request', error: err.message });
+        res.status(500).json({
+            success: false,
+            msg: `Error approving request: ${err.message}`,
+            error: err.message
+        });
     }
 };
 
@@ -1295,10 +1376,33 @@ router.put('/manager-directory/requests/:id/approve-kyc', auth, handleApproveMan
 // ============================================================
 router.put('/manager-directory/requests/:id/reject', auth, async (req, res) => {
     try {
-        const mReq = await ManagerRequest.findById(req.params.id);
-        if (!mReq) return res.status(404).json({ msg: 'Manager request not found' });
-        if (mReq.status === 'Approved') return res.status(400).json({ msg: 'Request is already approved. Cannot reject.' });
-        if (mReq.status === 'Rejected') return res.status(400).json({ msg: 'Request is already rejected.' });
+        let mReq = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            mReq = await ManagerRequest.findById(req.params.id);
+        }
+        if (!mReq) {
+            mReq = await ManagerRequest.findOne({
+                $or: [
+                    { requestId: req.params.id },
+                    { id: req.params.id },
+                    { _id: req.params.id }
+                ]
+            });
+        }
+        if (!mReq) {
+            const rawReqColl = mongoose.connection.collection('managerrequests');
+            mReq = await rawReqColl.findOne({
+                $or: [
+                    ...(mongoose.Types.ObjectId.isValid(req.params.id) ? [{ _id: new mongoose.Types.ObjectId(req.params.id) }] : []),
+                    { _id: req.params.id },
+                    { requestId: req.params.id },
+                    { id: req.params.id }
+                ]
+            });
+        }
+        if (!mReq) return res.status(404).json({ success: false, msg: 'Manager request not found' });
+        if (mReq.status === 'Approved') return res.status(400).json({ success: false, msg: 'Request is already approved. Cannot reject.' });
+        if (mReq.status === 'Rejected') return res.status(400).json({ success: false, msg: 'Request is already rejected.' });
 
         const rejectionReason = (req.body.reason || req.body.rejectionReason || '').trim();
         if (!rejectionReason) {
