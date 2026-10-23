@@ -31,6 +31,10 @@
       "destination": "https://api.ficapp.in/api/:path*"
     },
     {
+      "source": "/uploads/:path*",
+      "destination": "https://api.ficapp.in/uploads/:path*"
+    },
+    {
       "source": "/((?!assets/|.*\\.[a-zA-Z0-9]+$).*)",
       "destination": "/index.html"
     }

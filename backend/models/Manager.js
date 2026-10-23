@@ -1,11 +1,12 @@
 const mongoose = require('mongoose');
 
 const ManagerSchema = new mongoose.Schema({
+    _id: { type: mongoose.Schema.Types.Mixed },
     managerId: {
         type: String,
         unique: true,
         trim: true,
-        required: true
+        sparse: true
     },
     name: {
         type: String,
@@ -20,7 +21,10 @@ const ManagerSchema = new mongoose.Schema({
     },
     phone: {
         type: String,
-        required: true,
+        trim: true
+    },
+    mobile: {
+        type: String,
         trim: true
     },
     altPhone: {
@@ -29,16 +33,23 @@ const ManagerSchema = new mongoose.Schema({
         trim: true
     },
     level: {
-        type: String,
-        enum: ['state', 'district', 'division', 'pincode'],
-        required: true
+        type: mongoose.Schema.Types.Mixed,
+        default: 'state'
     },
     assignedState: {
         type: String,
-        required: true,
+        trim: true
+    },
+    state: {
+        type: String,
         trim: true
     },
     assignedDistrict: {
+        type: String,
+        default: '',
+        trim: true
+    },
+    district: {
         type: String,
         default: '',
         trim: true
@@ -48,7 +59,17 @@ const ManagerSchema = new mongoose.Schema({
         default: '',
         trim: true
     },
+    division: {
+        type: String,
+        default: '',
+        trim: true
+    },
     assignedPincode: {
+        type: String,
+        default: '',
+        trim: true
+    },
+    pincode: {
         type: String,
         default: '',
         trim: true
@@ -86,7 +107,9 @@ const ManagerSchema = new mongoose.Schema({
         default: null
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    strict: false,
+    strictPopulate: false
 });
 
 ManagerSchema.index({ email: 1 });

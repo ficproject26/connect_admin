@@ -987,7 +987,12 @@ const handleApproveManagerRequest = async (req, res) => {
             Boolean(mReq.subadminApprovedByName) ||
             Boolean(mReq.subAdminApproval && mReq.subAdminApproval.status === 'approved');
 
-        if (!isSubAdminApproved) {
+        const isSuperAdminCaller = ['super-admin', 'superadmin', 'main-admin', 'mainadmin'].includes(operatorRole.toLowerCase().trim()) ||
+            req.user?.adminLevel === 'main' ||
+            Boolean(req.user?.isPrimarySuperAdmin);
+
+        // For direct online applications or when Main/Super Admin explicitly approves, allow authorization
+        if (!isSubAdminApproved && !isSuperAdminCaller && mReq.onboardingSource !== 'DIRECT' && mReq.requestedBy) {
             return res.status(400).json({
                 success: false,
                 code: 'SUBADMIN_APPROVAL_REQUIRED',
@@ -1001,8 +1006,13 @@ const handleApproveManagerRequest = async (req, res) => {
             // =====================================================
             // STAGE 3: KYC TEAM CLEARANCE -> ACTIVATE MANAGER
             // =====================================================
-            // Must have both Sub-Admin and Main Admin approval before activating
-            const isMainAdminApproved = mReq.mainAdminApprovalStatus === 'approved' || Boolean(mReq.mainadminApprovedByName) || mReq.approvalStage === 'kyc_review';
+            // For Direct Onboarding or Super Admin caller, KYC clearance grants full activation
+            const isMainAdminApproved = mReq.mainAdminApprovalStatus === 'approved' ||
+                Boolean(mReq.mainadminApprovedByName) ||
+                mReq.approvalStage === 'kyc_review' ||
+                isSuperAdminCaller ||
+                mReq.onboardingSource === 'DIRECT';
+
             if (!isMainAdminApproved) {
                 return res.status(400).json({
                     success: false,
@@ -1011,46 +1021,79 @@ const handleApproveManagerRequest = async (req, res) => {
                 });
             }
 
+            // Auto-stamp subAdmin and mainAdmin approval if missing
+            if (!mReq.subAdminApprovalStatus || mReq.subAdminApprovalStatus === 'pending') {
+                mReq.subAdminApprovalStatus = 'approved';
+                mReq.subadminApprovedByName = operatorName;
+                mReq.subadminApprovedAt = new Date();
+                mReq.subAdminApproval = {
+                    status: 'approved',
+                    reviewerId: operatorId,
+                    reviewerName: operatorName,
+                    reviewerRole: operatorRole,
+                    reviewedAt: new Date()
+                };
+            }
+            if (!mReq.mainAdminApprovalStatus || mReq.mainAdminApprovalStatus === 'pending') {
+                mReq.mainAdminApprovalStatus = 'approved';
+                mReq.mainadminApprovedByName = operatorName;
+                mReq.mainadminApprovedAt = new Date();
+            }
+
             const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
             const rand = Math.floor(1000 + Math.random() * 9000);
-            const managerId = `MGR-${normLevel.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
+            const generatedManagerId = `MGR-${normLevel.slice(0, 3).toUpperCase()}-${dateStr}-${rand}`;
 
-            // Create or update in Manager collection
-            let newManager = await Manager.findOne({
+            // Create or update in Manager collection via direct MongoDB collection to avoid schema casting issues on string UUIDs
+            const rawManagersColl = mongoose.connection.collection('managers');
+            let existingManager = await rawManagersColl.findOne({
                 $or: [
                     { email: mReq.email.toLowerCase().trim() },
-                    { managerId: mReq.requestId }
+                    { managerId: mReq.requestId },
+                    ...(mReq.userId ? [{ id: mReq.userId }, { userId: mReq.userId }] : [])
                 ]
             });
 
-            if (!newManager) {
-                newManager = new Manager({
-                    managerId,
-                    name: mReq.name,
-                    email: mReq.email,
-                    phone: mReq.phone,
-                    altPhone: mReq.altPhone || '',
-                    level: normLevel,
-                    assignedState: mReq.assignedState,
-                    assignedDistrict: mReq.assignedDistrict || '',
-                    assignedDivision: mReq.assignedDivision || '',
-                    assignedPincode: mReq.assignedPincode || '',
-                    address: mReq.address || '',
-                    notes: mReq.notes || '',
-                    parentAdminId: mReq.requestedBy || operatorId,
-                    requestedBy: mReq.requestedBy,
-                    approvedBy: operatorId,
-                    bankDetails: mReq.bankDetails || null,
-                    status: 'Active'
-                });
-                await newManager.save();
+            const finalManagerId = existingManager?.managerId || generatedManagerId;
+            const managerUpdatePayload = {
+                name: mReq.name,
+                email: mReq.email.toLowerCase().trim(),
+                phone: mReq.phone || existingManager?.phone || existingManager?.mobile || '',
+                altPhone: mReq.altPhone || existingManager?.altPhone || '',
+                level: normLevel,
+                assignedState: mReq.assignedState || existingManager?.assignedState || existingManager?.state || 'Tamil Nadu',
+                assignedDistrict: mReq.assignedDistrict || existingManager?.assignedDistrict || existingManager?.district || '',
+                assignedDivision: mReq.assignedDivision || existingManager?.assignedDivision || existingManager?.division || '',
+                assignedPincode: mReq.assignedPincode || existingManager?.assignedPincode || existingManager?.pincode || '',
+                address: mReq.address || existingManager?.address || '',
+                notes: mReq.notes || existingManager?.notes || '',
+                parentAdminId: mReq.requestedBy || operatorId,
+                requestedBy: mReq.requestedBy || existingManager?.requestedBy || null,
+                approvedBy: operatorId,
+                status: 'Active',
+                isActive: true,
+                isFullyApproved: true,
+                kycStatus: 'Verified',
+                kycVerificationStatus: 'approved',
+                overallRegistrationStatus: 'active',
+                managerId: finalManagerId,
+                updatedAt: new Date()
+            };
+
+            if (mReq.bankDetails || existingManager?.bankDetails) {
+                managerUpdatePayload.bankDetails = mReq.bankDetails || existingManager.bankDetails;
+            }
+
+            if (!existingManager) {
+                managerUpdatePayload.createdAt = new Date();
+                const insertRes = await rawManagersColl.insertOne(managerUpdatePayload);
+                managerUpdatePayload._id = insertRes.insertedId;
             } else {
-                newManager.status = 'Active';
-                newManager.approvedBy = operatorId;
-                if (!newManager.bankDetails && mReq.bankDetails) {
-                    newManager.bankDetails = mReq.bankDetails;
-                }
-                await newManager.save();
+                await rawManagersColl.updateOne(
+                    { _id: existingManager._id },
+                    { $set: managerUpdatePayload }
+                );
+                managerUpdatePayload._id = existingManager._id;
             }
 
             mReq.status = 'Approved';
@@ -1062,50 +1105,60 @@ const handleApproveManagerRequest = async (req, res) => {
             mReq.kycApprovedAt = new Date();
             mReq.reviewedBy = operatorId;
             mReq.reviewedAt = new Date();
-            
-            try {
-                await mReq.save();
-            } catch (saveErr) {
-                console.warn('mReq.save() fallback to updateOne in approve-kyc:', saveErr.message);
-                await ManagerRequest.updateOne({ _id: mReq._id }, {
-                    $set: {
-                        status: 'Approved',
-                        approvalStage: 'approved',
-                        overallRegistrationStatus: 'active',
-                        kycVerificationStatus: 'approved',
-                        kycApprovedBy: operatorId,
-                        kycApprovedByName: operatorName,
-                        kycApprovedAt: new Date(),
-                        reviewedBy: operatorId,
-                        reviewedAt: new Date()
-                    }
-                });
-            }
+
+            await ManagerRequest.updateOne({ _id: mReq._id }, {
+                $set: {
+                    status: 'Approved',
+                    approvalStage: 'approved',
+                    overallRegistrationStatus: 'active',
+                    kycVerificationStatus: 'approved',
+                    subAdminApprovalStatus: mReq.subAdminApprovalStatus,
+                    subadminApprovedByName: mReq.subadminApprovedByName,
+                    subadminApprovedAt: mReq.subadminApprovedAt,
+                    subAdminApproval: mReq.subAdminApproval,
+                    mainAdminApprovalStatus: 'approved',
+                    mainadminApprovedByName: operatorName,
+                    mainadminApprovedAt: new Date(),
+                    kycApprovedBy: operatorId,
+                    kycApprovedByName: operatorName,
+                    kycApprovedAt: new Date(),
+                    reviewedBy: operatorId,
+                    reviewedAt: new Date()
+                }
+            });
 
             // Update matching User document to Active
-            const userFilter = mReq.userId
-                ? { $or: [{ _id: mReq.userId }, { email: mReq.email.toLowerCase().trim() }] }
-                : { email: mReq.email.toLowerCase().trim() };
-            await User.findOneAndUpdate(userFilter, {
-                status: 'active',
-                overallRegistrationStatus: 'active',
-                kycVerificationStatus: 'approved',
-                approvalStage: 'approved',
-                kycStatus: 'Verified',
-                isActive: true,
-                isApproved: true,
-                managerId: newManager.managerId
-            }).catch(e => console.warn('User activate error during KYC clearance:', e.message));
+            const rawUsersColl = mongoose.connection.collection('users');
+            await rawUsersColl.updateMany(
+                {
+                    $or: [
+                        { email: mReq.email.toLowerCase().trim() },
+                        ...(mReq.userId ? [{ _id: mReq.userId }, { id: mReq.userId }] : [])
+                    ]
+                },
+                {
+                    $set: {
+                        status: 'active',
+                        overallRegistrationStatus: 'active',
+                        kycVerificationStatus: 'approved',
+                        approvalStage: 'approved',
+                        kycStatus: 'Verified',
+                        isActive: true,
+                        isApproved: true,
+                        managerId: finalManagerId
+                    }
+                }
+            ).catch(e => console.warn('User activate error during KYC clearance:', e.message));
 
             // Emit real-time notification
             try {
                 const io = req.app.get('io');
                 if (io) {
                     io.to('admin').emit('manager_activated', {
-                        id: newManager._id,
-                        managerId: newManager.managerId,
-                        name: newManager.name,
-                        email: newManager.email,
+                        id: managerUpdatePayload._id,
+                        managerId: finalManagerId,
+                        name: managerUpdatePayload.name,
+                        email: managerUpdatePayload.email,
                         level: normLevel,
                         status: 'Active'
                     });
@@ -1116,7 +1169,7 @@ const handleApproveManagerRequest = async (req, res) => {
                 success: true,
                 stage: 'approved',
                 msg: `Manager KYC approved and activated. ${mReq.name} is now an active ${normLevel} manager.`,
-                manager: newManager,
+                manager: managerUpdatePayload,
                 request: mReq
             });
         } else {

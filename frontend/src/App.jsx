@@ -525,6 +525,25 @@ const getDocFallbackSvg = (title = 'Document', docNumber = '') => {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
 
+export const resolveDocumentUrl = (rawUrl, title = 'Document', docNumber = '') => {
+  if (!rawUrl || typeof rawUrl !== 'string') {
+    return getDocFallbackSvg(title, docNumber);
+  }
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return getDocFallbackSvg(title, docNumber);
+  }
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  const base = API_ORIGIN || (typeof window !== 'undefined' && window.location ? window.location.origin : '');
+  return base ? `${base}${cleanPath}` : cleanPath;
+};
+
 // Super Admin exclusive tabs
 const SUPER_ADMIN_TABS = new Set([
   'branches',
@@ -3895,12 +3914,12 @@ function App() {
                                 return (
                                   <>
                                     <div
-                                      onClick={() => setKycPreviewImage(aadhaarUrl || getDocFallbackSvg('Aadhaar Card', aadhaarNum))}
+                                      onClick={() => setKycPreviewImage(resolveDocumentUrl(aadhaarUrl, 'Aadhaar Card', aadhaarNum))}
                                       className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                     >
                                       <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
                                       <img
-                                        src={aadhaarUrl || getDocFallbackSvg('Aadhaar Card', aadhaarNum)}
+                                        src={resolveDocumentUrl(aadhaarUrl, 'Aadhaar Card', aadhaarNum)}
                                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Aadhaar Card', aadhaarNum); }}
                                         alt="Aadhaar"
                                         className="w-full h-24 object-cover rounded-lg border bg-slate-900"
@@ -3908,12 +3927,12 @@ function App() {
                                       <span className="block text-[10px] font-mono mt-2">{aadhaarNum || 'Verified Record'}</span>
                                     </div>
                                     <div
-                                      onClick={() => setKycPreviewImage(panUrl || getDocFallbackSvg('PAN Card', panNum))}
+                                      onClick={() => setKycPreviewImage(resolveDocumentUrl(panUrl, 'PAN Card', panNum))}
                                       className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                     >
                                       <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
                                       <img
-                                        src={panUrl || getDocFallbackSvg('PAN Card', panNum)}
+                                        src={resolveDocumentUrl(panUrl, 'PAN Card', panNum)}
                                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('PAN Card', panNum); }}
                                         alt="PAN"
                                         className="w-full h-24 object-cover rounded-lg border bg-slate-900"
@@ -3921,24 +3940,24 @@ function App() {
                                       <span className="block text-[10px] font-mono mt-2">{panNum || 'Verified Record'}</span>
                                     </div>
                                     <div
-                                      onClick={() => setKycPreviewImage(selfieUrl || getDocFallbackSvg('Selfie Photo', agent.name))}
+                                      onClick={() => setKycPreviewImage(resolveDocumentUrl(selfieUrl, 'Selfie Photo', agent.name))}
                                       className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                     >
                                       <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Selfie Photo/Video</span>
                                       <img
-                                        src={selfieUrl || getDocFallbackSvg('Selfie Photo', agent.name)}
+                                        src={resolveDocumentUrl(selfieUrl, 'Selfie Photo', agent.name)}
                                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Selfie Photo', agent.name); }}
                                         alt="Selfie"
                                         className="w-full h-24 object-cover rounded-lg border bg-slate-900"
                                       />
                                     </div>
                                     <div
-                                      onClick={() => setKycPreviewImage(proofUrl || getDocFallbackSvg('Business Proof', agent.name))}
+                                      onClick={() => setKycPreviewImage(resolveDocumentUrl(proofUrl, 'Business Proof', agent.name))}
                                       className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                     >
                                       <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof</span>
                                       <img
-                                        src={proofUrl || getDocFallbackSvg('Business Proof', agent.name)}
+                                        src={resolveDocumentUrl(proofUrl, 'Business Proof', agent.name)}
                                         onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Business Proof', agent.name); }}
                                         alt="Proof"
                                         className="w-full h-24 object-cover rounded-lg border bg-slate-900"
@@ -4048,7 +4067,8 @@ function App() {
                             {/* Documents viewer */}
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                               {(() => {
-                                const aadhaarImg = (vendor.kycDocs?.aadhaarImage && !vendor.kycDocs.aadhaarImage.includes('unsplash.com')) ? vendor.kycDocs.aadhaarImage : (vendor.kyc?.aadhaarImage && !vendor.kyc.aadhaarImage.includes('unsplash.com') ? vendor.kyc.aadhaarImage : (vendor.documents?.find(d => d.type === 'aadhaar' || d.documentType === 'aadhaar')?.url || null));
+                                const rawAadhaar = (vendor.kycDocs?.aadhaarImage && !vendor.kycDocs.aadhaarImage.includes('unsplash.com')) ? vendor.kycDocs.aadhaarImage : (vendor.kyc?.aadhaarImage && !vendor.kyc.aadhaarImage.includes('unsplash.com') ? vendor.kyc.aadhaarImage : (vendor.documents?.find(d => d.type === 'aadhaar' || d.documentType === 'aadhaar')?.url || null));
+                                const aadhaarImg = rawAadhaar ? resolveDocumentUrl(rawAadhaar, 'Aadhaar Card', vendor.name) : null;
                                 const aadhaarNum = vendor.kycDocs?.aadhaarNumber || vendor.kyc?.aadhaarNumber || vendor.aadhaarNumber || '';
                                 return (
                                   <div
@@ -4057,7 +4077,12 @@ function App() {
                                   >
                                     <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
                                     {aadhaarImg ? (
-                                      <img src={aadhaarImg} alt="Aadhaar" className="w-full h-24 object-cover rounded-lg border" />
+                                      <img
+                                        src={aadhaarImg}
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Aadhaar Card', aadhaarNum || vendor.name); }}
+                                        alt="Aadhaar"
+                                        className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                      />
                                     ) : (
                                       <div className="w-full h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
                                         <FileText className="w-6 h-6 mb-1 opacity-40" />
@@ -4070,7 +4095,8 @@ function App() {
                               })()}
 
                               {(() => {
-                                const panImg = (vendor.kycDocs?.panImage && !vendor.kycDocs.panImage.includes('unsplash.com')) ? vendor.kycDocs.panImage : (vendor.kyc?.panImage && !vendor.kyc.panImage.includes('unsplash.com') ? vendor.kyc.panImage : (vendor.documents?.find(d => d.type === 'pan' || d.documentType === 'pan')?.url || null));
+                                const rawPan = (vendor.kycDocs?.panImage && !vendor.kycDocs.panImage.includes('unsplash.com')) ? vendor.kycDocs.panImage : (vendor.kyc?.panImage && !vendor.kyc.panImage.includes('unsplash.com') ? vendor.kyc.panImage : (vendor.documents?.find(d => d.type === 'pan' || d.documentType === 'pan')?.url || null));
+                                const panImg = rawPan ? resolveDocumentUrl(rawPan, 'PAN Card', vendor.name) : null;
                                 const panNum = vendor.kycDocs?.panNumber || vendor.kyc?.panNumber || vendor.panNumber || '';
                                 return (
                                   <div
@@ -4079,7 +4105,12 @@ function App() {
                                   >
                                     <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
                                     {panImg ? (
-                                      <img src={panImg} alt="PAN" className="w-full h-24 object-cover rounded-lg border" />
+                                      <img
+                                        src={panImg}
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('PAN Card', panNum || vendor.name); }}
+                                        alt="PAN"
+                                        className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                      />
                                     ) : (
                                       <div className="w-full h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
                                         <FileText className="w-6 h-6 mb-1 opacity-40" />
@@ -4092,7 +4123,8 @@ function App() {
                               })()}
 
                               {(() => {
-                                const storefrontImg = (vendor.kycDocs?.selfie && !vendor.kycDocs.selfie.includes('unsplash.com')) ? vendor.kycDocs.selfie : (vendor.kyc?.selfie && !vendor.kyc.selfie.includes('unsplash.com') ? vendor.kyc.selfie : (vendor.documents?.find(d => d.documentType === 'storefront' || d.type === 'storefront' || d.title?.toLowerCase().includes('storefront') || d.title?.toLowerCase().includes('photo'))?.url || null));
+                                const rawStorefront = (vendor.kycDocs?.selfie && !vendor.kycDocs.selfie.includes('unsplash.com')) ? vendor.kycDocs.selfie : (vendor.kyc?.selfie && !vendor.kyc.selfie.includes('unsplash.com') ? vendor.kyc.selfie : (vendor.documents?.find(d => d.documentType === 'storefront' || d.type === 'storefront' || d.title?.toLowerCase().includes('storefront') || d.title?.toLowerCase().includes('photo'))?.url || null));
+                                const storefrontImg = rawStorefront ? resolveDocumentUrl(rawStorefront, 'Storefront Photo', vendor.businessName || vendor.name) : null;
                                 return (
                                   <div
                                     onClick={() => storefrontImg && setKycPreviewImage(storefrontImg)}
@@ -4100,7 +4132,12 @@ function App() {
                                   >
                                     <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Storefront / Photo</span>
                                     {storefrontImg ? (
-                                      <img src={storefrontImg} alt="Storefront Photo" className="w-full h-24 object-cover rounded-lg border" />
+                                      <img
+                                        src={storefrontImg}
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Storefront Photo', vendor.businessName || vendor.name); }}
+                                        alt="Storefront Photo"
+                                        className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                      />
                                     ) : (
                                       <div className="w-full h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
                                         <FileText className="w-6 h-6 mb-1 opacity-40" />
@@ -4113,7 +4150,8 @@ function App() {
                               })()}
 
                               {(() => {
-                                const proofImg = (vendor.kycDocs?.businessProofImage && !vendor.kycDocs.businessProofImage.includes('unsplash.com')) ? vendor.kycDocs.businessProofImage : (vendor.kyc?.businessProofImage && !vendor.kyc.businessProofImage.includes('unsplash.com') ? vendor.kyc.businessProofImage : (vendor.documents?.find(d => d.type === 'gst' || d.type === 'license' || d.documentType === 'business')?.url || null));
+                                const rawProof = (vendor.kycDocs?.businessProofImage && !vendor.kycDocs.businessProofImage.includes('unsplash.com')) ? vendor.kycDocs.businessProofImage : (vendor.kyc?.businessProofImage && !vendor.kyc.businessProofImage.includes('unsplash.com') ? vendor.kyc.businessProofImage : (vendor.documents?.find(d => d.type === 'gst' || d.type === 'license' || d.documentType === 'business')?.url || null));
+                                const proofImg = rawProof ? resolveDocumentUrl(rawProof, 'Business Proof', vendor.businessName || vendor.name) : null;
                                 const proofNum = vendor.gstNumber || vendor.gstin || '';
                                 return (
                                   <div
@@ -4122,7 +4160,12 @@ function App() {
                                   >
                                     <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Business Proof / GST</span>
                                     {proofImg ? (
-                                      <img src={proofImg} alt="Proof" className="w-full h-24 object-cover rounded-lg border" />
+                                      <img
+                                        src={proofImg}
+                                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Business Proof', proofNum || vendor.name); }}
+                                        alt="Proof"
+                                        className="w-full h-24 object-cover rounded-lg border bg-slate-900"
+                                      />
                                     ) : (
                                       <div className="w-full h-24 rounded-lg border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-slate-400">
                                         <FileText className="w-6 h-6 mb-1 opacity-40" />
@@ -4242,48 +4285,48 @@ function App() {
                               {/* Documents viewer */}
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                 <div
-                                  onClick={() => setKycPreviewImage(aadhaarUrl || getDocFallbackSvg('Aadhaar Card', mgr.name))}
+                                  onClick={() => setKycPreviewImage(resolveDocumentUrl(aadhaarUrl, 'Aadhaar Card', mgr.name))}
                                   className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                 >
                                   <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
                                   <img
-                                    src={aadhaarUrl || getDocFallbackSvg('Aadhaar Card', mgr.name)}
+                                    src={resolveDocumentUrl(aadhaarUrl, 'Aadhaar Card', mgr.name)}
                                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Aadhaar Card', mgr.name); }}
                                     alt="Aadhaar"
                                     className="w-full h-24 object-cover rounded-lg border bg-slate-900"
                                   />
                                 </div>
                                 <div
-                                  onClick={() => setKycPreviewImage(panUrl || getDocFallbackSvg('PAN Card', mgr.name))}
+                                  onClick={() => setKycPreviewImage(resolveDocumentUrl(panUrl, 'PAN Card', mgr.name))}
                                   className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                 >
                                   <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
                                   <img
-                                    src={panUrl || getDocFallbackSvg('PAN Card', mgr.name)}
+                                    src={resolveDocumentUrl(panUrl, 'PAN Card', mgr.name)}
                                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('PAN Card', mgr.name); }}
                                     alt="PAN"
                                     className="w-full h-24 object-cover rounded-lg border bg-slate-900"
                                   />
                                 </div>
                                 <div
-                                  onClick={() => setKycPreviewImage(bankUrl || getDocFallbackSvg('Bank Document', mgr.name))}
+                                  onClick={() => setKycPreviewImage(resolveDocumentUrl(bankUrl, 'Bank Document', mgr.name))}
                                   className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                 >
                                   <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Bank Document</span>
                                   <img
-                                    src={bankUrl || getDocFallbackSvg('Bank Document', mgr.name)}
+                                    src={resolveDocumentUrl(bankUrl, 'Bank Document', mgr.name)}
                                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Bank Document', mgr.name); }}
                                     alt="Bank"
                                     className="w-full h-24 object-cover rounded-lg border bg-slate-900"
                                   />
                                 </div>
                                 <div
-                                  onClick={() => setKycPreviewImage(signatureUrl || getDocFallbackSvg('Signature', mgr.name))}
+                                  onClick={() => setKycPreviewImage(resolveDocumentUrl(signatureUrl, 'Signature', mgr.name))}
                                   className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                 >
                                   <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Signature</span>
                                   <img
-                                    src={signatureUrl || getDocFallbackSvg('Signature', mgr.name)}
+                                    src={resolveDocumentUrl(signatureUrl, 'Signature', mgr.name)}
                                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Signature', mgr.name); }}
                                     alt="Signature"
                                     className="w-full h-24 object-cover rounded-lg border bg-slate-900"
@@ -4385,12 +4428,12 @@ function App() {
                               {/* Documents viewer */}
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                 <div
-                                  onClick={() => setKycPreviewImage(aadhaarUrl || getDocFallbackSvg('Aadhaar Card', subadmin.name))}
+                                  onClick={() => setKycPreviewImage(resolveDocumentUrl(aadhaarUrl, 'Aadhaar Card', subadmin.name))}
                                   className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                 >
                                   <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Aadhaar Card</span>
                                   <img
-                                    src={aadhaarUrl || getDocFallbackSvg('Aadhaar Card', subadmin.name)}
+                                    src={resolveDocumentUrl(aadhaarUrl, 'Aadhaar Card', subadmin.name)}
                                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Aadhaar Card', subadmin.name); }}
                                     alt="Aadhaar"
                                     className="w-full h-24 object-cover rounded-lg border bg-slate-900"
@@ -4398,12 +4441,12 @@ function App() {
                                   <span className="block text-[10px] font-mono mt-2 text-slate-600 dark:text-slate-400">{aadhaarNum || 'Verified Document'}</span>
                                 </div>
                                 <div
-                                  onClick={() => setKycPreviewImage(panUrl || getDocFallbackSvg('PAN Card', subadmin.name))}
+                                  onClick={() => setKycPreviewImage(resolveDocumentUrl(panUrl, 'PAN Card', subadmin.name))}
                                   className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                 >
                                   <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">PAN Card</span>
                                   <img
-                                    src={panUrl || getDocFallbackSvg('PAN Card', subadmin.name)}
+                                    src={resolveDocumentUrl(panUrl, 'PAN Card', subadmin.name)}
                                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('PAN Card', subadmin.name); }}
                                     alt="PAN"
                                     className="w-full h-24 object-cover rounded-lg border bg-slate-900"
@@ -4411,24 +4454,24 @@ function App() {
                                   <span className="block text-[10px] font-mono mt-2 text-slate-600 dark:text-slate-400">{panNum || 'Verified Document'}</span>
                                 </div>
                                 <div
-                                  onClick={() => setKycPreviewImage(selfieUrl || getDocFallbackSvg('Photo / Selfie', subadmin.name))}
+                                  onClick={() => setKycPreviewImage(resolveDocumentUrl(selfieUrl, 'Photo / Selfie', subadmin.name))}
                                   className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                 >
                                   <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Admin Photo</span>
                                   <img
-                                    src={selfieUrl || getDocFallbackSvg('Photo / Selfie', subadmin.name)}
+                                    src={resolveDocumentUrl(selfieUrl, 'Photo / Selfie', subadmin.name)}
                                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Photo / Selfie', subadmin.name); }}
                                     alt="Photo"
                                     className="w-full h-24 object-cover rounded-lg border bg-slate-900"
                                   />
                                 </div>
                                 <div
-                                  onClick={() => setKycPreviewImage(certUrl || getDocFallbackSvg('Qualifications', subadmin.name))}
+                                  onClick={() => setKycPreviewImage(resolveDocumentUrl(certUrl, 'Qualifications', subadmin.name))}
                                   className="bg-slate-50 dark:bg-slate-950 p-3 rounded-xl border border-slate-200/50 dark:border-slate-850 text-center cursor-pointer hover:shadow-md hover:border-slate-350 dark:hover:border-slate-700 transition-all"
                                 >
                                   <span className="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-2">Qualification / Cert</span>
                                   <img
-                                    src={certUrl || getDocFallbackSvg('Qualifications', subadmin.name)}
+                                    src={resolveDocumentUrl(certUrl, 'Qualifications', subadmin.name)}
                                     onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Qualifications', subadmin.name); }}
                                     alt="Certificates"
                                     className="w-full h-24 object-cover rounded-lg border bg-slate-900"
@@ -10090,7 +10133,8 @@ function App() {
               ✕ Close Preview
             </button>
             <img
-              src={kycPreviewImage}
+              src={resolveDocumentUrl(kycPreviewImage, 'Document Preview', 'Verified Record')}
+              onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = getDocFallbackSvg('Document Preview', 'Verified Record'); }}
               alt="KYC Document Preview"
               className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/10 cursor-default"
               onClick={(e) => e.stopPropagation()}
@@ -10183,7 +10227,7 @@ function App() {
                         )}
                         {aadhaarImg && (
                           <button
-                            onClick={() => setKycPreviewImage(aadhaarImg)}
+                            onClick={() => setKycPreviewImage(resolveDocumentUrl(aadhaarImg, 'Aadhaar Document', modalData.name))}
                             className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block cursor-pointer"
                           >
                             View Aadhaar Document
@@ -10198,7 +10242,7 @@ function App() {
                         )}
                         {panImg && (
                           <button
-                            onClick={() => setKycPreviewImage(panImg)}
+                            onClick={() => setKycPreviewImage(resolveDocumentUrl(panImg, 'PAN Document', modalData.name))}
                             className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block cursor-pointer"
                           >
                             View PAN Document
@@ -10214,7 +10258,7 @@ function App() {
 
                         {selfieImg && (
                           <button
-                            onClick={() => setKycPreviewImage(selfieImg)}
+                            onClick={() => setKycPreviewImage(resolveDocumentUrl(selfieImg, 'Selfie Profile', modalData.name))}
                             className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block cursor-pointer"
                           >
                             View Selfie Profile
@@ -10223,7 +10267,7 @@ function App() {
 
                         {bizProofImg && (
                           <button
-                            onClick={() => setKycPreviewImage(bizProofImg)}
+                            onClick={() => setKycPreviewImage(resolveDocumentUrl(bizProofImg, 'Business Proof Document', modalData.name))}
                             className="w-full text-center text-xs text-primary-500 hover:underline font-bold bg-primary-500/5 py-1.5 rounded-lg border border-primary-500/10 block cursor-pointer"
                           >
                             View Business Proof Document
