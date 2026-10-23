@@ -66,6 +66,7 @@ const PincodeTerritoryManagement = lazyWithRetry(() => import('./components/Pinc
 const AdminManagementModule = lazyWithRetry(() => import('./components/AdminManagementModule'), 'AdminManagementModule');
 const ManagerDirectoryModule = lazyWithRetry(() => import('./components/ManagerDirectoryModule'), 'ManagerDirectoryModule');
 const PaymentSecuritySettingsModule = lazyWithRetry(() => import('./components/PaymentSecuritySettingsModule'), 'PaymentSecuritySettingsModule');
+const AdminAccountManagementModule = lazyWithRetry(() => import('./components/AdminAccountManagementModule'), 'AdminAccountManagementModule');
 const DashboardCharts = lazyWithRetry(() => import('./components/DashboardCharts'), 'DashboardCharts');
 import dataSyncManager from './utils/dataSyncManager';
 import TerritoryFilterBar from './components/TerritoryFilterBar';
@@ -5350,6 +5351,9 @@ function App() {
                 </div>
 
               </div>
+
+              {/* Admin Account Credentials Management Card */}
+              <AdminAccountManagementModule token={token} API_BASE={API_BASE} currentUser={user} onToast={addToast} />
 
               {/* Payment Security Settings Card */}
               <PaymentSecuritySettingsModule token={token} API_BASE={API_BASE} onToast={addToast} />

@@ -53,7 +53,7 @@ module.exports = async function(req, res, next) {
         }
 
         const dbUser = await User.findById(userQueryId)
-            .select('name email role adminRole adminLevel level status kycStatus isActive isApproved isLocked lockUntil rejectionReason assignedState assignedDistrict assignedDivision assignedPincode branchId')
+            .select('name email role adminRole adminLevel level status kycStatus isActive isApproved isLocked lockUntil rejectionReason assignedState assignedDistrict assignedDivision assignedPincode branchId superAdminSlot isPrimarySuperAdmin')
             .lean();
 
         if (!dbUser) {
@@ -108,7 +108,9 @@ module.exports = async function(req, res, next) {
             assignedState: dbUser.assignedState,
             assignedDistrict: dbUser.assignedDistrict,
             assignedDivision: dbUser.assignedDivision,
-            assignedPincode: dbUser.assignedPincode
+            assignedPincode: dbUser.assignedPincode,
+            superAdminSlot: dbUser.superAdminSlot || (dbUser.email === 'admin@connect.com' ? 1 : (dbUser.email === 'admin@example.com' ? 2 : null)),
+            isPrimarySuperAdmin: Boolean(dbUser.isPrimarySuperAdmin || dbUser.email === 'admin@connect.com' || dbUser.superAdminSlot === 1)
         };
         req.dbUser = dbUser;
 

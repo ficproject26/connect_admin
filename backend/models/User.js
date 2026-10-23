@@ -37,6 +37,8 @@ const UserSchema = new mongoose.Schema({
     referredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Referred by agent / parent user
     adminRole: { type: String, enum: ['super-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'], default: 'staff' },
     adminLevel: { type: String, enum: ['main', 'state', 'district', 'division', 'pincode'], default: null },
+    superAdminSlot: { type: Number, enum: [1, 2, 3], default: null },
+    isPrimarySuperAdmin: { type: Boolean, default: false },
     parentAdminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     lastLogin: { type: Date, default: null },
     registrationId: { type: String },
@@ -116,8 +118,14 @@ const UserSchema = new mongoose.Schema({
     paymentPinFailedAttempts: { type: Number, default: 0 },
     paymentPinLockedUntil: { type: Date, default: null },
 
+    // Super Admin Multi-Account Slots (1: Primary Super Admin, 2: Additional Super Admin 1, 3: Additional Super Admin 2)
+    superAdminSlot: { type: Number, enum: [1, 2, 3], default: null },
+    isPrimarySuperAdmin: { type: Boolean, default: false },
+
     createdAt: { type: Date, default: Date.now }
 }, { strict: false, strictPopulate: false });
+
+UserSchema.index({ superAdminSlot: 1 });
 
 UserSchema.index({ role: 1, status: 1, level: 1 });
 UserSchema.index({ role: 1, level: 1 });

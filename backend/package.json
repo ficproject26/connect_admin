@@ -7,9 +7,10 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "echo 'No build step required'",
-    "test": "node tests/securityAudit.test.js && node tests/pincodeExcelExport.test.js",
+    "test": "node tests/securityAudit.test.js && node tests/pincodeExcelExport.test.js && node tests/adminAccountManagement.test.js",
     "test:security": "node tests/securityAudit.test.js",
-    "test:export": "node tests/pincodeExcelExport.test.js"
+    "test:export": "node tests/pincodeExcelExport.test.js",
+    "test:accounts": "node tests/adminAccountManagement.test.js"
   },
   "keywords": [],
   "author": "",
