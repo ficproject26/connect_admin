@@ -675,52 +675,70 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     if (exportingExcel) return;
     setExportingExcel(true);
     try {
-      const exportEndpoints = [
-        `${API_BASE}/admin/territory/export-excel`,
-        `${API_BASE}/territory/export-excel`,
-        `${API_BASE}/pincodes/export-excel`
-      ];
+      const cleanBase = (API_BASE || '').trim().replace(/\/+$/, '');
+      const authHeaders = {
+        ...(token ? { 'x-auth-token': token, 'Authorization': `Bearer ${token}` } : {})
+      };
 
-      let res = null;
-      let lastError = null;
+      // 1. Attempt download from direct server export endpoint
+      let downloaded = false;
+      const serverExportUrl = `${cleanBase}/admin/territory/export-excel`;
 
-      for (const endpoint of exportEndpoints) {
-        try {
-          const attempt = await fetch(endpoint, {
-            method: 'GET',
-            headers: {
-              ...(token ? { 'x-auth-token': token, 'Authorization': `Bearer ${token}` } : {})
-            }
-          });
-          if (attempt.ok) {
-            res = attempt;
-            break;
-          } else {
-            lastError = `HTTP ${attempt.status}`;
+      try {
+        const res = await fetch(serverExportUrl, {
+          method: 'GET',
+          headers: authHeaders
+        });
+
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('spreadsheetml') || contentType.includes('excel') || contentType.includes('octet-stream')) {
+            const blob = await res.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = 'Pincode_Management_Export.xlsx';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+            downloaded = true;
           }
-        } catch (fetchErr) {
-          lastError = fetchErr.message;
         }
+      } catch (serverErr) {
+        // Fallback to client-side generation using live hierarchy data
       }
 
-      if (!res || !res.ok) {
-        throw new Error(lastError || 'Export endpoint unavailable');
-      }
+      // 2. Seamless client-side generation fallback if server endpoint is not yet reloaded
+      if (!downloaded) {
+        const { downloadPincodeExcel, extractHierarchyRows } = await import('../utils/pincodeExcelExport');
+        let hierarchyTree = hierarchyData;
+        let rawPins = rawPincodes;
 
-      const blob = await res.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = 'Pincode_Management_Export.xlsx';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+        // If full tree not yet loaded in active component state, fetch from the verified working hierarchy API
+        if (!hierarchyTree || hierarchyTree.length === 0 || !hierarchyTree[0]?.districts?.length) {
+          const hRes = await fetch(`${cleanBase}/admin/territory/hierarchy`, {
+            headers: authHeaders
+          });
+          if (hRes.ok) {
+            const hData = await hRes.json();
+            hierarchyTree = hData.hierarchy || hData.states || [];
+            rawPins = hData.rawPincodes || [];
+          }
+        }
+
+        const rows = extractHierarchyRows(hierarchyTree, rawPins);
+        if (rows.length === 0) {
+          throw new Error('No pincode records available in the territory directory');
+        }
+
+        await downloadPincodeExcel(rows, 'Pincode_Management_Export.xlsx');
+      }
 
       showToast('Pincode Directory exported successfully to Excel');
     } catch (err) {
       console.error('Excel Export Error:', err);
-      showToast('Failed to export Excel file. Please try again.', 'error');
+      showToast(err.message || 'Failed to export Excel file. Please try again.', 'error');
     } finally {
       setExportingExcel(false);
     }
