@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 async function run() {
-    const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
+    const uri = process.env.MONGODB_URI || process.env.MONGO_URI ;
     console.log('Connecting to MongoDB cluster...');
     await mongoose.connect(uri);
 

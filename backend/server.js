@@ -532,6 +532,7 @@ app.use((err, req, res, next) => {
 // Auto-seed default Administrative accounts if missing on server boot
 const seedSuperAdminIfNeeded = async () => {
     try {
+        if (process.env.AUTO_SEED_ADMINS !== 'true') return;
         const User = require('./models/User');
         const bcrypt = require('bcryptjs');
         const salt = await bcrypt.genSalt(10);
@@ -574,6 +575,7 @@ const seedSuperAdminIfNeeded = async () => {
 
 // Auto-seed main categories if they don't exist
 const seedMainCategoriesIfNeeded = async () => {
+    if (process.env.AUTO_SEED_CATEGORIES !== 'true') return;
     try {
         const Category = require('./models/Category');
         const mainCount = await Category.countDocuments({ level: 'main', isSystem: true });
@@ -718,11 +720,13 @@ const startServer = async () => {
         await seedSuperAdminIfNeeded();
         await seedMainCategoriesIfNeeded();
         await syncSuspendedVendorProductsOnBoot();
-        try {
-            const syncTerritoryData = require('./utils/syncTerritoryData');
-            await syncTerritoryData({ force: false });
-        } catch (terrSyncErr) {
-            console.error('Territory auto-sync on boot note:', terrSyncErr.message);
+        if (process.env.AUTO_SEED_TERRITORIES === 'true') {
+            try {
+                const syncTerritoryData = require('./utils/syncTerritoryData');
+                await syncTerritoryData({ force: false });
+            } catch (terrSyncErr) {
+                console.error('Territory auto-sync on boot note:', terrSyncErr.message);
+            }
         }
         const { verifyTransporter } = require('./config/mailer');
         await verifyTransporter();

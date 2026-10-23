@@ -4,31 +4,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const router = express.Router();
 
-// Helper to synchronize vendor status directly to Manager portal data/vendors.json
-const syncVendorToManagerJson = (vendorId, email, updates) => {
-    try {
-        const mgrPath = 'D:/Connect App Project/Website/Manager/backend/data/vendors.json';
-        if (fs.existsSync(mgrPath)) {
-            const raw = fs.readFileSync(mgrPath, 'utf8');
-            const data = JSON.parse(raw);
-            let modified = false;
-            const updated = data.map(v => {
-                const idMatch = vendorId && (v.id === String(vendorId) || v._id === String(vendorId));
-                const emailMatch = email && v.email && String(v.email).toLowerCase().trim() === String(email).toLowerCase().trim();
-                if (idMatch || emailMatch) {
-                    modified = true;
-                    return { ...v, ...updates, updatedAt: new Date().toISOString() };
-                }
-                return v;
-            });
-            if (modified) {
-                fs.writeFileSync(mgrPath, JSON.stringify(updated, null, 2), 'utf8');
-            }
-        }
-    } catch (e) {
-        console.warn('[enterpriseModules] Sync to Manager vendors.json warning:', e.message);
-    }
-};
+// Obsolete legacy syncVendorToManagerJson removed
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Vendor = require('../models/Vendor');
@@ -2515,12 +2491,7 @@ router.post('/vendors/approve', auth, async (req, res) => {
             ).catch(() => {});
         }
 
-        // 3. Sync to Manager portal data/vendors.json
-        syncVendorToManagerJson(targetId, targetEmail, {
-            status: 'Active',
-            isActive: true,
-            isApproved: true
-        });
+        // Obsolete legacy sync call removed
 
         let user = await User.findOne(updateFilter);
         if (!user && (targetEmail || targetPhone || targetBizName)) {
@@ -2667,13 +2638,7 @@ router.post('/vendors/reject', auth, async (req, res) => {
             ).catch(() => {});
         }
 
-        // Sync to Manager portal data/vendors.json
-        syncVendorToManagerJson(targetId, targetEmail, {
-            status: 'Rejected',
-            isActive: false,
-            isApproved: false,
-            rejectionReason: reason
-        });
+        // Obsolete legacy sync call removed
 
         let existingVendor = await User.findOne(updateFilter);
         if (existingVendor) {

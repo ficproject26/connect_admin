@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 
 async function createOptimizedIndexes() {
-    const uri = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
+    const uri = process.env.MONGODB_URI || process.env.MONGO_URI ;
     await mongoose.connect(uri);
     const db = mongoose.connection.db;
 

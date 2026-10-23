@@ -17,7 +17,12 @@ async function runTestSuite() {
     console.log('  STARTING HIERARCHICAL PINCODE EXCEL EXPORT TEST SUITE');
     console.log('===============================================================');
 
-    const mongoUri = process.env.MONGODB_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) {
+        console.log('  ℹ NOTE: MONGODB_URI is not defined. Database export test skipped until new URL is configured.');
+        console.log('===============================================================');
+        return;
+    }
     await mongoose.connect(mongoUri);
 
     let passed = 0;

@@ -6,7 +6,11 @@ const connectDB = async () => {
         return mongoose.connection;
     }
 
-    let rawURI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://Connect-App:Dhanush123@cluster0.riukwbj.mongodb.net/connect_db?retryWrites=true&w=majority';
+    let rawURI = process.env.MONGODB_URI || process.env.MONGO_URI;
+    if (!rawURI) {
+        console.error('Fatal: MONGODB_URI environment variable is not defined.');
+        throw new Error('MONGODB_URI environment variable is not defined.');
+    }
     const dbURI = rawURI;
 
     const options = {
