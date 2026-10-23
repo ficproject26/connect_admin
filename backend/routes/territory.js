@@ -13,11 +13,12 @@ const PincodeAssignment = require('../models/PincodeAssignment');
 const Vendor = require('../models/Vendor');
 const TerritoryAuditLog = require('../models/TerritoryAuditLog');
 const syncTerritoryData = require('../utils/syncTerritoryData');
+const { generatePincodeExcelExport } = require('../utils/pincodeExcelExport');
 
 // Optional authentication middleware: Populates req.user if a valid token is provided, but allows public read-only territory access
 const optionalAuth = async (req, res, next) => {
     try {
-        let token = req.header('x-auth-token');
+        let token = req.header('x-auth-token') || req.query.token;
         const authHeader = req.header('Authorization') || req.header('authorization');
         if (!token && authHeader && authHeader.startsWith('Bearer ')) {
             token = authHeader.split(' ')[1];
@@ -1815,8 +1816,11 @@ router.delete('/divisions/:id', [auth, superAdminAuth], async (req, res) => {
 });
 
 // ============================================================
-// 6. PINCODE CRUD
+// 6. PINCODE CRUD & HIERARCHICAL EXCEL EXPORT
 // ============================================================
+// Hierarchical Pincode Management Excel Export (State -> District -> Division -> Pincode)
+router.get(['/export-excel', '/pincodes/export-excel', '/pincodes/export'], [optionalAuth], generatePincodeExcelExport);
+
 router.get('/pincodes', [optionalAuth], async (req, res) => {
     try {
         const filter = {};

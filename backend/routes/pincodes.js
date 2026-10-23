@@ -1,6 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const Pincode = require('../models/Pincode');
+const { generatePincodeExcelExport } = require('../utils/pincodeExcelExport');
+
+// @route    GET api/pincodes/export-excel
+// @desc     Export hierarchical pincode directory to Excel (.xlsx)
+// @access   Public / Authenticated
+router.get(['/export-excel', '/export'], generatePincodeExcelExport);
 
 // @route    GET api/pincodes
 // @desc     Get all pincodes

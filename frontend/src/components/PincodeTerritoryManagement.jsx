@@ -3,7 +3,7 @@ import {
   MapPin, Plus, Search, ChevronRight, Edit2, Trash2,
   CheckCircle, Layers, Filter, Eye, AlertTriangle, RefreshCw,
   Building2, Hash, UserCheck, ShieldAlert, X, ArrowRight, ArrowLeft,
-  List, FolderTree, History, Activity, Shield, Check, Sparkles, AlertCircle, Globe
+  List, FolderTree, History, Activity, Shield, Check, Sparkles, AlertCircle, Globe, Download
 } from 'lucide-react';
 
 export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }) => {
@@ -108,6 +108,7 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
 
   // --- Toast Notification ---
   const [toast, setToast] = useState(null);
+  const [exportingExcel, setExportingExcel] = useState(false);
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type, id: Date.now() });
     setTimeout(() => setToast(null), 3500);
@@ -669,6 +670,62 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
     }
   };
 
+  // --- Hierarchical Pincode Directory Excel Export ---
+  const handleExportExcel = async () => {
+    if (exportingExcel) return;
+    setExportingExcel(true);
+    try {
+      const exportEndpoints = [
+        `${API_BASE}/admin/territory/export-excel`,
+        `${API_BASE}/territory/export-excel`,
+        `${API_BASE}/pincodes/export-excel`
+      ];
+
+      let res = null;
+      let lastError = null;
+
+      for (const endpoint of exportEndpoints) {
+        try {
+          const attempt = await fetch(endpoint, {
+            method: 'GET',
+            headers: {
+              ...(token ? { 'x-auth-token': token, 'Authorization': `Bearer ${token}` } : {})
+            }
+          });
+          if (attempt.ok) {
+            res = attempt;
+            break;
+          } else {
+            lastError = `HTTP ${attempt.status}`;
+          }
+        } catch (fetchErr) {
+          lastError = fetchErr.message;
+        }
+      }
+
+      if (!res || !res.ok) {
+        throw new Error(lastError || 'Export endpoint unavailable');
+      }
+
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = 'Pincode_Management_Export.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+
+      showToast('Pincode Directory exported successfully to Excel');
+    } catch (err) {
+      console.error('Excel Export Error:', err);
+      showToast('Failed to export Excel file. Please try again.', 'error');
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
   // --- Filtered States for Initial Screen ---
   const filteredStates = useMemo(() => {
     const searchLower = (searchTerm || '').trim().toLowerCase();
@@ -1046,6 +1103,16 @@ export const PincodeTerritoryManagement = ({ token, API_BASE, onOpenAgentModal }
               title="Refresh Territory Data"
             >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-primary-500' : ''}`} />
+            </button>
+
+            <button
+              onClick={handleExportExcel}
+              disabled={exportingExcel}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              title="Export complete hierarchical pincode directory to Excel (.xlsx)"
+            >
+              <Download className={`w-3.5 h-3.5 ${exportingExcel ? 'animate-bounce' : ''}`} />
+              {exportingExcel ? 'Exporting...' : 'Export Excel'}
             </button>
           </div>
         </div>
