@@ -422,12 +422,15 @@ app.use('/admin/payment-security', require('./routes/paymentSecurityRoutes'));
 app.use('/payment-security', require('./routes/paymentSecurityRoutes'));
 
 // Admin Account & Credentials Management Routes
-app.use('/api/admin/accounts', require('./routes/adminAccountRoutes'));
-app.use('/admin-api/admin/accounts', require('./routes/adminAccountRoutes'));
-app.use('/admin-api/accounts', require('./routes/adminAccountRoutes'));
-app.use('/api/accounts', require('./routes/adminAccountRoutes'));
-app.use('/admin/accounts', require('./routes/adminAccountRoutes'));
-app.use('/accounts', require('./routes/adminAccountRoutes'));
+app.use([
+    '/api/admin/accounts',
+    '/admin-api/admin/accounts',
+    '/admin-api/accounts',
+    '/api/accounts',
+    '/admin/accounts',
+    '/accounts',
+    '/admin-api/admin-api/admin/accounts'
+], require('./routes/adminAccountRoutes'));
 
 app.use('/api/admin/enterprise', require('./routes/enterpriseModules'));
 app.use('/admin-api/enterprise', require('./routes/enterpriseModules'));

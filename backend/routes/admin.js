@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const auth = require('../middleware/auth');
 const User = require('../models/User');
 const Pincode = require('../models/Pincode');
@@ -3964,6 +3965,109 @@ router.delete('/vendors', [auth, adminAuth], async (req, res) => {
 // ==========================================
 // 7. CUSTOMER MANAGEMENT
 // ==========================================
+
+const decryptCustomerDocument = (val) => {
+    if (!val || typeof val !== 'string') return '';
+    const trimmed = val.trim();
+    if (!trimmed) return '';
+
+    const parts = trimmed.split(':');
+    if (parts.length === 4 && parts[0] === 'v1') {
+        const [, ivHex, tagHex, cipherHex] = parts;
+        const candidateKeys = [
+            process.env.CUSTOMER_ENCRYPTION_KEY,
+            process.env.DATA_ENCRYPTION_KEY,
+            process.env.AES_SECRET_KEY,
+            'connect_app_jwt_super_secret_key_2026_enterprise',
+            process.env.JWT_SECRET
+        ].filter(Boolean);
+
+        for (const rawKey of candidateKeys) {
+            try {
+                const key = crypto.createHash('sha256').update(rawKey).digest();
+                const iv = Buffer.from(ivHex, 'hex');
+                const authTag = Buffer.from(tagHex, 'hex');
+                if (iv.length !== 12 || authTag.length !== 16) continue;
+                const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+                decipher.setAuthTag(authTag);
+                let dec = decipher.update(cipherHex, 'hex', 'utf8');
+                dec += decipher.final('utf8');
+                if (dec) return dec.trim();
+            } catch (_) {}
+        }
+        return '__DECRYPT_FAILED__';
+    }
+    return trimmed;
+};
+
+const maskCustomerAadhaar = (rawVal) => {
+    if (!rawVal) return 'Unavailable';
+    const dec = decryptCustomerDocument(rawVal);
+    if (dec === '__DECRYPT_FAILED__') return 'Verification Required';
+    const cleaned = String(dec).replace(/\s/g, '').replace(/[^0-9]/g, '');
+    if (cleaned.length === 12) {
+        return `•••• •••• ${cleaned.slice(-4)}`;
+    }
+    if (cleaned.length >= 4) {
+        return `•••• •••• ${cleaned.slice(-4)}`;
+    }
+    return cleaned || 'Unavailable';
+};
+
+const maskCustomerPan = (rawVal) => {
+    if (!rawVal) return 'Unavailable';
+    const dec = decryptCustomerDocument(rawVal);
+    if (dec === '__DECRYPT_FAILED__') return 'Verification Required';
+    const cleaned = String(dec).trim().toUpperCase();
+    if (/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(cleaned)) {
+        return `••••••${cleaned.slice(-4)}`;
+    }
+    if (cleaned.length >= 4) {
+        return `••••••${cleaned.slice(-4)}`;
+    }
+    return cleaned || 'Unavailable';
+};
+
+const resolveCustomerMembershipTier = (custDoc, activePaymentsMap, activeRequestsMap) => {
+    // 1. Direct fields on customer/user doc
+    const directTier = custDoc.membershipTier || custDoc.membershipPlan || custDoc.plan;
+    const directStatus = String(custDoc.membershipStatus || '').toUpperCase();
+    const expiry = custDoc.membershipExpiryDate || custDoc.membershipExpiry;
+    const isExpired = expiry && new Date(expiry) < new Date();
+
+    if (directTier && directStatus === 'ACTIVE' && !isExpired && directTier.toLowerCase() !== 'none' && directTier.toLowerCase() !== 'standard') {
+        return directTier;
+    }
+
+    // 2. Check active payments & requests by customer identifiers
+    const keys = [
+        custDoc.customerId,
+        custDoc.registrationId,
+        custDoc._id ? String(custDoc._id) : null,
+        custDoc.id ? String(custDoc.id) : null,
+        custDoc.email ? String(custDoc.email).toLowerCase().trim() : null,
+        custDoc.phone ? String(custDoc.phone).trim() : null
+    ].filter(Boolean);
+
+    for (const k of keys) {
+        if (activePaymentsMap && activePaymentsMap.has(k)) {
+            const pay = activePaymentsMap.get(k);
+            if (pay && pay.plan) return pay.plan;
+        }
+        if (activeRequestsMap && activeRequestsMap.has(k)) {
+            const req = activeRequestsMap.get(k);
+            if (req && req.membershipType) {
+                const mt = req.membershipType;
+                return mt.toLowerCase().includes('tier') || mt.toLowerCase().includes('elite') || mt.toLowerCase().includes('prestige')
+                    ? mt
+                    : `${mt} Tier`;
+            }
+        }
+    }
+
+    return 'Standard';
+};
+
 router.get('/customers', [auth, adminAuth], async (req, res) => {
     try {
         const branchKey = req.adminUser?.branchId ? String(req.adminUser.branchId) : 'all';
@@ -3985,38 +4089,81 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
                 address: 1, addresses: 1, assignedArea: 1, assignedState: 1, assignedDistrict: 1,
                 assignedDivision: 1, assignedPincode: 1, status: 1, aadhaar: 1, aadhaarNumber: 1,
                 aadhar: 1, aadharNumber: 1, pan: 1, panNumber: 1, branchId: 1, createdAt: 1,
-                customerId: 1, registrationId: 1, id: 1
+                customerId: 1, registrationId: 1, id: 1, membershipTier: 1, membershipStatus: 1,
+                membershipStartDate: 1, membershipExpiryDate: 1, membershipPlan: 1, isSubscribed: 1,
+                plan: 1, kyc: 1, kycDocs: 1, documents: 1
             };
 
-            const [customersFromModel, usersAsCustomers] = await Promise.all([
+            const now = new Date();
+            const [customersFromModel, usersAsCustomers, activePayments, activeRequests] = await Promise.all([
                 Customer.find(filter, custProjection).populate('branchId', 'name').lean().catch((e) => {
                     console.warn('[Customer.find notice]:', e?.message);
                     return [];
                 }),
                 User.find({
-                    role: { $nin: ['Vendor', 'vendor', 'VENDOR', 'agent', 'Agent', 'AGENT', 'admin', 'Admin', 'ADMIN', 'staff', 'Staff', 'super-admin', 'Super-Admin', 'superadmin', 'SuperAdmin'] },
-                    adminRole: { $nin: ['super-admin', 'state-admin', 'district-admin', 'division-admin', 'pincode-admin', 'branch-admin', 'staff'] },
-                    email: { $nin: ['admin@example.com', 'admin@vendor.com'] }
+                    role: { $in: ['customer', 'Customer', 'CUSTOMER'] }
                 }, custProjection).lean().catch((e) => {
                     console.warn('[User.find as customer notice]:', e?.message);
                     return [];
-                })
+                }),
+                mongoose.connection.collection('membership_payments').find({
+                    membershipStatus: 'ACTIVE',
+                    status: { $in: ['SUCCESS', 'PAID', 'COMPLETED'] },
+                    $or: [
+                        { expiryDate: { $gt: now.toISOString() } },
+                        { expiryDate: null },
+                        { expiryDate: { $exists: false } }
+                    ]
+                }).toArray().catch(() => []),
+                mongoose.connection.collection('membershiprequests').find({
+                    status: { $in: ['Approved', 'Upgraded', 'Active', 'approved', 'active'] },
+                    paymentStatus: { $in: ['Paid', 'PAID', 'SUCCESS'] },
+                    $or: [
+                        { validityExpiryDate: { $gt: now } },
+                        { validityExpiryDate: null },
+                        { validityExpiryDate: { $exists: false } }
+                    ]
+                }).toArray().catch(() => [])
             ]);
+
+            const activePaymentsMap = new Map();
+            for (const p of activePayments || []) {
+                [p.customerId, p.userId, p.customerEmail?.toLowerCase(), p.customerPhone].filter(Boolean).forEach(k => {
+                    activePaymentsMap.set(String(k), p);
+                });
+            }
+
+            const activeRequestsMap = new Map();
+            for (const r of activeRequests || []) {
+                [r.customerCode, r.customerId ? String(r.customerId) : null, r.customerEmail?.toLowerCase(), r.customerPhone].filter(Boolean).forEach(k => {
+                    activeRequestsMap.set(String(k), r);
+                });
+            }
 
             combined = [];
             const seenEmails = new Set();
-            const seenPhones = new Set();
             const seenIds = new Set();
 
             const sanitize = (doc) => {
                 if (!doc) return null;
+                // Exclude any internal vendor sub-order tracking stubs that are not genuine registered customers
+                if (doc.vendorId && (!doc.role || String(doc.role).toLowerCase() !== 'customer') && !doc.phone) {
+                    return null;
+                }
                 const d = doc.toObject ? doc.toObject() : { ...doc };
                 delete d.password; // never expose passwords
                 const canonicalId = doc.customerId || doc.registrationId || getCanonicalCustomerId(doc);
                 d.customerId = canonicalId;
                 d.registrationId = canonicalId;
-                d.aadhaarNumber = d.aadhaar || d.aadhaarNumber || d.aadhar || d.aadharNumber || d.adhaar || d.adhaarNumber || (d.kyc && (d.kyc.aadhaarNumber || d.kyc.aadhaar || d.kyc.aadhar)) || (d.kycDocs && (d.kycDocs.aadhaarNumber || d.kycDocs.aadhaar)) || '';
-                d.panNumber = d.pan || d.panNumber || d.panCard || d.pancard || (d.kyc && (d.kyc.panNumber || d.kyc.pan)) || (d.kycDocs && (d.kycDocs.panNumber || d.kycDocs.pan)) || '';
+
+                const rawAadhaar = d.aadhaar || d.aadhaarNumber || d.aadhar || d.aadharNumber || d.adhaar || d.adhaarNumber || (d.kyc && (d.kyc.aadhaarNumber || d.kyc.aadhaar || d.kyc.aadhar)) || (d.kycDocs && (d.kycDocs.aadhaarNumber || d.kycDocs.aadhaar)) || '';
+                const rawPan = d.pan || d.panNumber || d.panCard || d.pancard || (d.kyc && (d.kyc.panNumber || d.kyc.pan)) || (d.kycDocs && (d.kycDocs.panNumber || d.kycDocs.pan)) || '';
+
+                d.aadhaarNumber = maskCustomerAadhaar(rawAadhaar);
+                d.panNumber = maskCustomerPan(rawPan);
+
+                d.customerType = resolveCustomerMembershipTier(d, activePaymentsMap, activeRequestsMap);
+
                 d.state = d.state || d.assignedState || (d.addresses && d.addresses[0]?.state) || '';
                 d.district = d.district || d.assignedDistrict || d.city || (d.addresses && d.addresses[0]?.city) || 'Direct';
                 d.division = d.division || d.assignedDivision || d.assignedArea || '';
@@ -4025,6 +4172,7 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
                 d.status = d.status || 'Active';
                 d.name = d.name || d.fullName || d.username || 'Customer';
                 d.phone = d.phone || d.mobileNumber || d.mobileContact || d.telephone || '';
+                d.role = 'customer';
                 return d;
             };
 
@@ -4033,21 +4181,18 @@ router.get('/customers', [auth, adminAuth], async (req, res) => {
                 const d = sanitize(doc);
                 if (!d) return;
 
-                const idKey = String(d._id || d.id || d.customerId || '');
+                const idKey = String(d._id || d.id || d.customerId || d.registrationId || '');
                 if (idKey && seenIds.has(idKey)) return;
 
                 const email = (d.email || '').toLowerCase().trim();
-                const phone = (d.phone || '').trim();
                 if (email && seenEmails.has(email)) return;
-                if (phone && seenPhones.has(phone)) return;
 
                 if (idKey) seenIds.add(idKey);
                 if (email) seenEmails.add(email);
-                if (phone) seenPhones.add(phone);
                 combined.push(d);
             };
 
-            // Priority: admin Customer model first, then Mongoose User model
+            // Priority: admin Customer model first, then Mongoose User model (strictly role: customer)
             (customersFromModel || []).forEach(c => addDoc(c));
             (usersAsCustomers || []).forEach(u => addDoc(u));
 

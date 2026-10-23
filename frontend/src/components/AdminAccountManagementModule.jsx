@@ -54,23 +54,47 @@ export const AdminAccountManagementModule = ({ token, API_BASE, currentUser, onT
     else console.log(`[${type.toUpperCase()}] ${msg}`);
   }, [onToast]);
 
+  // Resolve resilient endpoint candidate URLs
+  const resolveAccountEndpoints = useCallback((subpath) => {
+    const cleanPath = subpath.startsWith('/') ? subpath : `/${subpath}`;
+    const cleanApiBase = (API_BASE || '').replace(/\/+$/, '');
+    const origin = cleanApiBase.replace(/\/admin-api\/?$/, '').replace(/\/api\/?$/, '');
+    const list = [
+      `${cleanApiBase}${cleanPath}`.replace(/\/admin-api\/admin-api/, '/admin-api'),
+      `${origin}/admin-api${cleanPath}`,
+      `${origin}${cleanPath}`
+    ];
+    return [...new Set(list.filter(Boolean))];
+  }, [API_BASE]);
+
   // Fetch all 3 Super Admin accounts from backend
   const fetchAccounts = useCallback(async (isSilent = false) => {
     if (!isSilent) setLoading(true);
     else setRefreshing(true);
     try {
-      const cleanApiBase = (API_BASE || '').replace(/\/+$/, '');
-      const endpoint = `${cleanApiBase}/admin/accounts/credentials`;
+      const endpoints = resolveAccountEndpoints('/admin/accounts/credentials');
+      let res = null;
+      let data = null;
 
-      const res = await fetch(endpoint, {
-        headers: {
-          'x-auth-token': token,
-          'Authorization': `Bearer ${token}`
+      for (const endpoint of endpoints) {
+        try {
+          const attemptRes = await fetch(endpoint, {
+            headers: {
+              'x-auth-token': token,
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (attemptRes.status !== 404) {
+            res = attemptRes;
+            data = await attemptRes.json().catch(() => null);
+            break;
+          }
+        } catch (e) {
+          // Fall through to next candidate endpoint
         }
-      });
-      const data = await res.json();
+      }
 
-      if (res.ok && data?.success && Array.isArray(data.accounts)) {
+      if (res && res.ok && data?.success && Array.isArray(data.accounts)) {
         setAccounts(data.accounts);
         setCallerUser(data.currentUser || null);
 
@@ -99,7 +123,7 @@ export const AdminAccountManagementModule = ({ token, API_BASE, currentUser, onT
       setLoading(false);
       setRefreshing(false);
     }
-  }, [API_BASE, token, toast]);
+  }, [resolveAccountEndpoints, token, toast]);
 
   useEffect(() => {
     fetchAccounts();
@@ -242,26 +266,38 @@ export const AdminAccountManagementModule = ({ token, API_BASE, currentUser, onT
     }));
 
     try {
-      const cleanApiBase = (API_BASE || '').replace(/\/+$/, '');
-      const endpoint = `${cleanApiBase}/admin/accounts/update-credentials`;
+      const endpoints = resolveAccountEndpoints('/admin/accounts/update-credentials');
+      let res = null;
+      let data = null;
 
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'x-auth-token': token,
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          slot,
-          email: rawEmail.toLowerCase(),
-          oldPassword: currentSlotForm.oldPassword,
-          newPassword: currentSlotForm.newPassword,
-          confirmPassword: currentSlotForm.confirmPassword
-        })
+      const payload = JSON.stringify({
+        slot,
+        email: rawEmail.toLowerCase(),
+        oldPassword: currentSlotForm.oldPassword,
+        newPassword: currentSlotForm.newPassword,
+        confirmPassword: currentSlotForm.confirmPassword
       });
 
-      const data = await res.json();
+      for (const endpoint of endpoints) {
+        try {
+          const attemptRes = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'x-auth-token': token,
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: payload
+          });
+          if (attemptRes.status !== 404) {
+            res = attemptRes;
+            data = await attemptRes.json().catch(() => null);
+            break;
+          }
+        } catch (e) {
+          // Fall through to next candidate endpoint
+        }
+      }
 
       if (res.ok && data?.success) {
         setFormState(prev => ({

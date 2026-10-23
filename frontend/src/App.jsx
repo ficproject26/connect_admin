@@ -3695,7 +3695,18 @@ function App() {
             const customerDistricts = [...new Set(customers.map(c => c.district || c.branchId?.name || c.city).filter(Boolean))].sort();
             const customerTypes = [...new Set(customers.map(c => c.customerType || c.type || 'Standard').filter(Boolean))].sort();
 
+            const formatSafeDocDisplay = (val) => {
+              if (!val || val === '—' || val === 'null' || val === 'undefined') return 'Unavailable';
+              const str = String(val).trim();
+              if (str.startsWith('v1:') || str.length > 30) return 'Verification Required';
+              return str;
+            };
+
             const filteredCustomers = customers.filter(c => {
+              // Strictly exclude any non-customer accounts
+              if (c.role && !['customer', 'Customer', 'CUSTOMER'].includes(c.role)) return false;
+              if (c.adminRole || (c.role && ['admin', 'super-admin', 'staff', 'manager', 'state_manager', 'district_manager', 'division_manager', 'pincode_manager', 'agent', 'vendor'].includes(String(c.role).toLowerCase()))) return false;
+
               const matchesSearch = !customerSearchTerm ||
                 (c.name || '').toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
                 (c.email || '').toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
@@ -3792,8 +3803,8 @@ function App() {
                             <td className="px-6 py-4 text-xs font-semibold text-purple-500">
                               {c.customerType || c.type || 'Standard'}
                             </td>
-                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.aadhaarNumber || c.aadhaar || c.aadharNumber || c.aadhar || '—'}</td>
-                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{c.panNumber || c.pan || c.panCard || '—'}</td>
+                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{formatSafeDocDisplay(c.aadhaarNumber || c.aadhaar || c.aadharNumber || c.aadhar)}</td>
+                            <td className="px-6 py-4 text-xs font-mono text-slate-600 dark:text-slate-400">{formatSafeDocDisplay(c.panNumber || c.pan || c.panCard)}</td>
                             <td className="px-6 py-4">
                               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${c.status === 'active' || c.status === 'Active' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                                 {c.status === 'active' || c.status === 'Active' ? 'Active' : 'Inactive'}
