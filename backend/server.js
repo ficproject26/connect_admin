@@ -711,9 +711,10 @@ const PORT = process.env.PORT || 8004;
 
 // Connect Database, verify SMTP mailer, then start server
 const startServer = async () => {
-    server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
     try {
+        console.log('[Admin Backend] Connecting to MongoDB Atlas single source of truth...');
         await connectDB();
+        server.listen(PORT, () => console.log(`Server started on port ${PORT}`));
         await seedSuperAdminIfNeeded();
         await seedMainCategoriesIfNeeded();
         await syncSuspendedVendorProductsOnBoot();
@@ -726,7 +727,7 @@ const startServer = async () => {
         const { verifyTransporter } = require('./config/mailer');
         await verifyTransporter();
     } catch (err) {
-        console.error('Initialization warning (DB/Seed/SMTP):', err.message);
+        console.error('FATAL: Admin backend database connection failed during startup:', err.message); process.exit(1);
     }
 };
 
