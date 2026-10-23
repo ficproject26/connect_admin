@@ -539,6 +539,7 @@ const seedSuperAdminIfNeeded = async () => {
         const hashedPassword = await bcrypt.hash('admin123', salt);
 
         const adminAccounts = [
+            { name: 'Main Admin', email: 'admin@connect.com', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
             { name: 'Super Admin', email: 'admin@example.com', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
             { name: 'System Admin', email: 'admin@vendor.com', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
             { name: 'Dhanush', email: 'dhanush.antigraviity@gmail.com', phone: '6379068721', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },

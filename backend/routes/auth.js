@@ -909,6 +909,7 @@ router.post('/login', async (req, res) => {
         if (!user) {
             // Auto-heal missing essential admin accounts on demand to guarantee admin login never breaks
             const ADMIN_DEFAULTS = {
+                'admin@connect.com': { name: 'Main Admin', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
                 'admin@example.com': { name: 'Super Admin', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
                 'admin@vendor.com': { name: 'System Admin', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main' },
                 'dhanush.antigraviity@gmail.com': { name: 'Dhanush', role: 'super-admin', adminRole: 'super-admin', adminLevel: 'main', level: 'main', phone: '6379068721' },
