@@ -21,35 +21,6 @@ const app = express();
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
 
-// Response Gzip/Deflate Compression for APIs and text payloads (threshold 1KB)
-const compression = require('compression');
-app.use(compression({
-    filter: (req, res) => {
-        if (req.headers['x-no-compression']) return false;
-        return compression.filter(req, res);
-    },
-    threshold: 1024
-}));
-
-// Enterprise Helmet Security Headers
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-            fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-            imgSrc: ["'self'", "data:", "blob:", "https://*.amazonaws.com", "https://*.s3.amazonaws.com"],
-            connectSrc: ["'self'", "https://api.ficapp.in", "https://ficapp.in", "wss://api.ficapp.in", "ws://localhost:*", "http://localhost:*", "http://127.0.0.1:*"],
-            frameAncestors: ["'none'"]
-        }
-    },
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-    crossOriginOpenerPolicy: { policy: "same-origin" },
-    frameguard: { action: "deny" },
-    hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
-}));
-
 const allowedOrigins = [
     'https://connect-admin-roan.vercel.app',
     'https://connect-agent-one.vercel.app',
@@ -151,6 +122,38 @@ app.use((req, res, next) => {
 
 app.use(cors(corsOptions));
 
+
+// Response Gzip/Deflate Compression for APIs and text payloads (threshold 1KB)
+const compression = require('compression');
+app.use(compression({
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+    },
+    threshold: 1024
+}));
+
+// Enterprise Helmet Security Headers
+app.use(helmet({
+    contentSecurityPolicy: {
+        directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+            imgSrc: ["'self'", "data:", "blob:", "https://*.amazonaws.com", "https://*.s3.amazonaws.com"],
+            connectSrc: ["'self'", "https://api.ficapp.in", "https://ficapp.in", "wss://api.ficapp.in", "ws://localhost:*", "http://localhost:*", "http://127.0.0.1:*"],
+            frameAncestors: ["'none'"]
+        }
+    },
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginOpenerPolicy: { policy: "same-origin" },
+    frameguard: { action: "deny" },
+    hsts: process.env.NODE_ENV === 'production' ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false
+}));
+
+
+
 // Normalize redundant /admin-api/admin-api prefixes (legacy or proxy artifacts)
 app.use((req, res, next) => {
     if (req.url.startsWith('/admin-api/admin-api')) {
@@ -222,16 +225,24 @@ app.use(['/uploads', '/admin-api/uploads', '/admin/uploads'], serveUploads);
 // AWS S3 MEDIA STREAMING & REUSABLE UPLOAD ENDPOINTS
 // ============================================================
 const { uploadToS3, getObjectStream, extractS3Key, getPresignedUrl } = require('./config/s3');
-const multer = require('multer');
-const s3MemoryUpload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 25 * 1024 * 1024 }
-});
+let s3MemoryUpload;
+try {
+    const multer = require('multer');
+    s3MemoryUpload = multer({
+        storage: multer.memoryStorage(),
+        limits: { fileSize: 25 * 1024 * 1024 }
+    });
+} catch (mErr) {
+    console.warn('[Admin Server] Optional multer module not found, using memory fallback:', mErr.message);
+    s3MemoryUpload = {
+        single: () => (req, res, next) => next()
+    };
+}
 
 // S3 Media Viewing & Streaming Proxy Endpoint
-app.get(['/api/media/s3/:key(*)', '/admin-api/media/s3/:key(*)', '/admin/media/s3/:key(*)'], async (req, res) => {
+app.get(['/api/media/s3/{*key}', '/admin-api/media/s3/{*key}', '/admin/media/s3/{*key}'], async (req, res) => {
     try {
-        const rawKey = req.params.key || req.params[0] || '';
+        const rawKey = Array.isArray(req.params.key) ? req.params.key.join('/') : (req.params.key || req.params[0] || '');
         const cleanKey = decodeURIComponent(rawKey).replace(/^\/+/, '');
 
         if (!cleanKey || cleanKey.includes('..') || !/^[a-zA-Z0-9_\-\/.]+\.(jpg|jpeg|png|webp|gif|avif|pdf|svg|webm|mp3|wav|m4a|ogg|aac|doc|docx|xls|xlsx|csv|txt)$/i.test(cleanKey)) {
