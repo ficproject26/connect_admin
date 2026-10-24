@@ -39,7 +39,7 @@ app.use(helmet({
             scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
             styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
-            imgSrc: ["'self'", "data:", "blob:", "https://res.cloudinary.com"],
+            imgSrc: ["'self'", "data:", "blob:", "https://*.amazonaws.com", "https://*.s3.amazonaws.com"],
             connectSrc: ["'self'", "https://api.ficapp.in", "https://ficapp.in", "wss://api.ficapp.in", "ws://localhost:*", "http://localhost:*", "http://127.0.0.1:*"],
             frameAncestors: ["'none'"]
         }
