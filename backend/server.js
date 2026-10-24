@@ -160,8 +160,8 @@ app.use((req, res, next) => {
 });
 
 // 2. Express Body Parsers (Small production body limits to prevent DoS)
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // 3. Security Middleware
 const { applySecurityHeaders, authRateLimiter, sanitizeInput } = require('./middleware/security');
@@ -217,6 +217,109 @@ const serveUploads = (req, res, next) => {
 };
 
 app.use(['/uploads', '/admin-api/uploads', '/admin/uploads'], serveUploads);
+
+// ============================================================
+// AWS S3 MEDIA STREAMING & REUSABLE UPLOAD ENDPOINTS
+// ============================================================
+const { uploadToS3, getObjectStream, extractS3Key, getPresignedUrl } = require('./config/s3');
+const multer = require('multer');
+const s3MemoryUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+// S3 Media Viewing & Streaming Proxy Endpoint
+app.get(['/api/media/s3/:key(*)', '/admin-api/media/s3/:key(*)', '/admin/media/s3/:key(*)'], async (req, res) => {
+    try {
+        const rawKey = req.params.key || req.params[0] || '';
+        const cleanKey = decodeURIComponent(rawKey).replace(/^\/+/, '');
+
+        if (!cleanKey || cleanKey.includes('..') || !/^[a-zA-Z0-9_\-\/.]+\.(jpg|jpeg|png|webp|gif|avif|pdf|svg|webm|mp3|wav|m4a|ogg|aac|doc|docx|xls|xlsx|csv|txt)$/i.test(cleanKey)) {
+            return res.status(400).json({ error: 'Invalid or disallowed media key.' });
+        }
+
+        const isSensitiveDocument = /^(kyc|aadhaar|pan|admin_docs|subadmin_docs|resumes|passbooks)\//i.test(cleanKey);
+        if (isSensitiveDocument) {
+            const authHeader = req.headers['authorization'] || req.headers['x-auth-token'];
+            const token = typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : (authHeader || req.query.token);
+            if (!token) {
+                return res.status(401).json({ error: 'Authentication required to access private document.' });
+            }
+            try {
+                const jwt = require('jsonwebtoken');
+                jwt.verify(token, process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production');
+            } catch (authErr) {
+                return res.status(403).json({ error: 'Invalid or expired authentication token.' });
+            }
+        }
+
+        const streamRes = await getObjectStream(cleanKey);
+        if (!streamRes.success || !streamRes.body) {
+            return res.status(404).json({ error: streamRes.error || 'Media object not found in S3.' });
+        }
+
+        if (streamRes.etag) {
+            res.setHeader('ETag', streamRes.etag);
+            if (req.headers['if-none-match'] === streamRes.etag) {
+                return res.status(304).end();
+            }
+        }
+
+        res.setHeader('Content-Type', streamRes.contentType || 'application/octet-stream');
+        if (streamRes.contentLength) {
+            res.setHeader('Content-Length', streamRes.contentLength);
+        }
+        res.setHeader('Cache-Control', isSensitiveDocument ? 'private, no-cache, no-store, must-revalidate' : 'public, max-age=86400, stale-while-revalidate=604800');
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+
+        streamRes.body.pipe(res);
+    } catch (err) {
+        console.error('[Admin S3 Media Proxy Error]:', err.message);
+        res.status(500).json({ error: 'Failed to stream media from AWS S3.' });
+    }
+});
+
+// Reusable S3 Upload Endpoint for Admin (supports both multipart and JSON base64)
+app.post(['/api/upload', '/admin/upload', '/api/admin/upload'], (req, res, next) => {
+    s3MemoryUpload.single('file')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({ success: false, error: err.message || 'File upload validation error' });
+        }
+        next();
+    });
+}, async (req, res) => {
+    try {
+        let filePayload = null;
+        let filenameHint = 'upload.jpg';
+        let folder = req.body?.folder || 'admin_uploads';
+
+        if (req.file) {
+            filePayload = req.file.buffer;
+            filenameHint = req.file.originalname || filenameHint;
+        } else if (req.body?.file || req.body?.image || req.body?.document || req.body?.audio) {
+            filePayload = req.body.file || req.body.image || req.body.document || req.body.audio;
+            filenameHint = req.body.filename || req.body.name || filenameHint;
+        }
+
+        if (!filePayload) {
+            return res.status(400).json({ success: false, error: 'No file or image payload provided for upload.' });
+        }
+
+        const uploadRes = await uploadToS3(filePayload, folder, filenameHint);
+        return res.json({
+            success: true,
+            url: uploadRes.secure_url || uploadRes.url,
+            secure_url: uploadRes.secure_url || uploadRes.url,
+            key: uploadRes.key,
+            publicId: uploadRes.key,
+            category: uploadRes.category,
+            mimeType: uploadRes.mimeType
+        });
+    } catch (err) {
+        console.error('[Admin Upload Route Error]:', err.message);
+        return res.status(500).json({ success: false, error: err.message || 'Failed to upload to S3.' });
+    }
+});
 
 // Health Check Endpoints
 const getHealthStatus = () => {

@@ -1,3 +1,4 @@
+const { uploadToS3 } = require('../config/s3');
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
@@ -1127,6 +1128,28 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
 
         // Auto-generate registrationId if State Admin
         const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        // Upload any base64 KYC documents directly to AWS S3
+        let s3PhotoUrl = req.body.photoUrl || '';
+        let s3AadhaarFront = req.body.aadhaarFrontUrl || '';
+        let s3PanUrl = req.body.panUrl || '';
+
+        try {
+            if (s3PhotoUrl && s3PhotoUrl.startsWith('data:')) {
+                const res = await uploadToS3(s3PhotoUrl, 'admin_docs', 'photo.jpg');
+                s3PhotoUrl = res.url || res.secure_url || s3PhotoUrl;
+            }
+            if (s3AadhaarFront && s3AadhaarFront.startsWith('data:')) {
+                const res = await uploadToS3(s3AadhaarFront, 'kyc', 'aadhaar_front.jpg');
+                s3AadhaarFront = res.url || res.secure_url || s3AadhaarFront;
+            }
+            if (s3PanUrl && s3PanUrl.startsWith('data:')) {
+                const res = await uploadToS3(s3PanUrl, 'kyc', 'pan.jpg');
+                s3PanUrl = res.url || res.secure_url || s3PanUrl;
+            }
+        } catch (uploadErr) {
+            console.error('[Admin Onboarding S3 Upload Warning]:', uploadErr.message);
+        }
+
         const randDigits = Math.floor(1000 + Math.random() * 9000);
         const stateCode = finalState ? finalState.slice(0, 2).toUpperCase() : 'ADM';
         const registrationId = req.body.registrationId || `ADM-${stateCode}-${dateStr}-${randDigits}`;
@@ -1148,10 +1171,10 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
             fullAddress: req.body.address || req.body.fullAddress || '',
             kyc: req.body.kyc || (req.body.aadhaarNumber || req.body.panNumber ? {
                 aadhaarNumber: req.body.aadhaarNumber ? maskAadhaar(req.body.aadhaarNumber) : '',
-                aadhaarImage: req.body.aadhaarFrontUrl || '',
+                aadhaarImage: s3AadhaarFront || req.body.aadhaarFrontUrl || '',
                 panNumber: req.body.panNumber ? cleanPAN(req.body.panNumber) : '',
-                panImage: req.body.panUrl || '',
-                selfie: req.body.photoUrl || ''
+                panImage: s3PanUrl || req.body.panUrl || '',
+                selfie: s3PhotoUrl || req.body.photoUrl || ''
             } : undefined),
             kycDocs: req.body.kycDocs || {
                 fatherName: req.body.fatherName || '',
@@ -1162,7 +1185,7 @@ router.post('/admins', [auth, adminAuth], async (req, res) => {
                 city: req.body.city || '',
                 residentialState: req.body.residentialState || '',
                 residentialPincode: req.body.residentialPincode || '',
-                photoUrl: req.body.photoUrl || '',
+                photoUrl: s3PhotoUrl || req.body.photoUrl || '',
                 onboardedAt: new Date().toISOString()
             },
             isActive: req.body.status !== 'Inactive',

@@ -1,3 +1,4 @@
+const { uploadToS3 } = require('../config/s3');
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
@@ -1884,6 +1885,38 @@ const createHierarchyAdminHandler = async (req, res) => {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        // Upload any base64 KYC documents directly to AWS S3
+        let s3PhotoUrl = photoUrl || '';
+        let s3AadhaarFront = aadhaarFrontUrl || '';
+        let s3AadhaarBack = aadhaarBackUrl || '';
+        let s3PanUrl = panUrl || '';
+        let s3AddressProof = addressProofUrl || '';
+
+        try {
+            if (s3PhotoUrl && s3PhotoUrl.startsWith('data:')) {
+                const res = await uploadToS3(s3PhotoUrl, 'admin_docs', 'photo.jpg');
+                s3PhotoUrl = res.url || res.secure_url || s3PhotoUrl;
+            }
+            if (s3AadhaarFront && s3AadhaarFront.startsWith('data:')) {
+                const res = await uploadToS3(s3AadhaarFront, 'kyc', 'aadhaar_front.jpg');
+                s3AadhaarFront = res.url || res.secure_url || s3AadhaarFront;
+            }
+            if (s3AadhaarBack && s3AadhaarBack.startsWith('data:')) {
+                const res = await uploadToS3(s3AadhaarBack, 'kyc', 'aadhaar_back.jpg');
+                s3AadhaarBack = res.url || res.secure_url || s3AadhaarBack;
+            }
+            if (s3PanUrl && s3PanUrl.startsWith('data:')) {
+                const res = await uploadToS3(s3PanUrl, 'kyc', 'pan.jpg');
+                s3PanUrl = res.url || res.secure_url || s3PanUrl;
+            }
+            if (s3AddressProof && s3AddressProof.startsWith('data:')) {
+                const res = await uploadToS3(s3AddressProof, 'admin_docs', 'address_proof.jpg');
+                s3AddressProof = res.url || res.secure_url || s3AddressProof;
+            }
+        } catch (uploadErr) {
+            console.error('[Hierarchy Admin S3 Upload Warning]:', uploadErr.message);
+        }
+
         // Build full residential address string
         const addressParts = [addressLine1, addressLine2, locality, city, taluk, residentialDistrict, residentialState, residentialPincode].filter(Boolean);
         const fullResidentialAddress = address || addressParts.join(', ') || '';
@@ -1926,20 +1959,20 @@ const createHierarchyAdminHandler = async (req, res) => {
                 residentialDistrict: residentialDistrict || '',
                 residentialState: residentialState || '',
                 residentialPincode: residentialPincode || '',
-                photoUrl: photoUrl || '',
+                photoUrl: s3PhotoUrl || photoUrl || '',
                 addressProofType: addressProofType || '',
                 addressProofNumber: addressProofNumber || '',
-                addressProofUrl: addressProofUrl || '',
+                addressProofUrl: s3AddressProof || addressProofUrl || '',
                 declarationAccepted: !!declarationAccepted,
                 onboardedAt: new Date().toISOString()
             },
             // KYC document data stored in existing kyc subdocument
             kyc: {
                 aadhaarNumber: maskedAadhaar || '',
-                aadhaarImage: aadhaarFrontUrl || '',
+                aadhaarImage: s3AadhaarFront || aadhaarFrontUrl || '',
                 panNumber: panNumber ? String(panNumber).trim().toUpperCase() : '',
-                panImage: panUrl || '',
-                selfie: photoUrl || ''
+                panImage: s3PanUrl || panUrl || '',
+                selfie: s3PhotoUrl || photoUrl || ''
             },
             status: isAccountActive ? 'approved' : (status === 'Pending Verification' ? 'pending' : status),
             isActive: isAccountActive,
